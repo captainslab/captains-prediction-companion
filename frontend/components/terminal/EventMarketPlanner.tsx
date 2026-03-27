@@ -1,68 +1,46 @@
 'use client'
 
 import { FormEvent, useMemo, useState } from 'react'
-import { getApiBaseUrl } from '@/config/api-config'
 import type {
-  EventMarketPlanRequest,
-  EventMarketPlanResponse,
+  EventMarketAnalyzeResponse,
+  EventMarketContractPreview,
+  EventMarketTradeView,
+  EventMarketUserFacing,
 } from '@/types/event-market'
 
-type FormState = {
-  venue: string
-  domain: string
-  marketId: string
-  title: string
-  question: string
-  marketType: string
-  marketSubtype: string
-  url: string
-  resolutionSource: string
-  notes: string
-  metadataJson: string
-}
-
-const DEFAULT_FORM: FormState = {
-  venue: 'Kalshi',
-  domain: '',
-  marketId: '',
-  title: '',
-  question: '',
-  marketType: '',
-  marketSubtype: '',
-  url: '',
-  resolutionSource: '',
-  notes: '',
-  metadataJson: '',
-}
+const EXAMPLE_BOARD_URL =
+  'https://kalshi.com/markets/kxtrumpmention/what-will-trump-say/KXTRUMPMENTION-26MAR27?utm_source=kalshiapp_eventpage'
 
 function labelize(value: string) {
-  return value
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-function compactJson(value: unknown) {
-  return JSON.stringify(value, null, 2)
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
 }
 
-function buildRequestPayload(state: FormState): EventMarketPlanRequest {
-  const metadata = state.metadataJson.trim()
-    ? (JSON.parse(state.metadataJson) as Record<string, unknown>)
-    : {}
-
-  return {
-    venue: state.venue.trim() || 'Kalshi',
-    domain: state.domain.trim() || null,
-    market_id: state.marketId.trim() || null,
-    title: state.title.trim() || null,
-    question: state.question.trim() || null,
-    market_type: state.marketType.trim() || null,
-    market_subtype: state.marketSubtype.trim() || null,
-    url: state.url.trim() || null,
-    resolution_source: state.resolutionSource.trim() || null,
-    notes: state.notes.trim() || null,
-    metadata,
+function renderValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
   }
+  if (Array.isArray(value)) {
+    return value.map((item) => renderValue(item)).join(', ')
+  }
+  return JSON.stringify(value)
+}
+
+function formatProbability(value: number | null | undefined) {
+  if (value == null) return '--'
+  const percent = value * 100
+  const decimals = percent >= 90 || percent <= 10 ? 1 : 0
+  return `${percent.toFixed(decimals)}%`
+}
+
+function formatPrice(value: number | null | undefined) {
+  if (value == null) return '--'
+  return `${Math.round(value * 100)}c`
 }
 
 function recommendationTone(recommendation: string) {
@@ -71,14 +49,16 @@ function recommendationTone(recommendation: string) {
     case 'home':
     case 'home_cover':
     case 'over':
-      return 'text-emerald border-emerald/30 bg-emerald/10'
+      return 'border-emerald/35 bg-emerald/12 text-emerald'
     case 'buy_no':
     case 'away':
     case 'away_cover':
     case 'under':
-      return 'text-rose border-rose/30 bg-rose/10'
+      return 'border-rose/35 bg-rose/12 text-rose'
+    case 'pass':
+      return 'border-border bg-surface-elevated text-text-secondary'
     default:
-      return 'text-amber border-amber/30 bg-amber/10'
+      return 'border-amber/35 bg-amber/12 text-amber'
   }
 }
 
@@ -95,535 +75,673 @@ function statusTone(status: string) {
   }
 }
 
+function compactJson(value: unknown) {
+  return JSON.stringify(value, null, 2)
+}
+
 function getContextEntries(context: Record<string, unknown>) {
   return Object.entries(context).filter(([, value]) => {
     if (value == null) return false
     if (typeof value === 'string') return value.trim().length > 0
     if (Array.isArray(value)) return value.length > 0
-    if (typeof value === 'object') return Object.keys(value as object).length > 0
+    if (typeof value === 'object')
+      return Object.keys(asRecord(value)).length > 0
     return true
   })
 }
 
-function renderValue(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value)
-  }
-  return JSON.stringify(value)
-}
-
-function buildMarketViewHighlights(marketView: Record<string, unknown>) {
-  const highlights: Array<{ label: string; value: string }> = []
-
-  const targetPhrase = marketView.target_phrase
-  if (typeof targetPhrase === 'string' && targetPhrase.trim()) {
-    highlights.push({ label: 'Target phrase', value: targetPhrase })
-  }
-
-  const tradeView = marketView.trade_view
-  if (
-    tradeView &&
-    typeof tradeView === 'object' &&
-    'best_side' in tradeView &&
-    typeof tradeView.best_side === 'string'
-  ) {
-    highlights.push({ label: 'Best side', value: tradeView.best_side })
-  }
-
-  const moneyline = marketView.moneyline
-  if (
-    moneyline &&
-    typeof moneyline === 'object' &&
-    'lean' in moneyline &&
-    typeof moneyline.lean === 'string'
-  ) {
-    highlights.push({ label: 'Lean', value: moneyline.lean })
-  }
-
-  const spread = marketView.spread
-  if (
-    spread &&
-    typeof spread === 'object' &&
-    'lean' in spread &&
-    typeof spread.lean === 'string'
-  ) {
-    highlights.push({ label: 'Spread lean', value: spread.lean })
-  }
-
-  const total = marketView.total
-  if (
-    total &&
-    typeof total === 'object' &&
-    'lean' in total &&
-    typeof total.lean === 'string'
-  ) {
-    highlights.push({ label: 'Total lean', value: total.lean })
-  }
-
-  const playerProp = marketView.player_prop
-  if (
-    playerProp &&
-    typeof playerProp === 'object' &&
-    'lean' in playerProp &&
-    typeof playerProp.lean === 'string'
-  ) {
-    highlights.push({ label: 'Prop lean', value: playerProp.lean })
-  }
-
-  return highlights
-}
-
-function getWatchForItems(marketView: Record<string, unknown>): string[] {
+function getWatchForItems(card: EventMarketUserFacing | null) {
+  const marketView = asRecord(card?.market_view)
   const watchFor = marketView.watch_for
   if (!Array.isArray(watchFor)) return []
   return watchFor.filter((item): item is string => typeof item === 'string')
 }
 
-export function EventMarketPlanner() {
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM)
-  const [result, setResult] = useState<EventMarketPlanResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [showHidden, setShowHidden] = useState(false)
+function getMentionPaths(card: EventMarketUserFacing | null) {
+  const mentionPaths = asRecord(asRecord(card?.market_view).mention_paths)
+  return Object.entries(mentionPaths).filter(([, value]) => {
+    const record = asRecord(value)
+    return Object.keys(record).length > 0
+  })
+}
 
-  const contextEntries = useMemo(
-    () => getContextEntries(result?.user_facing.context || {}),
-    [result]
-  )
-  const marketHighlights = useMemo(
-    () =>
-      result ? buildMarketViewHighlights(result.user_facing.market_view || {}) : [],
-    [result]
-  )
-  const watchForItems = useMemo(
-    () => (result ? getWatchForItems(result.user_facing.market_view || {}) : []),
-    [result]
-  )
+function getAvailableContracts(
+  card: EventMarketUserFacing | null
+): EventMarketContractPreview[] {
+  const contracts = asRecord(card?.market_view).available_contracts
+  if (!Array.isArray(contracts)) return []
+  return contracts.filter((item): item is EventMarketContractPreview => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+    return true
+  })
+}
 
-  function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+function getTradeView(
+  card: EventMarketUserFacing | null
+): EventMarketTradeView {
+  return asRecord(
+    asRecord(card?.market_view).trade_view
+  ) as EventMarketTradeView
+}
+
+function getMarketDetails(card: EventMarketUserFacing | null) {
+  const marketView = asRecord(card?.market_view)
+  const details: Array<{ label: string; value: string }> = []
+
+  const targetPhrase = marketView.target_phrase
+  if (typeof targetPhrase === 'string' && targetPhrase.trim()) {
+    details.push({ label: 'Target phrase', value: targetPhrase })
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  const rulesSummary = marketView.rules_summary
+  if (typeof rulesSummary === 'string' && rulesSummary.trim()) {
+    details.push({ label: 'Rules summary', value: rulesSummary })
+  }
+
+  const tradeView = getTradeView(card)
+  if (tradeView.market_ticker) {
+    details.push({ label: 'Market ticker', value: tradeView.market_ticker })
+  }
+  if (tradeView.market_status) {
+    details.push({ label: 'Market status', value: tradeView.market_status })
+  }
+  if (tradeView.resolved_outcome) {
+    details.push({
+      label: 'Resolved outcome',
+      value: tradeView.resolved_outcome,
+    })
+  }
+
+  return details
+}
+
+function deriveContractUrl(
+  baseUrl: string | null,
+  marketTicker: string | null
+) {
+  if (!baseUrl || !marketTicker) return null
+
+  try {
+    const parsed = new URL(baseUrl)
+    const segments = parsed.pathname.split('/').filter(Boolean)
+    if (segments.length === 0) return null
+    segments[segments.length - 1] = marketTicker
+    parsed.pathname = `/${segments.join('/')}`
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+function Metric({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string
+  value: string
+  emphasis?: boolean
+}) {
+  return (
+    <div className="border-l border-border pl-4">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+        {label}
+      </div>
+      <div
+        className={`mt-1 ${emphasis ? 'text-lg font-semibold text-text-primary' : 'text-sm text-text-secondary'}`}
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-surface p-6">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan/60 to-transparent" />
+      <div className="max-w-2xl">
+        <div className="text-[10px] uppercase tracking-[0.24em] text-cyan">
+          MCP deterministic view
+        </div>
+        <h2 className="mt-3 font-display text-3xl text-text-primary">
+          Paste a Kalshi board or contract URL to render the exact tool card.
+        </h2>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary">
+          This panel uses the same MCP tool path as the ChatGPT app, but it
+          renders the structured payload directly instead of letting the chat
+          layer rewrite it into prose.
+        </p>
+        <div className="mt-6 grid gap-3 text-xs text-text-muted sm:grid-cols-3">
+          <div className="border-l border-border pl-4">
+            <div className="uppercase tracking-[0.18em]">Board mode</div>
+            <p className="mt-1 leading-5">
+              Shows the event-level card and contract strip when the URL points
+              to a phrase board.
+            </p>
+          </div>
+          <div className="border-l border-border pl-4">
+            <div className="uppercase tracking-[0.18em]">Contract mode</div>
+            <p className="mt-1 leading-5">
+              Resolves the phrase, market ticker, and live YES pricing for one
+              specific contract.
+            </p>
+          </div>
+          <div className="border-l border-border pl-4">
+            <div className="uppercase tracking-[0.18em]">Debug path</div>
+            <p className="mt-1 leading-5">
+              The raw tool payload stays available in a drawer so you can audit
+              the renderer.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function EventMarketPlanner() {
+  const [url, setUrl] = useState('')
+  const [result, setResult] = useState<EventMarketAnalyzeResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showRaw, setShowRaw] = useState(false)
+  const [lastAnalyzedUrl, setLastAnalyzedUrl] = useState<string | null>(null)
+
+  const card = result?.card ?? null
+  const tradeView = useMemo(() => getTradeView(card), [card])
+  const contracts = useMemo(() => getAvailableContracts(card), [card])
+  const contextEntries = useMemo(
+    () => getContextEntries(card?.context ?? {}),
+    [card]
+  )
+  const marketDetails = useMemo(() => getMarketDetails(card), [card])
+  const watchForItems = useMemo(() => getWatchForItems(card), [card])
+  const mentionPaths = useMemo(() => getMentionPaths(card), [card])
+
+  async function analyzeMarket(nextUrl: string) {
     setLoading(true)
     setError(null)
 
-    let payload: EventMarketPlanRequest
     try {
-      payload = buildRequestPayload(form)
-    } catch (parseError) {
-      setLoading(false)
-      setError('Metadata JSON is invalid. Fix it or leave it blank.')
-      return
-    }
-
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/pipeline/event-markets/plan`, {
+      const response = await fetch('/api/mcp/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ url: nextUrl }),
       })
 
-      if (!response.ok) {
-        const body = await response.text()
-        throw new Error(body || `Request failed with ${response.status}`)
+      const payload = (await response.json()) as EventMarketAnalyzeResponse & {
+        error?: string
       }
 
-      const data = (await response.json()) as EventMarketPlanResponse
-      setResult(data)
+      if (!response.ok) {
+        throw new Error(
+          payload.error || `Request failed with ${response.status}`
+        )
+      }
+
+      setResult(payload)
+      setLastAnalyzedUrl(nextUrl)
+      setUrl(nextUrl)
     } catch (requestError) {
-      console.error('Failed to plan event market:', requestError)
+      console.error('Failed to analyze Kalshi market URL:', requestError)
       setError(
         requestError instanceof Error
           ? requestError.message
-          : 'Failed to build event-market card.'
+          : 'Failed to analyze Kalshi market URL.'
       )
     } finally {
       setLoading(false)
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmed = url.trim()
+    if (!trimmed) {
+      setError('Paste a Kalshi market URL first.')
+      return
+    }
+    await analyzeMarket(trimmed)
+  }
+
+  async function handleContractSelect(contract: EventMarketContractPreview) {
+    const contractUrl = deriveContractUrl(
+      card?.source.url ?? lastAnalyzedUrl,
+      contract.market_ticker
+    )
+    if (!contractUrl) {
+      setError('Could not derive a contract URL from the current board.')
+      return
+    }
+    await analyzeMarket(contractUrl)
+  }
+
+  const activeTicker = tradeView.market_ticker ?? card?.source.market_id ?? null
+
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(360px,460px)_minmax(0,1fr)]">
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-lg border border-border bg-surface p-4"
-      >
+    <section className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+      <aside className="relative overflow-hidden rounded-2xl border border-border bg-surface p-5">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan/60 to-transparent" />
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-text-primary">
-              Event Market Planner
+            <div className="text-[10px] uppercase tracking-[0.24em] text-cyan">
+              Companion
+            </div>
+            <h2 className="mt-2 text-xl font-semibold text-text-primary">
+              Kalshi market card
             </h2>
-            <p className="mt-1 text-xs text-text-muted">
-              Build the compact app card from market context before pricing is wired.
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Deterministic renderer for the MCP tool output. Paste a board or
+              contract URL and drill into one phrase contract without relying on
+              chat prose.
             </p>
           </div>
           <button
             type="button"
             onClick={() => {
-              setForm(DEFAULT_FORM)
-              setResult(null)
+              setUrl(EXAMPLE_BOARD_URL)
               setError(null)
             }}
-            className="text-[11px] text-text-muted hover:text-text-primary transition-colors"
+            className="rounded-full border border-border bg-surface-elevated px-3 py-1 text-[11px] text-text-secondary transition-colors hover:border-cyan/35 hover:text-text-primary"
           >
-            Reset
+            Load example
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                Venue
-              </span>
-              <input
-                value={form.venue}
-                onChange={(event) => updateField('venue', event.target.value)}
-                className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                Domain
-              </span>
-              <select
-                value={form.domain}
-                onChange={(event) => updateField('domain', event.target.value)}
-                className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-              >
-                <option value="">Auto</option>
-                <option value="sports">Sports</option>
-                <option value="earnings">Earnings</option>
-                <option value="politics">Politics</option>
-                <option value="mention">Mention</option>
-                <option value="macro">Macro</option>
-              </select>
-            </label>
-          </div>
-
-          <label className="grid gap-1">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted">
-              Market title
-            </span>
-            <input
-              value={form.title}
-              onChange={(event) => updateField('title', event.target.value)}
-              placeholder='Will management say "GLP-1" on the earnings call?'
-              className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-            />
-          </label>
-
-          <label className="grid gap-1">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted">
-              Resolution question
+        <form onSubmit={handleSubmit} className="mt-5 space-y-3">
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+              Kalshi URL
             </span>
             <textarea
-              value={form.question}
-              onChange={(event) => updateField('question', event.target.value)}
-              rows={3}
-              placeholder="Will the event resolve YES?"
-              className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              rows={4}
+              placeholder="https://kalshi.com/markets/..."
+              className="mt-2 w-full rounded-xl border border-border bg-void/40 px-3 py-3 text-sm text-text-primary placeholder:text-text-muted focus:border-cyan/50 focus:outline-none"
             />
           </label>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                Market ID
-              </span>
-              <input
-                value={form.marketId}
-                onChange={(event) => updateField('marketId', event.target.value)}
-                className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                URL
-              </span>
-              <input
-                value={form.url}
-                onChange={(event) => updateField('url', event.target.value)}
-                placeholder="https://kalshi.com/markets/..."
-                className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-              />
-            </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-full border border-cyan/35 bg-cyan/12 px-4 py-2 text-sm font-medium text-cyan transition-colors hover:bg-cyan/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? 'Analyzing...' : 'Render card'}
+            </button>
+            {lastAnalyzedUrl && (
+              <a
+                href={lastAnalyzedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-text-muted transition-colors hover:text-text-primary"
+              >
+                Open source market
+              </a>
+            )}
           </div>
+        </form>
 
-          <details className="rounded border border-border/80 bg-surface-elevated/50">
-            <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-text-secondary">
-              Advanced market fields
-            </summary>
-            <div className="grid gap-3 border-t border-border/80 px-3 py-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                    Market type hint
-                  </span>
-                  <input
-                    value={form.marketType}
-                    onChange={(event) => updateField('marketType', event.target.value)}
-                    placeholder="mention, binary, total"
-                    className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-                  />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                    Market subtype
-                  </span>
-                  <input
-                    value={form.marketSubtype}
-                    onChange={(event) =>
-                      updateField('marketSubtype', event.target.value)
-                    }
-                    placeholder="earnings_call_mention"
-                    className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-                  />
-                </label>
+        {error && (
+          <div className="mt-4 rounded-xl border border-rose/35 bg-rose/10 px-3 py-3 text-sm text-rose">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-6 grid gap-3 text-xs sm:grid-cols-3 xl:grid-cols-1">
+          <Metric
+            label="Tool status"
+            value={card ? labelize(card.status) : 'Waiting for input'}
+            emphasis
+          />
+          <Metric
+            label="Recommendation"
+            value={card ? labelize(card.summary.recommendation) : 'None'}
+            emphasis
+          />
+          <Metric
+            label="Confidence"
+            value={card ? labelize(card.confidence) : '--'}
+            emphasis
+          />
+        </div>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                Board contracts
               </div>
-              <label className="grid gap-1">
-                <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                  Resolution source
-                </span>
-                <input
-                  value={form.resolutionSource}
-                  onChange={(event) =>
-                    updateField('resolutionSource', event.target.value)
-                  }
-                  className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-                />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                  Notes
-                </span>
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => updateField('notes', event.target.value)}
-                  rows={2}
-                  className="rounded border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary focus:border-cyan/50 focus:outline-none"
-                />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                  Metadata JSON
-                </span>
-                <textarea
-                  value={form.metadataJson}
-                  onChange={(event) =>
-                    updateField('metadataJson', event.target.value)
-                  }
-                  rows={5}
-                  placeholder='{"company":"Hims & Hers","start_time":"2026-05-06T17:00:00-04:00"}'
-                  className="rounded border border-border bg-surface-elevated px-3 py-2 font-mono text-xs text-text-primary focus:border-cyan/50 focus:outline-none"
-                />
-              </label>
+              <div className="mt-1 text-sm text-text-secondary">
+                Select one contract to lock the card to a phrase market.
+              </div>
             </div>
-          </details>
-
-          {error && (
-            <div className="rounded border border-rose/30 bg-rose/10 px-3 py-2 text-xs text-rose">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || (!form.title.trim() && !form.question.trim())}
-            className="mt-1 rounded border border-cyan/30 bg-cyan/10 px-3 py-2 text-sm font-medium text-cyan transition-colors hover:bg-cyan/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? 'Building card...' : 'Build event-market card'}
-          </button>
-        </div>
-      </form>
-
-      <div className="rounded-lg border border-border bg-surface p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">
-              User-Facing Card
-            </h2>
-            <p className="mt-1 text-xs text-text-muted">
-              Compact output for the ChatGPT app and the future dashboard.
-            </p>
+            {contracts.length > 0 && (
+              <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                {contracts.length} loaded
+              </span>
+            )}
           </div>
-          {result && (
-            <div className="text-[11px] text-text-muted">
-              {new Date(result.timestamp).toLocaleTimeString()}
+
+          {contracts.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-dashed border-border bg-void/25 px-3 py-5 text-sm text-text-muted">
+              The contract strip appears when the URL resolves to a Kalshi
+              board.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {contracts.map((contract) => {
+                const isActive =
+                  Boolean(activeTicker) &&
+                  activeTicker === contract.market_ticker
+                return (
+                  <button
+                    key={
+                      contract.market_ticker ??
+                      `${contract.label ?? 'contract'}-${contract.market_yes ?? 'na'}`
+                    }
+                    type="button"
+                    onClick={() => handleContractSelect(contract)}
+                    className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                      isActive
+                        ? 'border-cyan/45 bg-cyan/10'
+                        : 'border-border bg-surface-elevated hover:border-border-glow hover:bg-surface-hover/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-text-primary">
+                          {contract.label ??
+                            contract.market_ticker ??
+                            'Unnamed contract'}
+                        </div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                          {contract.market_ticker ?? 'No ticker'}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-text-primary">
+                          {formatProbability(contract.market_yes)} YES
+                        </div>
+                        <div className="mt-1 text-[11px] text-text-muted">
+                          Bid {formatPrice(contract.yes_bid)} / Ask{' '}
+                          {formatPrice(contract.yes_ask)}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
+      </aside>
 
-        {!result ? (
-          <div className="mt-6 flex h-[320px] items-center justify-center rounded-lg border border-dashed border-border bg-surface-elevated/50 px-6 text-center text-sm text-text-muted">
-            Submit a market title or resolution question to preview the compact card.
-          </div>
-        ) : (
-          <div className="mt-4 space-y-4">
-            <div className="rounded-lg border border-border bg-surface-elevated p-4">
+      {!card ? (
+        <EmptyState />
+      ) : (
+        <div className="space-y-4">
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-surface p-6">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.14),transparent_38%)]" />
+            <div className="relative">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`rounded-full border px-2 py-1 text-[11px] font-medium ${recommendationTone(
-                    result.user_facing.summary.recommendation
+                  className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${recommendationTone(
+                    card.summary.recommendation
                   )}`}
                 >
-                  {labelize(result.user_facing.summary.recommendation)}
+                  {labelize(card.summary.recommendation)}
                 </span>
                 <span
-                  className={`text-[11px] font-medium ${statusTone(
-                    result.user_facing.status
+                  className={`text-[11px] font-medium uppercase tracking-[0.18em] ${statusTone(
+                    card.status
                   )}`}
                 >
-                  {labelize(result.user_facing.status)}
+                  {labelize(card.status)}
                 </span>
-                <span className="text-[11px] text-text-muted">
-                  {labelize(result.user_facing.event_domain)} /{' '}
-                  {labelize(result.user_facing.event_type)} /{' '}
-                  {labelize(result.user_facing.market_type)}
+                <span className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                  {labelize(card.event_domain)} / {labelize(card.event_type)} /{' '}
+                  {labelize(card.market_type)}
                 </span>
               </div>
 
-              <h3 className="mt-3 text-lg font-semibold text-text-primary">
-                {result.user_facing.summary.headline}
+              <h3 className="mt-4 max-w-3xl font-display text-3xl leading-tight text-text-primary">
+                {card.summary.headline}
               </h3>
-              <p className="mt-2 text-sm text-text-secondary">
-                {result.user_facing.summary.one_line_reason}
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
+                {card.summary.one_line_reason}
               </p>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded border border-border/80 bg-surface px-3 py-2">
-                  <div className="text-[11px] uppercase tracking-wide text-text-muted">
-                    Platform
-                  </div>
-                  <div className="mt-1 text-sm text-text-primary">
-                    {result.user_facing.source.platform}
-                  </div>
-                </div>
-                <div className="rounded border border-border/80 bg-surface px-3 py-2">
-                  <div className="text-[11px] uppercase tracking-wide text-text-muted">
-                    Confidence
-                  </div>
-                  <div className="mt-1 text-sm text-text-primary">
-                    {labelize(result.user_facing.confidence)}
-                  </div>
-                </div>
-                <div className="rounded border border-border/80 bg-surface px-3 py-2">
-                  <div className="text-[11px] uppercase tracking-wide text-text-muted">
-                    Next action
-                  </div>
-                  <div className="mt-1 text-sm text-text-primary">
-                    {result.user_facing.next_action
-                      ? labelize(result.user_facing.next_action)
-                      : 'None'}
-                  </div>
-                </div>
+              <div className="mt-6 grid gap-4 border-t border-border pt-4 md:grid-cols-4">
+                <Metric
+                  label="Platform"
+                  value={card.source.platform}
+                  emphasis={false}
+                />
+                <Metric
+                  label="Next action"
+                  value={
+                    card.next_action
+                      ? labelize(card.next_action)
+                      : 'No follow-up'
+                  }
+                  emphasis={false}
+                />
+                <Metric
+                  label="YES midpoint"
+                  value={formatProbability(tradeView.market_yes)}
+                  emphasis
+                />
+                <Metric
+                  label="Bid / ask"
+                  value={`${formatPrice(tradeView.market_yes_bid)} / ${formatPrice(
+                    tradeView.market_yes_ask
+                  )}`}
+                  emphasis
+                />
               </div>
             </div>
+          </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-              <div className="rounded-lg border border-border bg-surface-elevated p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Event Context
-                </h3>
-                <div className="mt-3 space-y-2">
-                  {contextEntries.length === 0 ? (
-                    <p className="text-sm text-text-muted">
-                      No event context extracted yet.
-                    </p>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+            <section className="rounded-2xl border border-border bg-surface p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                    Event context
+                  </div>
+                  <h4 className="mt-1 text-lg font-semibold text-text-primary">
+                    Structured facts
+                  </h4>
+                </div>
+                {result && (
+                  <div className="text-[11px] text-text-muted">
+                    {new Date(result.timestamp).toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                {contextEntries.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-void/25 px-3 py-4 text-sm text-text-muted">
+                    No event context extracted yet.
+                  </div>
+                ) : (
+                  contextEntries.map(([key, value]) => (
+                    <div key={key} className="border-l border-border pl-4">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                        {labelize(key)}
+                      </div>
+                      <div className="mt-1 text-sm leading-6 text-text-primary">
+                        {renderValue(value)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-6 border-t border-border pt-4">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                  Market specifics
+                </div>
+                <div className="mt-3 grid gap-3">
+                  {marketDetails.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-void/25 px-3 py-4 text-sm text-text-muted">
+                      No market-specific detail extracted yet.
+                    </div>
                   ) : (
-                    contextEntries.map(([key, value]) => (
+                    marketDetails.map((detail) => (
                       <div
-                        key={key}
-                        className="rounded border border-border/80 bg-surface px-3 py-2"
+                        key={`${detail.label}-${detail.value}`}
+                        className="border-l border-border pl-4"
                       >
-                        <div className="text-[11px] uppercase tracking-wide text-text-muted">
-                          {labelize(key)}
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                          {detail.label}
                         </div>
-                        <div className="mt-1 text-sm text-text-primary">
-                          {renderValue(value)}
+                        <div className="mt-1 text-sm leading-6 text-text-primary">
+                          {detail.value}
                         </div>
                       </div>
                     ))
                   )}
                 </div>
               </div>
+            </section>
 
-              <div className="rounded-lg border border-border bg-surface-elevated p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Market View
-                </h3>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {marketHighlights.length === 0 ? (
-                    <p className="text-sm text-text-muted">
-                      The market view is mapped, but no compact highlights are available yet.
-                    </p>
-                  ) : (
-                    marketHighlights.map((highlight) => (
-                      <div
-                        key={`${highlight.label}-${highlight.value}`}
-                        className="rounded border border-border/80 bg-surface px-3 py-2"
-                      >
-                        <div className="text-[11px] uppercase tracking-wide text-text-muted">
-                          {highlight.label}
-                        </div>
-                        <div className="mt-1 text-sm text-text-primary">
-                          {labelize(highlight.value)}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+            <section className="rounded-2xl border border-border bg-surface p-5">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                Decision support
+              </div>
+              <h4 className="mt-1 text-lg font-semibold text-text-primary">
+                Phrase path and monitoring hooks
+              </h4>
 
-                {watchForItems.length > 0 && (
-                    <div className="mt-4 rounded border border-border/80 bg-surface px-3 py-3">
-                      <div className="text-[11px] uppercase tracking-wide text-text-muted">
-                        Watch for
+              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                      Watch for
+                    </div>
+                    {watchForItems.length === 0 ? (
+                      <div className="mt-3 rounded-xl border border-dashed border-border bg-void/25 px-3 py-4 text-sm text-text-muted">
+                        No watchlist hooks extracted yet.
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
+                    ) : (
+                      <div className="mt-3 flex flex-wrap gap-2">
                         {watchForItems.map((item) => (
                           <span
                             key={item}
-                            className="rounded-full border border-border px-2 py-1 text-xs text-text-secondary"
+                            className="rounded-full border border-border bg-surface-elevated px-3 py-2 text-xs text-text-secondary"
                           >
                             {item}
                           </span>
                         ))}
                       </div>
-                    </div>
-                  )}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-surface-elevated p-4">
-              <button
-                type="button"
-                onClick={() => setShowHidden((prev) => !prev)}
-                className="flex w-full items-center justify-between text-left"
-              >
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                    Hidden debug payload
+                    )}
                   </div>
-                  <div className="mt-1 text-xs text-text-muted">
-                    Keep this collapsed in normal app flows. It exists for development and audit work.
+
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                      Price snapshot
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                          Midpoint
+                        </div>
+                        <div className="mt-1 text-lg font-semibold text-text-primary">
+                          {formatProbability(tradeView.market_yes)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                          Last trade
+                        </div>
+                        <div className="mt-1 text-lg font-semibold text-text-primary">
+                          {formatPrice(tradeView.last_price)}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <span className="text-xs text-cyan">
-                  {showHidden ? 'Hide' : 'Show'}
-                </span>
-              </button>
-              {showHidden && (
-                <pre className="mt-4 max-h-64 overflow-auto rounded border border-border bg-void/70 p-3 text-[11px] text-text-secondary">
-                  {compactJson(result.hidden)}
-                </pre>
-              )}
-            </div>
+
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                    Mention paths
+                  </div>
+                  {mentionPaths.length === 0 ? (
+                    <div className="mt-3 rounded-xl border border-dashed border-border bg-void/25 px-3 py-4 text-sm text-text-muted">
+                      No mention-path breakdown extracted yet.
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {mentionPaths.map(([key, value]) => {
+                        const pathValue = asRecord(value)
+                        const strength =
+                          typeof pathValue.strength === 'string'
+                            ? pathValue.strength
+                            : typeof pathValue.level === 'string'
+                              ? pathValue.level
+                              : 'unknown'
+                        const reason =
+                          typeof pathValue.reason === 'string'
+                            ? pathValue.reason
+                            : 'No reason provided.'
+
+                        return (
+                          <div
+                            key={key}
+                            className="rounded-xl border border-border bg-surface-elevated px-4 py-3"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-medium text-text-primary">
+                                {labelize(key)}
+                              </div>
+                              <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                                {labelize(strength)}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-text-secondary">
+                              {reason}
+                            </p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
           </div>
-        )}
-      </div>
+
+          <details
+            open={showRaw}
+            className="rounded-2xl border border-border bg-surface p-5"
+          >
+            <summary
+              onClick={(event) => {
+                event.preventDefault()
+                setShowRaw((prev) => !prev)
+              }}
+              className="cursor-pointer list-none text-sm font-medium text-text-primary"
+            >
+              Raw MCP payload
+              <span className="ml-2 text-xs text-text-muted">
+                {showRaw ? 'Hide' : 'Show'}
+              </span>
+            </summary>
+            <p className="mt-2 text-xs text-text-muted">
+              This stays outside the primary UI. Use it to verify what the MCP
+              tool returned before the renderer shaped it.
+            </p>
+            <pre className="mt-4 max-h-80 overflow-auto rounded-xl border border-border bg-void/70 p-4 text-[11px] text-text-secondary">
+              {compactJson(result?.raw ?? result)}
+            </pre>
+          </details>
+        </div>
+      )}
     </section>
   )
 }

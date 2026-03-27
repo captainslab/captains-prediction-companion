@@ -4,6 +4,29 @@ export interface EventMarketSummary {
   one_line_reason: string
 }
 
+export interface EventMarketContractPreview {
+  market_ticker: string | null
+  label: string | null
+  market_yes: number | null
+  yes_bid: number | null
+  yes_ask: number | null
+  last_price: number | null
+  market_status: string | null
+}
+
+export interface EventMarketTradeView {
+  best_side?: string | null
+  market_status?: string | null
+  market_ticker?: string | null
+  market_yes?: number | null
+  market_yes_bid?: number | null
+  market_yes_ask?: number | null
+  last_price?: number | null
+  fair_yes?: number | null
+  edge_cents?: number | null
+  resolved_outcome?: string | null
+}
+
 export interface EventMarketUserFacing {
   source: {
     platform: string
@@ -18,29 +41,14 @@ export interface EventMarketUserFacing {
   summary: EventMarketSummary
   next_action: string | null
   context: Record<string, unknown>
-  market_view: Record<string, unknown>
-}
-
-export interface EventMarketPlanResponse {
-  timestamp: string
-  user_facing: EventMarketUserFacing
-  hidden: {
-    plan: Record<string, unknown>
-    workflow: Record<string, unknown>
-    output_contract: Record<string, unknown>
+  market_view: Record<string, unknown> & {
+    available_contracts?: EventMarketContractPreview[]
+    trade_view?: EventMarketTradeView
   }
 }
 
-export interface EventMarketPlanRequest {
-  venue: string
-  domain?: string | null
-  market_id?: string | null
-  title?: string | null
-  question?: string | null
-  market_type?: string | null
-  market_subtype?: string | null
-  url?: string | null
-  resolution_source?: string | null
-  notes?: string | null
-  metadata?: Record<string, unknown>
+export interface EventMarketAnalyzeResponse {
+  timestamp: string
+  card: EventMarketUserFacing
+  raw: Record<string, unknown>
 }
