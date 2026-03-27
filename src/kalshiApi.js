@@ -322,8 +322,11 @@ export async function enrichEventMarketInput(input = {}, options = {}) {
 
   return {
     ...input,
+    domain: input.domain ?? (normalizeComparableText(event?.category) === 'mentions' ? 'mention' : input.domain),
     title: input.title ?? event?.title ?? market?.title ?? null,
     question: input.question ?? event?.title ?? market?.title ?? null,
+    market_type: input.market_type ?? 'event market',
+    market_subtype: input.market_subtype ?? (normalizeComparableText(event?.category) === 'mentions' ? 'mention' : input.market_subtype ?? null),
     market_id: input.market_id ?? normalizeTicker(market?.ticker) ?? extraMetadata.kalshi_event_ticker,
     metadata: mergeMetadata(input, extraMetadata),
   };

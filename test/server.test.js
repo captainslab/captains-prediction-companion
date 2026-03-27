@@ -9,6 +9,8 @@ import { buildEventMarketWorkflowPrompt } from '../src/eventMarketPrompt.js';
 
 const TRUMP_EVENT_URL =
   'https://kalshi.com/markets/kxtrumpmentionb/trump-mention-b/KXTRUMPMENTIONB-26MAR27?utm_source=kalshiapp_eventpage';
+const TRUMP_GENERIC_EVENT_URL =
+  'https://kalshi.com/markets/kxtrumpmention/what-will-trump-say/KXTRUMPMENTION-26MAR27?utm_source=kalshiapp_eventpage';
 const KALSHI_BASE_URL = 'https://api.elections.kalshi.com/trade-api/v2';
 
 function jsonResponse(payload, status = 200) {
@@ -64,6 +66,44 @@ function buildTrumpEventPayload() {
         yes_bid_dollars: '0.6100',
         yes_ask_dollars: '0.6500',
         last_price_dollars: '0.6300',
+      },
+    ],
+  };
+}
+
+function buildTrumpGenericEventPayload() {
+  return {
+    event: {
+      category: 'Mentions',
+      event_ticker: 'KXTRUMPMENTION-26MAR27',
+      series_ticker: 'KXTRUMPMENTION',
+      sub_title: 'Donald Trump - Remarks at FII PRIORITY Summit',
+      title: 'What will Trump say during his remarks at the FII PRIORITY Summit?',
+    },
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTION-26MAR27-CHIN',
+        title: 'What will Trump say during his remarks at the FII PRIORITY Summit?',
+        yes_sub_title: 'China',
+        custom_strike: { Word: 'China' },
+        rules_primary:
+          'If Trump says China during the remarks, then the market resolves to Yes.',
+        status: 'active',
+        yes_bid_dollars: '0.7400',
+        yes_ask_dollars: '0.7800',
+        last_price_dollars: '0.7600',
+      },
+      {
+        ticker: 'KXTRUMPMENTION-26MAR27-BIDE',
+        title: 'What will Trump say during his remarks at the FII PRIORITY Summit?',
+        yes_sub_title: 'Biden',
+        custom_strike: { Word: 'Biden' },
+        rules_primary:
+          'If Trump says Biden during the remarks, then the market resolves to Yes.',
+        status: 'active',
+        yes_bid_dollars: '0.1200',
+        yes_ask_dollars: '0.1600',
+        last_price_dollars: '0.1400',
       },
     ],
   };
@@ -208,6 +248,29 @@ test('event market tool prices a specific Kalshi mention contract when market da
   assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-BIDE');
   assert.equal(result.user_facing.market_view.trade_view.market_yes, 0.84);
   assert.equal(result.user_facing.market_view.trade_view.market_status, 'active');
+});
+
+test('generic trump mention board url still classifies as a mention market', async () => {
+  const fetchImpl = createFetchStub(
+    new Map([[`${KALSHI_BASE_URL}/events/KXTRUMPMENTION-26MAR27`, buildTrumpGenericEventPayload()]])
+  );
+
+  const result = await buildEventMarketPlan(
+    {
+      venue: 'Kalshi',
+      url: TRUMP_GENERIC_EVENT_URL,
+    },
+    { fetchImpl }
+  );
+
+  assert.equal(result.user_facing.event_domain, 'politics');
+  assert.equal(result.user_facing.event_type, 'speech');
+  assert.equal(result.user_facing.market_type, 'mention');
+  assert.equal(result.user_facing.status, 'waiting');
+  assert.equal(result.user_facing.summary.recommendation, 'watch');
+  assert.equal(result.user_facing.context.speaker, 'Donald Trump');
+  assert.equal(result.user_facing.context.event_name, 'Remarks at FII PRIORITY Summit');
+  assert.equal(result.user_facing.market_view.available_contracts.length, 2);
 });
 
 test('event market tool routes earnings markets into the mention workflow', async () => {

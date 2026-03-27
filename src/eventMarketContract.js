@@ -95,12 +95,19 @@ function inferMarketId(input) {
 
 function collectDomainText(input) {
   const urlContext = extractUrlContext(input.url);
+  const metadata = input.metadata ?? {};
   return [
+    input.domain,
     input.title,
     input.question,
     input.market_id,
+    input.market_type,
+    input.market_subtype,
     input.url,
     input.resolution_source,
+    metadata.kalshi_category,
+    metadata.target_phrase,
+    metadata.market_ticker,
     urlContext.pathname,
     urlContext.tokens.join(' '),
     urlContext.tail,
