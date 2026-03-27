@@ -243,12 +243,11 @@ function metadataValue(metadata, ...keys) {
   return null;
 }
 
-function priceThresholdRecommendation(marketStatus, marketYes) {
+function priceThresholdRecommendation(marketStatus, marketYes, fairYes, edgeCents) {
   if (marketStatus && marketStatus !== 'active') return 'pass';
-  if (marketYes == null) return 'watch';
-  if (marketYes >= 0.8) return 'buy_yes';
-  if (marketYes <= 0.2) return 'buy_no';
-  return 'watch';
+  if (marketYes == null || fairYes == null || edgeCents == null) return 'watch';
+  if (edgeCents <= 0) return 'pass';
+  return fairYes > marketYes ? 'buy_yes' : 'buy_no';
 }
 
 function extractMatchup(...values) {
@@ -380,8 +379,10 @@ function buildUserFacingMarketView(input, marketType, eventType) {
       extractTargetPhrase(input.title, input.question, input.market_id, input.url);
     const marketStatus = metadataValue(metadata, 'market_status');
     const marketYes = metadataValue(metadata, 'market_yes');
+    const fairYes = metadataValue(metadata, 'fair_yes');
+    const edgeCents = metadataValue(metadata, 'edge_cents');
     const availableContracts = Array.isArray(metadata.available_contracts) ? metadata.available_contracts : [];
-    const bestSide = priceThresholdRecommendation(marketStatus, marketYes);
+    const bestSide = priceThresholdRecommendation(marketStatus, marketYes, fairYes, edgeCents);
 
     const watchFor =
       Array.isArray(metadata.watch_for) && metadata.watch_for.every(item => typeof item === 'string')
@@ -411,8 +412,8 @@ function buildUserFacingMarketView(input, marketType, eventType) {
         market_yes_bid: metadataValue(metadata, 'market_yes_bid'),
         market_yes_ask: metadataValue(metadata, 'market_yes_ask'),
         last_price: metadataValue(metadata, 'market_last_price'),
-        fair_yes: null,
-        edge_cents: null,
+        fair_yes: fairYes,
+        edge_cents: edgeCents,
         resolved_outcome: metadataValue(metadata, 'resolved_outcome'),
       },
       available_contracts: availableContracts,
@@ -508,7 +509,12 @@ function buildUserFacingStatus(eventType, marketType, marketView) {
       ? 'waiting'
       : 'insufficient_context';
   }
-  if (marketType === 'mention' && marketView.trade_view?.market_yes != null) return 'ready';
+  if (marketType === 'mention') {
+    if (marketView.trade_view?.fair_yes != null && marketView.trade_view?.edge_cents != null) {
+      return 'ready';
+    }
+    if (marketView.trade_view?.market_yes != null) return 'needs_pricing';
+  }
   if (eventType === 'general' && marketType !== 'mention') return 'insufficient_context';
   return 'needs_pricing';
 }
@@ -542,8 +548,11 @@ function buildUserFacingHeadline(status, marketType, eventType, input) {
   if (status === 'waiting' && marketType === 'mention') {
     return 'The mention board is loaded, but the app still needs a specific contract.';
   }
+  if (status === 'needs_pricing' && marketType === 'mention') {
+    return 'The mention contract is mapped and live-priced, but the alpha pipeline has not set fair value yet.';
+  }
   if (status === 'ready' && marketType === 'mention') {
-    return 'The mention contract is mapped and priced from Kalshi market data.';
+    return 'The mention contract is priced and the alpha pipeline has a directional edge.';
   }
   if (marketType === 'mention') {
     return 'The contract is mapped as a mention market and is ready for pricing.';
@@ -576,8 +585,11 @@ function buildUserFacingReason(status, marketType) {
   if (status === 'waiting' && marketType === 'mention') {
     return 'The Kalshi link resolves to a board with multiple phrase contracts, so the app needs one specific contract before it can take a side.';
   }
+  if (status === 'needs_pricing' && marketType === 'mention') {
+    return 'The contract has live Kalshi prices, but the alpha pipeline has not produced fair value or edge yet.';
+  }
   if (status === 'ready' && marketType === 'mention') {
-    return 'The exact phrase, rules summary, and current Kalshi prices are loaded into the card.';
+    return 'The alpha pipeline has loaded the exact phrase, rules summary, and computed edge for this contract.';
   }
   if (marketType === 'mention') {
     return 'The phrase path is mapped, but exact pricing and edge still need to be computed.';
@@ -589,6 +601,7 @@ function buildUserFacingNextAction(status, marketType, eventType) {
   if (status === 'market_unmapped') return 'review_market_rules';
   if (status === 'insufficient_context') return 'confirm_event_context';
   if (status === 'waiting' && marketType === 'mention') return 'select_specific_contract';
+  if (status === 'needs_pricing' && marketType === 'mention') return 'run_alpha_pipeline';
   if (status === 'ready' && marketType === 'mention') return 'review_market_rules';
   if (marketType === 'mention' && ['ncaamb_game', 'mlb_game', 'nfl_game', 'nba_game'].includes(eventType)) {
     return 'confirm_broadcast_crew';

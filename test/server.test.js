@@ -246,8 +246,8 @@ test('event market tool prices a specific Kalshi mention contract when market da
     { fetchImpl }
   );
 
-  assert.equal(result.user_facing.status, 'ready');
-  assert.equal(result.user_facing.summary.recommendation, 'buy_yes');
+  assert.equal(result.user_facing.status, 'needs_pricing');
+  assert.equal(result.user_facing.summary.recommendation, 'watch');
   assert.equal(result.user_facing.context.speaker, 'Donald Trump');
   assert.equal(result.user_facing.market_view.target_phrase, 'Biden');
   assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-BIDE');
@@ -291,7 +291,7 @@ test('event market tool enriches a specific Kalshi contract from the url tail', 
   );
 
   assert.equal(result.user_facing.market_type, 'mention');
-  assert.equal(result.user_facing.status, 'ready');
+  assert.equal(result.user_facing.status, 'needs_pricing');
   assert.equal(result.user_facing.summary.recommendation, 'watch');
   assert.equal(result.user_facing.market_view.target_phrase, 'Tariff');
   assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-TARI');
@@ -353,7 +353,7 @@ test('focused kalshi market plan auto-selects the top contract from a board url'
     { fetchImpl }
   );
 
-  assert.equal(result.user_facing.status, 'ready');
+  assert.equal(result.user_facing.status, 'needs_pricing');
   assert.equal(result.user_facing.summary.recommendation, 'watch');
   assert.equal(result.user_facing.source.market_id, focusTicker);
   assert.equal(result.user_facing.market_view.target_phrase, 'China');
