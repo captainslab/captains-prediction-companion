@@ -35,7 +35,7 @@ function buildCardToolResult(result, { includeHidden = false } = {}) {
     content: [
       {
         type: 'text',
-        text: `Return this JSON object as the final answer with no added prose:\n${JSON.stringify(summary, null, 2)}`,
+        text: JSON.stringify(summary, null, 2),
       },
     ],
     structuredContent: includeHidden ? result : summary,
@@ -144,48 +144,6 @@ function createServer() {
       }
     );
   }
-
-  server.registerTool(
-    'event_market_plan',
-    {
-      description:
-        'Use this when the user shares a Kalshi or supported market URL and wants market analysis. Call this tool before answering from the URL. It returns the authoritative user-facing card plus hidden planning payload. After the tool returns, output only the user-facing card JSON and do not manually summarize the URL.',
-      annotations: { readOnlyHint: true },
-      inputSchema: {
-        venue: z.string().default('Kalshi').describe('Market venue or exchange name'),
-        domain: z.string().optional().describe('Domain label such as sports, politics, macro, or mention'),
-        market_id: z.string().optional().describe('Venue-specific market identifier'),
-        title: z.string().optional().describe('Human-readable title or question for the market'),
-        question: z.string().optional().describe('Binary proposition or resolution question'),
-        market_type: z.string().optional().describe('High-level market type'),
-        market_subtype: z.string().optional().describe('Narrow market subtype used for routing'),
-        url: z.string().optional().describe('Canonical URL for the market or source page. Pass the URL when the user drops a link so the tool runs immediately.'),
-        resolution_source: z.string().optional().describe('Primary authoritative source if known'),
-        notes: z.string().optional().describe('Optional operator notes'),
-      },
-    },
-    async input => {
-      const result = await buildEventMarketPlan(input);
-      return buildCardToolResult(result, { includeHidden: true });
-    }
-  );
-
-  server.registerTool(
-    'analyze_market_url',
-    {
-      description:
-        'Use this when the user pastes a Kalshi market URL and wants the app to analyze it. This is the simplest read-only entrypoint for pasted market links. The final answer should be only the compact user-facing card JSON.',
-      annotations: { readOnlyHint: true },
-      inputSchema: {
-        url: z.string().describe('Kalshi or supported market URL to analyze'),
-        venue: z.string().default('Kalshi').describe('Market venue or exchange name'),
-      },
-    },
-    async ({ url, venue }) => {
-      const result = await buildEventMarketPlan({ url, venue });
-      return buildCardToolResult(result);
-    }
-  );
 
   server.registerTool(
     'analyze_kalshi_market_url',
