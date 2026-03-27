@@ -20,6 +20,11 @@ function normalizeTicker(value) {
   return cleaned ? cleaned.toUpperCase() : null;
 }
 
+function isSpecificContractTicker(value) {
+  const ticker = normalizeTicker(value);
+  return Boolean(ticker && ticker.includes('-') && !/\d{2}[A-Z]{3}\d{2}$/.test(ticker));
+}
+
 function extractPhraseCandidate(...values) {
   const cleanCandidate = candidate => {
     const text = normalizeComparableText(candidate);
@@ -143,7 +148,7 @@ function selectMatchingMarket(markets, input) {
     normalizeTicker(input.market_ticker) ??
     normalizeTicker(isObject(input.metadata) ? input.metadata.market_ticker : null) ??
     normalizeTicker(input.market_id);
-  if (explicitTicker && explicitTicker.includes('-') && !/\d{2}[A-Z]{3}\d{2}$/.test(explicitTicker)) {
+  if (isSpecificContractTicker(explicitTicker)) {
     const exact = markets.find(market => normalizeTicker(market.ticker) === explicitTicker);
     if (exact) return exact;
   }
@@ -267,8 +272,10 @@ export async function enrichEventMarketInput(input = {}, options = {}) {
 
   if (explicitMarketTicker) {
     market = await fetchKalshiMarket(explicitMarketTicker, fetchImpl);
-  } else if (providedMarketId && !/\d{2}[A-Z]{3}\d{2}$/.test(providedMarketId)) {
+  } else if (isSpecificContractTicker(providedMarketId)) {
     market = await fetchKalshiMarket(providedMarketId, fetchImpl);
+  } else if (isSpecificContractTicker(urlContext?.tail)) {
+    market = await fetchKalshiMarket(urlContext.tail, fetchImpl);
   }
 
   if (market?.event_ticker) {

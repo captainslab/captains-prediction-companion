@@ -25,6 +25,13 @@ type ToolResult = {
   structuredContent?: unknown
 }
 
+type FocusMetadata = {
+  auto_selected: boolean
+  market_ticker: string | null
+  label: string | null
+  message: string
+} | null
+
 function isJsonRpcError(payload: unknown): payload is JsonRpcError {
   return payload !== null && typeof payload === 'object' && 'error' in payload
 }
@@ -149,6 +156,69 @@ function parseToolCard(toolResult: ToolResult): EventMarketUserFacing {
   return JSON.parse(textBlock.text) as EventMarketUserFacing
 }
 
+function getAvailableContracts(card: EventMarketUserFacing) {
+  const contracts = card.market_view?.available_contracts
+  return Array.isArray(contracts) ? contracts : []
+}
+
+function getActiveMarketTicker(card: EventMarketUserFacing) {
+  const tradeView = card.market_view?.trade_view
+  return typeof tradeView?.market_ticker === 'string'
+    ? tradeView.market_ticker
+    : null
+}
+
+function deriveContractUrl(
+  baseUrl: string | null,
+  marketTicker: string | null
+) {
+  if (!baseUrl || !marketTicker) return null
+
+  try {
+    const parsed = new URL(baseUrl)
+    const segments = parsed.pathname.split('/').filter(Boolean)
+    if (segments.length === 0) return null
+    segments[segments.length - 1] = marketTicker
+    parsed.pathname = `/${segments.join('/')}`
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+async function callAnalyzeTool(sessionId: string, url: string) {
+  const requestId = crypto.randomUUID()
+  const { response, payload, text } = await postJsonRpc(
+    {
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'tools/call',
+      params: {
+        name: TOOL_NAME,
+        arguments: { url },
+      },
+    },
+    sessionId
+  )
+
+  if (!response.ok) {
+    throw new Error(text || `MCP tool call failed with ${response.status}`)
+  }
+
+  if (isJsonRpcError(payload)) {
+    throw new Error(payload.error.message)
+  }
+
+  const result = (payload as JsonRpcSuccess<ToolResult> | null)?.result
+
+  if (!result) {
+    throw new Error('MCP tool returned no result payload.')
+  }
+
+  const card = parseToolCard(result)
+  return { result, card }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { url?: string }
@@ -163,50 +233,35 @@ export async function POST(request: NextRequest) {
 
     const sessionId = await initializeSession()
     await notifyInitialized(sessionId)
+    let { result, card } = await callAnalyzeTool(sessionId, url)
+    let focus: FocusMetadata = null
 
-    const requestId = crypto.randomUUID()
-    const { response, payload, text } = await postJsonRpc(
-      {
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'tools/call',
-        params: {
-          name: TOOL_NAME,
-          arguments: { url },
-        },
-      },
-      sessionId
-    )
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: text || `MCP tool call failed with ${response.status}` },
-        { status: response.status }
+    const boardContracts = getAvailableContracts(card)
+    if (!getActiveMarketTicker(card) && boardContracts.length > 0) {
+      const primaryContract = boardContracts[0]
+      const contractUrl = deriveContractUrl(
+        card.source.url ?? url,
+        primaryContract.market_ticker
       )
+
+      if (contractUrl) {
+        const focused = await callAnalyzeTool(sessionId, contractUrl)
+        result = focused.result
+        card = focused.card
+        focus = {
+          auto_selected: true,
+          market_ticker: primaryContract.market_ticker,
+          label: primaryContract.label,
+          message: `Auto-focused ${primaryContract.label ?? primaryContract.market_ticker ?? 'the top contract'} from the board.`,
+        }
+      }
     }
-
-    if (isJsonRpcError(payload)) {
-      return NextResponse.json(
-        { error: payload.error.message },
-        { status: 502 }
-      )
-    }
-
-    const result = (payload as JsonRpcSuccess<ToolResult> | null)?.result
-
-    if (!result) {
-      return NextResponse.json(
-        { error: 'MCP tool returned no result payload.' },
-        { status: 502 }
-      )
-    }
-
-    const card = parseToolCard(result)
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
       card,
       raw: result,
+      focus,
     })
   } catch (error) {
     console.error('MCP analysis proxy failed:', error)

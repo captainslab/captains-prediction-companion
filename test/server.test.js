@@ -250,6 +250,48 @@ test('event market tool prices a specific Kalshi mention contract when market da
   assert.equal(result.user_facing.market_view.trade_view.market_status, 'active');
 });
 
+test('event market tool enriches a specific Kalshi contract from the url tail', async () => {
+  const eventPayload = buildTrumpEventPayload();
+  const marketPayload = {
+    market: {
+      ...eventPayload.markets[1],
+      event_ticker: 'KXTRUMPMENTIONB-26MAR27',
+      rules_secondary: 'Video of the remarks will be used as the primary settlement source.',
+    },
+  };
+  const orderbookPayload = {
+    orderbook_fp: {
+      yes_dollars: [
+        [0.65, 100],
+        [0.66, 50],
+      ],
+      no_dollars: [[0.35, 40]],
+    },
+  };
+  const fetchImpl = createFetchStub(
+    new Map([
+      [`${KALSHI_BASE_URL}/markets/KXTRUMPMENTIONB-26MAR27-TARI`, marketPayload],
+      [`${KALSHI_BASE_URL}/markets/KXTRUMPMENTIONB-26MAR27-TARI/orderbook`, orderbookPayload],
+      [`${KALSHI_BASE_URL}/events/KXTRUMPMENTIONB-26MAR27`, eventPayload],
+    ])
+  );
+
+  const result = await buildEventMarketPlan(
+    {
+      venue: 'Kalshi',
+      url: 'https://kalshi.com/markets/kxtrumpmentionb/trump-mention-b/KXTRUMPMENTIONB-26MAR27-TARI?utm_source=kalshiapp_eventpage',
+    },
+    { fetchImpl }
+  );
+
+  assert.equal(result.user_facing.market_type, 'mention');
+  assert.equal(result.user_facing.status, 'ready');
+  assert.equal(result.user_facing.summary.recommendation, 'watch');
+  assert.equal(result.user_facing.market_view.target_phrase, 'Tariff');
+  assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-TARI');
+  assert.equal(result.user_facing.market_view.trade_view.market_yes, 0.63);
+});
+
 test('generic trump mention board url still classifies as a mention market', async () => {
   const fetchImpl = createFetchStub(
     new Map([[`${KALSHI_BASE_URL}/events/KXTRUMPMENTION-26MAR27`, buildTrumpGenericEventPayload()]])

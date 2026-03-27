@@ -245,6 +245,7 @@ export function EventMarketPlanner() {
   const [result, setResult] = useState<EventMarketAnalyzeResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [showRaw, setShowRaw] = useState(false)
   const [lastAnalyzedUrl, setLastAnalyzedUrl] = useState<string | null>(null)
 
@@ -259,29 +260,34 @@ export function EventMarketPlanner() {
   const watchForItems = useMemo(() => getWatchForItems(card), [card])
   const mentionPaths = useMemo(() => getMentionPaths(card), [card])
 
+  async function fetchAnalysis(nextUrl: string) {
+    const response = await fetch('/api/mcp/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: nextUrl }),
+    })
+
+    const payload = (await response.json()) as EventMarketAnalyzeResponse & {
+      error?: string
+    }
+
+    if (!response.ok) {
+      throw new Error(payload.error || `Request failed with ${response.status}`)
+    }
+
+    return payload
+  }
+
   async function analyzeMarket(nextUrl: string) {
     setLoading(true)
     setError(null)
+    setInfo(null)
 
     try {
-      const response = await fetch('/api/mcp/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: nextUrl }),
-      })
-
-      const payload = (await response.json()) as EventMarketAnalyzeResponse & {
-        error?: string
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          payload.error || `Request failed with ${response.status}`
-        )
-      }
-
+      const payload = await fetchAnalysis(nextUrl)
       setResult(payload)
-      setLastAnalyzedUrl(nextUrl)
+      setInfo(payload.focus?.message ?? null)
+      setLastAnalyzedUrl(payload.card.source.url ?? nextUrl)
       setUrl(nextUrl)
     } catch (requestError) {
       console.error('Failed to analyze Kalshi market URL:', requestError)
@@ -290,6 +296,7 @@ export function EventMarketPlanner() {
           ? requestError.message
           : 'Failed to analyze Kalshi market URL.'
       )
+      setInfo(null)
     } finally {
       setLoading(false)
     }
@@ -342,6 +349,7 @@ export function EventMarketPlanner() {
             onClick={() => {
               setUrl(EXAMPLE_BOARD_URL)
               setError(null)
+              setInfo(null)
             }}
             className="rounded-full border border-border bg-surface-elevated px-3 py-1 text-[11px] text-text-secondary transition-colors hover:border-cyan/35 hover:text-text-primary"
           >
@@ -387,6 +395,12 @@ export function EventMarketPlanner() {
         {error && (
           <div className="mt-4 rounded-xl border border-rose/35 bg-rose/10 px-3 py-3 text-sm text-rose">
             {error}
+          </div>
+        )}
+
+        {info && !error && (
+          <div className="mt-4 rounded-xl border border-cyan/30 bg-cyan/10 px-3 py-3 text-sm text-cyan">
+            {info}
           </div>
         )}
 

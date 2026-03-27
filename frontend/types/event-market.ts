@@ -51,4 +51,10 @@ export interface EventMarketAnalyzeResponse {
   timestamp: string
   card: EventMarketUserFacing
   raw: Record<string, unknown>
+  focus?: {
+    auto_selected: boolean
+    market_ticker: string | null
+    label: string | null
+    message: string
+  } | null
 }
