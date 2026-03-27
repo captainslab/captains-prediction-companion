@@ -32,15 +32,7 @@ export function getPortfolioWsUrl(): string {
  * Get the API docs URL.
  */
 export function getApiDocsUrl(): string {
-  if (typeof window === 'undefined') {
-    return 'http://localhost:8000/docs'
-  }
-
-  const hostname = window.location.hostname
-
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:8000/docs'
-  }
-
-  return `http://${hostname}:8000/docs`
+  // Use the Next.js proxy path so the rendered href stays identical
+  // between server render and client hydration.
+  return '/api/docs'
 }
