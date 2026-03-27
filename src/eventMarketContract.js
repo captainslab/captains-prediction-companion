@@ -106,6 +106,11 @@ function collectDomainText(input) {
     input.url,
     input.resolution_source,
     metadata.kalshi_category,
+    metadata.event_name,
+    metadata.speaker,
+    metadata.rules_summary,
+    metadata.kalshi_event_ticker,
+    metadata.kalshi_series_ticker,
     metadata.target_phrase,
     metadata.market_ticker,
     urlContext.pathname,
@@ -125,15 +130,11 @@ function inferDomain(input) {
 
   const haystack = collectDomainText(input);
 
-  if (/\bmention(s)?\b|\bphrase\b|\bword\b|\bsaid\b|\bsays\b|\bsaying\b|\bspeech\b|\bremarks\b/.test(haystack)) {
-    return 'mention';
-  }
-
   if (/\b(nfl|nba|mlb|ufc|nascar|football|basketball|baseball|team|game|score|win|quarter|series)\b/.test(haystack)) {
     return 'sports';
   }
 
-  if (/\b(election|politics|president|congress|senate|house|debate|campaign|white house|c-span|press conference)\b/.test(haystack)) {
+  if (/\b(election|politics|president|congress|senate|house|debate|campaign|white house|c-span|press conference|cpac|governor|attorney general|secretary)\b/.test(haystack)) {
     return 'politics';
   }
 
@@ -141,7 +142,11 @@ function inferDomain(input) {
     return 'macro';
   }
 
-  if (/\b(earnings|earnings call|quarter|revenue|guidance|investor relations|transcript)\b/.test(haystack)) {
+  if (/\b(earnings|earnings call|quarter|revenue|guidance|investor relations|transcript|ceo|cfo)\b/.test(haystack)) {
+    return 'corporate';
+  }
+
+  if (/\bmention(s)?\b|\bphrase\b|\bword\b|\bsaid\b|\bsays\b|\bsaying\b|\bspeech\b|\bremarks\b/.test(haystack)) {
     return 'mention';
   }
 
@@ -182,7 +187,11 @@ function inferEventType(input, domain) {
   if (/\binterview\b|\bhost\b|\bprogram\b/.test(haystack)) {
     return 'interview';
   }
-  if (/\bspeech\b|\bremarks\b|\baddress\b|\brally\b/.test(haystack)) {
+  if (
+    /\bspeech\b|\bremarks\b|\baddress\b|\brally\b/.test(haystack) ||
+    /\bwhat will\b.+\bsay during\b/.test(haystack) ||
+    /\bif\b.+\bsays?\b.+\bas part of\b/.test(haystack)
+  ) {
     return 'speech';
   }
   if (/\bearnings\b|\bearnings call\b|\bquarterly results\b|\binvestor relations\b|\btranscript\b|\bq[1-4]\b/.test(haystack)) {

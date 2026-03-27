@@ -113,6 +113,32 @@ function buildTrumpGenericEventPayload() {
   };
 }
 
+function buildPoliticsDinnerEventPayload() {
+  return {
+    event: {
+      category: 'Mentions',
+      event_ticker: 'KXPOLITICSMENTION-26MAR27D',
+      series_ticker: 'KXPOLITICSMENTION',
+      sub_title: 'Ken Paxton - CPAC Ronald Reagan Dinner',
+      title: 'What will Ken Paxton say during CPAC Ronald Reagan Dinner?',
+    },
+    markets: [
+      {
+        ticker: 'KXPOLITICSMENTION-26MAR27D-DEMO',
+        title: 'What will Ken Paxton say during CPAC Ronald Reagan Dinner?',
+        yes_sub_title: 'Democrat',
+        custom_strike: { Word: 'Democrat' },
+        rules_primary:
+          'If Ken Paxton says Democrat as part of CPAC Ronald Reagan Dinner, then the market resolves to Yes.',
+        status: 'active',
+        yes_bid_dollars: '0.6100',
+        yes_ask_dollars: '0.7100',
+        last_price_dollars: '0.8300',
+      },
+    ],
+  };
+}
+
 test('note store creates, searches, lists, and deletes notes', () => {
   const dir = mkdtempSync(join(tmpdir(), 'chatgpt-app-starter-'));
   const file = join(dir, 'notes.json');
@@ -319,6 +345,26 @@ test('generic trump mention board url still classifies as a mention market', asy
   assert.equal(result.user_facing.context.speaker, 'Donald Trump');
   assert.equal(result.user_facing.context.event_name, 'Remarks at FII PRIORITY Summit');
   assert.equal(result.user_facing.market_view.available_contracts.length, 2);
+});
+
+test('politics mention event metadata classifies as politics speech instead of generic media', async () => {
+  const fetchImpl = createFetchStub(
+    new Map([[`${KALSHI_BASE_URL}/events/KXPOLITICSMENTION-26MAR27D`, buildPoliticsDinnerEventPayload()]])
+  );
+
+  const result = await buildEventMarketPlan(
+    {
+      venue: 'Kalshi',
+      url: 'https://kalshi.com/markets/kxpoliticsmention/general-politics/KXPOLITICSMENTION-26MAR27D?utm_source=kalshiapp_eventpage',
+    },
+    { fetchImpl }
+  );
+
+  assert.equal(result.user_facing.event_domain, 'politics');
+  assert.equal(result.user_facing.event_type, 'speech');
+  assert.equal(result.user_facing.market_type, 'mention');
+  assert.equal(result.user_facing.context.speaker, 'Ken Paxton');
+  assert.equal(result.user_facing.context.event_name, 'CPAC Ronald Reagan Dinner');
 });
 
 test('focused kalshi market plan auto-selects the top contract from a board url', async () => {
