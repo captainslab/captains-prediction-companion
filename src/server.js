@@ -39,6 +39,7 @@ function createServer() {
     'app_status',
     {
       description: 'Get a compact status report for Captains Prediction Companion.',
+      annotations: { readOnlyHint: true },
       inputSchema: {},
     },
     async () => {
@@ -135,7 +136,8 @@ function createServer() {
     'event_market_plan',
     {
       description:
-        'Build the authoritative user-facing card plus hidden planning payload for a Kalshi or supported event market. When the user drops a market URL, run this tool immediately and do not wait for extra context. After the tool returns, the assistant should output only the user-facing card JSON and must not manually summarize the URL.',
+        'Use this when the user shares a Kalshi or supported market URL and wants market analysis. Call this tool before answering from the URL. It returns the authoritative user-facing card plus hidden planning payload. After the tool returns, output only the user-facing card JSON and do not manually summarize the URL.',
+      annotations: { readOnlyHint: true },
       inputSchema: {
         venue: z.string().default('Kalshi').describe('Market venue or exchange name'),
         domain: z.string().optional().describe('Domain label such as sports, politics, macro, or mention'),
@@ -147,11 +149,61 @@ function createServer() {
         url: z.string().optional().describe('Canonical URL for the market or source page. Pass the URL when the user drops a link so the tool runs immediately.'),
         resolution_source: z.string().optional().describe('Primary authoritative source if known'),
         notes: z.string().optional().describe('Optional operator notes'),
-        metadata: z.record(z.string(), z.any()).default({}).describe('Extra context to attach to the plan'),
       },
     },
     async input => {
       const result = await buildEventMarketPlan(input);
+      const summary = buildEventMarketPlanSummary(result);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(summary, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  server.registerTool(
+    'analyze_market_url',
+    {
+      description:
+        'Use this when the user pastes a Kalshi market URL and wants the app to analyze it. This is the simplest read-only entrypoint for pasted market links. The final answer should be only the compact user-facing card JSON.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        url: z.string().describe('Kalshi or supported market URL to analyze'),
+        venue: z.string().default('Kalshi').describe('Market venue or exchange name'),
+      },
+    },
+    async ({ url, venue }) => {
+      const result = await buildEventMarketPlan({ url, venue });
+      const summary = buildEventMarketPlanSummary(result);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(summary, null, 2),
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  server.registerTool(
+    'analyze_kalshi_market_url',
+    {
+      description:
+        'Call this immediately when the user pastes a kalshi.com/markets URL. This is the primary read-only URL analysis tool for Captains Prediction Companion. Input: one Kalshi market URL. Output: the authoritative compact user-facing card JSON only.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        url: z.string().describe('Kalshi market URL to analyze'),
+      },
+    },
+    async ({ url }) => {
+      const result = await buildEventMarketPlan({ url, venue: 'Kalshi' });
       const summary = buildEventMarketPlanSummary(result);
       return {
         content: [
