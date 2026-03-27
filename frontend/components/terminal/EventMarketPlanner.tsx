@@ -97,14 +97,6 @@ function getWatchForItems(card: EventMarketUserFacing | null) {
   return watchFor.filter((item): item is string => typeof item === 'string')
 }
 
-function getMentionPaths(card: EventMarketUserFacing | null) {
-  const mentionPaths = asRecord(asRecord(card?.market_view).mention_paths)
-  return Object.entries(mentionPaths).filter(([, value]) => {
-    const record = asRecord(value)
-    return Object.keys(record).length > 0
-  })
-}
-
 function getAvailableContracts(
   card: EventMarketUserFacing | null
 ): EventMarketContractPreview[] {
@@ -258,7 +250,6 @@ export function EventMarketPlanner() {
   )
   const marketDetails = useMemo(() => getMarketDetails(card), [card])
   const watchForItems = useMemo(() => getWatchForItems(card), [card])
-  const mentionPaths = useMemo(() => getMentionPaths(card), [card])
 
   async function fetchAnalysis(nextUrl: string) {
     const response = await fetch('/api/mcp/analyze', {
@@ -626,10 +617,10 @@ export function EventMarketPlanner() {
 
             <section className="rounded-2xl border border-border bg-surface p-5">
               <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                Decision support
+                Alpha pipeline
               </div>
               <h4 className="mt-1 text-lg font-semibold text-text-primary">
-                Phrase path and monitoring hooks
+                Contract state and monitoring hooks
               </h4>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
@@ -683,48 +674,39 @@ export function EventMarketPlanner() {
 
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                    Mention paths
+                    Pipeline state
                   </div>
-                  {mentionPaths.length === 0 ? (
-                    <div className="mt-3 rounded-xl border border-dashed border-border bg-void/25 px-3 py-4 text-sm text-text-muted">
-                      No mention-path breakdown extracted yet.
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                        Active contract
+                      </div>
+                      <div className="mt-1 text-sm font-medium text-text-primary">
+                        {tradeView.market_ticker ??
+                          card.source.market_id ??
+                          'Board-level selection pending'}
+                      </div>
                     </div>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      {mentionPaths.map(([key, value]) => {
-                        const pathValue = asRecord(value)
-                        const strength =
-                          typeof pathValue.strength === 'string'
-                            ? pathValue.strength
-                            : typeof pathValue.level === 'string'
-                              ? pathValue.level
-                              : 'unknown'
-                        const reason =
-                          typeof pathValue.reason === 'string'
-                            ? pathValue.reason
-                            : 'No reason provided.'
-
-                        return (
-                          <div
-                            key={key}
-                            className="rounded-xl border border-border bg-surface-elevated px-4 py-3"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-sm font-medium text-text-primary">
-                                {labelize(key)}
-                              </div>
-                              <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                                {labelize(strength)}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm leading-6 text-text-secondary">
-                              {reason}
-                            </p>
-                          </div>
-                        )
-                      })}
+                    <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                        Pipeline status
+                      </div>
+                      <div className="mt-1 text-sm font-medium text-text-primary">
+                        {labelize(card.status)}
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                        {card.summary.one_line_reason}
+                      </p>
                     </div>
-                  )}
+                    <div className="rounded-xl border border-border bg-surface-elevated px-4 py-3">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
+                        Next pipeline action
+                      </div>
+                      <div className="mt-1 text-sm font-medium text-text-primary">
+                        {card.next_action ? labelize(card.next_action) : 'No follow-up'}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>

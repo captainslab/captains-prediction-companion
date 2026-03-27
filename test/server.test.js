@@ -208,6 +208,7 @@ test('event market plan summary stays compact and hides the workflow memo', asyn
   assert.match(summary.summary.one_line_reason, /specific contract/i);
   assert.equal(summary.next_action, 'select_specific_contract');
   assert.equal(Object.hasOwn(summary, 'workflow'), false);
+  assert.equal(Object.hasOwn(summary.market_view, 'mention_paths'), false);
 });
 
 test('event market tool prices a specific Kalshi mention contract when market data is available', async () => {
@@ -252,6 +253,7 @@ test('event market tool prices a specific Kalshi mention contract when market da
   assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-BIDE');
   assert.equal(result.user_facing.market_view.trade_view.market_yes, 0.84);
   assert.equal(result.user_facing.market_view.trade_view.market_status, 'active');
+  assert.equal(Object.hasOwn(result.user_facing.market_view, 'mention_paths'), false);
 });
 
 test('event market tool enriches a specific Kalshi contract from the url tail', async () => {

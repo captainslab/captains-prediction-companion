@@ -403,10 +403,6 @@ function buildUserFacingMarketView(input, marketType, eventType) {
       rules_summary:
         metadataValue(metadata, 'rules_summary') ??
         'Confirm the exact phrase, allowed speaker set, and venue counting rules before pricing.',
-      mention_paths:
-        metadata.mention_paths && typeof metadata.mention_paths === 'object'
-          ? metadata.mention_paths
-          : {},
       trade_view: {
         best_side: targetPhrase ? bestSide : availableContracts.length > 0 ? 'watch' : 'pass',
         market_status: marketStatus ?? null,
