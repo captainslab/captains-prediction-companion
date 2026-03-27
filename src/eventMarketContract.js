@@ -141,6 +141,424 @@ function inferDomain(input) {
   return 'general';
 }
 
+function inferMarketType(input, domain) {
+  const haystack = collectDomainText(input);
+
+  if (/\bmention(s)?\b|\bphrase\b|\bword\b|\bsaid\b|\bsays\b|\bsaying\b/.test(haystack)) {
+    return 'mention';
+  }
+  if (/\bplayer prop\b|\bplayer_prop\b|\bprops\b|\bpoints\b|\brebounds\b|\bassist(s)?\b/.test(haystack)) {
+    return 'player_prop';
+  }
+  if (/\bspread\b|\bcover\b/.test(haystack)) {
+    return 'spread';
+  }
+  if (/\btotal\b|\bover\b|\bunder\b/.test(haystack)) {
+    return 'total';
+  }
+  if (domain === 'sports' && /\bmoneyline\b|\bwinner\b|\bwin\b/.test(haystack)) {
+    return 'moneyline';
+  }
+
+  return 'general';
+}
+
+function inferEventType(input, domain) {
+  const haystack = collectDomainText(input);
+
+  if (/\bhearing\b|\bcommittee\b|\bwitness\b/.test(haystack)) {
+    return 'hearing';
+  }
+  if (/\bpress conference\b|\bpresser\b|\bbriefing\b/.test(haystack)) {
+    return 'press_conference';
+  }
+  if (/\binterview\b|\bhost\b|\bprogram\b/.test(haystack)) {
+    return 'interview';
+  }
+  if (/\bspeech\b|\bremarks\b|\baddress\b|\brally\b/.test(haystack)) {
+    return 'speech';
+  }
+  if (/\bearnings\b|\bearnings call\b|\bquarterly results\b|\binvestor relations\b|\btranscript\b|\bq[1-4]\b/.test(haystack)) {
+    return 'earnings_call';
+  }
+  if (domain === 'sports') {
+    if (/\bncaamb\b|\bncaa\b|\bcollege basketball\b|\bmarch madness\b/.test(haystack)) {
+      return 'ncaamb_game';
+    }
+    if (/\bmlb\b|\bbaseball\b|\bfirst pitch\b/.test(haystack)) {
+      return 'mlb_game';
+    }
+    if (/\bnfl\b|\bfootball\b|\bkickoff\b/.test(haystack)) {
+      return 'nfl_game';
+    }
+    if (/\bnba\b|\bbasketball\b|\btipoff\b/.test(haystack)) {
+      return 'nba_game';
+    }
+  }
+
+  return 'general';
+}
+
+function inferEventDomain(domain, eventType) {
+  const eventMap = {
+    earnings_call: 'corporate',
+    ncaamb_game: 'sports',
+    mlb_game: 'sports',
+    nfl_game: 'sports',
+    nba_game: 'sports',
+    speech: 'politics',
+    hearing: 'politics',
+    press_conference: 'politics',
+    interview: 'media',
+  };
+
+  if (eventMap[eventType]) {
+    return eventMap[eventType];
+  }
+  if (domain === 'sports') return 'sports';
+  if (domain === 'politics') return 'politics';
+  if (domain === 'mention') return 'media';
+  if (domain === 'macro') return 'general';
+  return 'general';
+}
+
+function metadataValue(metadata, ...keys) {
+  for (const key of keys) {
+    const value = metadata?.[key];
+    if (value == null) continue;
+    if (typeof value === 'string') {
+      const cleaned = value.trim();
+      if (cleaned) return cleaned;
+      continue;
+    }
+    return value;
+  }
+  return null;
+}
+
+function extractMatchup(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    const match = String(value).match(/([A-Za-z0-9 .&'-]+?)\s+(?:vs\.?|at)\s+([A-Za-z0-9 .&'-]+)/i);
+    if (match) {
+      return {
+        away: match[1].trim(),
+        home: match[2].trim(),
+      };
+    }
+  }
+  return { away: null, home: null };
+}
+
+function extractTargetPhrase(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    const text = String(value);
+    const quoted = text.match(/"([^"]+)"/) ?? text.match(/'([^']+)'/);
+    if (quoted?.[1]) return quoted[1].trim();
+    const sayMatch = text.match(/\bsay\s+([A-Za-z0-9 .&/-]+?)(?:\?|$)/i);
+    if (sayMatch?.[1]) return sayMatch[1].trim();
+    const mentionMatch = text.match(/\bmention(?:ing|ed)?\s+([A-Za-z0-9 .&/-]+?)(?:\?|$)/i);
+    if (mentionMatch?.[1]) return mentionMatch[1].trim();
+  }
+  return null;
+}
+
+function buildUserFacingContext(input, eventType) {
+  const metadata = input.metadata ?? {};
+  const matchup = extractMatchup(input.title, input.question);
+
+  if (eventType === 'earnings_call') {
+    return {
+      company: metadataValue(metadata, 'company', 'issuer'),
+      event_name: metadataValue(metadata, 'event_name') ?? input.title ?? null,
+      start_time: metadataValue(metadata, 'start_time', 'call_start_time'),
+      quarter: metadataValue(metadata, 'quarter', 'reporting_quarter'),
+    };
+  }
+
+  if (['ncaamb_game', 'mlb_game', 'nfl_game', 'nba_game'].includes(eventType)) {
+    const startKey =
+      eventType === 'mlb_game'
+        ? 'first_pitch'
+        : eventType === 'nfl_game'
+          ? 'kickoff'
+          : 'tipoff';
+    return {
+      teams: {
+        away: metadataValue(metadata, 'away_team', 'away') ?? matchup.away,
+        home: metadataValue(metadata, 'home_team', 'home') ?? matchup.home,
+      },
+      venue: metadataValue(metadata, 'venue'),
+      [startKey]: metadataValue(metadata, startKey, 'start_time'),
+      broadcast: {
+        network: metadataValue(metadata, 'broadcast_network', 'network'),
+      },
+    };
+  }
+
+  if (eventType === 'speech') {
+    return {
+      speaker: metadataValue(metadata, 'speaker'),
+      event_name: metadataValue(metadata, 'event_name') ?? input.title ?? null,
+      start_time: metadataValue(metadata, 'start_time'),
+      venue: metadataValue(metadata, 'venue'),
+      platform: metadataValue(metadata, 'platform'),
+    };
+  }
+
+  if (eventType === 'interview') {
+    return {
+      speaker: metadataValue(metadata, 'speaker'),
+      program: metadataValue(metadata, 'program') ?? input.title ?? null,
+      start_time: metadataValue(metadata, 'start_time'),
+      platform: metadataValue(metadata, 'platform'),
+      host: metadataValue(metadata, 'host'),
+    };
+  }
+
+  if (eventType === 'hearing') {
+    return {
+      witness: metadataValue(metadata, 'witness'),
+      committee: metadataValue(metadata, 'committee'),
+      start_time: metadataValue(metadata, 'start_time'),
+      venue: metadataValue(metadata, 'venue'),
+    };
+  }
+
+  if (eventType === 'press_conference') {
+    return {
+      speaker: metadataValue(metadata, 'speaker'),
+      event_name: metadataValue(metadata, 'event_name') ?? input.title ?? null,
+      start_time: metadataValue(metadata, 'start_time'),
+      venue: metadataValue(metadata, 'venue'),
+      platform: metadataValue(metadata, 'platform'),
+    };
+  }
+
+  return {
+    event_name: metadataValue(metadata, 'event_name') ?? input.title ?? null,
+    start_time: metadataValue(metadata, 'start_time'),
+    venue: metadataValue(metadata, 'venue'),
+  };
+}
+
+function buildUserFacingMarketView(input, marketType, eventType) {
+  const metadata = input.metadata ?? {};
+
+  if (marketType === 'mention') {
+    const targetPhrase =
+      metadataValue(metadata, 'target_phrase', 'phrase') ??
+      extractTargetPhrase(input.title, input.question, input.market_id, input.url);
+
+    const watchFor =
+      Array.isArray(metadata.watch_for) && metadata.watch_for.every(item => typeof item === 'string')
+        ? metadata.watch_for
+        : eventType === 'earnings_call'
+          ? [
+              `prepared remarks use ${targetPhrase ?? 'the target phrase'}`,
+              `analysts force ${targetPhrase ?? 'the target phrase'} into Q&A`,
+              'management pivots to substitute wording',
+            ]
+          : [
+              `the source uses ${targetPhrase ?? 'the target phrase'}`,
+              'the exact wording changes',
+              'the rules exclude the speaker or segment',
+            ];
+
+    return {
+      target_phrase: targetPhrase,
+      rules_summary:
+        metadataValue(metadata, 'rules_summary') ??
+        'Confirm the exact phrase, allowed speaker set, and venue counting rules before pricing.',
+      mention_paths:
+        metadata.mention_paths && typeof metadata.mention_paths === 'object'
+          ? metadata.mention_paths
+          : {},
+      trade_view: {
+        best_side: 'watch',
+        market_yes: null,
+        fair_yes: null,
+        edge_cents: null,
+      },
+      watch_for: watchFor,
+    };
+  }
+
+  if (marketType === 'moneyline') {
+    return {
+      moneyline: {
+        lean: 'watch',
+        confidence: 'medium',
+        reason: 'The game market is classified, but live prices and matchup inputs still need to be added.',
+      },
+      game_factors: Array.isArray(metadata.game_factors) ? metadata.game_factors : [],
+      price_view: {
+        market_implied: null,
+        fair_implied: null,
+        edge_cents: null,
+        best_action: 'watch',
+      },
+    };
+  }
+
+  if (marketType === 'spread') {
+    return {
+      spread: {
+        line: metadataValue(metadata, 'line', 'spread_line'),
+        lean: 'watch',
+        confidence: 'medium',
+        reason: 'The spread market is classified, but the posted line and fair margin still need to be added.',
+      },
+      margin_factors: Array.isArray(metadata.margin_factors) ? metadata.margin_factors : [],
+      price_view: {
+        market_yes: null,
+        fair_yes: null,
+        edge_cents: null,
+        best_action: 'watch',
+      },
+    };
+  }
+
+  if (marketType === 'total') {
+    return {
+      total: {
+        line: metadataValue(metadata, 'line', 'total_line'),
+        lean: 'watch',
+        confidence: 'medium',
+        reason: 'The totals market is classified, but the posted number and fair total still need to be added.',
+      },
+      scoring_factors: Array.isArray(metadata.scoring_factors) ? metadata.scoring_factors : [],
+      price_view: {
+        market_yes: null,
+        fair_yes: null,
+        edge_cents: null,
+        best_action: 'watch',
+      },
+    };
+  }
+
+  if (marketType === 'player_prop') {
+    return {
+      player_prop: {
+        player: metadataValue(metadata, 'player'),
+        stat_type: metadataValue(metadata, 'stat_type'),
+        line: metadataValue(metadata, 'line', 'prop_line'),
+        lean: 'watch',
+        confidence: 'medium',
+        reason: 'The player prop is classified, but projection inputs and live pricing still need to be added.',
+      },
+      projection: {
+        fair_value: null,
+        expected_stat: null,
+      },
+      price_view: {
+        market_yes: null,
+        fair_yes: null,
+        edge_cents: null,
+        best_action: 'watch',
+      },
+    };
+  }
+
+  return {
+    status_note: 'The market type is not mapped to a user-facing market view yet.',
+  };
+}
+
+function buildUserFacingStatus(eventType, marketType, marketView) {
+  if (marketType === 'general') return 'market_unmapped';
+  if (marketType === 'mention' && !marketView.target_phrase) return 'insufficient_context';
+  if (eventType === 'general' && marketType !== 'mention') return 'insufficient_context';
+  return 'needs_pricing';
+}
+
+function buildUserFacingRecommendation(marketType, status) {
+  if (status !== 'needs_pricing') return 'pass';
+  return 'watch';
+}
+
+function buildUserFacingHeadline(status, marketType, eventType, input) {
+  if (status === 'market_unmapped') {
+    return 'The market needs a manual classification pass before the app can price it.';
+  }
+  if (status === 'insufficient_context') {
+    return 'The market needs more event detail before the app can score it.';
+  }
+  if (marketType === 'mention') {
+    return 'The contract is mapped as a mention market and is ready for pricing.';
+  }
+  if (marketType === 'moneyline') {
+    return 'The contract is mapped as a game winner market and is ready for pricing.';
+  }
+  if (marketType === 'spread') {
+    return 'The contract is mapped as a spread market and is ready for pricing.';
+  }
+  if (marketType === 'total') {
+    return 'The contract is mapped as a totals market and is ready for pricing.';
+  }
+  if (marketType === 'player_prop') {
+    return 'The contract is mapped as a player prop and is ready for pricing.';
+  }
+  if (eventType !== 'general' && input.title) {
+    return `${input.title} is classified and ready for pricing.`;
+  }
+  return 'The event market is classified and ready for pricing.';
+}
+
+function buildUserFacingReason(status, marketType) {
+  if (status === 'market_unmapped') {
+    return 'The market type is not supported by the current event-market card.';
+  }
+  if (status === 'insufficient_context') {
+    return 'The app can parse the venue, but it still lacks enough event detail to build an actionable card.';
+  }
+  if (marketType === 'mention') {
+    return 'The phrase path is mapped, but exact pricing and edge still need to be computed.';
+  }
+  return 'The event and market types are classified, but fair value and edge are still missing.';
+}
+
+function buildUserFacingNextAction(status, marketType, eventType) {
+  if (status === 'market_unmapped') return 'review_market_rules';
+  if (status === 'insufficient_context') return 'confirm_event_context';
+  if (marketType === 'mention' && ['ncaamb_game', 'mlb_game', 'nfl_game', 'nba_game'].includes(eventType)) {
+    return 'confirm_broadcast_crew';
+  }
+  if (marketType === 'mention') return 'review_market_rules';
+  return 'fetch_live_prices';
+}
+
+function buildUserFacingCard(input, plan) {
+  const eventType = inferEventType(input, plan.domain);
+  const eventDomain = inferEventDomain(plan.domain, eventType);
+  const marketType = inferMarketType(input, plan.domain);
+  const marketView = buildUserFacingMarketView(input, marketType, eventType);
+  const status = buildUserFacingStatus(eventType, marketType, marketView);
+  const recommendation = buildUserFacingRecommendation(marketType, status);
+
+  return {
+    source: {
+      platform: plan.venue,
+      url: plan.metadata.url ?? null,
+      market_id: plan.metadata.market_id ?? null,
+    },
+    event_domain: eventDomain,
+    event_type: eventType,
+    market_type: marketType,
+    status,
+    confidence: status === 'needs_pricing' ? 'medium' : 'low',
+    summary: {
+      headline: buildUserFacingHeadline(status, marketType, eventType, input),
+      recommendation,
+      one_line_reason: buildUserFacingReason(status, marketType),
+    },
+    next_action: buildUserFacingNextAction(status, marketType, eventType),
+    context: buildUserFacingContext(input, eventType),
+    market_view: marketView,
+  };
+}
+
 function buildMacroProfile() {
   return {
     name: 'macro-market-research',
@@ -556,78 +974,61 @@ function buildOutputContract() {
     name: 'event-market-output',
     sections: [
       {
-        section: 'user_facing',
+        section: 'source',
         fields: [
-          { name: 'status', kind: 'string', required: true, description: 'Compact status for the chat response, such as background_planned, pick_ready, buy_yes, buy_no, or pass.' },
-          { name: 'recommendation', kind: 'string', required: true, description: 'Short user-facing recommendation or action label.' },
-          { name: 'confidence', kind: 'number', required: false, description: 'Optional confidence score for the recommendation, normalized to 0-1.' },
-          { name: 'one_line_reason', kind: 'string', required: true, description: 'Single-sentence explanation with no workflow dump.' },
-          { name: 'background_plan_hidden', kind: 'boolean', required: true, description: 'True when the detailed planning memo should stay hidden from the user.' },
-          { name: 'next_action', kind: 'string', required: false, description: 'Optional next step if the user should do something else.' },
-        ],
-      },
-      {
-        section: 'market',
-        fields: [
-          { name: 'venue', kind: 'string', required: true, description: 'Market venue or exchange name.' },
-        { name: 'domain', kind: 'string', required: true, description: 'High-level event domain such as sports, politics, macro, mention, or general.' },
+          { name: 'platform', kind: 'string', required: true, description: 'Market venue or platform name.' },
+          { name: 'url', kind: 'string', required: false, description: 'Original market URL when provided.' },
           { name: 'market_id', kind: 'string', required: false, description: 'Venue-specific market identifier when available.' },
-          { name: 'title', kind: 'string', required: false, description: 'Human-readable title or question for the market.' },
-          { name: 'question', kind: 'string', required: false, description: 'Binary proposition or resolution question.' },
-          { name: 'market_type', kind: 'string', required: false, description: 'High-level market type such as binary, spread, total, prop, or future.' },
-          { name: 'market_subtype', kind: 'string', required: false, description: 'Narrow subtype used for routing and logging.' },
-          { name: 'url', kind: 'string', required: false, description: 'Canonical URL for the market or source page.' },
         ],
       },
       {
-        section: 'sources',
+        section: 'classification',
         fields: [
-          { name: 'source_order', kind: 'array[string]', required: true, description: 'Ordered source stack used by the pipeline.' },
-          { name: 'resolution_source', kind: 'string', required: false, description: 'Primary authoritative source that settles the market if known.' },
-          { name: 'primary_evidence', kind: 'string', required: false, description: 'The strongest evidence item supporting the decision.' },
-          { name: 'secondary_evidence', kind: 'array[string]', required: false, description: 'Supporting evidence items or citations.' },
-          { name: 'falsifier', kind: 'string', required: false, description: 'What would invalidate the thesis or force a pass.' },
+          { name: 'event_domain', kind: 'string', required: true, description: 'Broad event bucket such as sports, corporate, politics, media, or general.' },
+          { name: 'event_type', kind: 'string', required: true, description: 'Specific event classification such as earnings_call, speech, or ncaamb_game.' },
+          { name: 'market_type', kind: 'string', required: true, description: 'Market mechanic such as mention, moneyline, spread, total, or player_prop.' },
+          { name: 'status', kind: 'string', required: true, description: 'Analysis readiness status, separate from trade direction.' },
+          { name: 'confidence', kind: 'string', required: true, description: 'Confidence in the card quality, not the event outcome.' },
         ],
       },
       {
-        section: 'domain_profile',
+        section: 'summary',
         fields: [
-          { name: 'wrapper', kind: 'string', required: true, description: 'Domain wrapper used to choose the right market-specific workflow.' },
-          { name: 'source_hints', kind: 'array[string]', required: true, description: 'High-level source hints for the active domain.' },
-          { name: 'evidence_targets', kind: 'array[string]', required: true, description: 'Concrete evidence targets to search for after source discovery.' },
-          { name: 'comparison_axes', kind: 'array[string]', required: true, description: 'The main axes used to compare the market thesis to historical or contextual evidence.' },
-          { name: 'source_tree_note', kind: 'string', required: false, description: 'Short note explaining how the source tree should be interpreted for the active domain.' },
+          { name: 'headline', kind: 'string', required: true, description: 'Compact headline safe to render directly in the app UI.' },
+          { name: 'recommendation', kind: 'string', required: true, description: 'Market-type-aware recommendation such as watch, buy_yes, home, or over.' },
+          { name: 'one_line_reason', kind: 'string', required: true, description: 'Single-sentence plain-English rationale without workflow leakage.' },
         ],
       },
       {
-        section: 'pricing',
+        section: 'action',
         fields: [
-          { name: 'fair_probability', kind: 'number', required: true, description: 'Model probability for the side being evaluated.' },
-          { name: 'market_probability', kind: 'number', required: true, description: 'Market-implied probability from the venue or consensus book.' },
-          { name: 'edge', kind: 'number', required: true, description: 'Fair probability minus market probability.' },
-          { name: 'expected_value', kind: 'number', required: true, description: 'Expected value per unit stake after simple pricing.' },
-          { name: 'confidence', kind: 'number', required: true, description: 'Confidence score for the estimate, normalized to 0-1.' },
+          { name: 'next_action', kind: 'string', required: false, description: 'Operational next step such as fetch_live_prices or review_market_rules.' },
         ],
       },
       {
-        section: 'decision',
+        section: 'context',
         fields: [
-          { name: 'decision', kind: 'string', required: true, description: 'Final action: buy_yes, buy_no, pass, or watch.' },
-          { name: 'no_bet_flag', kind: 'boolean', required: true, description: 'True when the edge does not survive the filters.' },
-          { name: 'recommended_stake_cap', kind: 'number', required: false, description: 'Maximum stake recommended after risk sizing.' },
-          { name: 'notes', kind: 'string', required: false, description: 'Short rationale and any execution caveats.' },
+          { name: 'context', kind: 'object', required: true, description: 'Event-specific facts block whose fields vary by event_type.' },
+        ],
+      },
+      {
+        section: 'market_view',
+        fields: [
+          { name: 'market_view', kind: 'object', required: true, description: 'Market-type-specific analysis block whose fields vary by market_type.' },
         ],
       },
     ],
-    notes: 'Keep the output compact, audit-friendly, and reusable across sports, politics, macro, and mention markets.',
+    notes: 'Expose only the compact card in the visible app response. Keep workflow, source tree, and planning details in structured content.',
   };
 }
 
 export function buildEventMarketContract(input = {}) {
   const plan = buildPlan(input);
+  const user_facing = buildUserFacingCard(input, plan);
   return {
     plan,
     workflow: buildWorkflow(plan),
     output_contract: buildOutputContract(),
+    user_facing,
   };
 }

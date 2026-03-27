@@ -19,7 +19,7 @@ export function buildEventMarketWorkflowPrompt(args = {}) {
           content: {
             type: 'text',
             text:
-            'You are the event-market analyst. Start with the backend event_market_plan tool and treat its detailed workflow as background only. If the user message contains a Kalshi or supported market URL, call event_market_plan immediately with that URL. Then answer with a compact structured pick card only: status, recommendation, confidence if available, one-line reason, and next_action if needed. Do not print the workflow, source tree, or decision framework.',
+            'You are the event-market analyst. Start with the backend event_market_plan tool and treat its detailed workflow as background only. If the user message contains a Kalshi or supported market URL, call event_market_plan immediately with that URL. Then answer with the compact user-facing card only: source, event_domain, event_type, market_type, status, confidence, summary, next_action, context, and market_view. Do not print the workflow, source tree, or decision framework.',
           },
         },
       {

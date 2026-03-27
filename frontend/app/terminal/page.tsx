@@ -12,6 +12,7 @@ import { usePortfolioPrices, Portfolio } from '@/hooks/usePortfolioPrices'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useFavorites } from '@/hooks/useFavorites'
 import { PortfolioModal } from '@/components/PortfolioModal'
+import { EventMarketPlanner } from '@/components/terminal/EventMarketPlanner'
 import { KeyboardShortcutsHelp } from '@/components/terminal/KeyboardShortcutsHelp'
 import { PortfolioTable } from '@/components/terminal/PortfolioTable'
 import { StatusIndicators } from '@/components/StatusIndicators'
@@ -355,6 +356,8 @@ export default function TerminalPage() {
             )}
           </div>
         </div>
+
+        <EventMarketPlanner />
 
         {/* Portfolio Table */}
         {status === 'connecting' && portfolios.length === 0 ? (

@@ -41,7 +41,9 @@ OpenRouter is the primary LLM API for implication extraction and validation in
 the production pipeline. If the per-step model env vars are not set, the app
 falls back to the OpenRouter free router (`openrouter/free`) for both steps.
 
-The API response also includes:
+The API response is split into:
 
-- `workflow`: the explicit research stages and their inputs/outputs
-- `output_contract`: the standardized JSON shape expected from the research and pricing layer
+- `user_facing`: the compact card safe to render directly in the app UI
+- `hidden.plan`: the reusable source-order and stage plan
+- `hidden.workflow`: the explicit research stages and their inputs/outputs
+- `hidden.output_contract`: the standardized visible JSON shape expected from the research and pricing layer

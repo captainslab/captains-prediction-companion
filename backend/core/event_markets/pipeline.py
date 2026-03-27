@@ -8,6 +8,11 @@ from core.event_markets.models import (
     EventMarketPipelinePlan,
     EventMarketPipelineStep,
 )
+from core.event_markets.spec import (
+    build_event_market_output_spec,
+    build_event_market_user_facing_output,
+    build_event_market_workflow_spec,
+)
 from core.event_markets.sources import (
     build_market_source_order,
     canonicalize_market_venue,
@@ -104,3 +109,19 @@ def build_event_market_pipeline(
         notes=notes,
         metadata=metadata,
     )
+
+
+def build_event_market_plan_payload(context: EventMarketContext) -> dict[str, object]:
+    """Build the visible card and hidden workflow payload for a market."""
+    plan = build_event_market_pipeline(context)
+    workflow = build_event_market_workflow_spec(context, plan)
+    output_contract = build_event_market_output_spec()
+    user_facing = build_event_market_user_facing_output(context)
+    return {
+        "user_facing": user_facing.to_dict(),
+        "hidden": {
+            "plan": plan.to_dict(),
+            "workflow": workflow.to_dict(),
+            "output_contract": output_contract.to_dict(),
+        },
+    }

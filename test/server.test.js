@@ -38,6 +38,7 @@ test('event market tool builds the standard contract locally', async () => {
   assert.equal(result.workflow.domain_wrapper, 'sports-market');
   assert.equal(result.workflow.stages.some(stage => stage.stage === 'routing'), true);
   assert.equal(result.output_contract.name, 'event-market-output');
+  assert.equal(result.user_facing.source.platform, 'Kalshi');
 });
 
 test('event market tool infers mention workflow from the market title', async () => {
@@ -51,7 +52,8 @@ test('event market tool infers mention workflow from the market title', async ()
   assert.equal(result.workflow.name, 'mention-market-research');
   assert.equal(result.workflow.domain_wrapper, 'mention-market');
   assert.match(result.workflow.evidence_targets[0], /broadcast/i);
-  assert.equal(result.output_contract.sections.some(section => section.section === 'domain_profile'), true);
+  assert.equal(result.output_contract.sections.some(section => section.section === 'classification'), true);
+  assert.equal(result.user_facing.market_type, 'mention');
 });
 
 test('event market tool infers mention workflow from a Kalshi url', async () => {
@@ -74,11 +76,19 @@ test('event market plan summary stays compact and hides the workflow memo', asyn
   });
   const summary = buildEventMarketPlanSummary(result);
 
-  assert.equal(summary.status, 'background_planned');
-  assert.equal(summary.recommendation, 'review_plan');
-  assert.equal(summary.confidence, null);
-  assert.match(summary.one_line_reason, /compact card/i);
-  assert.match(summary.next_action, /buy_yes, buy_no, or pass/i);
+  assert.deepEqual(summary.source, {
+    platform: 'Kalshi',
+    url: 'https://kalshi.com/markets/kxtrumpmentionb/trump-mention-b/KXTRUMPMENTIONB-26MAR27?utm_source=kalshiapp_eventpage',
+    market_id: 'KXTRUMPMENTIONB-26MAR27',
+  });
+  assert.equal(summary.event_domain, 'media');
+  assert.equal(summary.market_type, 'mention');
+  assert.equal(summary.status, 'insufficient_context');
+  assert.equal(summary.confidence, 'low');
+  assert.equal(summary.summary.recommendation, 'pass');
+  assert.match(summary.summary.one_line_reason, /lacks enough event detail/i);
+  assert.equal(summary.next_action, 'confirm_event_context');
+  assert.equal(Object.hasOwn(summary, 'workflow'), false);
 });
 
 test('event market tool routes earnings markets into the mention workflow', async () => {
@@ -132,6 +142,6 @@ test('event market prompt primes the backend plan workflow', () => {
   assert.equal(prompt.messages[0].role, 'system');
   assert.match(prompt.messages[0].content.text, /event_market_plan/);
   assert.match(prompt.messages[0].content.text, /background only/);
-  assert.match(prompt.messages[0].content.text, /compact structured pick card/i);
+  assert.match(prompt.messages[0].content.text, /compact user-facing card/i);
   assert.match(prompt.messages[1].content.text, /KX123/);
 });

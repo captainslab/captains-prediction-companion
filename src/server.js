@@ -160,7 +160,7 @@ function createServer() {
             text: JSON.stringify(summary, null, 2),
           },
         ],
-        structuredContent: { ...result, user_facing: summary },
+        structuredContent: result,
       };
     }
   );

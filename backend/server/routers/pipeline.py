@@ -9,9 +9,7 @@ from pydantic import BaseModel, Field
 
 from core.event_markets import (
     EventMarketContext,
-    build_event_market_output_spec,
-    build_event_market_pipeline,
-    build_event_market_workflow_spec,
+    build_event_market_plan_payload,
 )
 from core.model_defaults import get_pipeline_model_defaults
 from core.paths import DATA_DIR
@@ -134,7 +132,7 @@ async def get_status() -> dict[str, Any]:
 async def build_event_market_plan(
     request: EventMarketPlanRequest,
 ) -> dict[str, Any]:
-    """Build the reusable Kalshi -> Perplexity -> scraper plan."""
+    """Build the user-facing event-market card and hidden workflow payload."""
     metadata = dict(request.metadata)
     if request.notes:
         metadata.setdefault("notes", request.notes)
@@ -151,14 +149,9 @@ async def build_event_market_plan(
         resolution_source=request.resolution_source,
         metadata=metadata,
     )
-    plan = build_event_market_pipeline(context)
-    workflow = build_event_market_workflow_spec(context, plan)
-    output_contract = build_event_market_output_spec()
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "plan": plan.to_dict(),
-        "workflow": workflow.to_dict(),
-        "output_contract": output_contract.to_dict(),
+        **build_event_market_plan_payload(context),
     }
 
 

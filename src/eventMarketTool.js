@@ -5,13 +5,25 @@ export async function buildEventMarketPlan(input = {}) {
 }
 
 export function buildEventMarketPlanSummary(result = {}) {
-  return {
-    status: 'background_planned',
-    recommendation: 'review_plan',
-    confidence: null,
-    one_line_reason:
-      'The detailed workflow stays hidden in structured content while only the compact card is shown.',
-    next_action:
-      'Add pricing if you want a real buy_yes, buy_no, or pass decision.',
+  return result.user_facing ?? {
+    source: {
+      platform: 'Kalshi',
+      url: null,
+      market_id: null,
+    },
+    event_domain: 'general',
+    event_type: 'general',
+    market_type: 'general',
+    status: 'insufficient_context',
+    confidence: 'low',
+    summary: {
+      headline: 'The market needs more detail before the app can build a card.',
+      recommendation: 'pass',
+      one_line_reason:
+        'The planner did not receive enough market context to classify the event cleanly.',
+    },
+    next_action: 'confirm_event_context',
+    context: {},
+    market_view: {},
   };
 }
