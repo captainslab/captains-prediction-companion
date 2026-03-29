@@ -199,13 +199,7 @@ async def get_portfolios(
     # Get total before pagination
     total_count = len(portfolios)
 
-    # Apply pagination
-    if limit is not None:
-        portfolios = portfolios[offset : offset + limit]
-    elif offset > 0:
-        portfolios = portfolios[offset:]
-
-    # Count by tier
+    # Count by tier from the full filtered set (before pagination)
     tier_counts = {}
     profitable_count = 0
     for p in portfolios:
@@ -213,6 +207,12 @@ async def get_portfolios(
         tier_counts[f"tier_{tier}"] = tier_counts.get(f"tier_{tier}", 0) + 1
         if p.get("expected_profit", 0) > 0:
             profitable_count += 1
+
+    # Apply pagination
+    if limit is not None:
+        portfolios = portfolios[offset : offset + limit]
+    elif offset > 0:
+        portfolios = portfolios[offset:]
 
     response = {
         "source": "live" if live else "static",
