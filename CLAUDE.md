@@ -77,6 +77,7 @@ Claude hooks auto-run on every Write/Edit:
 
 ## Skills
 
+### Polymarket Platform
 | Skill | When to use |
 |-------|-------------|
 | `alphapoly-feature` | Adding a feature, endpoint, pipeline step, or UI page |
@@ -85,6 +86,29 @@ Claude hooks auto-run on every Write/Edit:
 | `alphapoly-portfolios` | Listing current portfolio opportunities |
 | `alphapoly-enter-position` | Executing a covered pair trade |
 | `alphapoly-exit-position` | Exiting or managing an open position |
+
+### Prediction Companion — Routing
+| Skill | When to use |
+|-------|-------------|
+| `companion-router` | Classifying, normalizing, and routing any market to an app |
+| `shared-market-infra` | Kelly sizing, CLV tracking, calibration, no-bet classification |
+
+### Prediction Companion — Sports Apps
+| Skill | When to use |
+|-------|-------------|
+| `football-game-app` | NFL / NCAAF game markets (sides, totals, moneylines, live) |
+| `basketball-game-app` | NBA / NCAA basketball game markets |
+| `baseball-game-app` | MLB / NCAA baseball game markets |
+| `mlb-home-run-prop-app` | MLB player HR prop markets |
+| `mlb-strikeout-prop-app` | MLB pitcher strikeout prop markets |
+| `ufc-fight-app` | UFC / MMA fight markets |
+| `nascar-race-app` | NASCAR race-level markets (winner, top-3, stage) |
+| `nascar-series-futures-app` | NASCAR series championship futures |
+
+### Prediction Companion — Politics Apps
+| Skill | When to use |
+|-------|-------------|
+| `politics-app` | Election outcomes, chamber control, policy/geopolitical markets |
 
 ## Environment
 
