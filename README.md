@@ -1,114 +1,56 @@
-<img width="1200" alt="Labs" src="https://user-images.githubusercontent.com/99700157/213291931-5a822628-5b8a-4768-980d-65f324985d32.png">
+# Captains Prediction Companion
 
-<p>
- <h3 align="center">Chainstack is the leading suite of services connecting developers with Web3 infrastructure</h3>
-</p>
+Captains Prediction Companion is a Node.js MCP-backed prediction-market assistant focused on **Kalshi event and mention markets**.
 
-<p align="center">
-  • <a target="_blank" href="https://chainstack.com/">Homepage</a> •
-  <a target="_blank" href="https://chainstack.com/protocols/">Supported protocols</a> •
-  <a target="_blank" href="https://chainstack.com/blog/">Chainstack blog</a> •
-  <a target="_blank" href="https://docs.chainstack.com/quickstart/">Blockchain API reference</a> • <br> 
-  • <a target="_blank" href="https://console.chainstack.com/user/account/create">Start for free</a> •
-</p>
+This repository's current application surface is a **backend-first MCP service**, not a full dashboard app.
 
+## What the app currently does
 
-# Alphapoly - Polymarket alpha detection platform
+- accepts Kalshi market URLs
+- builds event-market and mention-market plans
+- returns compact user-facing market cards
+- exposes MCP tools over HTTP
+- exposes a health endpoint for runtime checks
 
-Find covering portfolios across correlated prediction markets using predefined rules and LLM decisions. The system detects relationships between markets, classifies them to identify hedging pairs, and tracks their prices. The platform offers a smooth UI for entering detected pairs when profit opportunities exist and tracking your positions.
+## Current runtime surface
 
-OpenRouter is the primary LLM API for this app (see `.env.example`). The starter defaults to the OpenRouter free router for both implication extraction and validation, and you can override either model in the UI or `.env`.
+- `GET /healthz` -> health check JSON
+- `POST /mcp` -> MCP transport endpoint
 
+At the moment, `GET /` does **not** serve a browser UI on `main`.
 
+## Current project shape
 
-![Dashboard Screenshot](assets/dashboard-screenshot.png)
+- `src/server.js` runs the HTTP + MCP server
+- `src/eventMarketTool.js` builds market plans
+- `src/eventMarketPrompt.js` builds workflow prompts
+- `src/llm/` contains market-card and mention-card logic
 
-## How It Works
-
-1. **Groups** - Fetches multi-outcome markets from Polymarket (e.g., "Presidential Election Winner")
-2. **Implications** *(LLM)* - Extracts logical relationships between groups
-3. **Validation** *(LLM)* - Validates implications at the individual market level
-4. **Portfolios** - Computes cost and expected profit for validated pairs using live market prices
-5. **Positions** - Tracks your purchased position pairs
-
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/) (manages Python automatically)
-- **Node.js 18+** via [fnm](https://github.com/Schniz/fnm), nvm, or brew
-
-## Quick Start
+## Quick start
 
 ```bash
-cp .env.example .env
-
-# With make
-make install && make dev
-
-# Without make
-cd backend && uv sync
-cd frontend && npm install
-cd backend && uv run python -m uvicorn server.main:app --port 8000 &
-cd frontend && npm run dev
+npm install
+npm start
 ```
 
-Dashboard: http://localhost:3000 · API: http://localhost:8000/docs
+Then open or test:
 
-## Commands
+- `http://localhost:3000/healthz`
+- `http://localhost:3000/mcp`
 
-**With make** (auto-detects fnm/nvm/volta):
-```bash
-make install    # Install deps
-make dev        # Start both servers
-make pipeline   # Run ML pipeline (incremental, also available in UI)
-make lint       # Auto-fix: ruff + prettier + eslint
-```
+## Environment notes
 
-**Without make**:
-```bash
-# Backend
-cd backend && uv sync
-cd backend && uv run python -m uvicorn server.main:app --reload --port 8000
+The checked-in `.env.example` still contains older Alphapoly-era values and should be replaced with a current app-specific version.
 
-# Frontend
-cd frontend && npm install
-cd frontend && npm run dev
-```
+## Best next build step
 
-## Agentic Coding
+If this repo stays the primary home for the app, the next clean product step is:
 
-This repo is configured for AI coding agents via the `.claude/` directory:
+1. add `public/index.html`
+2. serve it from `GET /`
+3. add a small browser action that calls the existing market analysis path
 
-- **`CLAUDE.md`** — project context, commands, conventions, and API routes
-- **`hooks/`** — auto-lint on edit, guard against writing secrets *(Claude Code only)*
-- **`skills/`** — workflows for pipeline management, trading, and feature development
+## Repo reality check
 
-### Skills
-
-The `.claude/skills/` directory contains [Agent Skills](https://agentskills.io/home) — an open standard for extending AI coding agents with reusable, modular capabilities. Each skill is a directory with a `SKILL.md` file (YAML frontmatter + natural-language instructions) that teaches an agent how to perform a domain-specific workflow.
-
-| Skill | Purpose |
-|-------|---------|
-| `alphapoly-pipeline` | Run, debug, and manage the ML pipeline |
-| `alphapoly-portfolios` | Fetch and display portfolio opportunities |
-| `alphapoly-enter-position` | Execute a covered pair trade |
-| `alphapoly-exit-position` | Exit or manage an open position |
-| `alphapoly-feature` | Add features following stack conventions |
-| `alphapoly-experiment` | Scaffold standalone experiment scripts |
-
-**Cross-agent portability.** The Agent Skills format was [originated by Anthropic](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills) and released as an open standard. It has since been adopted by [OpenAI Codex](https://developers.openai.com/codex/skills/), [GitHub Copilot](https://code.visualstudio.com/docs/copilot/customization/custom-instructions), [Cursor](https://cursor.com/docs/context/rules), Google Antigravity, and [many others](https://github.com/skillmatic-ai/awesome-agent-skills). Skills are filesystem-based (not API-based), so any agent that can read a directory and parse Markdown can consume them — a skill authored for one agent typically runs unchanged in another.
-
-To use the skills in this repo with a different agent, point it at `.claude/skills/` or copy the skill directories into the agent's expected location (e.g., `~/.codex/skills/` for Codex CLI).
-
-### Instructions file
-
-`CLAUDE.md` is read natively by [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and by [GitHub Copilot in VS Code](https://code.visualstudio.com/docs/copilot/customization/custom-instructions#_use-a-claudemd-file) (opt-in via `chat.useClaudeMdFile`). For broader cross-agent compatibility, [`AGENTS.md`](https://agents.md/) is also provided as a symlink to `CLAUDE.md` — an open format (stewarded by the [Linux Foundation](https://www.linuxfoundation.org/)) supported by Codex, Cursor, Copilot, and others.
-
-## Experiments
-
-| Folder | Description |
-|--------|-------------|
-| [`experiments/onchain-otc/`](experiments/onchain-otc/) | On-chain OTC trading without the CLOB — split/merge, P2P transfers, atomic escrow, NegRisk conversions, and intent-based settlement on an Anvil fork of Polygon |
-
----
-
-**Disclaimer:** This software is provided as-is for educational and research purposes only. It is not financial advice. Trading prediction markets involves risk—you may lose money. Use at your own discretion.
+The code in `main` is already aligned with the Captains Prediction Companion direction.
+The main mismatch is **repo identity and stale docs**, not a completely separate product.
