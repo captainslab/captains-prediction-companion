@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Captains Prediction Companion</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0d14;
+      --surface: #111827;
+      --border: #1f2937;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.15);
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #f9fafb;
+      --muted: #6b7280;
+      --radius: 12px;
+      --font: 'Inter', system-ui, sans-serif;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 0.4rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.3rem 0.85rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+
+    .status-pill .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    .status-pill.online .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-pill.offline .dot { background: var(--red); }
+
+    .card {
+      width: 100%;
+      max-width: 640px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.6rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      padding: 0.65rem 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    input[type="text"]::placeholder { color: var(--muted); }
+
+    button {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.65rem 1.25rem;
+      transition: opacity 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    button:hover { opacity: 0.88; }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .result {
+      margin-top: 1rem;
+    }
+
+    .result-empty {
+      color: var(--muted);
+      font-size: 0.875rem;
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+
+    .market-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .market-card .market-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      line-height: 1.4;
+    }
+
+    .market-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+    }
+
+    .stat .label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.2rem;
+    }
+
+    .stat .value {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .stat .value.green { color: var(--green); }
+    .stat .value.yellow { color: var(--yellow); }
+    .stat .value.red { color: var(--red); }
+
+    .recommendation-badge {
+      display: inline-block;
+      border-radius: 6px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-buy { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-sell { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+    .badge-watch { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
+    .badge-hold { background: rgba(107,114,128,0.15); color: var(--muted); border: 1px solid var(--border); }
+
+    .error-msg {
+      color: var(--red);
+      font-size: 0.875rem;
+      margin-top: 0.75rem;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 8px;
+      padding: 0.65rem 1rem;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .raw-toggle {
+      font-size: 0.75rem;
+      color: var(--muted);
+      cursor: pointer;
+      margin-top: 0.75rem;
+      display: inline-block;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    pre.raw-json {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      font-size: 0.78rem;
+      overflow-x: auto;
+      margin-top: 0.5rem;
+      color: #a5f3fc;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    footer {
+      margin-top: 3rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>⚓ Captains Prediction Companion</h1>
+    <p>Kalshi market analysis via MCP</p>
+    <div class="status-pill" id="statusPill">
+      <span class="dot"></span>
+      <span id="statusText">Checking server…</span>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Analyze Market</h2>
+    <div class="input-row">
+      <input
+        id="urlInput"
+        type="text"
+        placeholder="https://kalshi.com/markets/…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="analyzeBtn" onclick="analyzeMarket()">Analyze</button>
+    </div>
+    <div class="result" id="result">
+      <div class="result-empty">Paste a Kalshi market URL above to begin.</div>
+    </div>
+  </div>
+
+  <footer>
+    Captains Prediction Companion &nbsp;·&nbsp; <span id="versionTag">v1.0.0</span>
+  </footer>
+
+  <script>
+    const MCP_ENDPOINT = '/mcp';
+    let sessionId = null;
+    let requestId = 1;
+    let rawData = null;
+    let showingRaw = false;
+
+    async function checkHealth() {
+      try {
+        const res = await fetch('/healthz');
+        const data = await res.json();
+        const pill = document.getElementById('statusPill');
+        const text = document.getElementById('statusText');
+        if (data.ok) {
+          pill.classList.add('online');
+          text.textContent = 'Server online';
+          if (data.version) document.getElementById('versionTag').textContent = 'v' + data.version;
+        } else {
+          pill.classList.add('offline');
+          text.textContent = 'Server error';
+        }
+      } catch {
+        const pill = document.getElementById('statusPill');
+        const text = document.getElementById('statusText');
+        pill.classList.add('offline');
+        text.textContent = 'Server unreachable';
+      }
+    }
+
+    async function mcpPost(body) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (sessionId) headers['mcp-session-id'] = sessionId;
+      const res = await fetch(MCP_ENDPOINT, { method: 'POST', headers, body: JSON.stringify(body) });
+      const sid = res.headers.get('mcp-session-id');
+      if (sid) sessionId = sid;
+      return res.json();
+    }
+
+    async function mcpInitialize() {
+      const resp = await mcpPost({
+        jsonrpc: '2.0', id: requestId++, method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'captain-dashboard', version: '1.0.0' }
+        }
+      });
+      await mcpPost({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
+      return resp;
+    }
+
+    async function analyzeMarket() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+
+      const btn = document.getElementById('analyzeBtn');
+      const resultDiv = document.getElementById('result');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Analyzing…';
+      resultDiv.innerHTML = '';
+      rawData = null;
+      showingRaw = false;
+
+      try {
+        if (!sessionId) await mcpInitialize();
+
+        const resp = await mcpPost({
+          jsonrpc: '2.0', id: requestId++, method: 'tools/call',
+          params: { name: 'analyze_kalshi_market_url', arguments: { url } }
+        });
+
+        if (resp.error) throw new Error(resp.error.message || 'MCP error');
+
+        const content = resp.result?.content?.[0]?.text;
+        if (!content) throw new Error('Empty response from server');
+
+        const card = JSON.parse(content);
+        rawData = card;
+        renderCard(card);
+      } catch (err) {
+        resultDiv.innerHTML = `<div class="error-msg">⚠ ${err.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Analyze';
+      }
+    }
+
+    function renderCard(card) {
+      const resultDiv = document.getElementById('result');
+      const rec = (card.recommendation || 'watch').toLowerCase();
+      const recClass = { buy: 'badge-buy', sell: 'badge-sell', watch: 'badge-watch', hold: 'badge-hold' }[rec] || 'badge-hold';
+      const fairYes = card.fair_yes != null ? (card.fair_yes * 100).toFixed(1) + '%' : '—';
+      const edgeCents = card.edge_cents != null ? (card.edge_cents > 0 ? '+' : '') + card.edge_cents + '¢' : '—';
+      const edgeColor = card.edge_cents > 5 ? 'green' : card.edge_cents < -5 ? 'red' : 'yellow';
+      const status = card.status || '—';
+
+      resultDiv.innerHTML = `
+        <div class="market-card">
+          <div class="market-title">${escHtml(card.title || card.market_id || 'Market Analysis')}</div>
+          <div class="market-grid">
+            <div class="stat">
+              <div class="label">Fair Yes</div>
+              <div class="value">${fairYes}</div>
+            </div>
+            <div class="stat">
+              <div class="label">Edge</div>
+              <div class="value ${edgeColor}">${edgeCents}</div>
+            </div>
+            <div class="stat">
+              <div class="label">Status</div>
+              <div class="value">${escHtml(status)}</div>
+            </div>
+            <div class="stat">
+              <div class="label">Recommendation</div>
+              <div class="value"><span class="recommendation-badge ${recClass}">${escHtml(rec)}</span></div>
+            </div>
+          </div>
+          <span class="raw-toggle" onclick="toggleRaw()">Show raw JSON</span>
+          <pre class="raw-json" id="rawJson" style="display:none">${escHtml(JSON.stringify(rawData, null, 2))}</pre>
+        </div>
+      `;
+    }
+
+    function toggleRaw() {
+      const pre = document.getElementById('rawJson');
+      const toggle = document.querySelector('.raw-toggle');
+      showingRaw = !showingRaw;
+      pre.style.display = showingRaw ? 'block' : 'none';
+      toggle.textContent = showingRaw ? 'Hide raw JSON' : 'Show raw JSON';
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') analyzeMarket();
+    });
+
+    checkHealth();
+  </script>
+
+</body>
+</html>
