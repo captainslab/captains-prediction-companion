@@ -3,7 +3,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import * as z from 'zod/v4';
@@ -22,7 +22,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const APP_NAME = process.env.APP_NAME ?? 'Captains Prediction Companion';
-const APP_VERSION = process.env.APP_VERSION ?? '0.1.0';
+const APP_VERSION = process.env.APP_VERSION ?? '1.0.0';
+const PUBLIC_DIR = resolve(__dirname, '../public');
 const PORT = Number(process.env.PORT ?? 3000);
 const ENABLE_NOTE_TOOLS = process.env.ENABLE_NOTE_TOOLS === 'true';
 const DATA_FILE = resolve(process.env.APP_DATA_FILE ?? `${__dirname}/../data/notes.json`);
@@ -221,6 +222,18 @@ async function main() {
       return;
     }
 
+    if (req.url === '/' || req.url === '/index.html') {
+      const indexPath = resolve(PUBLIC_DIR, 'index.html');
+      if (existsSync(indexPath)) {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(readFileSync(indexPath));
+      } else {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('Dashboard not found');
+      }
+      return;
+    }
+
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
@@ -285,9 +298,10 @@ async function main() {
   });
 
   httpServer.listen(PORT, () => {
-    console.log(`${APP_NAME} listening on http://localhost:${PORT}`);
-    console.log(`Health: http://localhost:${PORT}/healthz`);
-    console.log(`MCP: http://localhost:${PORT}/mcp`);
+    console.log(`${APP_NAME} v${APP_VERSION} listening on http://localhost:${PORT}`);
+    console.log(`Dashboard: http://localhost:${PORT}/`);
+    console.log(`Health:    http://localhost:${PORT}/healthz`);
+    console.log(`MCP:       http://localhost:${PORT}/mcp`);
   });
 }
 

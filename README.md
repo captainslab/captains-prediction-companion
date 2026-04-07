@@ -1,56 +1,72 @@
 # Captains Prediction Companion
 
-Captains Prediction Companion is a Node.js MCP-backed prediction-market assistant focused on **Kalshi event and mention markets**.
+ChatGPT-first prediction market assistant focused on **Kalshi event and mention markets**.
 
-This repository's current application surface is a **backend-first MCP service**, not a full dashboard app.
+The primary integration surface is a **remote MCP server**. A browser dashboard is the next expansion step.
 
-## What the app currently does
+## What it does
 
-- accepts Kalshi market URLs
-- builds event-market and mention-market plans
-- returns compact user-facing market cards
-- exposes MCP tools over HTTP
-- exposes a health endpoint for runtime checks
+- Accepts Kalshi market URLs
+- Builds event-market and mention-market analysis plans
+- Returns compact, user-facing market cards
+- Exposes MCP tools over HTTP for ChatGPT and compatible clients
+- Serves a lightweight browser UI at `GET /`
 
-## Current runtime surface
+## Runtime surfaces
 
-- `GET /healthz` -> health check JSON
-- `POST /mcp` -> MCP transport endpoint
-
-At the moment, `GET /` does **not** serve a browser UI on `main`.
-
-## Current project shape
-
-- `src/server.js` runs the HTTP + MCP server
-- `src/eventMarketTool.js` builds market plans
-- `src/eventMarketPrompt.js` builds workflow prompts
-- `src/llm/` contains market-card and mention-card logic
+| Endpoint | Purpose |
+|---|---|
+| `GET /` | Browser dashboard UI |
+| `GET /healthz` | Health check JSON |
+| `POST /mcp` | MCP transport for ChatGPT / compatible clients |
 
 ## Quick start
 
 ```bash
+cp .env.example .env
+# Fill in OPENROUTER_API_KEY
 npm install
 npm start
 ```
 
-Then open or test:
+Then open:
+- `http://localhost:3000/` — browser dashboard
+- `http://localhost:3000/healthz` — health check
+- `http://localhost:3000/mcp` — MCP endpoint
 
-- `http://localhost:3000/healthz`
-- `http://localhost:3000/mcp`
+## Environment
 
-## Environment notes
+See `.env.example` for all supported variables. Required:
+- `OPENROUTER_API_KEY` — model provider key (OpenRouter)
 
-The checked-in `.env.example` still contains older Alphapoly-era values and should be replaced with a current app-specific version.
+Optional:
+- `OPENROUTER_MODEL` — defaults to `openrouter/free`
+- `PORT` — defaults to `3000`
+- `ENABLE_NOTE_TOOLS` — enables note storage MCP tools (default: `false`)
 
-## Best next build step
+## Project structure
 
-If this repo stays the primary home for the app, the next clean product step is:
+```
+src/
+├── server.js              # HTTP + MCP server, serves GET /
+├── env.js                 # Env loader
+├── eventMarketTool.js     # Market plan builder
+├── eventMarketPrompt.js   # Workflow prompt builder
+├── eventMarketAlpha.js    # Alpha / edge calculation
+├── eventMarketContract.js # Output contract types
+├── kalshiApi.js           # Kalshi API client
+├── noteStore.js           # Optional note storage
+├── modelDefaults.js       # LLM model defaults
+└── storage.js             # Persistent storage helpers
+public/
+└── index.html             # Browser dashboard
+```
 
-1. add `public/index.html`
-2. serve it from `GET /`
-3. add a small browser action that calls the existing market analysis path
+## ChatGPT integration
 
-## Repo reality check
+See [CONNECT_CHATGPT.md](./CONNECT_CHATGPT.md) for full setup instructions.
 
-The code in `main` is already aligned with the Captains Prediction Companion direction.
-The main mismatch is **repo identity and stale docs**, not a completely separate product.
+## Known failure modes
+
+- If the market card shows `fair_yes: null` — check that `OPENROUTER_API_KEY` is set in the running process environment. A healthy `/healthz` alone does not prove alpha is enabled.
+- If the public URL shows stale data — rotate the tunnel. Old `trycloudflare` links can stay attached to outdated processes.
