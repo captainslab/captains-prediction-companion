@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 
-const STORAGE_KEY = 'alphapoly:favorites'
+const STORAGE_KEY = 'cpc:favorites'
 
 export interface FavoriteEntry {
   pair_id: string

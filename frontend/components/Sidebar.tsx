@@ -21,10 +21,10 @@ export function Sidebar() {
       <div className="px-4 py-5 border-b border-border">
         <Link href="/terminal" className="block group">
           <span className="text-base font-semibold tracking-tight text-text-primary group-hover:text-cyan transition-colors">
-            alphapoly
+            Captains Prediction Companion
           </span>
           <p className="text-[10px] text-text-muted mt-0.5">
-            Smart Hedging Strategies
+            Kalshi market analysis
           </p>
         </Link>
       </div>

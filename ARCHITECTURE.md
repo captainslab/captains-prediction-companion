@@ -33,7 +33,6 @@
 - Keep app identity in `package.json`, `README.md`, and `CONNECT_CHATGPT.md`
 - Keep durable product decisions in this file
 - Keep secrets out of git
-- Treat `/root/.codex/skills` as the reusable skill library, not as repo content
 
 ## Expansion path
 

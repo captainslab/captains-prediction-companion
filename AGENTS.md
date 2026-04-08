@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 > ChatGPT-first prediction market assistant. Remote MCP server backed by a Node.js app that accepts Kalshi market URLs, builds event-market and mention-market analysis plans, and returns compact user-facing cards.
 
@@ -12,9 +12,6 @@ npm install
 npm run dev       # Start server with --watch (auto-restart on file changes)
 npm start         # Start server (production)
 npm test          # Run tests (node --test)
-
-# Validation
-npm run check:skills   # Verify app code is isolated from /root/.codex/skills
 ```
 
 ## Project Structure
@@ -35,8 +32,6 @@ public/
 └── index.html             # Browser dashboard served at GET /
 test/
 └── server.test.js         # Node built-in test runner
-scripts/
-└── check-skills-compatibility.js  # Isolation guard
 ```
 
 ## API / MCP Surfaces
@@ -50,13 +45,6 @@ scripts/
 MCP tools exposed: `app_status`, `analyze_kalshi_market_url`
 MCP prompt exposed: `event_market_workflow`
 Optional tools (set `ENABLE_NOTE_TOOLS=true`): `remember_note`, `list_notes`, `search_notes`, `delete_note`
-
-## Hooks
-
-Claude hooks auto-run on every Write/Edit:
-
-- **PreToolUse guard** — blocks edits to `.env`, `data/`, `*.key`, `*.pem`, `*.secret`
-- **PostToolUse lint** — prettier + eslint on `src/` JS files; unfixable errors surface as blocking messages
 
 ## Environment
 

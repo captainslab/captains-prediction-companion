@@ -7,7 +7,7 @@ export interface ModelSettings {
   validationModel: string
 }
 
-const STORAGE_KEY = 'alphapoly:pipeline-model-settings'
+const STORAGE_KEY = 'cpc:pipeline-model-settings'
 const DEFAULTS: ModelSettings = { implicationsModel: '', validationModel: '' }
 
 export function useModelSettings() {

@@ -104,7 +104,7 @@ async function initializeSession() {
       protocolVersion: '2025-03-26',
       capabilities: {},
       clientInfo: {
-        name: 'alphapoly-web',
+        name: 'captains-prediction-companion-frontend',
         version: '0.1.0',
       },
     },
