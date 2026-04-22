@@ -1,12 +1,120 @@
-import { resolveOpenRouterModel } from './modelDefaults.js';
+import { runHermesChat } from './hermesRuntime.js';
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const EDGE_THRESHOLD_CENTS = 3;
+const ALPHA_PROVIDER_DEFAULT = 'gemini';
+const ALPHA_MODEL_DEFAULT = 'gemini-2.5-flash';
 const ALPHA_SYSTEM_PROMPT =
   'You are the oracle stage for a prediction-market companion. Treat mention markets as resolution-constrained language problems. Use only the provided market data and any supplied official source packet. Do not assume extra facts. Do not output pick, watch, or pass from price math alone. Reasoning must not be shallow or generic. If a real research packet is missing or empty, downgrade to watch or pass. Respect the exact phrase, exact speaker, exact event boundary, exact source constraints, and exact official-source hierarchy from the rules summary. Return JSON only with keys fair_yes, confidence, reasoning, and watch_for. fair_yes must be a number from 0 to 1. confidence must be low, medium, or high. reasoning must be one short sentence and must explain why implied market probability differs from model/fair probability using at least one of: historical pattern, behavioral tendency, timing/catalyst insight, or market-structure mismatch. watch_for must be an array of up to three short strings. Do not use the live market price itself as evidence. If fair value is inside the no-bet band, say there is no actionable edge rather than implying certainty. watch_for items must be concrete monitoring hooks such as transcript release, exact-phrase confirmation, official-source publication, or excluded-segment risk, not names, tickers, or event titles. If a source packet is provided, prefer it over generic assumptions and do not invent evidence beyond it.';
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeConfiguredString(value) {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.trim();
+  return cleaned || null;
+}
+
+function normalizeAlphaProviderName(value) {
+  const cleaned = normalizeConfiguredString(value);
+  if (!cleaned) return null;
+
+  const lowered = cleaned.toLowerCase();
+  if (lowered === 'google' || lowered === 'google-ai' || lowered === 'google_gemini') {
+    return 'gemini';
+  }
+
+  return cleaned;
+}
+
+function resolveAlphaProvider(options = {}) {
+  return (
+    normalizeAlphaProviderName(options.alphaProvider) ??
+    normalizeAlphaProviderName(process.env.EVENT_MARKET_ALPHA_PROVIDER) ??
+    normalizeAlphaProviderName(process.env.HERMES_PROVIDER) ??
+    ALPHA_PROVIDER_DEFAULT
+  );
+}
+
+function resolveAlphaModel(options = {}) {
+  const candidates = [
+    options.alphaModel,
+    process.env.EVENT_MARKET_ALPHA_MODEL,
+    process.env.GEMINI_MODEL,
+    process.env.HERMES_MODEL,
+    process.env.IMPLICATIONS_MODEL,
+    process.env.GOOGLE_MODEL,
+  ];
+
+  for (const candidate of candidates) {
+    const cleaned = normalizeConfiguredString(candidate);
+    if (!cleaned) continue;
+    if (cleaned === 'openrouter/free' || cleaned.startsWith('openrouter/')) continue;
+    return cleaned;
+  }
+
+  return ALPHA_MODEL_DEFAULT;
+}
+
+function parseJsonResponse(text) {
+  const trimmed = typeof text === 'string' ? text.trim() : '';
+  if (!trimmed) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (!fenced?.[1]) return null;
+    try {
+      return JSON.parse(fenced[1].trim());
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extractMessageText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+  return content
+    .map(part => (typeof part?.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function buildHermesAlphaQuery(payload) {
+  return [ALPHA_SYSTEM_PROMPT, '', 'alpha_input:', JSON.stringify(payload), '', 'Return only the required JSON object.']
+    .join('\n');
+}
+
+async function callHermesAlpha(payload, options) {
+  const chatRunner = options.alphaChatRunner ?? options.alphaRunner ?? runHermesChat;
+  if (typeof chatRunner !== 'function') return null;
+
+  const provider = resolveAlphaProvider(options);
+  const model = resolveAlphaModel(options);
+
+  try {
+    const hermesResult = await chatRunner(buildHermesAlphaQuery(payload), {
+      ...options,
+      provider,
+      ...(model ? { model } : {}),
+      source: options.alphaSource ?? 'event-market-alpha',
+      skills: options.alphaSkills ?? [],
+      toolsets: options.alphaToolsets ?? [],
+    });
+
+    if (isObject(hermesResult?.parsed)) {
+      return hermesResult.parsed;
+    }
+
+    const text = extractMessageText(hermesResult?.stdout ?? hermesResult?.content ?? hermesResult?.text);
+    const parsed = parseJsonResponse(text);
+    return isObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function mergeMetadata(input, extraMetadata) {
@@ -52,32 +160,6 @@ function normalizeWatchFor(value) {
     .slice(0, 3);
 }
 
-function parseJsonResponse(text) {
-  const trimmed = typeof text === 'string' ? text.trim() : '';
-  if (!trimmed) return null;
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    if (!fenced?.[1]) return null;
-    try {
-      return JSON.parse(fenced[1].trim());
-    } catch {
-      return null;
-    }
-  }
-}
-
-function extractMessageText(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return null;
-  return content
-    .map(part => (typeof part?.text === 'string' ? part.text : ''))
-    .filter(Boolean)
-    .join('\n');
-}
-
 function buildPromptPayload(input) {
   const metadata = isObject(input.metadata) ? input.metadata : {};
   const availableContracts = Array.isArray(metadata.available_contracts)
@@ -118,64 +200,6 @@ function buildPromptPayload(input) {
   };
 }
 
-async function callOpenRouterAlpha(payload, options) {
-  const fetchImpl = options.alphaFetchImpl ?? options.fetchImpl ?? globalThis.fetch;
-  const apiKey = options.alphaApiKey ?? process.env.OPENROUTER_API_KEY ?? null;
-  const model =
-    options.alphaModel ??
-    resolveOpenRouterModel('EVENT_MARKET_ALPHA_MODEL', resolveOpenRouterModel('IMPLICATIONS_MODEL'));
-
-  if (!apiKey || typeof fetchImpl !== 'function') return null;
-
-  const requestBody = JSON.stringify({
-    model,
-    temperature: 0.1,
-    max_tokens: 400,
-    reasoning: {
-      effort: 'none',
-      exclude: true,
-    },
-    messages: [
-      {
-        role: 'system',
-        content: ALPHA_SYSTEM_PROMPT,
-      },
-      {
-        role: 'user',
-        content: JSON.stringify(payload),
-      },
-    ],
-  });
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const response = await fetchImpl(OPENROUTER_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: requestBody,
-      });
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const data = await response.json();
-      const content = extractMessageText(data?.choices?.[0]?.message?.content);
-      const parsed = parseJsonResponse(content);
-      if (parsed) {
-        return parsed;
-      }
-    } catch {
-      // Retry once on transient network/provider failures.
-    }
-  }
-
-  return null;
-}
-
 export async function enrichEventMarketAlpha(input = {}, options = {}) {
   const metadata = isObject(input.metadata) ? input.metadata : {};
   const targetPhrase = metadata.target_phrase ?? null;
@@ -195,7 +219,7 @@ export async function enrichEventMarketAlpha(input = {}, options = {}) {
     return input;
   }
 
-  const alpha = await callOpenRouterAlpha(buildPromptPayload(input), options);
+  const alpha = await callHermesAlpha(buildPromptPayload(input), options);
   if (!isObject(alpha)) {
     return input;
   }
@@ -220,9 +244,7 @@ export async function enrichEventMarketAlpha(input = {}, options = {}) {
       alpha_confidence: confidence,
       alpha_summary_reason: reasoning,
       watch_for: watchFor.length > 0 ? watchFor : metadata.watch_for,
-      alpha_model:
-        options.alphaModel ??
-        resolveOpenRouterModel('EVENT_MARKET_ALPHA_MODEL', resolveOpenRouterModel('IMPLICATIONS_MODEL')),
+      alpha_model: resolveAlphaModel(options),
     }),
   };
 }

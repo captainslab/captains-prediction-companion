@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNoteStore } from '../src/noteStore.js';
 import { createPipelineService } from '../src/pipelineService.js';
-import { DEFAULT_MODEL_NAME } from '../src/modelDefaults.js';
 import {
   buildEventMarketPlan,
   buildEventMarketPlanSummary,
@@ -41,22 +40,20 @@ function createFetchStub(routeMap) {
   };
 }
 
-function createAlphaFetchStub(result, verifier) {
-  return async (url, init = {}) => {
-    const key = typeof url === 'string' ? url : url.toString();
-    assert.equal(key, 'https://openrouter.ai/api/v1/chat/completions');
-    assert.equal(init.method, 'POST');
-    const body = JSON.parse(init.body);
-    verifier?.(body);
-    return jsonResponse({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify(result),
-          },
-        },
-      ],
-    });
+function createAlphaRunnerStub(result, verifier) {
+  return async (query, options = {}) => {
+    assert.equal(typeof query, 'string');
+    assert.match(query, /alpha_input:/);
+    verifier?.(query, options);
+    return {
+      ok: true,
+      parsed: result,
+      stdout: '',
+      stderr: '',
+      status: 0,
+      error: null,
+      sessionId: 'test-session',
+    };
   };
 }
 
@@ -372,21 +369,21 @@ test('event market alpha computes fair value and a directional side for a specif
       [`${KALSHI_BASE_URL}/events/KXTRUMPMENTIONB-26MAR27`, eventPayload],
     ])
   );
-  const alphaFetchImpl = createAlphaFetchStub(
+  const alphaRunner = createAlphaRunnerStub(
     {
       fair_yes: 0.92,
       confidence: 'high',
       reasoning: 'Biden is a likely attack line in this remarks format.',
       watch_for: ['alternate wording', 'segment exclusions'],
     },
-    body => {
-      assert.equal(body.model, DEFAULT_MODEL_NAME);
-      assert.deepEqual(body.reasoning, {
-        effort: 'none',
-        exclude: true,
-      });
-      assert.match(body.messages[1].content, /"target_phrase":"Biden"/);
-      assert.match(body.messages[1].content, /"market_yes":0\.84/);
+    (query, options) => {
+      assert.equal(options.provider, 'gemini');
+      assert.equal(options.model, 'gemini-2.5-flash');
+      assert.equal(options.source, 'event-market-alpha');
+      assert.deepEqual(options.skills, []);
+      assert.deepEqual(options.toolsets, []);
+      assert.match(query, /"target_phrase":"Biden"/);
+      assert.match(query, /"market_yes":0\.84/);
     }
   );
 
@@ -396,7 +393,7 @@ test('event market alpha computes fair value and a directional side for a specif
       market_id: 'KXTRUMPMENTIONB-26MAR27-BIDE',
       url: TRUMP_EVENT_URL,
     },
-    { fetchImpl, alphaFetchImpl, alphaApiKey: 'test-key' }
+    { fetchImpl, alphaRunner }
   );
 
   assert.equal(result.user_facing.status, 'ready');
@@ -449,8 +446,7 @@ test('event market alpha falls back cleanly when the model call fails', async ()
     },
     {
       fetchImpl,
-      alphaApiKey: 'test-key',
-      alphaFetchImpl: async () => {
+      alphaRunner: async () => {
         throw new Error('network down');
       },
     }
