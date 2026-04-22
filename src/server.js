@@ -16,6 +16,7 @@ import { buildEventMarketWorkflowPrompt } from './eventMarketPrompt.js';
 import { createNoteStore } from './noteStore.js';
 import { loadDotEnv } from './env.js';
 import { createPipelineService } from './pipelineService.js';
+import { fetchKalshiMarkets } from './marketSources.js';
 
 loadDotEnv();
 
@@ -49,9 +50,25 @@ function parseSeedUrls(rawValue) {
     .filter(Boolean);
 }
 
+async function buildSeedUrls() {
+  const envUrls = parseSeedUrls(process.env.PIPELINE_SEED_URLS);
+
+  try {
+    const calendarUrls = await fetchKalshiMarkets({
+      calendarUrl: process.env.PIPELINE_CALENDAR_URL,
+      limit: Number(process.env.PIPELINE_CALENDAR_LIMIT ?? 50),
+    });
+
+    return [...new Set([...calendarUrls, ...envUrls])];
+  } catch (err) {
+    console.error('Calendar seed fetch failed, falling back to env seeds:', err);
+    return envUrls;
+  }
+}
+
 const pipelineService = createPipelineService({
   stateFile: PIPELINE_STATE_FILE,
-  seedUrls: parseSeedUrls(process.env.PIPELINE_SEED_URLS),
+  seedUrls: await buildSeedUrls(),
 });
 
 function buildCardToolResult(result, { includeHidden = false } = {}) {
@@ -279,6 +296,30 @@ async function main() {
       pipelineService.reset();
       writeJson(res, 200, {
         ok: true,
+        status: pipelineService.getStatus(),
+      });
+      return;
+    }
+
+    if (req.url === '/pipeline/queue' && req.method === 'POST') {
+      let body = null;
+      try {
+        body = await getBodyBuffer(req);
+      } catch {
+        writeJson(res, 400, { error: 'Invalid JSON body' });
+        return;
+      }
+
+      const result = pipelineService.queueUrl(body?.url);
+      if (!result.ok) {
+        writeJson(res, 400, { error: result.error });
+        return;
+      }
+
+      writeJson(res, 200, {
+        ok: true,
+        queued: result.queued,
+        url: result.url,
         status: pipelineService.getStatus(),
       });
       return;
