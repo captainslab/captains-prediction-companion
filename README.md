@@ -41,10 +41,12 @@ Then open:
 ## Environment
 
 Required for the backend runtime:
-- `OPENROUTER_API_KEY`
+- current model-provider API key
 
 Common optional variables:
-- `OPENROUTER_MODEL` — defaults to `openrouter/free`
+- `IMPLICATIONS_MODEL` — default model for the implications stage
+- `VALIDATION_MODEL` — default model for the validation stage
+- `EVENT_MARKET_ALPHA_MODEL` — model override for the alpha stage
 - `PORT` — defaults to `3000`
 - `ENABLE_NOTE_TOOLS` — enables note storage MCP tools (default: `false`)
 - `APP_DATA_FILE`

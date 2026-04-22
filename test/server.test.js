@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNoteStore } from '../src/noteStore.js';
 import { createPipelineService } from '../src/pipelineService.js';
+import { DEFAULT_MODEL_NAME } from '../src/modelDefaults.js';
 import {
   buildEventMarketPlan,
   buildEventMarketPlanSummary,
@@ -379,7 +380,7 @@ test('event market alpha computes fair value and a directional side for a specif
       watch_for: ['alternate wording', 'segment exclusions'],
     },
     body => {
-      assert.equal(body.model, 'openrouter/free');
+      assert.equal(body.model, DEFAULT_MODEL_NAME);
       assert.deepEqual(body.reasoning, {
         effort: 'none',
         exclude: true,

@@ -34,7 +34,7 @@ Recommended production ports:
 
 Backend:
 - `PORT=8000`
-- `OPENROUTER_API_KEY` or the model provider key required by the active runtime
+- current model-provider API key required by the active runtime
 - `APP_DATA_FILE=/var/lib/captains/notes.json` (or another writable path)
 - `PIPELINE_STATE_FILE=/var/lib/captains/pipeline-state.json`
 - `PIPELINE_OUTPUT_FILE=/var/lib/captains/pipeline-card-outputs.json`

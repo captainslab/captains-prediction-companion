@@ -25,7 +25,7 @@
 
 - ChatGPT sends a market link or market brief to the MCP server
 - The server parses and classifies the market
-- The server can call a model provider such as OpenRouter when wired in
+- The server can call a model provider when wired in
 - The server returns structured JSON for UI rendering
 
 ## Recovery rules

@@ -3,7 +3,7 @@ import { loadJsonFile, writeJsonFileAtomic } from './storage.js';
 import { buildFocusedKalshiMarketPlan, buildEventMarketPlanSummary } from './eventMarketTool.js';
 import { runHermesResearch } from './hermesResearch.js';
 import { runHermesOracle } from './hermesOracle.js';
-import { resolveOpenRouterModel } from './modelDefaults.js';
+import { resolveModelName } from './modelDefaults.js';
 import { buildOfficialSourcePacket } from './sourcePackets.js';
 
 const MAX_RECENT_URLS = 20;
@@ -161,11 +161,11 @@ function resolveDefaultModels(defaultModels = {}) {
   const implications =
     typeof defaultModels.implications === 'string' && defaultModels.implications.trim()
       ? defaultModels.implications.trim()
-      : resolveOpenRouterModel('IMPLICATIONS_MODEL');
+      : resolveModelName('IMPLICATIONS_MODEL');
   const validation =
     typeof defaultModels.validation === 'string' && defaultModels.validation.trim()
       ? defaultModels.validation.trim()
-      : resolveOpenRouterModel('VALIDATION_MODEL', implications);
+      : resolveModelName('VALIDATION_MODEL', implications);
 
   return {
     implications,

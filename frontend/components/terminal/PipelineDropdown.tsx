@@ -253,8 +253,8 @@ export function PipelineDropdown() {
             <div className="pt-2 border-t border-border space-y-1.5">
             {/* LLM cost warning */}
             <p className="text-[10px] text-amber-400/80 leading-tight pb-1.5">
-                ⚠ Pipeline uses LLM tokens. The starter defaults to
-                `openrouter/free`, so Quick Demo is the cheapest way to
+                ⚠ Pipeline uses LLM tokens. The starter uses the configured
+                default model, so Quick Demo is the cheapest way to
                 sanity-check the flow. Free/cheap models may miss
                 opportunities. Budget spend on LLM can exceed hedge profits.
               </p>
