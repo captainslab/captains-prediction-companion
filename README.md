@@ -41,12 +41,16 @@ Then open:
 ## Environment
 
 Required for the backend runtime:
-- current model-provider API key
+- Hermes auth configured for the alpha stage's Gemini provider
+- no OpenRouter API key is needed for alpha transport
 
 Common optional variables:
 - `IMPLICATIONS_MODEL` — default model for the implications stage
 - `VALIDATION_MODEL` — default model for the validation stage
+- `HERMES_PROVIDER` — Hermes provider for alpha transport (default: `gemini`)
+- `EVENT_MARKET_ALPHA_PROVIDER` — provider override for the alpha stage
 - `EVENT_MARKET_ALPHA_MODEL` — model override for the alpha stage
+- `GEMINI_MODEL` — Gemini model fallback used by the alpha stage
 - `PORT` — defaults to `3000`
 - `ENABLE_NOTE_TOOLS` — enables note storage MCP tools (default: `false`)
 - `APP_DATA_FILE`

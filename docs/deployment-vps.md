@@ -34,7 +34,10 @@ Recommended production ports:
 
 Backend:
 - `PORT=8000`
-- current model-provider API key required by the active runtime
+- Hermes auth configured for the alpha stage's Gemini provider
+- `EVENT_MARKET_ALPHA_PROVIDER=gemini` if you want to pin the alpha provider explicitly
+- `EVENT_MARKET_ALPHA_MODEL=gemini-2.5-flash` if you want to override the alpha model
+- `GEMINI_MODEL=` if you want a global Gemini fallback override
 - `APP_DATA_FILE=/var/lib/captains/notes.json` (or another writable path)
 - `PIPELINE_STATE_FILE=/var/lib/captains/pipeline-state.json`
 - `PIPELINE_OUTPUT_FILE=/var/lib/captains/pipeline-card-outputs.json`
