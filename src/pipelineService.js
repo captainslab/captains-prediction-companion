@@ -1,6 +1,8 @@
 import { dirname, resolve } from 'node:path';
 import { loadJsonFile, writeJsonFileAtomic } from './storage.js';
 import { buildFocusedKalshiMarketPlan, buildEventMarketPlanSummary } from './eventMarketTool.js';
+import { runHermesResearch } from './hermesResearch.js';
+import { runHermesOracle } from './hermesOracle.js';
 import { resolveOpenRouterModel } from './modelDefaults.js';
 
 const MAX_RECENT_URLS = 20;
@@ -201,16 +203,151 @@ function summarizeResult(result, url) {
   };
 }
 
-function createOutputRecord(result, runId, recordedAt) {
+function formatPercentage(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return `${Math.round(numeric * 100)}%`;
+}
+
+function formatCents(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  return `${rounded >= 0 ? '' : '-'}${Math.abs(rounded)}c`;
+}
+
+function getResultEdgeCents(result) {
+  const edge =
+    result?.market_view?.trade_view?.edge_cents ??
+    result?.market_view?.price_view?.edge_cents ??
+    null;
+  return typeof edge === 'number' ? edge : null;
+}
+
+function hasActionableEdge(result) {
+  const recommendation = String(result?.summary?.recommendation ?? '').trim().toLowerCase();
+  if (ACTIONABLE_RECOMMENDATIONS.has(recommendation)) {
+    return true;
+  }
+
+  const edge = getResultEdgeCents(result);
+  return typeof edge === 'number' && Math.abs(edge) >= 3;
+}
+
+function buildNoEdgeReason(result) {
+  if (hasActionableEdge(result)) {
+    return null;
+  }
+
+  const recommendation = String(result?.summary?.recommendation ?? '').trim().toLowerCase();
+  const tradeView = result?.market_view?.trade_view ?? {};
+  const fairYes = formatPercentage(tradeView.fair_yes);
+  const marketYes = formatPercentage(tradeView.market_yes ?? tradeView.last_price);
+  const edgeCents = formatCents(getResultEdgeCents(result));
+  const eventDomain = String(result?.event_domain ?? '').trim().toLowerCase();
+  const eventType = String(result?.event_type ?? '').trim().toLowerCase();
+
+  if (eventDomain === 'general' && eventType === 'general') {
+    return {
+      code: 'manual_classification_required',
+      message: 'The card was classified as general/general, so it stayed pass pending manual classification.',
+    };
+  }
+
+  if (fairYes && marketYes && edgeCents) {
+    return {
+      code: 'priced_in',
+      message: `Market price (${marketYes}) and model fair value (${fairYes}) were too close, leaving only a ${edgeCents} gap.`,
+    };
+  }
+
+  if (recommendation === 'pass') {
+    return {
+      code: 'manual_classification_required',
+      message: 'The market stayed pass because the researched evidence did not map cleanly to an actionable pricing gap.',
+    };
+  }
+
   return {
-    market_id: result?.source?.market_id ?? null,
-    url: result?.source?.url ?? null,
-    summary_headline: result?.summary?.headline ?? null,
-    recommendation: result?.summary?.recommendation ?? null,
-    confidence: result?.confidence ?? null,
-    recorded_at: recordedAt,
-    run_id: runId,
+    code: 'no_actionable_edge',
+    message: 'The researched evidence did not show an actionable pricing gap.',
   };
+}
+
+function createOutputRecord(result, runId, recordedAt) {
+  const boardUrl =
+    result?.board_url ??
+    result?.source?.url ??
+    result?.user_facing?.source?.url ??
+    null;
+  const boardHeadline =
+    result?.board_headline ??
+    result?.summary?.headline ??
+    result?.user_facing?.summary?.headline ??
+    null;
+  const boardRecommendation =
+    result?.board_recommendation ??
+    result?.summary?.recommendation ??
+    result?.user_facing?.summary?.recommendation ??
+    null;
+  const boardConfidence = result?.board_confidence ?? result?.confidence ?? result?.user_facing?.confidence ?? null;
+
+  const childContracts = Array.isArray(result?.child_contracts)
+    ? result.child_contracts
+    : Array.isArray(result?.user_facing?.market_view?.available_contracts)
+      ? result.user_facing.market_view.available_contracts.map(contract => ({
+          ticker: contract.market_ticker ?? null,
+          label: contract.label ?? null,
+          market_price: contract.market_yes ?? null,
+          fair_value: contract.fair_yes ?? null,
+          edge_cents: contract.edge_cents ?? null,
+          phrase_found: contract.phrase_found ?? null,
+          transcript_excerpt: contract.transcript_excerpt ?? null,
+          evidence: Array.isArray(contract.evidence) ? contract.evidence : [],
+          pick: contract.pick ?? null,
+          confidence: contract.confidence ?? null,
+          reasoning: contract.reasoning ?? null,
+        }))
+      : [];
+
+  const boardNoEdgeReasonCode = result?.board_no_edge_reason_code ?? null;
+  const boardNoEdgeReason = result?.board_no_edge_reason ?? null;
+  const record = {
+    run_id: runId,
+    recorded_at: recordedAt,
+    board_url: boardUrl,
+    url: boardUrl,
+    board_headline: boardHeadline,
+    summary_headline: boardHeadline,
+    official_source_url: result?.official_source_url ?? null,
+    official_source_type: result?.official_source_type ?? null,
+    transcript_excerpt: result?.transcript_excerpt ?? null,
+    research_summary: result?.research_summary ?? result?.summary?.one_line_reason ?? null,
+    evidence_strength: result?.evidence_strength ?? null,
+    source_quality: result?.source_quality ?? null,
+    unresolved_gaps: Array.isArray(result?.unresolved_gaps) ? result.unresolved_gaps : [],
+    board_recommendation: boardRecommendation,
+    recommendation: boardRecommendation,
+    board_confidence: boardConfidence,
+    confidence: boardConfidence,
+    board_no_edge_reason_code: boardNoEdgeReasonCode,
+    no_edge_reason_code: boardNoEdgeReasonCode,
+    board_no_edge_reason: boardNoEdgeReason,
+    no_edge_reason: boardNoEdgeReason,
+    child_contracts: childContracts,
+  };
+
+  if (!record.board_no_edge_reason_code || !record.board_no_edge_reason) {
+    const noEdgeReason = buildNoEdgeReason(result);
+    if (noEdgeReason) {
+      record.board_no_edge_reason_code = noEdgeReason.code;
+      record.no_edge_reason_code = noEdgeReason.code;
+      record.board_no_edge_reason = noEdgeReason.message;
+      record.no_edge_reason = noEdgeReason.message;
+    }
+  }
+
+  return record;
 }
 
 function fallbackResult(url, error) {
@@ -297,7 +434,10 @@ export function createPipelineService(options = {}) {
   const runMarketAnalysis =
     typeof options.runMarketAnalysis === 'function'
       ? options.runMarketAnalysis
-      : (input, runOptions) => buildFocusedKalshiMarketPlan(input, runOptions);
+      : async (input, runOptions) => {
+          const research = await runHermesResearch(input, runOptions);
+          return runHermesOracle(research, input, runOptions);
+        };
   const seedUrls = uniqueUrls(Array.isArray(options.seedUrls) ? options.seedUrls : []);
 
   if (!stateFile) {

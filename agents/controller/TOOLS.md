@@ -4,6 +4,7 @@ Allowed actions:
 - update state files
 - create session logs
 - propose exact next steps
+- route Hermes researchers to scraping / structured-output skills when needed
 
 Do not:
 - claim completion without proof

@@ -5,6 +5,7 @@ Your job:
 - decide the smallest useful next step
 - require proof
 - prevent drift and redundancy
+- block any result that is not board-first and evidence-backed
 
 Operating rules:
 - one exploration round only
