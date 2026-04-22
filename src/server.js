@@ -15,6 +15,7 @@ import {
 import { buildEventMarketWorkflowPrompt } from './eventMarketPrompt.js';
 import { createNoteStore } from './noteStore.js';
 import { loadDotEnv } from './env.js';
+import { createPipelineService } from './pipelineService.js';
 
 loadDotEnv();
 
@@ -27,6 +28,9 @@ const PUBLIC_DIR = resolve(__dirname, '../public');
 const PORT = Number(process.env.PORT ?? 3000);
 const ENABLE_NOTE_TOOLS = process.env.ENABLE_NOTE_TOOLS === 'true';
 const DATA_FILE = resolve(process.env.APP_DATA_FILE ?? `${__dirname}/../data/notes.json`);
+const PIPELINE_STATE_FILE = resolve(
+  process.env.PIPELINE_STATE_FILE ?? `${__dirname}/../data/pipeline-state.json`
+);
 
 mkdirSync(dirname(DATA_FILE), { recursive: true });
 
@@ -36,6 +40,19 @@ if (!existsSync(DATA_FILE)) {
 
 const noteStore = createNoteStore(DATA_FILE);
 const transports = new Map();
+
+function parseSeedUrls(rawValue) {
+  if (typeof rawValue !== 'string') return [];
+  return rawValue
+    .split(/[\n,]/)
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+const pipelineService = createPipelineService({
+  stateFile: PIPELINE_STATE_FILE,
+  seedUrls: parseSeedUrls(process.env.PIPELINE_SEED_URLS),
+});
 
 function buildCardToolResult(result, { includeHidden = false } = {}) {
   const summary = buildEventMarketPlanSummary(result);
@@ -51,11 +68,12 @@ function buildCardToolResult(result, { includeHidden = false } = {}) {
 }
 
 export async function analyzeKalshiMarketUrlTool({ url }, options = {}) {
+  options.pipelineService?.recordRecentUrl?.(url);
   const result = await buildFocusedKalshiMarketPlan({ url, venue: 'Kalshi' }, options);
   return buildCardToolResult(result);
 }
 
-function createServer() {
+function createServer(options = {}) {
   const server = new McpServer(
     { name: APP_NAME, version: APP_VERSION },
     { capabilities: { logging: {} } }
@@ -168,7 +186,7 @@ function createServer() {
         url: z.string().describe('Kalshi market URL to analyze'),
       },
     },
-    async ({ url }) => analyzeKalshiMarketUrlTool({ url })
+    async ({ url }) => analyzeKalshiMarketUrlTool({ url }, { pipelineService: options.pipelineService })
   );
 
   server.registerPrompt(
@@ -216,6 +234,11 @@ function getBodyBuffer(req) {
   });
 }
 
+function writeJson(res, statusCode, payload) {
+  res.writeHead(statusCode, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(payload));
+}
+
 async function main() {
   const httpServer = http.createServer(async (req, res) => {
     if (!req.url) {
@@ -247,6 +270,54 @@ async function main() {
       return;
     }
 
+    if (req.url === '/pipeline/status' && req.method === 'GET') {
+      writeJson(res, 200, pipelineService.getStatus());
+      return;
+    }
+
+    if (req.url === '/pipeline/reset' && req.method === 'POST') {
+      pipelineService.reset();
+      writeJson(res, 200, {
+        ok: true,
+        status: pipelineService.getStatus(),
+      });
+      return;
+    }
+
+    if (req.url === '/pipeline/run/production' && req.method === 'POST') {
+      let body = null;
+      try {
+        body = await getBodyBuffer(req);
+      } catch {
+        writeJson(res, 400, { error: 'Invalid JSON body' });
+        return;
+      }
+
+      const maxEvents = Number(body?.max_events);
+      const runResult = pipelineService.startProductionRun({
+        full: body?.full !== false,
+        max_events: Number.isInteger(maxEvents) && maxEvents > 0 ? maxEvents : undefined,
+        implications_model:
+          typeof body?.implications_model === 'string' ? body.implications_model : undefined,
+        validation_model:
+          typeof body?.validation_model === 'string' ? body.validation_model : undefined,
+      });
+
+      if (!runResult.started) {
+        writeJson(res, 409, {
+          error: 'Pipeline already running',
+          status: runResult.status,
+        });
+        return;
+      }
+
+      writeJson(res, 202, {
+        ok: true,
+        status: runResult.status,
+      });
+      return;
+    }
+
     if (req.url.startsWith('/mcp')) {
       let transport = null;
       const sessionId = req.headers['mcp-session-id'];
@@ -256,7 +327,7 @@ async function main() {
       } else if (req.method === 'POST') {
         const body = await getBodyBuffer(req);
 
-        const server = createServer();
+        const server = createServer({ pipelineService });
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: id => {
