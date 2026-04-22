@@ -32,6 +32,9 @@ const DATA_FILE = resolve(process.env.APP_DATA_FILE ?? `${__dirname}/../data/not
 const PIPELINE_STATE_FILE = resolve(
   process.env.PIPELINE_STATE_FILE ?? `${__dirname}/../data/pipeline-state.json`
 );
+const PIPELINE_OUTPUT_FILE = resolve(
+  process.env.PIPELINE_OUTPUT_FILE ?? `${__dirname}/../data/pipeline-card-outputs.json`
+);
 
 mkdirSync(dirname(DATA_FILE), { recursive: true });
 
@@ -68,6 +71,7 @@ async function buildSeedUrls() {
 
 const pipelineService = createPipelineService({
   stateFile: PIPELINE_STATE_FILE,
+  outputFile: PIPELINE_OUTPUT_FILE,
   seedUrls: await buildSeedUrls(),
 });
 
@@ -289,6 +293,17 @@ async function main() {
 
     if (req.url === '/pipeline/status' && req.method === 'GET') {
       writeJson(res, 200, pipelineService.getStatus());
+      return;
+    }
+
+    if (req.url === '/pipeline/outputs' && req.method === 'GET') {
+      try {
+        const raw = readFileSync(PIPELINE_OUTPUT_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        writeJson(res, 200, Array.isArray(parsed) ? parsed.slice(-10) : []);
+      } catch {
+        writeJson(res, 200, []);
+      }
       return;
     }
 
