@@ -118,7 +118,7 @@ export async function runHermesResearch(input = {}, options = {}) {
     official_source_url: sourcePacket?.official_source_url ?? null,
     official_source_type: sourcePacket?.official_source_type ?? null,
     transcript_excerpt: sourcePacket?.transcript_excerpt ?? null,
-    research_summary: hermesResult.stderr?.trim() || sourcePacket?.research_summary || 'Hermes returned no usable structured response.',
+    research_summary: sourcePacket?.research_summary || hermesResult.stderr?.trim() || 'Hermes returned no usable structured response.',
     evidence_strength: sourcePacket?.evidence_strength ?? 'low',
     source_quality: sourcePacket?.source_quality ?? 'unknown',
     source_packet_kind: sourcePacket?.source_packet_kind ?? null,

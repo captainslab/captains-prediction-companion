@@ -11,6 +11,7 @@ export function resolveHermesCommand() {
 }
 
 export const HERMES_RESEARCH_PACKET = resolve(__dirname, '../prompts/hermes-kalshi-mention-research.md');
+export const HERMES_ORACLE_PACKET = resolve(__dirname, '../prompts/hermes-kalshi-oracle-decision.md');
 export const DEFAULT_HERMES_SKILLS = [
   'research-source-scraping',
   'last30days-research',
@@ -34,6 +35,14 @@ function normalizeList(values, fallback) {
 export function readHermesResearchPacket() {
   try {
     return readFileSync(HERMES_RESEARCH_PACKET, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+export function readHermesOraclePacket() {
+  try {
+    return readFileSync(HERMES_ORACLE_PACKET, 'utf8');
   } catch {
     return '';
   }

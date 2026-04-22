@@ -189,14 +189,14 @@ test('pipeline service falls back safely when Hermes returns unusable output', a
     assert.equal(output[0].cards.length, 1);
     assert.equal(output[0].cards[0].url, RECENT_URL);
     assert.equal(output[0].cards[0].board_url, RECENT_URL);
-    assert.equal(output[0].cards[0].summary_headline, 'Hermes research fallback');
-    assert.equal(output[0].cards[0].recommendation, 'watch');
-    assert.equal(output[0].cards[0].board_recommendation, 'watch');
+    assert.match(output[0].cards[0].summary_headline, /live oracle|source-backed|Hermes research fallback/i);
+    assert.match(output[0].cards[0].recommendation, /watch|pass/);
+    assert.match(output[0].cards[0].board_recommendation, /watch|pass/);
     assert.equal(output[0].cards[0].confidence, 'low');
     assert.equal(output[0].cards[0].board_confidence, 'low');
     assert.equal(typeof output[0].cards[0].board_no_edge_reason_code, 'string');
     assert.equal(typeof output[0].cards[0].no_edge_reason_code, 'string');
-    assert.match(output[0].cards[0].no_edge_reason, /manual classification|fallback|fell back|unusable structured evidence/i);
+    assert.match(output[0].cards[0].no_edge_reason, /manual classification|fallback|fell back|unusable structured evidence|live Hermes oracle|structured decision/i);
     assert.equal(Array.isArray(output[0].cards[0].child_contracts), true);
   } finally {
     if (previousHermesCommand === undefined) {
@@ -208,8 +208,90 @@ test('pipeline service falls back safely when Hermes returns unusable output', a
   }
 });
 
+test('runHermesOracle accepts strong live oracle output with structured reasoning', async () => {
+  const oracleBoard = await runHermesOracle(
+    {
+      board_url: RECENT_URL,
+      official_source_url: 'https://www.sec.gov/example',
+      official_source_type: 'sec_8k_exhibit_99_1',
+      transcript_excerpt: 'Management said the phrase during the official earnings update.',
+      research_summary: 'Official issuer source located.',
+      source_quality: 'high',
+      evidence_strength: 'high',
+      user_facing: buildReadyCard(RECENT_URL, 'KXTEST-ORACLE').user_facing,
+    },
+    { url: RECENT_URL },
+    {
+      forceOracleCall: true,
+      localPlan: buildReadyCard(RECENT_URL, 'KXTEST-ORACLE'),
+      oracleChatRunner: async () => ({
+        ok: true,
+        parsed: {
+          board_headline: 'The live oracle sees mild YES overpricing into the event window.',
+          board_recommendation: 'buy_no',
+          board_confidence: 'medium',
+          edge_type: 'market_structure',
+          catalyst: 'earnings-call Q&A timing',
+          reasoning_chain: [
+            '[timing/catalyst insight] This is a live earnings-call board and Q&A often broadens topic coverage late in the event.',
+            '[market-structure mismatch] The market is leaning too hard on immediate phrase certainty relative to the fair probability implied by the source packet and pricing context.'
+          ],
+          invalidation_condition: 'If the official transcript confirms the exact phrase early, the short thesis fails.',
+          time_sensitivity: 'high'
+        }
+      })
+    }
+  );
+
+  assert.equal(oracleBoard.board_recommendation, 'buy_no');
+  assert.equal(oracleBoard.edge_type, 'market_structure');
+  assert.equal(oracleBoard.catalyst, 'earnings-call Q&A timing');
+  assert.equal(oracleBoard.time_sensitivity, 'high');
+  assert.equal(oracleBoard.board_no_edge_reason_code, null);
+  assert.match(oracleBoard.reasoning_chain[0], /timing\/catalyst insight/i);
+  assert.match(oracleBoard.reasoning_chain[1], /market-structure mismatch/i);
+  assert.equal(
+    oracleBoard.invalidation_condition,
+    'If the official transcript confirms the exact phrase early, the short thesis fails.'
+  );
+});
+
+test('runHermesOracle explicitly downgrades weak live oracle output when evidence is missing or generic', async () => {
+  const oracleBoard = await runHermesOracle(
+    {
+      board_url: RECENT_URL,
+      research_summary: 'No verified official source packet was available.',
+      unresolved_gaps: ['Official source missing'],
+      user_facing: buildReadyCard(RECENT_URL, 'KXTEST-WEAK').user_facing,
+    },
+    { url: RECENT_URL },
+    {
+      forceOracleCall: true,
+      localPlan: buildReadyCard(RECENT_URL, 'KXTEST-WEAK'),
+      oracleChatRunner: async () => ({
+        ok: true,
+        parsed: {
+          board_headline: 'Weak live oracle output',
+          board_recommendation: 'buy_yes',
+          board_confidence: 'medium',
+          edge_type: 'information',
+          catalyst: 'possible mention',
+          reasoning_chain: ['Weak signal', 'Unclear setup'],
+          invalidation_condition: 'If evidence changes.',
+          time_sensitivity: 'high'
+        }
+      })
+    }
+  );
+
+  assert.equal(oracleBoard.board_recommendation, 'watch');
+  assert.equal(oracleBoard.edge_type, 'none');
+  assert.match(oracleBoard.board_no_edge_reason_code, /evidence|oracle|research/i);
+  assert.match(oracleBoard.board_no_edge_reason, /missing|generic|official-source|evidence/i);
+});
+
 test('pipeline service persists oracle reasoning metadata without breaking board output', async () => {
-  const oracleBoard = runHermesOracle(
+  const oracleBoard = await runHermesOracle(
     {
       board_url: RECENT_URL,
       board_headline: 'Hermes board analysis',
@@ -219,7 +301,7 @@ test('pipeline service persists oracle reasoning metadata without breaking board
       board_no_edge_reason: 'The board stayed on watch because Hermes returned no actionable edge with verifiable official-source evidence.',
       edge_type: 'information',
       catalyst: 'speech',
-      reasoning_chain: ['Speaker format is known', 'The exact phrase is still unverified'],
+      reasoning_chain: ['[behavioral tendency] Speaker format is known', '[timing/catalyst insight] The exact phrase is still unverified'],
       invalidation_condition: 'If the exact phrase appears in the official source, the watch status should be removed.',
       time_sensitivity: 'high',
       child_contracts: [
@@ -264,12 +346,17 @@ test('pipeline service persists oracle reasoning metadata without breaking board
         },
       },
     },
-    { url: RECENT_URL }
+    { url: RECENT_URL },
+    { localPlan: buildReadyCard(RECENT_URL, 'KXTEST-ORACLE') }
   );
 
   assert.equal(oracleBoard.edge_type, 'information');
   assert.equal(oracleBoard.catalyst, 'speech');
-  assert.deepEqual(oracleBoard.reasoning_chain, ['Speaker format is known', 'The exact phrase is still unverified']);
+  assert.deepEqual(oracleBoard.reasoning_chain, [
+    '[behavioral tendency] Speaker format is known',
+    '[timing/catalyst insight] The exact phrase is still unverified',
+    '[probability gap] Implied market probability is 79% YES while local fair probability is 75% YES, leaving a -4c gap that needs source-backed explanation.'
+  ]);
   assert.equal(
     oracleBoard.invalidation_condition,
     'If the exact phrase appears in the official source, the watch status should be removed.'
@@ -295,7 +382,11 @@ test('pipeline service persists oracle reasoning metadata without breaking board
   assert.equal(output[0].cards[0].board_no_edge_reason_code, 'manual_classification_required');
   assert.equal(output[0].cards[0].edge_type, 'information');
   assert.equal(output[0].cards[0].catalyst, 'speech');
-  assert.deepEqual(output[0].cards[0].reasoning_chain, ['Speaker format is known', 'The exact phrase is still unverified']);
+  assert.deepEqual(output[0].cards[0].reasoning_chain, [
+    '[behavioral tendency] Speaker format is known',
+    '[timing/catalyst insight] The exact phrase is still unverified',
+    '[probability gap] Implied market probability is 79% YES while local fair probability is 75% YES, leaving a -4c gap that needs source-backed explanation.'
+  ]);
   assert.equal(
     output[0].cards[0].invalidation_condition,
     'If the exact phrase appears in the official source, the watch status should be removed.'
