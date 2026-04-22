@@ -1,3 +1,4 @@
+import { dirname, resolve } from 'node:path';
 import { loadJsonFile, writeJsonFileAtomic } from './storage.js';
 import { buildFocusedKalshiMarketPlan, buildEventMarketPlanSummary } from './eventMarketTool.js';
 import { resolveOpenRouterModel } from './modelDefaults.js';
@@ -200,6 +201,18 @@ function summarizeResult(result, url) {
   };
 }
 
+function createOutputRecord(result, runId, recordedAt) {
+  return {
+    market_id: result?.source?.market_id ?? null,
+    url: result?.source?.url ?? null,
+    summary_headline: result?.summary?.headline ?? null,
+    recommendation: result?.summary?.recommendation ?? null,
+    confidence: result?.confidence ?? null,
+    recorded_at: recordedAt,
+    run_id: runId,
+  };
+}
+
 function fallbackResult(url, error) {
   const message = error instanceof Error ? error.message : 'Pipeline research failed for this market.';
   return {
@@ -292,10 +305,24 @@ export function createPipelineService(options = {}) {
   }
 
   const state = normalizeLoadedState(loadJsonFile(stateFile, makeEmptyState()));
+  const outputFile = resolve(options.outputFile ?? `${dirname(stateFile)}/pipeline-card-outputs.json`);
   let activeRunPromise = null;
 
   function persist() {
     writeJsonFileAtomic(stateFile, state);
+  }
+
+  function persistOutputRecord(runId, recordedAt, results) {
+    const existing = loadJsonFile(outputFile, []);
+    const entries = Array.isArray(existing) ? existing : [];
+    const record = {
+      run_id: runId,
+      recorded_at: recordedAt,
+      cards: results.map(result => createOutputRecord(result, runId, recordedAt)),
+    };
+
+    const filtered = entries.filter(entry => entry?.run_id !== runId);
+    writeJsonFileAtomic(outputFile, [...filtered, record]);
   }
 
   function setCurrentStep(step, details = null) {
@@ -396,6 +423,17 @@ export function createPipelineService(options = {}) {
       state.production.last_full_run = lastRun.completed_at;
     }
     state.production.last_run = lastRun;
+  }
+
+  function queueUrl(url) {
+    const normalized = normalizeUrl(url);
+    if (!normalized) {
+      return { ok: false, error: 'url is required' };
+    }
+
+    state.recent_urls = [normalized, ...state.recent_urls.filter(value => value !== normalized)].slice(0, MAX_RECENT_URLS);
+    persist();
+    return { ok: true, queued: normalized };
   }
 
   function recordRecentUrl(url) {
@@ -532,6 +570,7 @@ export function createPipelineService(options = {}) {
       state.results = mergedResults;
       refreshProductionSnapshot(mergedResults, lastRun, full);
       state.runs = [clone(lastRun), ...state.runs].slice(0, 25);
+      persistOutputRecord(lastRun.id, lastRun.completed_at, processedResults);
 
       setCurrentStep(
         PIPELINE_STEPS[7],
@@ -602,6 +641,7 @@ export function createPipelineService(options = {}) {
 
   return {
     getStatus,
+    queueUrl,
     recordRecentUrl,
     reset,
     runProduction,

@@ -111,6 +111,36 @@ test('pipeline service runs research for the most recent analyzed URL and persis
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('pipeline service appends durable per-run card outputs to a local file', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pipeline-service-output-'));
+  const stateFile = join(dir, 'pipeline-state.json');
+  const outputFile = join(dir, 'pipeline-card-outputs.json');
+
+  const service = createPipelineService({
+    stateFile,
+    outputFile,
+    seedUrls: [SEED_URL],
+    now: () => new Date('2026-04-22T12:00:00.000Z'),
+    runMarketAnalysis: async input => buildReadyCard(input.url, 'KXOUTPUT-1'),
+  });
+
+  service.recordRecentUrl(RECENT_URL);
+  await service.runProduction({ full: false, max_events: 1 });
+
+  const output = JSON.parse(readFileSync(outputFile, 'utf8'));
+  assert.equal(Array.isArray(output), true);
+  assert.equal(output.length, 1);
+  assert.equal(output[0].run_id, 1);
+  assert.equal(output[0].cards.length, 1);
+  assert.equal(output[0].cards[0].url, RECENT_URL);
+  assert.equal(output[0].cards[0].summary_headline, 'The mention contract is priced and the alpha pipeline has a directional edge.');
+  assert.equal(output[0].cards[0].recommendation, 'buy_no');
+  assert.equal(output[0].cards[0].confidence, 'medium');
+  assert.equal(typeof output[0].cards[0].recorded_at, 'string');
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('pipeline reset clears persisted research state', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'pipeline-service-reset-'));
   const stateFile = join(dir, 'pipeline-state.json');
@@ -123,7 +153,7 @@ test('pipeline reset clears persisted research state', async () => {
       implications: 'env-implications',
       validation: 'env-validation',
     },
-    runMarketAnalysis: async (input) => buildReadyCard(input.url, 'KXSEED-1'),
+    runMarketAnalysis: async input => buildReadyCard(input.url, 'KXSEED-1'),
   });
 
   await service.runProduction({ full: true, max_events: 1 });
