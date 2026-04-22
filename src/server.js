@@ -260,8 +260,8 @@ function writeJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-async function main() {
-  const httpServer = http.createServer(async (req, res) => {
+export function createHttpRequestHandler({ pipelineService = null, noteStore = null } = {}) {
+  return async function handleRequest(req, res) {
     if (!req.url) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: 'Missing request URL' }));
@@ -286,13 +286,24 @@ async function main() {
         ok: true,
         appName: APP_NAME,
         version: APP_VERSION,
-        noteCount: noteStore.stats().count,
+        noteCount: noteStore?.stats?.().count ?? 0,
       }));
       return;
     }
 
     if (req.url === '/pipeline/status' && req.method === 'GET') {
-      writeJson(res, 200, pipelineService.getStatus());
+      writeJson(res, 200, pipelineService?.getStatus?.() ?? {});
+      return;
+    }
+
+    if (req.url === '/pipeline/outputs/latest' && req.method === 'GET') {
+      const latest = pipelineService?.getLatestBoardOutput?.();
+      if (!latest) {
+        writeJson(res, 404, { error: 'No stored board outputs found' });
+        return;
+      }
+
+      writeJson(res, 200, latest);
       return;
     }
 
@@ -308,10 +319,10 @@ async function main() {
     }
 
     if (req.url === '/pipeline/reset' && req.method === 'POST') {
-      pipelineService.reset();
+      pipelineService?.reset?.();
       writeJson(res, 200, {
         ok: true,
-        status: pipelineService.getStatus(),
+        status: pipelineService?.getStatus?.() ?? {},
       });
       return;
     }
@@ -325,7 +336,7 @@ async function main() {
         return;
       }
 
-      const result = pipelineService.queueUrl(body?.url);
+      const result = pipelineService?.queueUrl?.(body?.url) ?? { ok: false, error: 'Pipeline unavailable' };
       if (!result.ok) {
         writeJson(res, 400, { error: result.error });
         return;
@@ -335,7 +346,7 @@ async function main() {
         ok: true,
         queued: result.queued,
         url: result.url,
-        status: pipelineService.getStatus(),
+        status: pipelineService?.getStatus?.() ?? {},
       });
       return;
     }
@@ -350,7 +361,7 @@ async function main() {
       }
 
       const maxEvents = Number(body?.max_events);
-      const runResult = pipelineService.startProductionRun({
+      const runResult = pipelineService?.startProductionRun?.({
         full: body?.full !== false,
         max_events: Number.isInteger(maxEvents) && maxEvents > 0 ? maxEvents : undefined,
         implications_model:
@@ -359,10 +370,10 @@ async function main() {
           typeof body?.validation_model === 'string' ? body.validation_model : undefined,
       });
 
-      if (!runResult.started) {
+      if (!runResult?.started) {
         writeJson(res, 409, {
           error: 'Pipeline already running',
-          status: runResult.status,
+          status: runResult?.status ?? pipelineService?.getStatus?.() ?? {},
         });
         return;
       }
@@ -424,7 +435,12 @@ async function main() {
 
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
-  });
+  };
+}
+
+async function main() {
+  const handleRequest = createHttpRequestHandler({ pipelineService, noteStore });
+  const httpServer = http.createServer(handleRequest);
 
   httpServer.listen(PORT, () => {
     console.log(`${APP_NAME} v${APP_VERSION} listening on http://localhost:${PORT}`);

@@ -380,6 +380,25 @@ function createOutputRecord(result, runId, recordedAt) {
   return record;
 }
 
+function normalizeLatestBoardRecord(card = {}) {
+  return {
+    board_url: card?.board_url ?? card?.url ?? null,
+    board_headline: card?.board_headline ?? card?.summary_headline ?? null,
+    board_recommendation: card?.board_recommendation ?? card?.recommendation ?? null,
+    board_confidence: card?.board_confidence ?? card?.confidence ?? null,
+    official_source_url: card?.official_source_url ?? null,
+    official_source_type: card?.official_source_type ?? null,
+    board_no_edge_reason_code: card?.board_no_edge_reason_code ?? card?.no_edge_reason_code ?? null,
+    board_no_edge_reason: card?.board_no_edge_reason ?? card?.no_edge_reason ?? null,
+    edge_type: card?.edge_type ?? null,
+    catalyst: card?.catalyst ?? null,
+    reasoning_chain: Array.isArray(card?.reasoning_chain) ? card.reasoning_chain : [],
+    invalidation_condition: card?.invalidation_condition ?? null,
+    time_sensitivity: card?.time_sensitivity ?? null,
+    child_contracts: Array.isArray(card?.child_contracts) ? card.child_contracts : [],
+  };
+}
+
 function fallbackResult(url, error) {
   const message = error instanceof Error ? error.message : 'Pipeline research failed for this market.';
   return {
@@ -811,9 +830,44 @@ export function createPipelineService(options = {}) {
     return buildStatusSnapshot(state, now, defaultModels);
   }
 
+  function getLatestBoardOutput() {
+    const results = Array.isArray(state.results) ? state.results : [];
+    let latestResult = null;
+    let latestTimestamp = -Infinity;
+
+    for (const result of results) {
+      const analyzedAt = new Date(result?.analyzed_at ?? 0).getTime();
+      if (Number.isFinite(analyzedAt) && analyzedAt >= latestTimestamp) {
+        latestTimestamp = analyzedAt;
+        latestResult = result;
+      }
+    }
+
+    if (latestResult) {
+      return normalizeLatestBoardRecord(latestResult);
+    }
+
+    const existing = loadJsonFile(outputFile, []);
+    const entries = Array.isArray(existing) ? existing : [];
+
+    for (let entryIndex = entries.length - 1; entryIndex >= 0; entryIndex -= 1) {
+      const entry = entries[entryIndex];
+      const cards = Array.isArray(entry?.cards) ? entry.cards : [entry];
+      for (let cardIndex = cards.length - 1; cardIndex >= 0; cardIndex -= 1) {
+        const card = cards[cardIndex];
+        if (card) {
+          return normalizeLatestBoardRecord(card);
+        }
+      }
+    }
+
+    return null;
+  }
+
   persist();
 
   return {
+    getLatestBoardOutput,
     getStatus,
     queueUrl,
     recordRecentUrl,

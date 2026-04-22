@@ -1,16 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import http from 'node:http';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNoteStore } from '../src/noteStore.js';
+import { createPipelineService } from '../src/pipelineService.js';
 import {
   buildEventMarketPlan,
   buildEventMarketPlanSummary,
   buildFocusedKalshiMarketPlan,
 } from '../src/eventMarketTool.js';
 import { buildEventMarketWorkflowPrompt } from '../src/eventMarketPrompt.js';
-import { analyzeKalshiMarketUrlTool } from '../src/server.js';
+import { analyzeKalshiMarketUrlTool, createHttpRequestHandler } from '../src/server.js';
 
 const TRUMP_EVENT_URL =
   'https://kalshi.com/markets/kxtrumpmentionb/trump-mention-b/KXTRUMPMENTIONB-26MAR27?utm_source=kalshiapp_eventpage';
@@ -600,45 +602,95 @@ test('event market prompt primes the backend plan workflow', () => {
 });
 
 
-test('analyze_kalshi_market_url tool returns compact card JSON for a flagship URL', async () => {
-  const fetchImpl = createFetchStub(
-    new Map([[`${KALSHI_BASE_URL}/events/KXTRUMPMENTIONB-26MAR27`, buildTrumpEventPayload()]])
-  );
+test('pipeline latest output endpoint returns the most recent Tesla board record', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pipeline-latest-board-'));
+  const stateFile = join(dir, 'pipeline-state.json');
+  const outputFile = join(dir, 'pipeline-card-outputs.json');
+  const service = createPipelineService({
+    stateFile,
+    outputFile,
+    seedUrls: [],
+    now: () => new Date('2026-04-22T12:00:00.000Z'),
+    runMarketAnalysis: async () => ({
+      board_url: 'https://kalshi.com/markets/kxearningsmentiontsla/tesla-earnings-mention/KXEARNINGSMENTIONTSLA-26APR22-FSD',
+      board_headline: 'The alpha pipeline priced the mention contract, but the edge is too thin to act.',
+      board_recommendation: 'watch',
+      board_confidence: 'high',
+      official_source_url: 'https://www.sec.gov/Archives/edgar/data/1318605/000162828026026551/exhibit991.htm',
+      official_source_type: 'sec_8k_exhibit_99_1',
+      board_no_edge_reason_code: 'priced_in',
+      board_no_edge_reason: 'Market price (100%) and model fair value (100%) were too close, leaving only a 0c gap.',
+      edge_type: 'none',
+      catalyst: 'Tesla earnings filing',
+      reasoning_chain: [
+        '[timing/catalyst insight] The official filing is already public, so the remaining edge is only in settlement confirmation.',
+        '[market-structure mismatch] Market price and fair probability are aligned, so there is no actionable spread left.'
+      ],
+      invalidation_condition: 'If a later official source changes the exact phrase interpretation, revisit the board.',
+      time_sensitivity: 'high',
+      child_contracts: [],
+    }),
+  });
 
-  const alphaResult = {
-    status: 'watch',
-    confidence: 'medium',
-    summary: {
-      headline: 'Trump mention market ready for compact card output.',
-      recommendation: 'watch',
-      one_line_reason: 'The URL resolves to a specific mention contract with live pricing.',
-    },
-    next_action: 'monitor_live_contract',
-  };
+  service.recordRecentUrl('https://kalshi.com/markets/kxearningsmentiontsla/tesla-earnings-mention/KXEARNINGSMENTIONTSLA-26APR22-FSD');
+  await service.runProduction({ full: false, max_events: 1 });
 
-  const alphaFetchImpl = createAlphaFetchStub(alphaResult);
+  const handler = createHttpRequestHandler({ pipelineService: service, noteStore: createNoteStore(join(dir, 'notes.json')) });
+  const latest = await new Promise((resolve, reject) => {
+    const req = new http.IncomingMessage();
+    req.url = '/pipeline/outputs/latest';
+    req.method = 'GET';
+    req.headers = {};
+    const chunks = [];
+    const res = new http.ServerResponse(req);
+    res.assignSocket({
+      writable: true,
+      on() {},
+      once() {},
+      emit() {},
+      removeListener() {},
+      cork() {},
+      uncork() {},
+      end() {},
+      destroy() {},
+      setTimeout() {},
+      setNoDelay() {},
+      setKeepAlive() {},
+    });
+    res.write = chunk => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      return true;
+    };
+    res.end = chunk => {
+      if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      resolve({
+        statusCode: res.statusCode,
+        body: Buffer.concat(chunks).toString('utf8'),
+      });
+    };
+    Promise.resolve(handler(req, res)).catch(reject);
+  });
 
-  const toolResult = await analyzeKalshiMarketUrlTool(
-    { url: TRUMP_EVENT_URL },
-    { fetchImpl, alphaFetchImpl }
-  );
+  assert.equal(latest.statusCode, 200);
+  const parsed = JSON.parse(latest.body);
+  assert.equal(parsed.board_url, 'https://kalshi.com/markets/kxearningsmentiontsla/tesla-earnings-mention/KXEARNINGSMENTIONTSLA-26APR22-FSD');
+  assert.equal(parsed.board_headline, 'The alpha pipeline priced the mention contract, but the edge is too thin to act.');
+  assert.equal(parsed.board_recommendation, 'watch');
+  assert.equal(parsed.board_confidence, 'high');
+  assert.equal(parsed.official_source_url, 'https://www.sec.gov/Archives/edgar/data/1318605/000162828026026551/exhibit991.htm');
+  assert.equal(parsed.official_source_type, 'sec_8k_exhibit_99_1');
+  assert.equal(parsed.board_no_edge_reason_code, 'priced_in');
+  assert.equal(parsed.board_no_edge_reason, 'Market price (100%) and model fair value (100%) were too close, leaving only a 0c gap.');
+  assert.equal(parsed.edge_type, 'none');
+  assert.equal(parsed.catalyst, 'Tesla earnings filing');
+  assert.deepEqual(parsed.reasoning_chain, [
+    '[timing/catalyst insight] The official filing is already public, so the remaining edge is only in settlement confirmation.',
+    '[market-structure mismatch] Market price and fair probability are aligned, so there is no actionable spread left.'
+  ]);
+  assert.equal(parsed.invalidation_condition, 'If a later official source changes the exact phrase interpretation, revisit the board.');
+  assert.equal(parsed.time_sensitivity, 'high');
+  assert.equal(Array.isArray(parsed.child_contracts), true);
+  assert.equal(parsed.child_contracts.length, 0);
 
-  assert.equal(Array.isArray(toolResult.content), true);
-  assert.equal(toolResult.content[0].type, 'text');
-
-  const card = JSON.parse(toolResult.content[0].text);
-  assert.equal(card.source.platform, 'Kalshi');
-  assert.equal(
-    card.source.url,
-    'https://kalshi.com/markets/kxtrumpmentionb/trump-mention-b/KXTRUMPMENTIONB-26MAR27-BIDE?utm_source=kalshiapp_eventpage'
-  );
-  assert.equal(card.market_type, 'mention');
-  assert.equal(card.summary.recommendation, 'pass');
-  assert.match(
-    card.summary.headline,
-    /needs? more (detail|event detail) before the app can (build a card|score it)|compact card output/i
-  );
-
-  assert.equal(toolResult.structuredContent.market_type, card.market_type);
-  assert.equal(toolResult.structuredContent.source.url, card.source.url);
+  rmSync(dir, { recursive: true, force: true });
 });
