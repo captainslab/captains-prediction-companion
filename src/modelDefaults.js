@@ -1,4 +1,4 @@
-export const DEFAULT_MODEL_NAME = 'openrouter/free';
+export const DEFAULT_MODEL_NAME = 'gemini-2.5-flash';
 
 export function resolveModelName(envVar, fallback = DEFAULT_MODEL_NAME) {
   const configured = process.env[envVar];

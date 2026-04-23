@@ -54,6 +54,7 @@ Notes:
 - The frontend already uses same-origin `/api/*` from the browser.
 - In production, Nginx should proxy `/api/*` to the frontend server on `3000`.
 - The frontend server then proxies those routes to the backend.
+- Only `/ws/*` should force `Upgrade` / `Connection: upgrade` headers. Do not force websocket headers on `/api/*`, or the frontend catch-all proxy can fail with `invalid connection header` when it forwards to the backend.
 
 ## Same-origin production flow
 

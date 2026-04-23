@@ -161,7 +161,7 @@ function resolveDefaultModels(defaultModels = {}) {
   const implications =
     typeof defaultModels.implications === 'string' && defaultModels.implications.trim()
       ? defaultModels.implications.trim()
-      : resolveModelName('IMPLICATIONS_MODEL');
+      : resolveModelName('IMPLICATIONS_MODEL', 'gemini-2.5-flash');
   const validation =
     typeof defaultModels.validation === 'string' && defaultModels.validation.trim()
       ? defaultModels.validation.trim()
