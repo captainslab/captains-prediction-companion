@@ -27,6 +27,18 @@ Role:
 - require proof
 - choose the next smallest useful action
 
+
+### oracle
+Location: `agents/oracle/`
+
+Role:
+- analyze prediction markets
+- check resolution criteria and edge cases
+- estimate fair value probabilistically
+- compare market pricing to evidence
+- support automation, alerts, and arb detection
+- note real money risk and avoid fabricated prices
+
 ### researcher
 Location: `agents/researcher/`
 
