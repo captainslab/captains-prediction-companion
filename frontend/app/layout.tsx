@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { JetBrains_Mono, Syne } from 'next/font/google'
 import './globals.css'
 import { Sidebar } from '@/components/Sidebar'
@@ -21,6 +22,8 @@ export const metadata: Metadata = {
   description: 'Deterministic market cards for Kalshi and companion workflows',
 }
 
+const cloudflareToken = process.env.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN
+
 export default function RootLayout({
   children,
 }: {
@@ -36,6 +39,14 @@ export default function RootLayout({
               {children}
             </main>
           </div>
+          {cloudflareToken ? (
+            <Script
+              id="cloudflare-web-analytics"
+              src="https://static.cloudflareinsights.com/beacon.min.js"
+              strategy="afterInteractive"
+              data-cf-beacon={JSON.stringify({ token: cloudflareToken })}
+            />
+          ) : null}
         </Providers>
       </body>
     </html>

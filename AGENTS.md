@@ -47,6 +47,40 @@ Role:
 - summarize architecture and gaps
 - support controller decisions with evidence
 
+### mentions-researcher
+Location: `agents/mentions-researcher/`
+
+Role:
+- research mention markets as exact-string future-language proof markets
+- use Firecrawl for official-source discovery and transcript/source extraction
+- produce rules-first evidence packets without making picks
+- separate historical word-match evidence, current context, prompt-force paths, and unresolved gaps
+
+### mentions-mcp-forecaster
+Location: `agents/mentions-mcp-forecaster/`
+
+Role:
+- treat market price as prior
+- update with transcript/context evidence
+- apply MixMCP damping
+- calculate TV, edge, LSP, max entry, and trade gate
+
+### captain-x-writer
+Location: `agents/captain-x-writer/`
+
+Role:
+- convert completed internal research and trade-gate packets into Captain X guide drafts
+- preserve required public guide sections and code-box tables
+- avoid source dumps, fabricated picks, and publishing side effects
+
+### captainmentions-article-formatter
+Location: `agents/captainmentions-article-formatter/`
+
+Role:
+- convert completed mention-market research packets into CaptainMentions-style X Article drafts
+- preserve the observed Section A-G structure, proof-market voice, board tables, live playbook, groups, sneaky NOs, coffee CTA, and signoff
+- refuse to invent picks, prices, or TV/edge math when inputs are incomplete
+
 ## Working rules
 - one exploration round only
 - no brainstorming after convergence
