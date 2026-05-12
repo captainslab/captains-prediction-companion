@@ -7,9 +7,31 @@
 
 ## BOOT — Run This Immediately on Any Link
 
+Try scrapers in order until one returns clean content:
+
 ```bash
+# 1. Firecrawl (primary)
 firecrawl scrape "<KALSHI_URL>" --only-main-content -o .firecrawl/market.md
+
+# 2. Jina — if Firecrawl is out of credits (no install needed)
+curl -s "https://r.jina.ai/<KALSHI_URL>" -o .firecrawl/market.md
+
+# 3. Crawl4AI — if Jina returns incomplete JS content
+python3 -c "
+import asyncio
+from crawl4ai import AsyncWebCrawler
+async def scrape():
+    async with AsyncWebCrawler() as c:
+        r = await c.arun('<KALSHI_URL>')
+        print(r.markdown)
+asyncio.run(scrape())
+" > .firecrawl/market.md
+
+# 4. trafilatura — for static pages / transcripts only
+trafilatura -u "<KALSHI_URL>" --markdown -o .firecrawl/market.md
 ```
+
+Full scraper reference: `docs/SCRAPERS.md`
 
 Then read `.firecrawl/market.md` and extract these fields before doing anything else:
 
