@@ -1,264 +1,387 @@
-# HOW-TO-PREDICT.md — CLI Agent Prediction Guide
+# HOW-TO-PREDICT.md — CLI Agent Prediction Playbook
 
-> You received a Kalshi market link. This is your playbook.
-> **Core rule: fan agents out in parallel whenever tasks are independent. Never run sequentially what can run simultaneously.**
-
----
-
-## Agent Roster — Have These Ready
-
-Before starting any prediction session, confirm these agents are available in your CLI session:
-
-| Agent | Role | Required for |
-|-------|------|-------------|
-| `@companion-router` | Classify and normalize incoming market | All pipelines — always first |
-| `@alphaagent` | Fetch prices, stats, transcripts, news, weather | All pipelines |
-| `@mentions-researcher` | Transcript research, strike normalization, historical hit rates | mentionsApp |
-| `@mentions-mcp-forecaster` | Bayesian probability via MixMCP | mentionsApp |
-| `@oracle` | Fair value comparison and trade gate | All pipelines |
-| `@decision-logic` | EV, Kelly sizing, trade posture | All pipelines |
-| `@sports-pre-game` | Fair probability for game/race/fight markets | sportsApp |
-| `@researcher` | Evidence gathering, repo facts, source verification | All pipelines |
-| `@controller` | Scope-lock, task management, proof requirement | Complex or multi-market sessions |
-
-**Minimum viable session:** `@companion-router` + `@alphaagent` + `@oracle` + `@decision-logic`
+> **You received a Kalshi link. Execute this file top to bottom.**
+> Fan agents out in parallel at every wave. Never run sequentially what can run simultaneously.
 
 ---
 
-## Step 1 — Parallel Launch (Do This Immediately)
+## BOOT — Run This Immediately on Any Link
 
-As soon as you receive a Kalshi link, dispatch these **simultaneously in one message**:
-
-```
-@companion-router  — classify the market, identify pipeline, extract strike/speaker/resolution source
-@alphaagent        — fetch the market page: title, YES/NO prices, volume, lock time, resolution rules
+```bash
+firecrawl scrape "<KALSHI_URL>" --only-main-content -o .firecrawl/market.md
 ```
 
-Do not wait for one before starting the other. Both can run in parallel.
+Then read `.firecrawl/market.md` and extract these fields before doing anything else:
+
+```
+TITLE:              _______________________________________________
+STRIKE:             _______________________________________________  (exact YES resolution condition)
+RESOLUTION_SOURCE:  _______________________________________________  (transcript / scoreboard / official announcement)
+ELIGIBLE_SPEAKER:   _______________________________________________  (if applicable)
+EVENT_DATE:         _______________________________________________
+LOCK_TIME:          _______________________________________________
+YES_PRICE:          _______________  (e.g. 0.62)
+NO_PRICE:           _______________
+VOLUME:             _______________
+```
+
+**Hard stop before proceeding:**
+- Market locked? → output `NO_TRADE: market locked` and stop.
+- YES price = 0.99 or 0.01 with no volume? → output `NO_TRADE: stale penny-bait` and stop.
+- Resolution source unavailable or unofficial? → output `NO_TRADE: unverifiable resolution source` and stop.
 
 ---
 
-## Step 2 — Classify the Market
+## WAVE 1 — Classify + Fetch (Parallel)
 
-From `@companion-router` output, route to the correct pipeline:
+Dispatch both simultaneously:
 
-| Resolution condition | Pipeline |
-|----------------------|----------|
-| Word/phrase **spoken** by a specific person | `mentionsApp` |
-| Sports game / race / fight **outcome** | `sportsApp` |
-| Political **event** (election, vote, appointment, policy) | `politicsApp` |
+**Agent A — Classify:**
+```
+Read .firecrawl/market.md. Answer one question only:
 
-**Hard disambiguation rules:**
-- "Will X say 'Y' at the briefing?" → `mentionsApp`
-- "Will X be confirmed/elected/appointed?" → `politicsApp`
-- "Will Team A beat Team B?" → `sportsApp`
-- Contract cites a transcript → `mentionsApp`
-- Contract cites a scoreboard or stats feed → `sportsApp`
-- Contract cites a vote count or official announcement → `politicsApp`
+Does this market resolve on:
+(A) A specific word or phrase being SPOKEN by a named person? → mentionsApp
+(B) The outcome of a sports game, race, or fight?           → sportsApp
+(C) A political event (election, vote, appointment, policy)? → politicsApp
+
+Disambiguation:
+- "Will X say Y at the event?"   → mentionsApp
+- "Will X be confirmed/elected?" → politicsApp
+- "Will Team A beat Team B?"     → sportsApp
+- Resolution cites a transcript  → mentionsApp
+- Resolution cites a scoreboard  → sportsApp
+- Resolution cites a vote count  → politicsApp
+
+Output exactly: PIPELINE: [mentionsApp | sportsApp | politicsApp]
+Then: SUBTYPE: [see subtype list below]
+```
+
+Subtype reference:
+- mentionsApp subtypes: `earningsMentionsApp` / `politicalMentionsApp` / `fedMentionsApp` / `sportsPresserApp` / `sportsAnnouncerApp` / `mediaInterviewApp`
+- sportsApp subtypes: `nflMoneyline` / `nflSpread` / `nflTotal` / `nbaMoneyline` / `nbaSpread` / `nbaTotal` / `mlbMoneyline` / `mlbTotal` / `mlbHomeRunProp` / `mlbPitcherStrikeoutProp` / `ufcMoneyline` / `ufcMethod` / `nascarRaceWinner` / `nascarTop3` / `nascarSeriesChampion` / `ncaafbMoneyline` / `ncaabbMoneyline` / `ncaaBaseballMoneyline`
+- politicsApp subtypes: `electionsFederal` / `electionsState` / `electionsChamberControl` / `geopoliticsPolicy` / `geopoliticsConflict` / `cabinetNomination` / `cabinetConfirmation`
+
+**Agent B — Fetch market data:**
+```
+Fetch the following for the market in .firecrawl/market.md.
+Run all fetches in parallel:
+
+1. Current YES/NO prices and order book depth from Kalshi
+2. Any related markets on the same event (siblings, series)
+3. Recent news on this topic/event (last 48 hours)
+   - Use: firecrawl search "<event name> <speaker or teams>" --limit 5
+4. For sports markets: injury reports, lineup confirmations
+5. For mentions markets: is the event still live or has it ended?
+
+Output each result with a FRESHNESS timestamp.
+Flag any source that returned stale or failed data.
+```
 
 ---
 
-## Step 3 — Pipeline Fan-Out
+## WAVE 2 — Pipeline Research (Parallel by pipeline)
 
-### mentionsApp Fan-Out
-
-Dispatch these **simultaneously in one message** after classification:
-
-```
-@mentions-researcher  — fetch comparable transcripts, count historical mentions,
-                        normalize strike aliases, identify eligible speaker patterns
-@alphaagent           — pull current narrative context: is this topic trending?
-                        Any breaking news that shifts the prior?
-```
-
-Then, once both return, dispatch **simultaneously**:
-
-```
-@mentions-mcp-forecaster  — run Poisson model (λ from historical counts),
-                             apply narrative heat, output P(YES) with confidence
-@oracle                   — compare fair P(YES) to current market price, flag edge cases
-```
-
-Then `@decision-logic` for posture and sizing.
-
-**Mentions research checklist (for @mentions-researcher):**
-- [ ] Exact strike string extracted
-- [ ] All aliases and plurals mapped (what counts, what doesn't)
-- [ ] Eligible speaker confirmed (not just any participant)
-- [ ] Comparable transcripts fetched (same speaker, same event type)
-- [ ] Historical mention counts tabulated
-- [ ] Prepared remarks vs Q&A window identified
-- [ ] Transcript source confirmed as official and accepted by contract
-
-Reference: `docs/MENTIONSAPP.md`, `runbooks/captain-mentions-research-system.md`
+Wait for WAVE 1. Then dispatch the correct wave:
 
 ---
 
-### sportsApp Fan-Out
+### WAVE 2A — mentionsApp
 
-Dispatch these **simultaneously in one message** after classification:
+Dispatch both simultaneously:
 
+**Agent A — Transcript research:**
 ```
-@alphaagent       — fetch: current odds/prices, injury/lineup reports,
-                    weather (if outdoor), recent team/player stats
-@sports-pre-game  — identify sport, market type, route to modeling skill:
-                    NFL/NCAAFB    → footballEfficiencySkill (EPA, efficiency, QB, weather)
-                    NBA/NCAABB    → basketballTempoRotationSkill (pace, efficiency, rest, travel)
-                    MLB/NCAAB     → baseballPitcherWeatherSkill (starter, bullpen, park, weather)
-                    UFC           → ufcStyleMatchupSkill (striking, grappling, form, style)
-                    NASCAR        → nascarPracticeTrackSkill (practice speed, tire, track history)
-                    MLB HR prop   → mlbHomeRunPropSkill (barrel rate, park, wind, pitcher)
-                    MLB K prop    → mlbStrikeoutPropSkill (K/BF, CSW%, workload, opponent K%)
+Market: [paste TITLE and STRIKE from boot]
+Speaker: [paste ELIGIBLE_SPEAKER]
+Event type: [earningsMentionsApp | politicalMentionsApp | fedMentionsApp | etc.]
+
+Do all of the following:
+1. Fetch 3–5 comparable prior transcripts (same speaker, same event type)
+   - Earnings: search SEC EDGAR or Seeking Alpha for prior calls
+   - Political/Fed: search official .gov or DoD transcript archives
+   - Sports presser: search team/league official site
+2. Count exact mentions of the strike string in each transcript
+3. Map all aliases: what variations would or would not count under the exact contract wording?
+4. Identify whether event has prepared remarks, Q&A, or both — and which is remaining
+5. Confirm the transcript source Kalshi will use for resolution
+
+Output:
+- HISTORICAL_COUNTS: [list of (event, date, count)]
+- LAMBDA: [mean mentions per comparable event]
+- ALIASES_COUNTED: [list]
+- ALIASES_EXCLUDED: [list]
+- EVENT_WINDOW_REMAINING: [prepared remarks / Q&A / none]
+- RESOLUTION_SOURCE_CONFIRMED: [yes/no + source name]
 ```
 
-Then, once both return, dispatch **simultaneously**:
-
+**Agent B — Narrative context:**
 ```
-@oracle         — fair probability vs Kalshi implied probability, edge check
-@decision-logic — EV calculation, Kelly sizing, trade posture
+Market: [paste TITLE and STRIKE]
+
+1. Search for news on this topic in the last 72 hours:
+   firecrawl search "<strike term> <speaker name>" --limit 5
+2. Is this topic unusually active or trending right now? (yes/no + evidence)
+3. Any recent statements, interviews, or events that make the speaker MORE likely to use this word?
+4. Any recent events that make them LESS likely? (avoidance signals)
+
+Output:
+- NARRATIVE_HEAT: [high / medium / low]
+- HEAT_DIRECTION: [toward YES / toward NO / neutral]
+- KEY_EVIDENCE: [1–3 bullet points]
 ```
-
-**Injury/lineup gate:** If key player/starter is unconfirmed → posture is `WAIT`. Do not price until confirmed.
-
-Reference: `docs/SPORTSAPP.md`
 
 ---
 
-### politicsApp Fan-Out
+### WAVE 2B — sportsApp
 
-Dispatch these **simultaneously in one message** after classification:
+Dispatch both simultaneously:
 
+**Agent A — Stats and injury gate:**
 ```
-@alphaagent   — pull worldmonitor feed: headlines, entity tags, event clusters,
-                urgency heat for relevant actors/regions;
-                pull polling averages if elections subtype
-@researcher   — historical base rates for this race/event type,
-                analogous past markets and their outcomes
+Market: [paste TITLE, sport, teams/fighters/drivers]
+
+Fetch all of the following in parallel:
+1. Confirmed lineup / starter / fighter status (is the key player actually playing?)
+2. Injury report — any key absences?
+3. Weather conditions if outdoor (NFL, MLB, NASCAR)
+   - Temperature, wind speed/direction, precipitation
+4. Last 5 games/races stats for each side:
+   - NFL: EPA, offensive/defensive efficiency, turnover rate
+   - NBA: pace, offensive rating, defensive rating, rest days
+   - MLB: starter ERA, K/9, WHIP, last 3 starts; bullpen ERA last 7 days
+   - UFC: last 3 fights, finish rate, striking/grappling tendencies
+   - NASCAR: last 3 races at this track type, qualifying speed, practice speed
+5. Odds from 2+ sources for consensus check
+
+GATE CHECK — output this first:
+- KEY_PLAYER_CONFIRMED: [yes / no / unknown]
+If KEY_PLAYER_CONFIRMED is "no" or "unknown" → stop and output POSTURE: WAIT
 ```
 
-Then, once both return, dispatch **simultaneously**:
-
+**Agent B — Fair probability model:**
 ```
-@oracle         — build narrative state (dominant themes, convergence signals, sudden shifts),
-                  construct fair probability via appropriate engine:
-                  elections   → electionsAlphaEngine (polling + base rates + economic indicators)
-                  geopolitics → geopoliticsAlphaEngine (event clusters + narrative heat + urgency)
-                  cabinet     → electionsAlphaEngine with appointment-context adjustments
-@decision-logic — EV, Kelly, trade posture
-```
+Market: [paste TITLE, sport, market type]
+Use the correct skill:
 
-Reference: `docs/POLITICSAPP.md`, `docs/WORLDMONITORINTEGRATION.md`
+NFL / NCAAFB    → footballEfficiencySkill
+  Inputs: EPA differential, efficiency ratings, QB status, weather (wind >15mph degrades passing)
+  Pythagorean exponent: 1.83
+
+NBA / NCAABB    → basketballTempoRotationSkill
+  Inputs: pace differential, offensive/defensive efficiency, rest days (back-to-back = -3 pts),
+  travel burden, foul trouble in live markets
+  Pythagorean exponent: 13.9
+
+MLB / NCAAB     → baseballPitcherWeatherSkill
+  Inputs: starter quality (ERA, FIP, K/9), lineup handedness splits,
+  bullpen depth, park factor, wind (>10mph out = +0.3 runs total)
+
+UFC             → ufcStyleMatchupSkill
+  Inputs: striking volume/accuracy, takedown efficiency/defense,
+  grappling control time, form last 3 fights, thin-data discount
+
+NASCAR          → nascarPracticeTrackSkill
+  Inputs: single-lap practice speed, 5-lap and 10-lap averages,
+  tire falloff rate, track type history, season form
+
+MLB HR prop     → mlbHomeRunPropSkill
+  Inputs: barrel rate, hard-hit rate, launch angle, 20-game power form,
+  pitcher HR allowance, park factor, wind direction/speed
+
+MLB K prop      → mlbStrikeoutPropSkill
+  Inputs: K/BF, SwStr%, CSW%, pitch count projection, workload,
+  opposing lineup K tendencies
+
+Build FAIR_PROB for the specific bet (moneyline win / cover / over-under).
+Show your model inputs and calculation.
+```
 
 ---
 
-## Step 4 — Trade Posture
+### WAVE 2C — politicsApp
 
-`@decision-logic` produces one of six postures:
+Dispatch both simultaneously:
 
-| Posture | Condition |
-|---------|-----------|
-| `TRADE_YES` | Positive EV above threshold, within exposure limits, buy YES |
-| `TRADE_NO` | Positive EV on NO side above threshold, buy NO |
-| `PLACE_PASSIVE_ORDER` | Edge exists but market is wide or illiquid — enter limit at fair value |
-| `WAIT` | Edge is real but critical info is unconfirmed (injury, lineup, transcript not posted) |
-| `ESCALATE` | Ambiguous resolution, unusual signal, or conflicting sources — flag for review |
-| `NO_TRADE` | Hard block: stale market, price already moved post-news, circuit breaker hit |
+**Agent A — Intelligence fetch:**
+```
+Market: [paste TITLE, actors, region]
 
-**EV thresholds:**
-- Pre-event: ≥ 2%
-- Live/in-play: ≥ 5%
-- Futures: ≥ 3%
+Fetch in parallel:
+1. worldmonitor feed — run: npm run dev (localhost:5173), search for entity/region
+   Extract: headlines (last 48h), event clusters, urgency heat, entity tags
+   Alert keywords to flag: war, invasion, nuclear, sanctions, confirmed, nominated
+2. For elections subtype only:
+   - Current polling averages (RealClearPolitics or FiveThirtyEight)
+   - State-level breakdown if applicable
+   - Economic indicator context (approval rating, GDP trend)
+3. Recent news convergence: are multiple independent sources pointing the same direction?
 
-**Kelly:** f* = (bp − q) / b — always use f*/4 in production
+Output:
+- URGENCY_HEAT: [high / medium / low]
+- DOMINANT_THEME: [one line]
+- CONVERGENCE_SIGNAL: [yes/no + evidence]
+- POLLING_AVERAGE: [if elections — current % with source and date]
+```
+
+**Agent B — Base rates and analogues:**
+```
+Market: [paste TITLE and SUBTYPE]
+
+Research:
+1. What is the historical base rate for this type of event?
+   - Senate confirmation: ~85% of nominated cabinet picks get confirmed
+   - Incumbent reelection by office type: [look up]
+   - Policy passage rate for similar legislation: [look up]
+2. Find 2–3 analogous past prediction markets and their outcomes
+3. What was the market-implied probability for those analogues at the same stage?
+
+Output:
+- BASE_RATE: [0.00–1.00 with source]
+- ANALOGUES: [list of (event, outcome, market_prob_at_same_stage)]
+```
 
 ---
 
-## Step 5 — Standard Output Block
+## WAVE 3 — Price + Posture (Always Parallel)
 
-Every prediction session ends with this block. No exceptions.
+Dispatch both simultaneously regardless of pipeline:
+
+**Agent A — Fair value:**
+```
+Inputs from WAVE 2:
+[paste relevant outputs]
+
+1. Build FAIR_PROB:
+   - mentionsApp: P(YES) = 1 − e^(−λ), adjusted for narrative heat
+     λ = LAMBDA from transcript research × heat multiplier (high=1.3, medium=1.0, low=0.7)
+   - sportsApp: use model output from WAVE 2B Agent B directly
+   - politicsApp: weight base rate 60% + polling/intel signal 40%; adjust for convergence
+
+2. Extract MARKET_PROB from current YES price (= YES price directly on Kalshi)
+
+3. Calculate:
+   EDGE = FAIR_PROB − MARKET_PROB
+   PAYOUT = 1 / YES_PRICE  (if buying YES)
+           or 1 / NO_PRICE  (if buying NO)
+   EV = (FAIR_PROB × PAYOUT) − 1   [positive = edge on YES]
+      or ((1−FAIR_PROB) × (1/NO_PRICE)) − 1  [for NO side]
+
+Output: FAIR_PROB, MARKET_PROB, EDGE, EV_YES, EV_NO
+```
+
+**Agent B — Trade posture:**
+```
+Inputs: FAIR_PROB, EDGE, EV_YES, EV_NO, KEY_PLAYER_CONFIRMED
+
+Apply these rules in order — first match wins:
+
+1. KEY_PLAYER_CONFIRMED = no/unknown                    → POSTURE: WAIT
+2. Market locked or already resolved                    → POSTURE: NO_TRADE
+3. Price moved >10% since WAVE 1 fetch                 → POSTURE: NO_TRADE
+4. Resolution source unconfirmed                        → POSTURE: NO_TRADE
+5. EV_YES > threshold AND within limits                 → POSTURE: TRADE_YES
+6. EV_NO > threshold AND within limits                  → POSTURE: TRADE_NO
+7. Edge exists but order book is thin (<$500 volume)   → POSTURE: PLACE_PASSIVE_ORDER
+8. Conflicting sources or ambiguous resolution          → POSTURE: ESCALATE
+9. All else                                             → POSTURE: NO_TRADE
+
+EV thresholds: pre-event ≥ 0.02 | live ≥ 0.05 | futures ≥ 0.03
+
+Kelly stake: f* = (b×p − q) / b  where b=payout−1, p=FAIR_PROB, q=1−FAIR_PROB
+Production stake = f*/4
+Cap: never exceed 0.02 per bet, 0.10 per league/pipeline per day
+
+Output: POSTURE, STAKE_CAP, which cap applied (if any)
+```
+
+---
+
+## FINAL OUTPUT — Fill and Return
 
 ```
-MARKET:           [Full Kalshi market title]
+═══════════════════════════════════════════════════════
+CAPTAIN PREDICTION PACKET
+═══════════════════════════════════════════════════════
+MARKET:           
 PIPELINE:         [mentionsApp | sportsApp | politicsApp]
-SUBTYPE:          [earningsMentionsApp | nflSpread | electionsApp | etc.]
+SUBTYPE:          
 
-FAIR_PROB:        [0.00–1.00]
-MARKET_PROB:      [0.00–1.00]  ← implied from current YES price
-EDGE:             [fair_prob − market_prob, signed]
-EV:               [(fair_prob × payout) − price]
+FAIR_PROB:        
+MARKET_PROB:      
+EDGE:             
+EV:               
 
 POSTURE:          [TRADE_YES | TRADE_NO | PLACE_PASSIVE_ORDER | WAIT | ESCALATE | NO_TRADE]
-STAKE_CAP:        [e.g. 0.02 = 2% of bankroll]
+STAKE_CAP:        
 
-PRIMARY_SIGNAL:   [one-line: the most important finding driving the price]
+PRIMARY_SIGNAL:   
 SUPPORTING:
-  - [evidence item 1]
-  - [evidence item 2]
-NO_BET_REASON:    [if WAIT/NO_TRADE — why]
+  -
+  -
+  -
+NO_BET_REASON:    [blank if TRADE_YES or TRADE_NO]
 CONFIDENCE:       [0.0–1.0]
-RESOLUTION_NOTES: [any contract edge cases or ambiguities]
+RESOLUTION_NOTES: 
+═══════════════════════════════════════════════════════
 ```
 
 ---
 
-## Hard Stops — Check Before Outputting
+## Mentions Edge Cases — Instant Decisions
 
-- [ ] Market is still open and not yet locked
-- [ ] Price is live and liquid (not a stale 0.99/0.01 penny-bait)
-- [ ] Resolution source is confirmed official
-- [ ] Eligible speaker / key player identified with certainty
-- [ ] Price hasn't moved >10% since you fetched (already reacted to news you're reading)
-- [ ] Strike string fully normalized for mentions markets
-
-**Auto-output `NO_TRADE` if any of these fail.**
-
----
-
-## Mentions Edge Cases (mentionsApp only)
-
-| Situation | Action |
-|-----------|--------|
-| Word clearly said mid-event | YES → ~0.99; avoid NO |
-| Event ended, word never said | NO → ~0.01; avoid YES |
-| Alias ambiguity ("Beijing" ≠ "China") | Flag; do not assume |
-| Prepared remarks over, Q&A remaining | Event not over — do not price as done |
-| Video suggests word said, transcript not posted | `WAIT` — do not act on video alone |
-| Moderator says the term, not the named speaker | Does not resolve YES |
-| Speaker reads question containing strike term | Check contract wording carefully |
-| 0.99/0.01 with no volume | Likely settlement lag trap — check before acting |
+| What you observe | Do this |
+|-----------------|---------|
+| Speaker said the word live, event ongoing | FAIR_PROB → 0.99. POSTURE: TRADE_YES |
+| Event ended, word never said | FAIR_PROB → 0.01. POSTURE: TRADE_NO |
+| "Beijing" in transcript, contract says "China" | ESCALATE — do not assume equivalence |
+| Prepared remarks done, Q&A still running | Do NOT close out. Event is not over |
+| Video shows word spoken, official transcript not posted yet | POSTURE: WAIT |
+| Moderator or interviewer says the strike term | Does NOT resolve YES. Exclude from count |
+| Speaker reads viewer/audience question containing strike | Check contract. Usually does not count |
+| YES=0.99 or NO=0.99 with <$100 volume | POSTURE: NO_TRADE — settlement lag trap |
 
 ---
 
-## Fan-Out Summary (Quick Reference)
+## Full Fan-Out Map (Single Reference)
 
 ```
-STEP 1 (always parallel):
-  @companion-router + @alphaagent
-
-STEP 2 — mentionsApp (parallel):
-  @mentions-researcher + @alphaagent (narrative)
-  → then: @mentions-mcp-forecaster + @oracle (parallel)
-  → then: @decision-logic
-
-STEP 2 — sportsApp (parallel):
-  @alphaagent (stats/injuries) + @sports-pre-game (modeling)
-  → then: @oracle + @decision-logic (parallel)
-
-STEP 2 — politicsApp (parallel):
-  @alphaagent (worldmonitor + polls) + @researcher (base rates)
-  → then: @oracle + @decision-logic (parallel)
+ON LINK RECEIVED
+  │
+  ├─ WAVE 0: firecrawl scrape → extract boot fields → hard stop checks
+  │
+  ├─ WAVE 1 (parallel):
+  │    Agent A: Classify → PIPELINE + SUBTYPE
+  │    Agent B: Fetch → prices, news, live status
+  │
+  ├─ WAVE 2 (parallel, by pipeline):
+  │    mentionsApp:  Agent A: transcript research + counts
+  │                  Agent B: narrative heat + news
+  │    sportsApp:    Agent A: stats + injury gate
+  │                  Agent B: fair probability model
+  │    politicsApp:  Agent A: worldmonitor + polling
+  │                  Agent B: base rates + analogues
+  │
+  ├─ WAVE 3 (always parallel):
+  │    Agent A: fair value → FAIR_PROB, EDGE, EV
+  │    Agent B: trade posture → POSTURE, STAKE_CAP
+  │
+  └─ FINAL: fill and return output packet
 ```
 
 ---
 
-## Reference Docs
+## Agent Roles Quick Reference
 
-| Doc | Covers |
-|-----|--------|
-| `docs/MENTIONSAPP.md` | Full mentions pipeline |
-| `docs/SPORTSAPP.md` | Full sports pipeline, skill registry, math models |
-| `docs/POLITICSAPP.md` | Full politics pipeline, worldmonitor integration |
-| `docs/WORLDMONITORINTEGRATION.md` | worldmonitor sources, feeds, output schema |
-| `docs/BUILDSTATUS.md` | What's operational vs planned |
-| `runbooks/captain-mentions-research-system.md` | Step-by-step mentions research |
-| `agents/*/SOUL.md` | Per-agent role definitions |
+| Agent | Waves | What they do |
+|-------|-------|-------------|
+| *(you / orchestrator)* | 0 | Run firecrawl scrape, extract boot fields, hard stop check |
+| `@companion-router` | 1A | Classify pipeline and subtype |
+| `@alphaagent` | 1B, 2A, 2C-A | All external data fetches |
+| `@mentions-researcher` | 2A-A | Transcript research, strike normalization |
+| `@mentions-mcp-forecaster` | 3A (mentions) | Poisson model, P(YES) |
+| `@sports-pre-game` | 2B-B | Fair probability modeling |
+| `@researcher` | 2C-B | Base rates, analogues |
+| `@oracle` | 3A | Fair value comparison, edge cases |
+| `@decision-logic` | 3B | EV, Kelly, trade posture |
+| `@controller` | Any | Scope-lock if session gets complex |
