@@ -46,6 +46,14 @@ node_modules
 .DS_Store
 *.pem
 
+# Terminal paste artifacts
+e
+hrc.read_text()
+"hell settings ===\""
+"safely ===\""
+tart in text and end in text:
+till stuck at (END), press q first. Then paste this whole block.
+
 # debug
 npm-debug.log*
 yarn-debug.log*
