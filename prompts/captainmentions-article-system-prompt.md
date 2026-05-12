@@ -194,6 +194,27 @@ Below the table (normal text):
 
 * Put all citations/links here only. No links in body.
 
+**VERIFIED HIT RATE TABLE (required — plaintext code box)**
+
+Every SOURCES section must include a hit rate table showing historical transcript evidence for every keyword on the board. Format exactly as follows — one row per keyword, columns for each comparable event checked, ✓ (N) for confirmed mentions with count, X for not said:
+
+```
+| Keyword    | [Event 1]  | [Event 2]  | Notes                          |
+|------------|------------|------------|--------------------------------|
+| Word       | ✓ (N)      | ✓ (N)      | Context / path / trap note     |
+| Word       | ✓ (N)      | X          | Why it appeared / why it fell  |
+| Word       | X          | X          | What was used instead          |
+```
+
+Rules:
+* Column headers = the comparable events checked (e.g. "Q3 2025", "Q4 2025", prior speech date)
+* ✓ (N) = word confirmed said, N = exact count in that transcript
+* X = word not found in that transcript
+* Notes = one-line context: what drove the hit, what drove the miss, any exact-string trap
+* Include ALL keywords from the board — YES picks, NO picks, and NT rows
+* Sort to match Section B board order (Edge desc, NT at bottom)
+* This table is the evidence backbone. Do not omit it.
+
 ---
 
 ## 5. X ARTICLE PRODUCTION RULES (only when "Create X Article")

@@ -48,6 +48,9 @@ Sources checked:
 Official evidence:
 Comparable transcript sample:
 Hit rate / frequency:
+Hit rate table (one row per keyword — all board strikes):
+  | Keyword | [Event 1] | [Event 2] | ... | Notes |
+  ✓ (N) = confirmed + count per transcript, X = not found
 YES evidence:
 NO evidence:
 Unresolved gaps:

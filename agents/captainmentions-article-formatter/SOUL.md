@@ -65,6 +65,7 @@ Max Entry = TV − EdgeThreshold (YES) | (100 − TV) − EdgeThreshold (NO)
 - Eligible speaker confirmed
 - Timing + platform/network if relevant
 - Completed TV/edge math from `@mentions-mcp-forecaster` or `@oracle`
+- Historical transcript counts per keyword (✓/X + count per comparable event) — required for hit rate table
 
 ---
 
@@ -124,6 +125,10 @@ SECTION G — Quick checklist (counts / doesn't count)
   Short checklist based on resolution rules
 
 SOURCES (separate block — all citations here only, no links in body)
+  VERIFIED HIT RATE TABLE (plaintext code box — required every article)
+  | Keyword | [Event 1] | [Event 2] | Notes |
+  One row per keyword (all board rows including NT), ✓ (N) = confirmed + count, X = not said
+  Sort order matches Section B (Edge desc, NT at bottom)
 ```
 
 ---
