@@ -34,9 +34,19 @@
 - Keep durable product decisions in this file
 - Keep secrets out of git
 
+## System components
+
+Three cross-pipeline agents sit above all prediction pipelines:
+
+- **`@companion-router`** — domain-agnostic dispatcher; normalizes all incoming markets and routes to the correct pipeline
+- **`@alphaagent`** — data acquisition layer; API connectors, scraping, auth, rate-limit handling, health reporting
+- **`@decision-logic`** — shared calculation layer; EV, Kelly, CLV, fair value comparison, spread analysis, trade posture output
+
+Trade postures emitted by `@decision-logic`: `TRADE_YES` | `TRADE_NO` | `PLACE_PASSIVE_ORDER` | `WAIT` | `ESCALATE` | `NO_TRADE`
+
 ## Pipeline model
 
-V1 ships 3 prediction pipelines + shared infra. The 8-app breakdown from earlier specs is the target end state — not the build order.
+V1 ships 3 prediction pipelines + shared infra. Full build order: `docs/BUILDSTATUS.md`.
 
 ```
 gameApp (sport="NBA"|"NFL"|"NCAABB"|"NCAAFB"|"MLB")
@@ -53,7 +63,9 @@ fightAndRacingApp (type="UFC"|"NASCAR")
 
 **Sports pipeline agents:** Three agents operate the sports pipeline — `@sports-pre-game` (pre-game planning + recommendations), `@sports-live` (in-play execution + live probability updating), and `@sports-review` (CLV tracking + calibration). A `sports-calendar-router` helper determines which sports are active on a given date and routes accordingly. Full spec: `docs/SPORTSAPP.md`.
 
-**Mentions and politics pipelines** are separate from all of the above because resolution is text-based (word appears in transcript), not outcome-based. See `docs/MENTIONSAPP.md`.
+**Politics pipeline:** `politicsApp` handles outcome-based political markets (elections, geopolitics, cabinet appointments) via five components: `politicsAppRouter`, `politicsIntelIngest` (worldmonitor-backed), `politicsNarrativeEngine`, `electionsAlphaEngine`, `geopoliticsAlphaEngine`, and `politicsReviewAnalyst`. Full spec: `docs/POLITICSAPP.md`.
+
+**Mentions pipeline** is separate from all of the above because resolution is text-based (word appears in transcript), not outcome-based. See `docs/MENTIONSAPP.md`.
 
 ## mentionsApp model
 

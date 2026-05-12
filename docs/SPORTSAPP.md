@@ -50,6 +50,22 @@ Three dedicated agents operate the sports pipeline:
 
 ---
 
+## Skill Registry
+
+Each sport routes to a named modeling skill. The `sports_calendar_router` selects from this registry based on active leagues.
+
+| Skill | Sport | Purpose |
+|-------|-------|---------|
+| `footballEfficiencySkill` | NFL / NCAAFB | EPA, efficiency, QB status, injuries, weather |
+| `basketballTempoRotationSkill` | NBA / NCAABB | Pace, efficiency, rest, travel, lineup status |
+| `baseballPitcherWeatherSkill` | MLB / NCAAB | Pitcher projection, lineup handedness, weather, bullpen, park factor |
+| `nascarPracticeTrackSkill` | NASCAR | Practice speed, lap averages, tire falloff, track type, season form |
+| `ufcStyleMatchupSkill` | UFC | Striking, defense, grappling, takedowns, form |
+| `mlbHomeRunPropSkill` | MLB props | Batter power metrics, pitcher HR allowance, park factors, wind, lineup context |
+| `mlbStrikeoutPropSkill` | MLB props | K/BF, pitch count projection, opponent K tendencies, workload context |
+
+---
+
 ## Workflows
 
 ### Pre-Game Planning
@@ -166,6 +182,8 @@ nascar_race_winner, nascar_top3
 nascar_series_champion
 ```
 
+> Runtime uses camelCase canonically: `nflMoneyline`, `nbaSpread`, `mlbHomeRunProp`, etc. Snake_case forms above are alias-equivalent for logging queries.
+
 ---
 
 ## Advanced Modules
@@ -207,13 +225,88 @@ Every sport-specific skill outputs standardized JSON to the trading pipeline:
 
 ---
 
+## Mathematical Models
+
+### Pythagorean Win Expectation
+Used in `gameApp` for all team sports. Exponent `n` varies by sport:
+- NFL: n ≈ 1.83
+- NBA: n ≈ 13.9 (points are plentiful; small efficiency gaps are decisive)
+- MLB / NCAAB: fitted from historical data
+
+```
+Win% = Points_For^n / (Points_For^n + Points_Against^n)
+```
+
+### Poisson Scoring Model
+Used for totals and prop distributions in low-scoring sports (MLB, soccer). Models goal/run scoring as independent Poisson processes per team.
+
+### Dixon-Coles Adjustment
+Applied on top of Poisson model. Adds time-decay weighting (recent results weighted more heavily) and low-score dependence correction (corrects Poisson underestimation of 0-0 and 1-0 outcomes).
+
+### Poisson Mention Model (mentionsApp)
+For word-count markets: assume mention count follows Poisson distribution with rate λ (estimated from historical mean count for that speaker/event type).
+```
+P(at least one mention) = 1 − e^(−λ)
+```
+
+### Kelly Criterion
+```
+f* = (bp − q) / b
+```
+Where b = decimal odds − 1, p = win probability, q = 1 − p.
+Production sizing: quarter-Kelly (f*/4) to account for model error and variance.
+
+---
+
+## Skill-Level Output Contracts
+
+Each sport skill outputs a simplified payload consumed by `decisionLogicAgent` for EV/Kelly calculation. These are distinct from the full trading pipeline contract above.
+
+### Game-Level (gameApp / fightAndRacingApp)
+```json
+{
+  "fairProb": 0.54,
+  "fairSpread": -3.5,
+  "fairTotal": 47.0,
+  "confidence": 0.72,
+  "injuryAdjustedEdge": 0.06,
+  "notes": ""
+}
+```
+
+### MLB Strikeout Props (propApp)
+```json
+{
+  "expectedStrikeouts": 6.4,
+  "fairProbOver": 0.58,
+  "fairProbUnder": 0.42,
+  "marketProb": 0.50,
+  "edgeK": 0.08,
+  "confidenceK": 0.70,
+  "primaryDriverK": "whiff skill|opponent tendency|workload",
+  "notes": ""
+}
+```
+
+---
+
 ## Configuration Structure
 
 ```yaml
 sports_routing:
-  preferred_sports: [NFL, NBA, MLB, UFC, NASCAR, NCAAFB, NCAABB, NCAAB]
+  preferred_sports:          # priority order; max 4 active at once
+    - NFL
+    - NCAABB
+    - NBA
+    - MLB
+    - UFC
+    - NASCAR_TRUCKS
+    - NASCAR_OREILLY
+    - NASCAR_CUP
+    - NCAAFB
+    - NCAAB
   min_games_per_league: 1
-  max_active_sports: 5
+  max_active_sports: 4
 
 sports_pre_game:
   min_ev_threshold: 0.02        # 2%
@@ -234,15 +327,35 @@ sports_futures:
 
 sports_advanced:
   clv_tracking: true
-  closing_price_capture_minutes_before_lock: 10
+  closing_price_capture_minutes_before_lock: 5
   consensus_pricing: true
-  stale_price_threshold: 0.03
+  stale_price_threshold: 0.02
   injury_gating: true
   news_reaction_mode: event_driven
-  monte_carlo_run_count: 10000
+  monte_carlo_pregame_runs: 20000
+  monte_carlo_live_runs: 5000
   calibration_reporting: true
   no_bet_classifier: true
   market_state_labeling: true
+```
+
+```yaml
+# Prop-specific overrides (applied on top of sports_pre_game defaults)
+mlb_home_run_props:
+  min_ev_pct: 0.03
+  max_kelly_frac: 0.12
+  require_confirmed_lineup: true
+  weather_weighting: true
+  park_factor_weighting: true
+  rolling_form_window_games: 20
+
+mlb_strikeout_props:
+  min_ev_pct: 0.025
+  max_kelly_frac: 0.12
+  require_confirmed_lineup: true
+  use_pitch_count_projection: true
+  use_opponent_k_profile: true
+  include_moneyline_total_context: true
 ```
 
 ---

@@ -17,6 +17,33 @@ Use this repo as both:
 
 ## Active agents
 
+### companion-router
+Location: `agents/companion-router/`
+
+Role:
+- normalize all incoming markets and route to correct pipeline (sportsApp / mentionsApp / politicsApp)
+- classify market type (outcome-based vs text-based vs political)
+- build context block for the receiving pipeline
+- flag ambiguous routing rather than guessing
+
+### alphaagent
+Location: `agents/alphaagent/`
+
+Role:
+- acquire data from all external sources (Kalshi, Polymarket, stats APIs, weather, worldmonitor)
+- manage API auth, rate limits, and request queuing
+- normalize prices and event metadata to canonical formats
+- report data freshness, source health, and fetch failures proactively
+
+### decision-logic
+Location: `agents/decision-logic/`
+
+Role:
+- run shared EV, Kelly, CLV, and fair value calculations for all pipelines
+- enforce per-bet, per-league, per-phase, and global exposure caps
+- emit one of six canonical trade postures: TRADE_YES, TRADE_NO, PLACE_PASSIVE_ORDER, WAIT, ESCALATE, NO_TRADE
+- apply quarter-Kelly production sizing without exception
+
 ### controller
 Location: `agents/controller/`
 
@@ -109,6 +136,16 @@ Role:
 - calculate CLV by bet and by segment (open/midday/pre-lock/live)
 - measure probability calibration over rolling time windows grouped by league/phase/market subtype
 - output actionable threshold and configuration adjustment recommendations
+
+### politics-app (politicsApp pipeline)
+Components: `politicsAppRouter`, `politicsIntelIngest`, `politicsNarrativeEngine`, `electionsAlphaEngine`, `geopoliticsAlphaEngine`, `politicsReviewAnalyst`
+
+Role:
+- route and price outcome-based political markets (elections, geopolitics, cabinet appointments)
+- ingest geopolitical intelligence via worldmonitor (upstream-only)
+- build narrative state from headlines, entity tags, event clusters
+- model fair probabilities for elections (polling + base rates) and geopolitics (event clustering + urgency heat)
+- track CLV and calibration by political market subtype
 
 ## Working rules
 - one exploration round only
