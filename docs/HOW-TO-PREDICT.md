@@ -112,45 +112,53 @@ Wait for WAVE 1. Then dispatch the correct wave:
 
 Dispatch both simultaneously:
 
-**Agent A — Transcript research:**
+**Agent A — Transcript frequency search:**
 ```
 Market: [paste TITLE and STRIKE from boot]
 Speaker: [paste ELIGIBLE_SPEAKER]
 Event type: [earningsMentionsApp | politicalMentionsApp | fedMentionsApp | etc.]
 
-Do all of the following:
-1. Fetch 3–5 comparable prior transcripts (same speaker, same event type)
-   - Earnings: search SEC EDGAR or Seeking Alpha for prior calls
-   - Political/Fed: search official .gov or DoD transcript archives
-   - Sports presser: search team/league official site
-2. Count exact mentions of the strike string in each transcript
-3. Map all aliases: what variations would or would not count under the exact contract wording?
-4. Identify whether event has prepared remarks, Q&A, or both — and which is remaining
+1. Fetch comparable prior transcripts:
+   - Earnings: last 4 quarters (required — all 4, not fewer)
+     Search SEC EDGAR / Seeking Alpha for prior calls
+   - Political / Fed: last 8–20 comparable appearances
+   - Sports presser / media: last 3–5 comparable events
+2. Count exact mentions of each strike string in every transcript
+3. Map all aliases: what variations count vs. don't under the exact contract wording?
+4. Identify prepared remarks vs. Q&A window — which path does each word travel?
 5. Confirm the transcript source Kalshi will use for resolution
 
 Output:
-- HISTORICAL_COUNTS: [list of (event, date, count)]
-- LAMBDA: [mean mentions per comparable event]
+- HIT_RATE_TABLE: one row per keyword, one column per transcript checked
+  Earnings format: | Keyword | Q1 YYYY | Q2 YYYY | Q3 YYYY | Q4 YYYY | Notes |
+  ✓ (N) = said N times, X = not found
+- LAMBDA: [mean mentions per comparable event, per keyword]
 - ALIASES_COUNTED: [list]
 - ALIASES_EXCLUDED: [list]
 - EVENT_WINDOW_REMAINING: [prepared remarks / Q&A / none]
 - RESOLUTION_SOURCE_CONFIRMED: [yes/no + source name]
 ```
 
-**Agent B — Narrative context:**
+**Agent B — Context search (MANDATORY — every event type, every run):**
 ```
-Market: [paste TITLE and STRIKE]
+Market: [paste TITLE, company/speaker, all strike keywords]
 
-1. Search for news on this topic in the last 72 hours:
-   firecrawl search "<strike term> <speaker name>" --limit 5
-2. Is this topic unusually active or trending right now? (yes/no + evidence)
-3. Any recent statements, interviews, or events that make the speaker MORE likely to use this word?
-4. Any recent events that make them LESS likely? (avoidance signals)
+For each keyword on the board, answer: WHY is this word on the board?
 
-Output:
-- NARRATIVE_HEAT: [high / medium / low]
-- HEAT_DIRECTION: [toward YES / toward NO / neutral]
-- KEY_EVIDENCE: [1–3 bullet points]
+1. Search company/speaker news last 90 days:
+   curl -s "https://r.jina.ai/https://www.google.com/search?q=<company>+<keyword>+2025" -o .firecrawl/context-<keyword>.md
+   OR: firecrawl search "<company> <keyword>" --limit 5
+
+2. For each keyword determine:
+   - What recent event, product launch, deal, regulatory action, or analyst question put this word in play?
+   - Has the speaker used this word in recent press releases, interviews, or guidance?
+   - Is this a prepared-remarks word (scripted/planned) or Q&A-only (analyst must ask)?
+   - What would have to be true for this word NOT to appear?
+
+Output per keyword:
+- CONTEXT_DRIVER: one line — why it's on the board
+- PATH: [prepared / Q&A / either]
+- AVOIDANCE_RISK: [low / medium / high] + reason if medium or high
 ```
 
 ---

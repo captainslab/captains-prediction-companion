@@ -25,13 +25,23 @@ Preferred workflow:
 3. Parse rules for eligible speaker, official source, phrase variants, and exclusions.
 4. Use Firecrawl to find/scrape official source material.
 5. Build comparable transcript sample:
-   - earnings: prior 6 quarters if available
+   - earnings: last 4 quarters (required) — word frequency match across all 4
    - Fed: last 8 comparable press conferences
    - political/agency: last 20 comparable appearances when feasible
    - sports/media: recent comparable transcripts/replays
-6. Count hit rate and frequency for exact phrase plus allowed variants.
-7. Flag prepared-vs-Q&A, speaker scope, alias ambiguity, source completeness, and timing risk.
-8. Return a compact evidence packet for oracle.
+
+6. Run context search (MANDATORY — every event type, every run):
+   For each keyword on the board, determine WHY it is on the board:
+   - What recent news, product launch, deal, regulatory action, or analyst focus put this word in play?
+   - Has the company/speaker recently used this word in press releases, interviews, or guidance?
+   - Is there a prepared-remarks path (scripted topic) or only a Q&A path (analyst must ask)?
+   - What would have to be true for this word to NOT appear?
+   Search: company news last 90 days, earnings preview coverage, analyst reports, press releases.
+   Output a one-line context driver per keyword.
+
+7. Count hit rate and frequency for exact phrase plus allowed variants.
+8. Flag prepared-vs-Q&A, speaker scope, alias ambiguity, source completeness, and timing risk.
+9. Return a compact evidence packet for oracle.
 
 Required output:
 
@@ -49,8 +59,12 @@ Official evidence:
 Comparable transcript sample:
 Hit rate / frequency:
 Hit rate table (one row per keyword — all board strikes):
-  | Keyword | [Event 1] | [Event 2] | ... | Notes |
+  Earnings: 4 columns = last 4 quarters (e.g. Q1 2025 | Q2 2025 | Q3 2025 | Q4 2025)
+  Other events: columns = comparable events checked
+  | Keyword | [Q/Event 1] | [Q/Event 2] | [Q/Event 3] | [Q/Event 4] | Notes |
   ✓ (N) = confirmed + count per transcript, X = not found
+Context driver per keyword (from context search):
+  | Keyword | Why It's on the Board | Path (prepared/Q&A/either) |
 YES evidence:
 NO evidence:
 Unresolved gaps:

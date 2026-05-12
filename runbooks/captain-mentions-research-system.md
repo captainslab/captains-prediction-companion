@@ -29,15 +29,26 @@ Agents:
    - required proof
    - missing price/source inputs
 
-2. Mentions researcher
-   - parse rules
-   - identify eligible speaker/event window/source
-   - capture strikes and prices
-   - use Firecrawl for official source discovery/scraping
-   - build exact word mechanics
-   - build transcript/history evidence
-   - build why-this-word-exists log
+2. Mentions researcher (two parallel searches — run simultaneously)
+
+   Transcript frequency search:
+   - parse rules: eligible speaker, event window, resolution source, exact-string requirements
+   - capture strikes and prices from board
+   - use Firecrawl / Jina / Crawl4AI for official source discovery and scraping
+   - earnings: fetch last 4 quarters of transcripts (all 4 required)
+   - count exact word frequency per keyword per transcript
+   - build hit rate table: | Keyword | Q1 | Q2 | Q3 | Q4 | Notes | (✓(N) or X)
+   - map aliases: what counts, what doesn't
+   - identify prepared-remarks vs Q&A path per keyword
    - build prompt-force and paraphrase-risk maps
+
+   Context search (MANDATORY — every event type, every run):
+   - for each keyword: why is this word on the board?
+   - search company/speaker news last 90 days
+   - identify the event/launch/deal/regulatory action that put each word in play
+   - determine prepared path vs Q&A-only path
+   - flag avoidance risk (has speaker recently stopped using this word?)
+   - output one context driver line per keyword
 
 3. Mentions MCP forecaster
    - p_mkt from YES¢

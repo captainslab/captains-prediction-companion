@@ -58,7 +58,11 @@ If missing inputs: assume only from provided materials. Do not invent prices, qu
 
 ### Research window (internal only; never show sources)
 
-* Use provided materials first. Prefer last 7 days; earnings: last 2 calls + latest press release; sports: recent same-booth game(s) + injury report + venue branding (only if provided).
+* Use provided materials first.
+* Earnings: last **4 quarters** of transcripts (word frequency match across all 4) + latest press release + company news last 90 days.
+* Fed / political / agency: last 8–20 comparable appearances.
+* Sports / media: recent same-booth or same-event transcripts.
+* **Context search (MANDATORY — every event type):** For each keyword, determine WHY it is on the board — recent news, product launches, deals, regulatory actions, analyst focus, or guidance that put the word in play. Output one context driver line per keyword. This runs in parallel with the transcript search, never skipped.
 
 ---
 
@@ -198,19 +202,22 @@ Below the table (normal text):
 
 Every SOURCES section must include a hit rate table showing historical transcript evidence for every keyword on the board. Format exactly as follows — one row per keyword, columns for each comparable event checked, ✓ (N) for confirmed mentions with count, X for not said:
 
+Earnings calls use 4 columns (last 4 quarters). Other events use however many comparable transcripts were checked.
+
 ```
-| Keyword    | [Event 1]  | [Event 2]  | Notes                          |
-|------------|------------|------------|--------------------------------|
-| Word       | ✓ (N)      | ✓ (N)      | Context / path / trap note     |
-| Word       | ✓ (N)      | X          | Why it appeared / why it fell  |
-| Word       | X          | X          | What was used instead          |
+| Keyword    | Q1 YYYY | Q2 YYYY | Q3 YYYY | Q4 YYYY | Notes                          |
+|------------|---------|---------|---------|---------|--------------------------------|
+| Word       | ✓ (N)   | ✓ (N)   | ✓ (N)   | ✓ (N)   | Prepared hit. Highest freq.    |
+| Word       | ✓ (N)   | ✓ (N)   | X       | ✓ (N)   | Q&A path. Analyst-dependent.   |
+| Word       | X       | X       | X       | X       | "regulatory" used instead.     |
 ```
 
 Rules:
-* Column headers = the comparable events checked (e.g. "Q3 2025", "Q4 2025", prior speech date)
+* Earnings: 4 columns = last 4 quarters. Non-earnings: columns = comparable events checked.
+* Column headers = exact event labels (e.g. "Q3 2025", "Q4 2025", "Jan 2025 Presser")
 * ✓ (N) = word confirmed said, N = exact count in that transcript
 * X = word not found in that transcript
-* Notes = one-line context: what drove the hit, what drove the miss, any exact-string trap
+* Notes = one-line context driver: what drove the hit, what drove the miss, exact-string trap, or path (prepared/Q&A)
 * Include ALL keywords from the board — YES picks, NO picks, and NT rows
 * Sort to match Section B board order (Edge desc, NT at bottom)
 * This table is the evidence backbone. Do not omit it.
