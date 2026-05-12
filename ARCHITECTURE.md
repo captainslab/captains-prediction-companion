@@ -51,6 +51,8 @@ fightAndRacingApp (type="UFC"|"NASCAR")
 
 **Why this split:** The Pythagorean win model, possession/scoring distribution, injury gate, and Kelly sizing are identical across NBA/NFL/NCAABB/NCAAFB/MLB — only the efficiency metrics and exponents differ. A `sport` config key handles that. Player props need a separate distribution model (batter/pitcher/player level, not team level). UFC has no score or clock; NASCAR has no analog in other sports — both are different enough to justify separation from `gameApp`, but similar enough in infra to share one shell for V1.
 
+**Sports pipeline agents:** Three agents operate the sports pipeline — `@sports-pre-game` (pre-game planning + recommendations), `@sports-live` (in-play execution + live probability updating), and `@sports-review` (CLV tracking + calibration). A `sports-calendar-router` helper determines which sports are active on a given date and routes accordingly. Full spec: `docs/SPORTSAPP.md`.
+
 **Mentions and politics pipelines** are separate from all of the above because resolution is text-based (word appears in transcript), not outcome-based. See `docs/MENTIONSAPP.md`.
 
 ## mentionsApp model

@@ -81,6 +81,35 @@ Role:
 - preserve the observed Section A-G structure, proof-market voice, board tables, live playbook, groups, sneaky NOs, coffee CTA, and signoff
 - refuse to invent picks, prices, or TV/edge math when inputs are incomplete
 
+### sports-pre-game
+Location: `agents/sports-pre-game/`
+
+Role:
+- call `sports_calendar_router` to identify active sports for the day
+- route each active sport to its dedicated modeling skill (gameApp / propApp / fightAndRacingApp)
+- construct fair probability estimates and compare to market-implied probabilities
+- evaluate EV and apply Kelly fractional sizing with configured caps
+- log all opportunities (bet and no-bet) with structured rationale
+
+### sports-live
+Location: `agents/sports-live/`
+
+Role:
+- initialize from pre-game watchlist and poll live game/race/fight state (default: 20s interval)
+- update fair probabilities from live data (scores, clock, events, drive context)
+- enforce higher EV threshold than pre-game (default: 5% vs 2%)
+- check exposure caps and drawdown limits before execution; pause at 15% drawdown
+- log all decisions with live snapshots
+
+### sports-review
+Location: `agents/sports-review/`
+
+Role:
+- capture entry odds and closing prices for every logged bet
+- calculate CLV by bet and by segment (open/midday/pre-lock/live)
+- measure probability calibration over rolling time windows grouped by league/phase/market subtype
+- output actionable threshold and configuration adjustment recommendations
+
 ## Working rules
 - one exploration round only
 - no brainstorming after convergence
