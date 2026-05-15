@@ -1,0 +1,34 @@
+{
+  "source_id": "weather",
+  "status": "ok",
+  "checked_at_utc": "2026-05-15T22:22:18.406Z",
+  "cache_key": "weather_environment_2026-05-15T22:22:18.406Z",
+  "cache_path": "state/mlb/2026-05-15/discovery/weather_adapter.json",
+  "required": true,
+  "records": [
+    {
+      "query_type": "game_weather_environment",
+      "game_pk": 100001,
+      "game_date": "2026-05-15",
+      "game": "Alpha City Aces at Beta Town Bears",
+      "venue": "Placeholder Park",
+      "checked_at_utc": "2026-05-15T22:22:18.406Z",
+      "temperature": 72,
+      "temperature_unit": "F",
+      "wind_speed": 9,
+      "wind_speed_unit": "mph",
+      "wind_direction": "out to left-center",
+      "precipitation_risk": 0.15,
+      "roof_status": null,
+      "weather_note": "Fixture weather record only; no live weather source was called.",
+      "source_urls": []
+    }
+  ],
+  "warnings": [
+    "Fixture mode: no live weather source was called."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://api.weather.gov"
+  ]
+}

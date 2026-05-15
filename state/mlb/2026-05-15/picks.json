@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "run_date": "2026-05-15",
+  "generated_at_utc": "2026-05-15T22:22:18.468Z",
+  "operator": "sports-pre-game",
+  "source_health": {
+    "kalshi": "ok",
+    "mlb_official": "ok",
+    "baseball_savant": "ok",
+    "weather": "ok",
+    "liquidity": "ok",
+    "optional_price_sanity": "skipped"
+  },
+  "summary_counts": {
+    "total": 1,
+    "clear_pick": 0,
+    "lean": 0,
+    "watch_for_listing": 1,
+    "pass": 0,
+    "blocked": 0,
+    "not_tradeable": 0
+  },
+  "picks": [
+    {
+      "market_ticker": "KXMLB-PLACEHOLDER-001-WINNER",
+      "event_ticker": "KXMLB-PLACEHOLDER-001",
+      "market_title": "Will the Alpha City Aces beat the Beta Town Bears?",
+      "market_lane": "moneyline",
+      "classification": "WATCH_FOR_LISTING",
+      "fixture_mode": true,
+      "gates_passed": [
+        "kalshi_tradable: Kalshi status ok and records present",
+        "mlb_game_match: MLB status ok and records present",
+        "savant_evidence: Baseball Savant status ok and records present",
+        "weather: skipped (lane=moneyline is not weather-sensitive)",
+        "liquidity: Liquidity status=ok"
+      ],
+      "gates_failed": [
+        "not_fixture: Fixture mode detected across one or more adapters"
+      ],
+      "notes": [
+        "Fixture mode active: CLEAR_PICK is blocked. Use live-readonly run for real classifications."
+      ]
+    }
+  ],
+  "notes": [
+    "Discovery-only output writer dry-run.",
+    "Fixture mode: no CLEAR_PICK generated. Replace fixture adapters with live evidence before production use.",
+    "Scored 1 market candidates: 0 CLEAR_PICK, 0 LEAN, 1 WATCH_FOR_LISTING, 0 BLOCKED, 0 NOT_TRADEABLE.",
+    "No live picks made. No trades placed."
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "source_id": "mlb_official",
+  "status": "ok",
+  "checked_at_utc": "2026-05-15T22:22:18.405Z",
+  "cache_key": "mlb_official_schedule_2026-05-15T22:22:18.405Z",
+  "cache_path": "state/mlb/2026-05-15/discovery/mlb_official_adapter.json",
+  "required": true,
+  "records": [
+    {
+      "game_pk": 100001,
+      "game_date": "2026-05-15",
+      "start_time_utc": "2026-05-15T23:05:00Z",
+      "away_team": "Alpha City Aces",
+      "home_team": "Beta Town Bears",
+      "mlb_status": "Preview",
+      "probable_pitchers": {
+        "away": "Placeholder Pitcher A",
+        "home": "Placeholder Pitcher B"
+      },
+      "venue": "Placeholder Park"
+    }
+  ],
+  "warnings": [
+    "Fixture mode: no live MLB source was called."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-05-15&hydrate=probablePitcher%2Cteam"
+  ]
+}

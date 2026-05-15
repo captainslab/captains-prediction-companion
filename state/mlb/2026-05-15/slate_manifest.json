@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "run_date": "2026-05-15",
+  "generated_at_utc": "2026-05-15T22:22:18.468Z",
+  "operator": "sports-pre-game",
+  "kalshi_calendar_url": "https://kalshi.com/calendar/sports/baseball",
+  "source_timestamps": {
+    "kalshi": "2026-05-15T22:22:18.406Z",
+    "mlb_official": "2026-05-15T22:22:18.405Z",
+    "baseball_savant": "2026-05-15T22:22:18.406Z",
+    "weather": "2026-05-15T22:22:18.406Z",
+    "liquidity": "2026-05-15T22:22:18.407Z",
+    "optional_price_sanity": null
+  },
+  "games": [
+    {
+      "game_pk": 100001,
+      "game": "Alpha City Aces at Beta Town Bears",
+      "game_date": "2026-05-15",
+      "start_time_utc": "2026-05-15T23:05:00Z",
+      "teams": {
+        "away": "Alpha City Aces",
+        "home": "Beta Town Bears"
+      },
+      "mlb_status": "Preview",
+      "probable_pitchers": {
+        "away": "Placeholder Pitcher A",
+        "home": "Placeholder Pitcher B"
+      },
+      "kalshi_events": [],
+      "listed_market_lanes": [],
+      "weather_status": "ok"
+    }
+  ],
+  "router_results": [
+    {
+      "route_status": "ROUTED",
+      "market_lane": "moneyline",
+      "candidate_lanes": [
+        "moneyline"
+      ],
+      "kalshi_url": null,
+      "event_ticker": "KXMLB-PLACEHOLDER-001",
+      "market_ticker": "KXMLB-PLACEHOLDER-001-WINNER",
+      "event_title": "Alpha City Aces at Beta Town Bears",
+      "market_title": "Will the Alpha City Aces beat the Beta Town Bears?",
+      "contract_title": null,
+      "game_date": "2026-05-15",
+      "teams": {
+        "away": null,
+        "home": null
+      },
+      "player_name": null,
+      "threshold": null,
+      "side_hint": null,
+      "confidence": 70,
+      "matched_signals": [
+        "adapter routed moneyline"
+      ],
+      "reject_signals": [],
+      "needed_clarification": [],
+      "next_workflow": "runbooks/mlb-prediction-process.md",
+      "notes": [
+        "Discovery-only router result; no prediction created."
+      ]
+    }
+  ],
+  "unmatched_or_excluded_markets": [],
+  "notes": [
+    "Dry-run output composed from existing discovery files only.",
+    "Kalshi same-day records kept: 1.",
+    "Kalshi rejected diagnostic records: 0.",
+    "Baseball Savant adapter status: ok; records: 3.",
+    "Weather adapter status: ok; records: 1.",
+    "Liquidity adapter status: ok; records: 1.",
+    "No live picks made. No trades placed."
+  ]
+}

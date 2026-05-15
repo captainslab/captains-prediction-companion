@@ -1,0 +1,37 @@
+{
+  "source_id": "kalshi",
+  "status": "ok",
+  "checked_at_utc": "2026-05-15T22:22:18.406Z",
+  "cache_key": "kalshi_baseball_discovery_2026-05-15T22:22:18.406Z",
+  "cache_path": "state/mlb/2026-05-15/discovery/kalshi_adapter.json",
+  "required": true,
+  "records": [
+    {
+      "event_ticker": "KXMLB-PLACEHOLDER-001",
+      "series_ticker": "KXMLB-PLACEHOLDER",
+      "event_title": "Alpha City Aces at Beta Town Bears",
+      "category": "Sports",
+      "sub_title": "Placeholder MLB game",
+      "markets": [
+        {
+          "market_ticker": "KXMLB-PLACEHOLDER-001-WINNER",
+          "market_title": "Will the Alpha City Aces beat the Beta Town Bears?",
+          "contract_title": null,
+          "route_status": "ROUTED",
+          "market_lane": "moneyline",
+          "candidate_lanes": [
+            "moneyline"
+          ]
+        }
+      ]
+    }
+  ],
+  "rejected_records": [],
+  "warnings": [
+    "Fixture mode: no live Kalshi source was called."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://kalshi.com/calendar/sports/baseball"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "source_id": "liquidity",
+  "status": "ok",
+  "checked_at_utc": "2026-05-15T22:22:18.407Z",
+  "cache_key": "liquidity_2026-05-15T22:22:18.407Z",
+  "cache_path": "state/mlb/2026-05-15/discovery/liquidity_adapter.json",
+  "required": false,
+  "records": [
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLB-ALP-BET-WINNER",
+      "event_ticker": "KXMLB-ALP-BET",
+      "checked_at_utc": "2026-05-15T22:22:18.407Z",
+      "best_bid": 0.48,
+      "best_ask": 0.52,
+      "spread": 0.04,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "fixture",
+      "source_urls": [],
+      "warnings": [
+        "Fixture record only; no live Kalshi liquidity endpoint was called."
+      ]
+    }
+  ],
+  "warnings": [
+    "Fixture mode: no live liquidity source was called."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://api.elections.kalshi.com/trade-api/v2"
+  ]
+}

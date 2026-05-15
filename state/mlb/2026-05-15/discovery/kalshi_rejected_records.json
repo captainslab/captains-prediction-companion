@@ -1,0 +1,98 @@
+[
+  {
+    "event_ticker": "KXJOHNNYDEPP-35",
+    "series_ticker": "KXJOHNNYDEPP",
+    "event_title": "Will Johnny Depp be cast in the next Pirates of the Caribbean?",
+    "category": "Entertainment",
+    "sub_title": "Before 2035",
+    "reason": "excluded non-same-day game market: entertainment"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-EHOLLIDAY",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Ethan Holliday: Debut Date",
+    "category": "Sports",
+    "sub_title": "Ethan Holliday",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-SHERNANDEZ",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Seth Hernandez: Debut Date",
+    "category": "Sports",
+    "sub_title": "Seth Hernandez",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-LPENA",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Luis Peña: Debut Date",
+    "category": "Sports",
+    "sub_title": "Luis Peña",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-EWILLITS",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Eli Willits: Debut Date",
+    "category": "Sports",
+    "sub_title": "Eli Willits",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-EQUINTERO",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Eduardo Quintero: Debut Date",
+    "category": "Sports",
+    "sub_title": "Eduardo Quintero",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-ZHOPE",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Zyhir Hope: Debut Date",
+    "category": "Sports",
+    "sub_title": "Zyhir Hope",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-SWALCOTT",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Sebastian Walcott: Debut Date",
+    "category": "Sports",
+    "sub_title": "Sebastian Walcott",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-KANDERSON",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Kade Anderson: Debut Date",
+    "category": "Sports",
+    "sub_title": "Kade Anderson",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-JMADE",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Jesús Made: Debut Date",
+    "category": "Sports",
+    "sub_title": "Jesús Made",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-JDEPAULA",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Josue De Paula: Debut Date",
+    "category": "Sports",
+    "sub_title": "Josue De Paula",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-FARIAS",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Franklin Arias: Debut Date",
+    "category": "Sports",
+    "sub_title": "Franklin Arias",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  }
+]

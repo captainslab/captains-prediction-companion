@@ -1,0 +1,71 @@
+{
+  "source_id": "baseball_savant",
+  "status": "ok",
+  "checked_at_utc": "2026-05-15T22:22:18.406Z",
+  "cache_key": "baseball_savant_statcast_2026-05-15T22:22:18.406Z",
+  "cache_path": "state/mlb/2026-05-15/discovery/baseball_savant_adapter.json",
+  "required": true,
+  "records": [
+    {
+      "query_type": "pitcher_strikeout_profile",
+      "player_name": "Placeholder Pitcher A",
+      "team_name": "Alpha City Aces",
+      "game_pk": 100001,
+      "season_or_date_range": "2026-05-15 fixture season-to-date",
+      "sample_size": 150,
+      "checked_at_utc": "2026-05-15T22:22:18.406Z",
+      "k_rate": 0.28,
+      "whiff_or_swinging_strike_proxy": 0.31,
+      "pitch_mix": [
+        {
+          "pitch_type": "FF",
+          "usage_rate": 0.46
+        },
+        {
+          "pitch_type": "SL",
+          "usage_rate": 0.28
+        }
+      ],
+      "opponent_strikeout_profile": "Placeholder opponent K profile.",
+      "data_quality_note": "Fixture mode: no live Baseball Savant source was called.",
+      "source_urls": []
+    },
+    {
+      "query_type": "home_run_hitter_profile",
+      "player_name": "Placeholder Hitter B",
+      "team_name": "Beta Town Bears",
+      "game_pk": 100001,
+      "season_or_date_range": "2026-05-15 fixture season-to-date",
+      "sample_size": 120,
+      "checked_at_utc": "2026-05-15T22:22:18.406Z",
+      "barrel_rate": 0.14,
+      "hard_hit_rate": 0.48,
+      "fly_ball_or_launch_profile": "Placeholder elevated-contact profile.",
+      "handedness": "R",
+      "pitcher_hr_pitch_profile": "Placeholder opposing pitcher HR/pitch profile.",
+      "data_quality_note": "Fixture mode: no live Baseball Savant source was called.",
+      "source_urls": []
+    },
+    {
+      "query_type": "game_run_environment_profile",
+      "player_name": null,
+      "team_name": "Alpha City Aces / Beta Town Bears",
+      "game_pk": 100001,
+      "season_or_date_range": "2026-05-15 fixture season-to-date",
+      "sample_size": 250,
+      "checked_at_utc": "2026-05-15T22:22:18.406Z",
+      "starter_contact_profile": "Placeholder starter contact profile.",
+      "top_of_order_power_contact": "Placeholder top-of-order power/contact signal.",
+      "run_environment_batted_ball_indicators": "Placeholder batted-ball run environment summary.",
+      "data_quality_note": "Fixture mode: no live Baseball Savant source was called.",
+      "source_urls": []
+    }
+  ],
+  "warnings": [
+    "Fixture mode: no live Baseball Savant/Statcast source was called."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&player_type=batter&game_date_gt=2026-05-15&game_date_lt=2026-05-15"
+  ]
+}
