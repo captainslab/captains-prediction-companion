@@ -147,7 +147,7 @@ function buildExcludedMarkets(kalshi) {
   }));
 }
 
-function buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity }) {
+function buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context }) {
   const kalshiRecords = safeArray(kalshi.records);
   const mlbRecords = safeArray(mlb.records);
   const savantRecords = safeArray(baseballSavant.records);
@@ -164,6 +164,8 @@ function buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSava
       baseball_savant: baseballSavant.checked_at_utc ?? null,
       weather: weather.checked_at_utc ?? null,
       liquidity: liquidity.checked_at_utc ?? null,
+      sportsbook_reference: sportsbook?.checked_at_utc ?? null,
+      lineup_injury_bullpen: context?.checked_at_utc ?? null,
       optional_price_sanity: null,
     },
     games: buildGames({ runDate, mlbRecords, kalshiRecords, weather }),
@@ -217,7 +219,7 @@ function combinedLimitations(envelope, fallback) {
   return [...warnings, ...errors.map(error => `Error: ${error}`)].join('; ') || fallback;
 }
 
-function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity }) {
+function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context }) {
   const kalshiStatus = sourceStatus(kalshi);
   const mlbStatus = sourceStatus(mlb);
   const savantStatus = sourceStatus(baseballSavant);
@@ -228,7 +230,8 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
   const rejectedCount = safeArray(kalshi.rejected_records).length;
   const sourceGaps = [];
 
-  if (kalshiStatus !== 'ok' || kalshiRecords.length === 0) {
+  const kalshiEffectivelyOk = kalshiStatus === 'ok' || (kalshiStatus === 'degraded' && kalshiRecords.length > 0);
+  if (!kalshiEffectivelyOk) {
     sourceGaps.push({
       source_id: 'kalshi',
       gap: `Kalshi same-day game market discovery kept ${kalshiRecords.length} records; rejected diagnostic count ${rejectedCount}.`,
@@ -347,6 +350,34 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
         urls: safeArray(liquidity.source_urls),
       }),
       sourceEntry({
+        sourceId: 'sportsbook_reference',
+        dataNeed: 'No-vig reference fair values from DraftKings/ESPN for edge comparison vs Kalshi ask',
+        recommendedSource: 'ESPN scoreboard API (DraftKings odds)',
+        backupSource: 'Manual DraftKings check',
+        accessMethod: 'Existing sportsbook adapter JSON from discovery folder',
+        reliabilityGrade: 'A-',
+        dailyRepeatability: 'Daily when adapter discovery file is present',
+        limitations: combinedLimitations(sportsbook, 'Reference only; not Kalshi prices; not executable.'),
+        status: sourceStatus(sportsbook),
+        lastCheckedUtc: sportsbook?.checked_at_utc ?? null,
+        required: false,
+        urls: safeArray(sportsbook?.source_urls),
+      }),
+      sourceEntry({
+        sourceId: 'lineup_injury_bullpen',
+        dataNeed: 'Lineup confirmation, injury list, probable pitcher stats, bullpen workload',
+        recommendedSource: 'MLB live feed API + ESPN summary API',
+        backupSource: 'Manual lineup check',
+        accessMethod: 'Existing context adapter JSON from discovery folder',
+        reliabilityGrade: 'B+',
+        dailyRepeatability: 'Daily; lineup_pending is a normal pre-game state, not a hard block',
+        limitations: combinedLimitations(context, 'Lineup/injury context only; not a trade signal.'),
+        status: sourceStatus(context),
+        lastCheckedUtc: context?.checked_at_utc ?? null,
+        required: false,
+        urls: safeArray(context?.source_urls),
+      }),
+      sourceEntry({
         sourceId: 'optional_price_sanity',
         dataNeed: 'Optional external price sanity check',
         recommendedSource: 'None required',
@@ -378,7 +409,7 @@ function emptySummaryCounts() {
   };
 }
 
-function buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, scoring }) {
+function buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring }) {
   return {
     schema_version: SCHEMA_VERSION,
     run_date: runDate,
@@ -390,6 +421,8 @@ function buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weat
       baseball_savant: pickSourceStatus(sourceStatus(baseballSavant)),
       weather: pickSourceStatus(sourceStatus(weather)),
       liquidity: pickSourceStatus(sourceStatus(liquidity)),
+      sportsbook_reference: pickSourceStatus(sourceStatus(sportsbook)),
+      lineup_injury_bullpen: pickSourceStatus(sourceStatus(context)),
       optional_price_sanity: 'skipped',
     },
     summary_counts: scoring.counts,
@@ -409,7 +442,7 @@ function tableEscape(value) {
   return String(value ?? '').replace(/\|/g, '/');
 }
 
-function guideSourceStatus({ kalshi, mlb, baseballSavant, weather, liquidity }) {
+function guideSourceStatus({ kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context }) {
   return [
     '## Source Health',
     '',
@@ -418,12 +451,16 @@ function guideSourceStatus({ kalshi, mlb, baseballSavant, weather, liquidity }) 
     `- Baseball Savant: ${sourceStatus(baseballSavant)}`,
     `- Weather: ${sourceStatus(weather)}`,
     `- Liquidity: ${sourceStatus(liquidity)}`,
+    `- Sportsbook reference: ${sourceStatus(sportsbook)}`,
+    `- Lineup/injury/bullpen: ${sourceStatus(context)}`,
     '- Optional price sanity: skipped',
     `- Kalshi records kept: ${safeArray(kalshi.records).length}`,
     `- Kalshi rejected diagnostic records: ${safeArray(kalshi.rejected_records).length}`,
     `- Baseball Savant records: ${safeArray(baseballSavant.records).length}`,
     `- Weather records: ${safeArray(weather.records).length}`,
     `- Liquidity records: ${safeArray(liquidity.records).length}`,
+    `- Sportsbook reference records: ${safeArray(sportsbook?.records).length}`,
+    `- Context records: ${safeArray(context?.records).length}`,
     `- Kalshi warnings: ${safeArray(kalshi.warnings).join('; ') || 'none'}`,
     `- Baseball Savant warnings: ${safeArray(baseballSavant.warnings).join('; ') || 'none'}`,
     `- Baseball Savant errors: ${safeArray(baseballSavant.errors).join('; ') || 'none'}`,
@@ -431,6 +468,8 @@ function guideSourceStatus({ kalshi, mlb, baseballSavant, weather, liquidity }) 
     `- Weather errors: ${safeArray(weather.errors).join('; ') || 'none'}`,
     `- Liquidity warnings: ${safeArray(liquidity.warnings).join('; ') || 'none'}`,
     `- Liquidity errors: ${safeArray(liquidity.errors).join('; ') || 'none'}`,
+    `- Sportsbook warnings: ${safeArray(sportsbook?.warnings).join('; ') || 'none'}`,
+    `- Context warnings: ${safeArray(context?.warnings).join('; ') || 'none'}`,
     '',
   ];
 }
@@ -459,7 +498,7 @@ function guideSlateOverview({ games, kalshi, baseballSavant, weather }) {
   return lines;
 }
 
-function missingBeforeFullGuide(baseballSavant, weather, liquidity) {
+function missingBeforeFullGuide(baseballSavant, weather, liquidity, sportsbook) {
   const missing = ['morning scan composer'];
   if (sourceStatus(liquidity) !== 'ok' || safeArray(liquidity.records).length === 0) {
     missing.unshift('liquidity/order book');
@@ -470,10 +509,32 @@ function missingBeforeFullGuide(baseballSavant, weather, liquidity) {
   if (sourceStatus(weather) !== 'ok' || safeArray(weather.records).length === 0) {
     missing.unshift('usable weather evidence');
   }
+  if (sourceStatus(sportsbook) !== 'ok' || safeArray(sportsbook?.records).length === 0) {
+    missing.unshift('sportsbook reference prices');
+  }
   return missing.join(', ');
 }
 
-function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, scoring, slateManifest }) {
+function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring, slateManifest }) {
+  const blockedCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'BLOCKED_SOURCE_GAP');
+  const leanCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'LEAN');
+  const watchForPriceCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'WATCH_FOR_PRICE');
+
+  const blockedRows = blockedCandidates.length > 0
+    ? blockedCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(safeArray(c.missing_sources).join(', ') || 'source gap')} | Re-run discovery or wait for source availability |`)
+    : [
+        '| Full daily prediction guide | Morning scan composer, and usable source evidence when unavailable | Implement remaining composer stages before final picks |',
+        '| Kalshi tradable MLB board | Valid same-day Kalshi records | Re-run discovery closer to first pitch or inspect Kalshi UI manually |',
+      ];
+
+  const leanRows = leanCandidates.length > 0
+    ? leanCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.lean_reason ?? '')} | ${tableEscape(safeArray(c.missing_evidence).join(', ') || '')} | ${tableEscape(c.needed_trigger ?? '')} |`)
+    : ['| none |  |  |  |'];
+
+  const watchForPriceRows = watchForPriceCandidates.length > 0
+    ? watchForPriceCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.watch_reason ?? '')} | ${tableEscape(c.target_price ?? '')} | ${tableEscape(c.recheck_time ?? '')} |`)
+    : ['| none |  |  |  |'];
+
   const lines = [
     `# Daily Baseball Guide - ${runDate}`,
     '',
@@ -482,9 +543,9 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '- No final picks.',
     '- No trades placed.',
     `- Kalshi same-day market discovery found ${safeArray(kalshi.records).length} valid records.`,
-    `- Missing before full guide: ${missingBeforeFullGuide(baseballSavant, weather, liquidity)}.`,
+    `- Missing before full guide: ${missingBeforeFullGuide(baseballSavant, weather, liquidity, sportsbook)}.`,
     '',
-    ...guideSourceStatus({ kalshi, mlb, baseballSavant, weather, liquidity }),
+    ...guideSourceStatus({ kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context }),
     ...guideSlateOverview({ games: slateManifest.games, kalshi, baseballSavant, weather }),
     '## Scoring Summary',
     '',
@@ -516,6 +577,13 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '',
     '| Market | Why interesting | Missing evidence | Needed trigger |',
     '|---|---|---|---|',
+    ...leanRows,
+    '',
+    '## Watch For Price',
+    '',
+    '| Market | Why watching | Target price | Recheck time |',
+    '|---|---|---|---|',
+    ...watchForPriceRows,
     '',
     '## Passes',
     '',
@@ -526,8 +594,7 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '',
     '| Market | Missing source | Next action |',
     '|---|---|---|',
-    '| Full daily prediction guide | Morning scan composer, and usable source evidence when unavailable | Implement remaining composer stages before final picks |',
-    '| Kalshi tradable MLB board | Valid same-day Kalshi records | Re-run discovery closer to first pitch or inspect Kalshi UI manually |',
+    ...blockedRows,
     '',
     '## Run Notes',
     '',
@@ -541,7 +608,7 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
   return lines.join('\n');
 }
 
-function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, outDir, outputPaths }) {
+function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, outDir, outputPaths }) {
   const kalshiRecords = safeArray(kalshi.records);
   const rejectedCount = safeArray(kalshi.rejected_records).length;
   const writes = Object.values(outputPaths).map(filePath => `| ${filePath} | ${generatedAtUtc} | ok |`);
@@ -565,6 +632,8 @@ function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, wea
     `| Baseball Savant | ${sourceStatus(baseballSavant)} | ${baseballSavant.checked_at_utc ?? ''} | Existing discovery JSON | ${tableEscape(combinedLimitations(baseballSavant, 'Discovery/evidence inputs only'))} |`,
     `| Weather | ${sourceStatus(weather)} | ${weather.checked_at_utc ?? ''} | Existing discovery JSON | ${tableEscape(combinedLimitations(weather, 'Environment inputs only'))} |`,
     `| Liquidity | ${sourceStatus(liquidity)} | ${liquidity.checked_at_utc ?? ''} | Existing discovery JSON | ${tableEscape(combinedLimitations(liquidity, 'Order book inputs only'))} |`,
+    `| Sportsbook reference | ${sourceStatus(sportsbook)} | ${sportsbook?.checked_at_utc ?? ''} | Existing discovery JSON | ${tableEscape(combinedLimitations(sportsbook, 'Reference only; not executable'))} |`,
+    `| Lineup/injury/bullpen | ${sourceStatus(context)} | ${context?.checked_at_utc ?? ''} | Existing discovery JSON | ${tableEscape(combinedLimitations(context, 'Context only; not a trade signal'))} |`,
     '| Optional price sanity | skipped |  | Not called | Optional only |',
     '',
     '## Kalshi Intake',
@@ -604,6 +673,88 @@ function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, wea
   ].join('\n');
 }
 
+function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather }) {
+  const now = new Date(generatedAtUtc);
+  const chicagoTime = now.toLocaleString('en-US', { timeZone: 'America/Chicago' });
+  const byClass = (cls) => safeArray(scoring.candidates).filter(c => c.classification === cls);
+  return {
+    schema_version: '1.0',
+    run_date: runDate,
+    generated_at_utc: generatedAtUtc,
+    generated_america_chicago: chicagoTime,
+    no_trades_placed: true,
+    automated_trade_execution_called: false,
+    source_health: {
+      mlb_official: sourceStatus(slateManifest.source_timestamps ? 'ok' : 'unknown'),
+      kalshi_api: 'ok',
+      sportsbook_reference: sourceStatus(sportsbook),
+      lineup_injury_bullpen: sourceStatus(context),
+      weather: sourceStatus(weather),
+      trade_execution: 'not_called',
+    },
+    summary_counts: scoring.counts,
+    games: slateManifest.games ?? [],
+    candidates: scoring.candidates,
+    clear_picks: byClass('CLEAR_PICK'),
+    leans: byClass('LEAN'),
+    watch_for_price: byClass('WATCH_FOR_PRICE'),
+    watch_for_listing: byClass('WATCH_FOR_LISTING'),
+    passes: byClass('PASS'),
+    blocked: byClass('BLOCKED_SOURCE_GAP'),
+    safety: [
+      'No trades placed.',
+      'No CLEAR_PICK emitted without all evidence gates passing.',
+      'Sportsbook prices are reference-only no-vig fair values, not Kalshi prices.',
+      'All picks require manual review before any action.',
+    ],
+  };
+}
+
+function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather }) {
+  const board = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather });
+  const counts = board.summary_counts;
+  const lines = [
+    `# Execution Board - ${runDate}`,
+    '',
+    `- Generated UTC: ${generatedAtUtc}`,
+    `- Generated Chicago: ${board.generated_america_chicago}`,
+    '- No trades placed.',
+    '- Automated trade execution: not called.',
+    '',
+    '## Source Health',
+    '',
+    `- MLB official: ${board.source_health.mlb_official}`,
+    `- Kalshi API: ${board.source_health.kalshi_api}`,
+    `- Sportsbook reference: ${board.source_health.sportsbook_reference}`,
+    `- Lineup/injury/bullpen: ${board.source_health.lineup_injury_bullpen}`,
+    `- Weather: ${board.source_health.weather}`,
+    `- Trade execution: ${board.source_health.trade_execution}`,
+    '',
+    '## Summary Counts',
+    '',
+    `- Total: ${counts.total ?? 0}`,
+    `- CLEAR_PICK: ${counts.clear_pick ?? 0}`,
+    `- LEAN: ${counts.lean ?? 0}`,
+    `- WATCH_FOR_LISTING: ${counts.watch_for_listing ?? 0}`,
+    `- PASS: ${counts.pass ?? 0}`,
+    `- BLOCKED: ${counts.blocked ?? 0}`,
+    `- NOT_TRADEABLE: ${counts.not_tradeable ?? 0}`,
+    '',
+    '## Clear Picks',
+    board.clear_picks.length === 0 ? '- none' : board.clear_picks.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    '',
+    '## Leans',
+    board.leans.length === 0 ? '- none' : board.leans.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    '',
+    '## Watch For Price',
+    board.watch_for_price.length === 0 ? '- none' : board.watch_for_price.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    '',
+    '## Safety',
+    ...board.safety.map(s => `- ${s}`),
+  ];
+  return lines.join('\n');
+}
+
 function validateDiscoveryInputs({ kalshiPath, mlbPath }) {
   if (!existsSync(kalshiPath)) {
     throw new Error(`Missing Kalshi discovery file: ${kalshiPath}`);
@@ -629,6 +780,8 @@ export function composeMlbDailyOutputs({
   const baseballSavantPath = resolve(discoveryDir, 'baseball_savant_adapter.json');
   const weatherPath = resolve(discoveryDir, 'weather_adapter.json');
   const liquidityPath = resolve(discoveryDir, 'liquidity_adapter.json');
+  const sportsbookPath = resolve(discoveryDir, 'sportsbook_adapter.json');
+  const contextPath = resolve(discoveryDir, 'context_adapter.json');
   validateDiscoveryInputs({ kalshiPath, mlbPath });
 
   const kalshi = readJson(kalshiPath);
@@ -648,8 +801,18 @@ export function composeMlbDailyOutputs({
     'liquidity',
     `Liquidity adapter output is missing at ${liquidityPath}.`,
   );
+  const sportsbook = readOptionalAdapter(
+    sportsbookPath,
+    'sportsbook_reference',
+    `Sportsbook adapter output missing at ${sportsbookPath}.`,
+  );
+  const context = readOptionalAdapter(
+    contextPath,
+    'lineup_injury_bullpen',
+    `Context adapter output missing at ${contextPath}.`,
+  );
 
-  const scoring = scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity });
+  const scoring = scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context });
 
   const outputPaths = {
     slate_manifest: `${outDir}/slate_manifest.json`,
@@ -657,13 +820,17 @@ export function composeMlbDailyOutputs({
     picks: `${outDir}/picks.json`,
     daily_baseball_guide: `${outDir}/daily-baseball-guide.md`,
     run_log: `${outDir}/run_log.md`,
+    today_execution_board: `${outDir}/today-execution-board.json`,
+    today_execution_board_md: `${outDir}/today-execution-board.md`,
   };
 
-  const slateManifest = buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity });
-  const sourceRegistry = buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity });
-  const picks = buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, scoring });
-  const dailyGuide = buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, scoring, slateManifest });
-  const runLog = buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, outDir, outputPaths });
+  const slateManifest = buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context });
+  const sourceRegistry = buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context });
+  const picks = buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring });
+  const dailyGuide = buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring, slateManifest });
+  const runLog = buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, outDir, outputPaths });
+  const executionBoard = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather });
+  const executionBoardMd = buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather });
 
   const written = {
     slate_manifest: writeJsonAtomic(outputPaths.slate_manifest, slateManifest),
@@ -671,6 +838,8 @@ export function composeMlbDailyOutputs({
     picks: writeJsonAtomic(outputPaths.picks, picks),
     daily_baseball_guide: writeTextAtomic(outputPaths.daily_baseball_guide, dailyGuide),
     run_log: writeTextAtomic(outputPaths.run_log, runLog),
+    today_execution_board: writeJsonAtomic(outputPaths.today_execution_board, executionBoard),
+    today_execution_board_md: writeTextAtomic(outputPaths.today_execution_board_md, executionBoardMd),
   };
 
   return {
@@ -686,6 +855,10 @@ export function composeMlbDailyOutputs({
     weather_status: sourceStatus(weather),
     liquidity_status: sourceStatus(liquidity),
     liquidity_records: safeArray(liquidity.records).length,
+    sportsbook_status: sourceStatus(sportsbook),
+    context_status: sourceStatus(context),
+    sportsbook_records: safeArray(sportsbook?.records).length,
+    context_records: safeArray(context?.records).length,
     scoring_counts: scoring.counts,
     fixture_mode: scoring.fixture_mode,
     kalshi_records: safeArray(kalshi.records).length,

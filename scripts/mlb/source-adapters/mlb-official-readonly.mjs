@@ -23,7 +23,7 @@ export function buildMlbScheduleUrl(runDate) {
   const url = new URL(MLB_SCHEDULE_BASE_URL);
   url.searchParams.set('sportId', '1');
   url.searchParams.set('date', runDate);
-  url.searchParams.set('hydrate', 'probablePitcher,team');
+  url.searchParams.set('hydrate', 'probablePitcher,team,venue(timezone)');
   return url.toString();
 }
 
@@ -42,8 +42,11 @@ export function normalizeMlbSchedulePayload(payload = {}) {
     probable_pitchers: {
       away: game.teams?.away?.probablePitcher?.fullName ?? null,
       home: game.teams?.home?.probablePitcher?.fullName ?? null,
+      away_id: game.teams?.away?.probablePitcher?.id ?? null,
+      home_id: game.teams?.home?.probablePitcher?.id ?? null,
     },
     venue: game.venue?.name ?? null,
+    venue_timezone: game.venue?.timeZone?.id ?? null,
   }));
 }
 

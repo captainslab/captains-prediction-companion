@@ -5,10 +5,12 @@ import { fetchMlbScheduleReadonly } from './source-adapters/mlb-official-readonl
 import { fetchBaseballSavantReadonly } from './source-adapters/baseball-savant-readonly.mjs';
 import { fetchWeatherReadonly } from './source-adapters/weather-readonly.mjs';
 import { fetchLiquidityReadonly } from './source-adapters/liquidity-readonly.mjs';
+import { fetchSportsbookReadonly } from './source-adapters/sportsbook-readonly.mjs';
+import { fetchContextReadonly } from './source-adapters/context-readonly.mjs';
 import { defaultDiscoveryDir, formatDateInTimeZone, writeJsonAtomic, writeTextAtomic } from './file-io.mjs';
 import { pathToFileURL } from 'node:url';
 
-const VALID_SOURCES = new Set(['kalshi', 'mlb', 'baseball_savant', 'savant', 'weather', 'liquidity', 'all']);
+const VALID_SOURCES = new Set(['kalshi', 'mlb', 'baseball_savant', 'savant', 'weather', 'liquidity', 'sportsbook', 'context', 'all']);
 
 function parseArgs(argv) {
   const options = {
@@ -53,7 +55,7 @@ function parseArgs(argv) {
 function usage() {
   return [
     'Usage:',
-    '  node scripts/mlb/source-adapter-dry-run.mjs [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--source kalshi|mlb|baseball_savant|weather|liquidity|all] [--out path]',
+    '  node scripts/mlb/source-adapter-dry-run.mjs [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--source kalshi|mlb|baseball_savant|weather|liquidity|sportsbook|context|all] [--out path]',
     '',
     'Defaults:',
     '  --fixtures-only is used unless --live-readonly is provided.',
@@ -104,7 +106,7 @@ function readExistingOrSkipped({ sourceId, filePath, runDate, outputDir }) {
   };
 }
 
-function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope, baseballSavantEnvelope, weatherEnvelope, liquidityEnvelope }) {
+function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope, baseballSavantEnvelope, weatherEnvelope, liquidityEnvelope, sportsbookEnvelope, contextEnvelope }) {
   const kalshiCount = safeArray(kalshiEnvelope.records).length;
   const kalshiRejectedCount = Array.isArray(kalshiEnvelope.rejected_records)
     ? kalshiEnvelope.rejected_records.length
@@ -113,12 +115,16 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
   const baseballSavantCount = safeArray(baseballSavantEnvelope.records).length;
   const weatherCount = safeArray(weatherEnvelope.records).length;
   const liquidityCount = safeArray(liquidityEnvelope.records).length;
+  const sportsbookCount = safeArray(sportsbookEnvelope?.records).length;
+  const contextCount = safeArray(contextEnvelope?.records).length;
   const warnings = [
     ...safeArray(kalshiEnvelope.warnings),
     ...safeArray(mlbEnvelope.warnings),
     ...safeArray(baseballSavantEnvelope.warnings),
     ...safeArray(weatherEnvelope.warnings),
     ...safeArray(liquidityEnvelope.warnings),
+    ...safeArray(sportsbookEnvelope?.warnings),
+    ...safeArray(contextEnvelope?.warnings),
   ];
   const errors = [
     ...safeArray(kalshiEnvelope.errors),
@@ -126,6 +132,8 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
     ...safeArray(baseballSavantEnvelope.errors),
     ...safeArray(weatherEnvelope.errors),
     ...safeArray(liquidityEnvelope.errors),
+    ...safeArray(sportsbookEnvelope?.errors),
+    ...safeArray(contextEnvelope?.errors),
   ];
 
   return [
@@ -138,12 +146,16 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
     `- Baseball Savant source status: ${baseballSavantEnvelope.status}`,
     `- Weather source status: ${weatherEnvelope.status}`,
     `- Liquidity source status: ${liquidityEnvelope.status}`,
+    `- Sportsbook reference status: ${sportsbookEnvelope?.status ?? 'skipped'}`,
+    `- Lineup/injury/bullpen status: ${contextEnvelope?.status ?? 'skipped'}`,
     `- Kalshi records found: ${kalshiCount}`,
     `- Kalshi rejected records: ${kalshiRejectedCount}`,
     `- MLB games found: ${mlbCount}`,
     `- Baseball Savant records found: ${baseballSavantCount}`,
     `- Weather records found: ${weatherCount}`,
     `- Liquidity records found: ${liquidityCount}`,
+    `- Sportsbook reference records found: ${sportsbookCount}`,
+    `- Context records found: ${contextCount}`,
     '',
     'This is discovery only.',
     'No picks made.',
@@ -170,12 +182,16 @@ export async function runSourceAdapterDryRun(options = {}) {
   const runBaseballSavant = shouldRunSource(requestedSource, 'baseball_savant');
   const runWeather = shouldRunSource(requestedSource, 'weather');
   const runLiquidity = shouldRunSource(requestedSource, 'liquidity');
+  const runSportsbook = shouldRunSource(requestedSource, 'sportsbook');
+  const runContext = shouldRunSource(requestedSource, 'context');
 
   const kalshiPath = `${outputDir}/kalshi_adapter.json`;
   const mlbPath = `${outputDir}/mlb_official_adapter.json`;
   const baseballSavantPath = `${outputDir}/baseball_savant_adapter.json`;
   const weatherPath = `${outputDir}/weather_adapter.json`;
   const liquidityPath = `${outputDir}/liquidity_adapter.json`;
+  const sportsbookPath = `${outputDir}/sportsbook_adapter.json`;
+  const contextPath = `${outputDir}/context_adapter.json`;
   const summaryPath = `${outputDir}/discovery_summary.md`;
   const rejectedPath = `${outputDir}/kalshi_rejected_records.json`;
 
@@ -242,6 +258,20 @@ export async function runSourceAdapterDryRun(options = {}) {
         outputDir,
       });
 
+  const sportsbookEnvelope = runSportsbook
+    ? await fetchSportsbookReadonly({ runDate, outputDir, fixturesOnly })
+    : readExistingOrSkipped({ sourceId: 'sportsbook_reference', filePath: sportsbookPath, runDate, outputDir });
+
+  const sportsbookRecordsForContext = safeArray(sportsbookEnvelope?.records);
+  const contextEnvelope = runContext
+    ? await fetchContextReadonly({
+        outputDir,
+        fixturesOnly,
+        mlbGames: safeArray(mlbEnvelope.records),
+        sportsbookRecords: sportsbookRecordsForContext,
+      })
+    : readExistingOrSkipped({ sourceId: 'lineup_injury_bullpen', filePath: contextPath, runDate, outputDir });
+
   const finalKalshiEnvelope = { ...kalshiEnvelope, cache_path: kalshiPath };
   const finalMlbEnvelope = { ...mlbEnvelope, cache_path: mlbPath };
   const finalBaseballSavantEnvelope = { ...baseballSavantEnvelope, cache_path: baseballSavantPath };
@@ -266,6 +296,12 @@ export async function runSourceAdapterDryRun(options = {}) {
   if (runLiquidity) {
     writeJsonAtomic(liquidityPath, finalLiquidityEnvelope);
   }
+  if (runSportsbook) {
+    writeJsonAtomic(sportsbookPath, { ...sportsbookEnvelope, cache_path: sportsbookPath });
+  }
+  if (runContext) {
+    writeJsonAtomic(contextPath, { ...contextEnvelope, cache_path: contextPath });
+  }
   if (runKalshi && rejectedRecords.length > 0) {
     writeJsonAtomic(rejectedPath, rejectedRecords);
   }
@@ -280,6 +316,8 @@ export async function runSourceAdapterDryRun(options = {}) {
       baseballSavantEnvelope: finalBaseballSavantEnvelope,
       weatherEnvelope: finalWeatherEnvelope,
       liquidityEnvelope: finalLiquidityEnvelope,
+      sportsbookEnvelope,
+      contextEnvelope,
     }),
   );
 
@@ -294,6 +332,8 @@ export async function runSourceAdapterDryRun(options = {}) {
       ...(runBaseballSavant ? { baseball_savant_adapter: baseballSavantPath } : {}),
       ...(runWeather ? { weather_adapter: weatherPath } : {}),
       ...(runLiquidity ? { liquidity_adapter: liquidityPath } : {}),
+      ...(runSportsbook ? { sportsbook_adapter: sportsbookPath } : {}),
+      ...(runContext ? { context_adapter: contextPath } : {}),
       discovery_summary: summaryPath,
       ...(runKalshi && rejectedRecords.length > 0 ? { kalshi_rejected_records: rejectedPath } : {}),
     },
@@ -302,12 +342,16 @@ export async function runSourceAdapterDryRun(options = {}) {
     baseball_savant_status: finalBaseballSavantEnvelope.status,
     weather_status: finalWeatherEnvelope.status,
     liquidity_status: finalLiquidityEnvelope.status,
+    sportsbook_status: sportsbookEnvelope?.status ?? 'skipped',
+    context_status: contextEnvelope?.status ?? 'skipped',
     kalshi_records: safeArray(finalKalshiEnvelope.records).length,
     kalshi_rejected_records: rejectedRecords.length,
     mlb_games: safeArray(finalMlbEnvelope.records).length,
     baseball_savant_records: safeArray(finalBaseballSavantEnvelope.records).length,
     weather_records: safeArray(finalWeatherEnvelope.records).length,
     liquidity_records: safeArray(finalLiquidityEnvelope.records).length,
+    sportsbook_records: safeArray(sportsbookEnvelope?.records).length,
+    context_records: safeArray(contextEnvelope?.records).length,
     message: 'Discovery only. No picks made. No trades placed.',
   };
 }

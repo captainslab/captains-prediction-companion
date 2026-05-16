@@ -1,0 +1,16 @@
+{
+  "source_id": "liquidity",
+  "status": "blocked",
+  "checked_at_utc": "2026-05-16T15:02:43.217Z",
+  "cache_key": "liquidity_2026-05-16T15:02:43.217Z",
+  "cache_path": "state/mlb/2026-05-16/discovery/liquidity_adapter.json",
+  "required": false,
+  "records": [],
+  "warnings": [
+    "No Kalshi market tickers provided; cannot fetch liquidity."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://api.elections.kalshi.com/trade-api/v2"
+  ]
+}

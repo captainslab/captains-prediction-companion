@@ -1,0 +1,2040 @@
+{
+  "source_id": "lineup_injury_bullpen",
+  "status": "ok",
+  "checked_at_utc": "2026-05-16T15:39:50.042Z",
+  "cache_key": "lineup_injury_bullpen_2026-05-16T15:39:50.042Z",
+  "cache_path": "state/mlb/2026-05-16/discovery/context_adapter.json",
+  "required": false,
+  "records": [
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824278,
+      "espn_event_id": "401815366",
+      "game_date": "2026-05-16",
+      "game": "Toronto Blue Jays at Detroit Tigers",
+      "away_team": "Toronto Blue Jays",
+      "home_team": "Detroit Tigers",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "confirmed_or_boxscore_available",
+      "probable_pitchers": {
+        "away": "Mason Fluharty",
+        "home": "Casey Mize"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Detroit Tigers",
+          "player": "Casey Mize",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Toronto Blue Jays",
+          "player": "Mason Fluharty",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Detroit Tigers",
+          "player": "Casey Mize",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Thigh Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-15T19:13Z"
+        },
+        {
+          "team": "Detroit Tigers",
+          "player": "Gleyber Torres",
+          "status": "10-Day-IL",
+          "position": "2B",
+          "detail": "Left Oblique Strain",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-15T19:32Z"
+        },
+        {
+          "team": "Detroit Tigers",
+          "player": "Ty Madden",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Right Forearm Bruise",
+          "return_date": "2026-05-20",
+          "updated_at": "2026-05-16T04:08Z"
+        },
+        {
+          "team": "Detroit Tigers",
+          "player": "Kerry Carpenter",
+          "status": "10-Day-IL",
+          "position": "RF",
+          "detail": "Left Shoulder Sprain",
+          "return_date": "2026-05-20",
+          "updated_at": "2026-05-10T20:40Z"
+        },
+        {
+          "team": "Detroit Tigers",
+          "player": "Will Vest",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Forearm Inflammation",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-15T19:29Z"
+        },
+        {
+          "team": "Toronto Blue Jays",
+          "player": "Javen Coleman",
+          "status": "Day-To-Day",
+          "position": "P",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Toronto Blue Jays",
+          "player": "CJ Stubbs",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Toronto Blue Jays",
+          "player": "Lazaro Estrada",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Pinched Nerve",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Toronto Blue Jays",
+          "player": "Fernando Perez",
+          "status": "developmental list",
+          "position": "P",
+          "detail": "Not Specified Not Injury Related Not Specified",
+          "return_date": "2026-05-19",
+          "updated_at": "2026-05-11T12:59Z"
+        },
+        {
+          "team": "Toronto Blue Jays",
+          "player": "Addison Barger",
+          "status": "10-Day-IL",
+          "position": "RF",
+          "detail": "Right Elbow Inflammation",
+          "return_date": "2026-05-20",
+          "updated_at": "2026-05-11T19:21Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {
+        "condition": "Cloudy",
+        "temp": "70",
+        "wind": "14 mph, In From CF"
+      },
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824278/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815366"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 823060,
+      "espn_event_id": "401815368",
+      "game_date": "2026-05-16",
+      "game": "Kansas City Royals at St. Louis Cardinals",
+      "away_team": "Kansas City Royals",
+      "home_team": "St. Louis Cardinals",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Noah Cameron",
+        "home": "Kyle Leahy"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "St. Louis Cardinals",
+          "player": "Kyle Leahy",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Kansas City Royals",
+          "player": "Noah Cameron",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "St. Louis Cardinals",
+          "player": "Matt Pushard",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Knee Tendinitis",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-15T13:22Z"
+        },
+        {
+          "team": "St. Louis Cardinals",
+          "player": "Ramon Urias",
+          "status": "10-Day-IL",
+          "position": "3B",
+          "detail": "Right Elbow Tendinitis",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "St. Louis Cardinals",
+          "player": "Lars Nootbaar",
+          "status": "60-Day-IL",
+          "position": "LF",
+          "detail": "Not Specified Heel Surgery",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-15T13:17Z"
+        },
+        {
+          "team": "St. Louis Cardinals",
+          "player": "Ixan Henderson",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Left Elbow Strain",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "St. Louis Cardinals",
+          "player": "Victor Santos",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Kansas City Royals",
+          "player": "Bailey Falter",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Elbow Inflammation",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Kansas City Royals",
+          "player": "Cole Ragans",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Left Elbow Pinched Nerve",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-12T22:31Z"
+        },
+        {
+          "team": "Kansas City Royals",
+          "player": "James McArthur",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Elbow Inflammation",
+          "return_date": "2026-05-24",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Kansas City Royals",
+          "player": "Anthony Simonelli",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Kansas City Royals",
+          "player": "Javier Vaz",
+          "status": "Day-To-Day",
+          "position": "2B",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {
+        "condition": "Cloudy",
+        "temp": "79",
+        "wind": "9 mph, R To L"
+      },
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/823060/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815368"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824359,
+      "espn_event_id": "401815371",
+      "game_date": "2026-05-16",
+      "game": "Arizona Diamondbacks at Colorado Rockies",
+      "away_team": "Arizona Diamondbacks",
+      "home_team": "Colorado Rockies",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Eduardo Rodriguez",
+        "home": "Tomoyuki Sugano"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Colorado Rockies",
+          "player": "Tomoyuki Sugano",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Arizona Diamondbacks",
+          "player": "Eduardo Rodriguez",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Colorado Rockies",
+          "player": "Jared Thomas",
+          "status": "Day-To-Day",
+          "position": "CF",
+          "detail": "Right Wrist Surgery",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Colorado Rockies",
+          "player": "Tyler Freeman",
+          "status": "paternity",
+          "position": "RF",
+          "detail": "Personal",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-15T20:37Z"
+        },
+        {
+          "team": "Colorado Rockies",
+          "player": "McCade Brown",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Shoulder Inflammation",
+          "return_date": "2026-05-24",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Colorado Rockies",
+          "player": "Jeff Criswell",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Colorado Rockies",
+          "player": "Jimmy Herget",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Pinched Nerve",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-14T15:00Z"
+        },
+        {
+          "team": "Arizona Diamondbacks",
+          "player": "Carlos Santana",
+          "status": "10-Day-IL",
+          "position": "1B",
+          "detail": "Right Thigh Strain",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-11T21:05Z"
+        },
+        {
+          "team": "Arizona Diamondbacks",
+          "player": "Pavin Smith",
+          "status": "60-Day-IL",
+          "position": "1B",
+          "detail": "Left Elbow Surgery",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-16T11:51Z"
+        },
+        {
+          "team": "Arizona Diamondbacks",
+          "player": "Cristian Mena",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Strain",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Arizona Diamondbacks",
+          "player": "Jordan Lawlar",
+          "status": "60-Day-IL",
+          "position": "LF",
+          "detail": "Right Wrist Fracture",
+          "return_date": "2026-06-03",
+          "updated_at": "2026-05-10T12:45Z"
+        },
+        {
+          "team": "Arizona Diamondbacks",
+          "player": "A.J. Puk",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Left Elbow Surgery",
+          "return_date": "2026-06-15",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824359/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815371"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 822737,
+      "espn_event_id": "401815360",
+      "game_date": "2026-05-16",
+      "game": "Baltimore Orioles at Washington Nationals",
+      "away_team": "Baltimore Orioles",
+      "home_team": "Washington Nationals",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Chris Bassitt",
+        "home": "Cade Cavalli"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Washington Nationals",
+          "player": "Cade Cavalli",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Baltimore Orioles",
+          "player": "Chris Bassitt",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Washington Nationals",
+          "player": "Clayton Beeter",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Forearm Soreness",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-12T20:14Z"
+        },
+        {
+          "team": "Washington Nationals",
+          "player": "Cole Henry",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Strain",
+          "return_date": "2026-05-23",
+          "updated_at": "2026-05-15T18:55Z"
+        },
+        {
+          "team": "Washington Nationals",
+          "player": "Josiah Gray",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Strain",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Washington Nationals",
+          "player": "Trevor Williams",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Washington Nationals",
+          "player": "Tyler Baum",
+          "status": "Day-To-Day",
+          "position": "DH",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Baltimore Orioles",
+          "player": "Jackson Holliday",
+          "status": "10-Day-IL",
+          "position": "2B",
+          "detail": "Right Hand Surgery",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-09T23:25Z"
+        },
+        {
+          "team": "Baltimore Orioles",
+          "player": "Keagan Gillies",
+          "status": "Day-To-Day",
+          "position": "P",
+          "detail": "Not Specified Quadriceps Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Baltimore Orioles",
+          "player": "Luis Vazquez",
+          "status": "Day-To-Day",
+          "position": "SS",
+          "detail": "Right Thumb Fracture",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Baltimore Orioles",
+          "player": "Will Robertson",
+          "status": "Day-To-Day",
+          "position": "LF",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Baltimore Orioles",
+          "player": "Cade Povich",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Left Elbow Inflammation",
+          "return_date": "2026-05-23",
+          "updated_at": "2026-05-08T20:20Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/822737/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815360"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 823382,
+      "espn_event_id": "401815365",
+      "game_date": "2026-05-16",
+      "game": "Philadelphia Phillies at Pittsburgh Pirates",
+      "away_team": "Philadelphia Phillies",
+      "home_team": "Pittsburgh Pirates",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Cristopher Sánchez",
+        "home": "Bubba Chandler"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Pittsburgh Pirates",
+          "player": "Bubba Chandler",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Philadelphia Phillies",
+          "player": "Cristopher Sanchez",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Pittsburgh Pirates",
+          "player": "Jake Mangum",
+          "status": "10-Day-IL",
+          "position": "LF",
+          "detail": "Left Hamstring Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T23:19Z"
+        },
+        {
+          "team": "Pittsburgh Pirates",
+          "player": "Dominic Fletcher",
+          "status": "Day-To-Day",
+          "position": "RF",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Pittsburgh Pirates",
+          "player": "Joey Bart",
+          "status": "10-Day-IL",
+          "position": "C",
+          "detail": "Left Foot Infection",
+          "return_date": "2026-05-20",
+          "updated_at": "2026-05-12T22:25Z"
+        },
+        {
+          "team": "Pittsburgh Pirates",
+          "player": "Chris Devenski",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Not Specified Illness Not Specified",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Pittsburgh Pirates",
+          "player": "Jared Jones",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-13T05:53Z"
+        },
+        {
+          "team": "Philadelphia Phillies",
+          "player": "Keaton Anthony",
+          "status": "Day-To-Day",
+          "position": "1B",
+          "detail": "Not Specified Toe Surgery",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Philadelphia Phillies",
+          "player": "Zach Pop",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Calf Strain",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-11T05:21Z"
+        },
+        {
+          "team": "Philadelphia Phillies",
+          "player": "Rene Pinto",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Philadelphia Phillies",
+          "player": "Max Lazar",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Left Oblique Strain",
+          "return_date": "2026-05-23",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Philadelphia Phillies",
+          "player": "Kyle Backhus",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Elbow Inflammation",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-14T04:33Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/823382/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815365"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 822981,
+      "espn_event_id": "401815363",
+      "game_date": "2026-05-16",
+      "game": "Miami Marlins at Tampa Bay Rays",
+      "away_team": "Miami Marlins",
+      "home_team": "Tampa Bay Rays",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Sandy Alcantara",
+        "home": "Nick Martinez"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Tampa Bay Rays",
+          "player": "Nick Martinez",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Miami Marlins",
+          "player": "Sandy Alcantara",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Tampa Bay Rays",
+          "player": "Austin Vernon",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Right Elbow Soreness",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Tampa Bay Rays",
+          "player": "Logan Driscoll",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Right Ankle Sprain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Tampa Bay Rays",
+          "player": "Keyshawn Askew",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Tampa Bay Rays",
+          "player": "Tre' Morgan",
+          "status": "Day-To-Day",
+          "position": "1B",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Tampa Bay Rays",
+          "player": "TJ Nichols",
+          "status": "Day-To-Day",
+          "position": "P",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Miami Marlins",
+          "player": "Griffin Conine",
+          "status": "10-Day-IL",
+          "position": "LF",
+          "detail": "Left Hamstring Surgery",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Miami Marlins",
+          "player": "Robby Snelling",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Left Elbow Sprain",
+          "return_date": "2026-06-12",
+          "updated_at": "2026-05-15T21:14Z"
+        },
+        {
+          "team": "Miami Marlins",
+          "player": "Ronny Henriquez",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2027-02-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Miami Marlins",
+          "player": "Jesus Tinoco",
+          "status": "Out",
+          "position": "RP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2027-02-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Miami Marlins",
+          "player": "Adam Mazur",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2027-04-01",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Dome",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/822981/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815363"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824435,
+      "espn_event_id": "401815362",
+      "game_date": "2026-05-16",
+      "game": "Cincinnati Reds at Cleveland Guardians",
+      "away_team": "Cincinnati Reds",
+      "home_team": "Cleveland Guardians",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Chris Paddack",
+        "home": "Joey Cantillo"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Cleveland Guardians",
+          "player": "Joey Cantillo",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Cincinnati Reds",
+          "player": "Chris Paddack",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Cleveland Guardians",
+          "player": "Gabriel Arias",
+          "status": "10-Day-IL",
+          "position": "SS",
+          "detail": "Left Hamstring Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-16T15:02Z"
+        },
+        {
+          "team": "Cleveland Guardians",
+          "player": "Shawn Armstrong",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Groin Strain",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-13T13:09Z"
+        },
+        {
+          "team": "Cleveland Guardians",
+          "player": "Andrew Walters",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Lat Surgery",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-16T13:02Z"
+        },
+        {
+          "team": "Cleveland Guardians",
+          "player": "Carlos Hernandez",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Right Leg Surgery",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Cincinnati Reds",
+          "player": "Caleb Ferguson",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Oblique Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-10T13:59Z"
+        },
+        {
+          "team": "Cincinnati Reds",
+          "player": "Josh Staumont",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Cincinnati Reds",
+          "player": "Rhett Lowder",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Shoulder Soreness",
+          "return_date": "2026-05-26",
+          "updated_at": "2026-05-14T15:16Z"
+        },
+        {
+          "team": "Cincinnati Reds",
+          "player": "Eugenio Suarez",
+          "status": "10-Day-IL",
+          "position": "3B",
+          "detail": "Left Oblique Strain",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-15T18:39Z"
+        },
+        {
+          "team": "Cincinnati Reds",
+          "player": "Connor Burns",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824435/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815362"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824193,
+      "espn_event_id": "401815370",
+      "game_date": "2026-05-16",
+      "game": "Texas Rangers at Houston Astros",
+      "away_team": "Texas Rangers",
+      "home_team": "Houston Astros",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Jacob deGrom",
+        "home": "Kai-Wei Teng"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Houston Astros",
+          "player": "Kai-Wei Teng",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Texas Rangers",
+          "player": "Jacob deGrom",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Houston Astros",
+          "player": "Jeremy Pena",
+          "status": "10-Day-IL",
+          "position": "SS",
+          "detail": "Right Hamstring Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-14T16:19Z"
+        },
+        {
+          "team": "Houston Astros",
+          "player": "Lucas Spence",
+          "status": "Day-To-Day",
+          "position": "OF",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Houston Astros",
+          "player": "Yainer Diaz",
+          "status": "10-Day-IL",
+          "position": "C",
+          "detail": "Left Oblique Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Houston Astros",
+          "player": "Walker Janek",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-17",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Houston Astros",
+          "player": "Nate Pearson",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-11T19:54Z"
+        },
+        {
+          "team": "Texas Rangers",
+          "player": "Chris Martin",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Biceps Soreness",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-12T11:42Z"
+        },
+        {
+          "team": "Texas Rangers",
+          "player": "Wyatt Langford",
+          "status": "10-Day-IL",
+          "position": "LF",
+          "detail": "Right Forearm Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Texas Rangers",
+          "player": "Nathan Eovaldi",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Left Side Soreness",
+          "return_date": "2026-05-17",
+          "updated_at": "2026-05-13T21:03Z"
+        },
+        {
+          "team": "Texas Rangers",
+          "player": "Luis Curvelo",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Pinched Nerve",
+          "return_date": "2026-05-19",
+          "updated_at": "2026-05-15T20:43Z"
+        },
+        {
+          "team": "Texas Rangers",
+          "player": "Robert Garcia",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Shoulder Inflammation",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-08T22:47Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Retractable",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824193/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815370"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824600,
+      "espn_event_id": "401815367",
+      "game_date": "2026-05-16",
+      "game": "Chicago Cubs at Chicago White Sox",
+      "away_team": "Chicago Cubs",
+      "home_team": "Chicago White Sox",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Jameson Taillon",
+        "home": "Davis Martin"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Chicago White Sox",
+          "player": "Davis Martin",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Chicago Cubs",
+          "player": "Jameson Taillon",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Chicago White Sox",
+          "player": "Austin Hays",
+          "status": "10-Day-IL",
+          "position": "LF",
+          "detail": "Left Calf Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-09T22:24Z"
+        },
+        {
+          "team": "Chicago White Sox",
+          "player": "Everson Pereira",
+          "status": "10-Day-IL",
+          "position": "RF",
+          "detail": "Right Pectoral Strain",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Chicago White Sox",
+          "player": "Kyle Teel",
+          "status": "10-Day-IL",
+          "position": "C",
+          "detail": "Right Hamstring Strain",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-10T20:00Z"
+        },
+        {
+          "team": "Chicago White Sox",
+          "player": "Ky Bush",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Left Elbow Surgery",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Chicago White Sox",
+          "player": "Drew Thorpe",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Chicago Cubs",
+          "player": "Jaxon Wiggins",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Right Elbow Inflammation",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Chicago Cubs",
+          "player": "Caleb Thielbar",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Hamstring Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Chicago Cubs",
+          "player": "Jeff Brigham",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-27",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Chicago Cubs",
+          "player": "Matthew Boyd",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Left Knee Surgery",
+          "return_date": "2026-06-19",
+          "updated_at": "2026-05-15T22:32Z"
+        },
+        {
+          "team": "Chicago Cubs",
+          "player": "Riley Martin",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Elbow Inflammation",
+          "return_date": "2026-06-22",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824600/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815367"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 823706,
+      "espn_event_id": "401815369",
+      "game_date": "2026-05-16",
+      "game": "Milwaukee Brewers at Minnesota Twins",
+      "away_team": "Milwaukee Brewers",
+      "home_team": "Minnesota Twins",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Logan Henderson",
+        "home": "Connor Prielipp"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Minnesota Twins",
+          "player": "Connor Prielipp",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Milwaukee Brewers",
+          "player": "Logan Henderson",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Minnesota Twins",
+          "player": "Trevor Larnach",
+          "status": "Day-To-Day",
+          "position": "LF",
+          "detail": "Back Soreness",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-15T20:50Z"
+        },
+        {
+          "team": "Minnesota Twins",
+          "player": "Byron Buxton",
+          "status": "Day-To-Day",
+          "position": "CF",
+          "detail": "Right Hip Soreness",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-15T19:50Z"
+        },
+        {
+          "team": "Minnesota Twins",
+          "player": "Cory Lewis",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Right Shoulder Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Minnesota Twins",
+          "player": "Julian Merryweather",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Left Hamstring Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Minnesota Twins",
+          "player": "Cody Laweryson",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Forearm Strain",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Milwaukee Brewers",
+          "player": "Christian Yelich",
+          "status": "Day-To-Day",
+          "position": "DH",
+          "detail": "Not Specified Back Soreness",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-15T21:07Z"
+        },
+        {
+          "team": "Milwaukee Brewers",
+          "player": "Jacob Misiorowski",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Not Specified Quadriceps Cramps",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-14T02:53Z"
+        },
+        {
+          "team": "Milwaukee Brewers",
+          "player": "J.B. Bukauskas",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Right Lat Surgery",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Milwaukee Brewers",
+          "player": "Brandon Woodruff",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Shoulder Inflammation",
+          "return_date": "2026-05-23",
+          "updated_at": "2026-05-15T21:55Z"
+        },
+        {
+          "team": "Milwaukee Brewers",
+          "player": "Rob Zastryzny",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Left Ribs Strain",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-12T20:48Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/823706/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815369"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 823139,
+      "espn_event_id": "401815373",
+      "game_date": "2026-05-16",
+      "game": "San Diego Padres at Seattle Mariners",
+      "away_team": "San Diego Padres",
+      "home_team": "Seattle Mariners",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Walker Buehler",
+        "home": "Logan Gilbert"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Seattle Mariners",
+          "player": "Logan Gilbert",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "San Diego Padres",
+          "player": "Walker Buehler",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Seattle Mariners",
+          "player": "Patrick Wisdom",
+          "status": "10-Day-IL",
+          "position": "1B",
+          "detail": "Left Oblique Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Seattle Mariners",
+          "player": "Victor Robles",
+          "status": "10-Day-IL",
+          "position": "RF",
+          "detail": "Right Pectoral Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Seattle Mariners",
+          "player": "Gabe Speier",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Shoulder Inflammation",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Seattle Mariners",
+          "player": "Teddy McGraw",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Right Elbow Not Specified",
+          "return_date": "2026-05-17",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Seattle Mariners",
+          "player": "Matt Brash",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Lat Inflammation",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-14T18:46Z"
+        },
+        {
+          "team": "San Diego Padres",
+          "player": "Jake Cronenworth",
+          "status": "7-day il",
+          "position": "2B",
+          "detail": "Not Specified Concussion Concussion",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "San Diego Padres",
+          "player": "Blake Hunt",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Not Specified Oblique Not Specified",
+          "return_date": "2026-05-27",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "San Diego Padres",
+          "player": "Matt Waldron",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Forearm",
+          "return_date": "2026-05-30",
+          "updated_at": "2026-05-15T23:34Z"
+        },
+        {
+          "team": "San Diego Padres",
+          "player": "Jhony Brito",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Forearm Surgery",
+          "return_date": "2026-06-05",
+          "updated_at": "2026-05-11T16:33Z"
+        },
+        {
+          "team": "San Diego Padres",
+          "player": "Luis Campusano",
+          "status": "10-Day-IL",
+          "position": "C",
+          "detail": "Left Toe Fracture",
+          "return_date": "2026-06-07",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Retractable",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/823139/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815373"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824924,
+      "espn_event_id": "401815361",
+      "game_date": "2026-05-16",
+      "game": "Boston Red Sox at Atlanta Braves",
+      "away_team": "Boston Red Sox",
+      "home_team": "Atlanta Braves",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Payton Tolle",
+        "home": "Bryce Elder"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Atlanta Braves",
+          "player": "Bryce Elder",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Boston Red Sox",
+          "player": "Payton Tolle",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Atlanta Braves",
+          "player": "Blake Burkhalter",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Not Specified Back Spasms",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Atlanta Braves",
+          "player": "Dylan Dodd",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Back Inflammation",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Atlanta Braves",
+          "player": "Eli White",
+          "status": "7-Day IL",
+          "position": "CF",
+          "detail": "Not Specified Concussion Concussion",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-15T14:57Z"
+        },
+        {
+          "team": "Atlanta Braves",
+          "player": "Ronald Acuna Jr.",
+          "status": "10-Day-IL",
+          "position": "RF",
+          "detail": "Left Hamstring Strain",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-15T21:05Z"
+        },
+        {
+          "team": "Atlanta Braves",
+          "player": "Hurston Waldrep",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-06-02",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Boston Red Sox",
+          "player": "Connor Wong",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Right Ankle",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-14T01:02Z"
+        },
+        {
+          "team": "Boston Red Sox",
+          "player": "Danny Coulombe",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Not Specified Neck Spasms",
+          "return_date": "2026-05-17",
+          "updated_at": "2026-05-15T22:26Z"
+        },
+        {
+          "team": "Boston Red Sox",
+          "player": "Roman Anthony",
+          "status": "10-Day-IL",
+          "position": "LF",
+          "detail": "Right Wrist Sprain",
+          "return_date": "2026-05-26",
+          "updated_at": "2026-05-15T21:34Z"
+        },
+        {
+          "team": "Boston Red Sox",
+          "player": "Romy Gonzalez",
+          "status": "60-Day-IL",
+          "position": "1B",
+          "detail": "Left Shoulder Surgery",
+          "return_date": "2026-05-26",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Boston Red Sox",
+          "player": "Garrett Crochet",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Left Shoulder Inflammation",
+          "return_date": "2026-05-28",
+          "updated_at": "2026-05-14T12:10Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824924/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815361"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 823627,
+      "espn_event_id": "401815364",
+      "game_date": "2026-05-16",
+      "game": "New York Yankees at New York Mets",
+      "away_team": "New York Yankees",
+      "home_team": "New York Mets",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Carlos Rodón",
+        "home": "Huascar Brazobán"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "New York Mets",
+          "player": "Huascar Brazoban",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "New York Yankees",
+          "player": "Carlos Rodon",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "New York Mets",
+          "player": "Jose Rojas",
+          "status": "Day-To-Day",
+          "position": "3B",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-17",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "New York Mets",
+          "player": "Joe Jacques",
+          "status": "Day-To-Day",
+          "position": "RP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-05-20",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "New York Mets",
+          "player": "Jorge Polanco",
+          "status": "10-Day-IL",
+          "position": "1B",
+          "detail": "Left Achilles Inflammation",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-15T13:57Z"
+        },
+        {
+          "team": "New York Mets",
+          "player": "A.J. Minter",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Lat Surgery",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-12T19:47Z"
+        },
+        {
+          "team": "New York Mets",
+          "player": "Justin Hagenman",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Ribs",
+          "return_date": "2026-05-27",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "New York Yankees",
+          "player": "Gerrit Cole",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Elbow Surgery",
+          "return_date": "2026-05-20",
+          "updated_at": "2026-05-11T04:55Z"
+        },
+        {
+          "team": "New York Yankees",
+          "player": "Jose Caballero",
+          "status": "10-Day-IL",
+          "position": "SS",
+          "detail": "Right Finger Fracture",
+          "return_date": "2026-05-21",
+          "updated_at": "2026-05-13T03:02Z"
+        },
+        {
+          "team": "New York Yankees",
+          "player": "Giancarlo Stanton",
+          "status": "10-Day-IL",
+          "position": "DH",
+          "detail": "Right Calf Strain",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-13T20:53Z"
+        },
+        {
+          "team": "New York Yankees",
+          "player": "Travis MacGregor",
+          "status": "Day-To-Day",
+          "position": "SP",
+          "detail": "Not Specified Undisclosed Not Specified",
+          "return_date": "2026-06-01",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "New York Yankees",
+          "player": "Jasson Dominguez",
+          "status": "10-Day-IL",
+          "position": "LF",
+          "detail": "Left Shoulder Sprain",
+          "return_date": "2026-06-02",
+          "updated_at": "2026-05-13T16:12Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/823627/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815364"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 824038,
+      "espn_event_id": "401815372",
+      "game_date": "2026-05-16",
+      "game": "Los Angeles Dodgers at Los Angeles Angels",
+      "away_team": "Los Angeles Dodgers",
+      "home_team": "Los Angeles Angels",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Justin Wrobleski",
+        "home": "José Soriano"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Los Angeles Angels",
+          "player": "Jose Soriano",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "Los Angeles Dodgers",
+          "player": "Justin Wrobleski",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Los Angeles Angels",
+          "player": "Logan O'Hoppe",
+          "status": "Day-To-Day",
+          "position": "C",
+          "detail": "Left Wrist",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-16T03:39Z"
+        },
+        {
+          "team": "Los Angeles Angels",
+          "player": "Grayson Rodriguez",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Shoulder Inflammation",
+          "return_date": "2026-05-17",
+          "updated_at": "2026-05-15T19:41Z"
+        },
+        {
+          "team": "Los Angeles Angels",
+          "player": "Travis d'Arnaud",
+          "status": "10-Day-IL",
+          "position": "C",
+          "detail": "Right Foot Plantar Fasciitis",
+          "return_date": "2026-05-18",
+          "updated_at": "2026-05-08T20:16Z"
+        },
+        {
+          "team": "Los Angeles Angels",
+          "player": "Ben Joyce",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Surgery",
+          "return_date": "2026-05-26",
+          "updated_at": "2026-05-15T22:15Z"
+        },
+        {
+          "team": "Los Angeles Angels",
+          "player": "Drew Pomeranz",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Left Elbow Inflammation",
+          "return_date": "2026-05-28",
+          "updated_at": "2026-05-15T22:20Z"
+        },
+        {
+          "team": "Los Angeles Dodgers",
+          "player": "Ben Casparius",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Inflammation",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-10T20:00Z"
+        },
+        {
+          "team": "Los Angeles Dodgers",
+          "player": "Gavin Stone",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Shoulder Inflammation",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Los Angeles Dodgers",
+          "player": "Landon Knack",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Not Specified Chest Strain",
+          "return_date": "2026-05-24",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Los Angeles Dodgers",
+          "player": "Enrique Hernandez",
+          "status": "60-Day-IL",
+          "position": "1B",
+          "detail": "Left Elbow Surgery",
+          "return_date": "2026-05-24",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Los Angeles Dodgers",
+          "player": "Bobby Miller",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Right Shoulder Soreness",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-08T11:02Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824038/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815372"
+      ]
+    },
+    {
+      "query_type": "lineup_injury_bullpen_context",
+      "game_pk": 825007,
+      "espn_event_id": "401815374",
+      "game_date": "2026-05-16",
+      "game": "San Francisco Giants at Athletics",
+      "away_team": "San Francisco Giants",
+      "home_team": "Athletics",
+      "checked_at_utc": "2026-05-16T15:39:50.042Z",
+      "lineup_status": "lineup_pending",
+      "probable_pitchers": {
+        "away": "Trevor McDonald",
+        "home": "Luis Severino"
+      },
+      "probable_pitcher_stats": [
+        {
+          "team": "Athletics",
+          "player": "Luis Severino",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        },
+        {
+          "team": "San Francisco Giants",
+          "player": "Trevor McDonald",
+          "record": null,
+          "era": null,
+          "wins": null,
+          "losses": null
+        }
+      ],
+      "key_injuries": [
+        {
+          "team": "Athletics",
+          "player": "Denzel Clarke",
+          "status": "10-Day-IL",
+          "position": "CF",
+          "detail": "Right Foot Bruise",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-13T16:12Z"
+        },
+        {
+          "team": "Athletics",
+          "player": "Brooks Kriske",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Pinched Nerve",
+          "return_date": "2026-05-29",
+          "updated_at": "2026-05-13T21:52Z"
+        },
+        {
+          "team": "Athletics",
+          "player": "Gunnar Hoglund",
+          "status": "60-Day-IL",
+          "position": "SP",
+          "detail": "Not Specified Knee Strain",
+          "return_date": "2026-06-02",
+          "updated_at": "2026-05-08T11:02Z"
+        },
+        {
+          "team": "Athletics",
+          "player": "Max Muncy",
+          "status": "10-Day-IL",
+          "position": "3B",
+          "detail": "Left Hand Fracture",
+          "return_date": "2026-06-12",
+          "updated_at": "2026-05-13T16:28Z"
+        },
+        {
+          "team": "Athletics",
+          "player": "Jacob Wilson",
+          "status": "10-Day-IL",
+          "position": "SS",
+          "detail": "Left Shoulder Dislocated",
+          "return_date": "2026-06-15",
+          "updated_at": "2026-05-12T21:01Z"
+        },
+        {
+          "team": "San Francisco Giants",
+          "player": "Heliot Ramos",
+          "status": "Day-To-Day",
+          "position": "LF",
+          "detail": "Right Quadriceps Soreness",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-16T03:47Z"
+        },
+        {
+          "team": "San Francisco Giants",
+          "player": "Erik Miller",
+          "status": "15-Day-IL",
+          "position": "RP",
+          "detail": "Not Specified Back Strain",
+          "return_date": "2026-05-16",
+          "updated_at": "2026-05-15T01:19Z"
+        },
+        {
+          "team": "San Francisco Giants",
+          "player": "Logan Webb",
+          "status": "15-Day-IL",
+          "position": "SP",
+          "detail": "Right Knee Inflammation",
+          "return_date": "2026-05-22",
+          "updated_at": "2026-05-15T01:26Z"
+        },
+        {
+          "team": "San Francisco Giants",
+          "player": "Jason Foley",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Shoulder Surgery",
+          "return_date": "2026-05-25",
+          "updated_at": "2026-05-15T17:36Z"
+        },
+        {
+          "team": "San Francisco Giants",
+          "player": "Reiver Sanmartin",
+          "status": "60-Day-IL",
+          "position": "RP",
+          "detail": "Right Hip Strain",
+          "return_date": "2026-06-09",
+          "updated_at": "2026-05-15T17:21Z"
+        }
+      ],
+      "injury_status": "injury_records_available",
+      "bullpen_usage_note": "No machine-readable bullpen workload summary available from ESPN/MLB feed.",
+      "weather_from_mlb_feed": {},
+      "venue_roof_type": "Open",
+      "source_urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/825007/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815374"
+      ]
+    }
+  ],
+  "warnings": [
+    "Lineup pending is a disclosed evidence state, not a full-slate blocker."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://statsapi.mlb.com/api/v1.1/game/824278/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815366",
+    "https://statsapi.mlb.com/api/v1.1/game/823060/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815368",
+    "https://statsapi.mlb.com/api/v1.1/game/824359/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815371",
+    "https://statsapi.mlb.com/api/v1.1/game/822737/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815360",
+    "https://statsapi.mlb.com/api/v1.1/game/823382/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815365",
+    "https://statsapi.mlb.com/api/v1.1/game/822981/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815363",
+    "https://statsapi.mlb.com/api/v1.1/game/824435/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815362",
+    "https://statsapi.mlb.com/api/v1.1/game/824193/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815370",
+    "https://statsapi.mlb.com/api/v1.1/game/824600/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815367",
+    "https://statsapi.mlb.com/api/v1.1/game/823706/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815369",
+    "https://statsapi.mlb.com/api/v1.1/game/823139/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815373",
+    "https://statsapi.mlb.com/api/v1.1/game/824924/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815361",
+    "https://statsapi.mlb.com/api/v1.1/game/823627/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815364",
+    "https://statsapi.mlb.com/api/v1.1/game/824038/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815372",
+    "https://statsapi.mlb.com/api/v1.1/game/825007/feed/live",
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815374"
+  ]
+}

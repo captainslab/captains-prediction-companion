@@ -1,0 +1,232 @@
+{
+  "schema_version": "1.0",
+  "run_date": "2026-05-16",
+  "generated_at_utc": "2026-05-16T16:06:43.200Z",
+  "operator": "sports-pre-game",
+  "sources": [
+    {
+      "source_id": "kalshi",
+      "data_need": "Tradable markets, rules, available contracts, bid/ask, liquidity, and order books",
+      "recommended_source": "Kalshi baseball calendar and public read-only Trade API discovery",
+      "backup_source": "Manual Kalshi UI review if public discovery is challenge-gated",
+      "access_method": "Existing discovery adapter JSON from public/read-only GET attempts",
+      "reliability_grade": "A",
+      "daily_repeatability": "Daily, subject to UI challenge gates and public endpoint availability",
+      "limitations": "Kalshi calendar inaccessible or challenge-gated: HTTP 429.",
+      "status": "degraded",
+      "last_checked_utc": "2026-05-16T15:39:22.043Z",
+      "required": true,
+      "urls": [
+        "https://kalshi.com/calendar/sports/baseball",
+        "https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&series_ticker=KXMLBGAME",
+        "https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&series_ticker=KXMLBTOTAL",
+        "https://external-api.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&series_ticker=KXMLBGAME",
+        "https://external-api.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&series_ticker=KXMLBTOTAL",
+        "https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true",
+        "https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&cursor=CgYI8Nj99wYSC1NFTkFURU1PLTI4",
+        "https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&cursor=CgYI8NSs5gYSFktYTUlEVEVSTVZPVEVUVVJOLVZBMDk",
+        "https://external-api.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true",
+        "https://external-api.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&cursor=CgYI8Nj99wYSC1NFTkFURU1PLTI4",
+        "https://external-api.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true&cursor=CgYI8NSs5gYSFktYTUlEVEVSTVZPVEVUVVJOLVZBMDk"
+      ]
+    },
+    {
+      "source_id": "mlb_official",
+      "data_need": "Schedule, official game IDs, teams, status, probable pitchers, venue, and start times",
+      "recommended_source": "Official MLB Stats API / MLB Gameday",
+      "backup_source": "MLB.com scoreboard",
+      "access_method": "Existing MLB official adapter JSON",
+      "reliability_grade": "A",
+      "daily_repeatability": "Daily public API access",
+      "limitations": "Official schedule source; not a betting or player-prop model.",
+      "status": "ok",
+      "last_checked_utc": "2026-05-16T15:02:39.418Z",
+      "required": true,
+      "urls": [
+        "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-05-16&hydrate=probablePitcher%2Cteam"
+      ]
+    },
+    {
+      "source_id": "baseball_savant",
+      "data_need": "Batter/pitcher splits, K%, barrel rate, hard-hit rate, HR profiles, pitch mix, and workload",
+      "recommended_source": "Baseball Savant / Statcast",
+      "backup_source": "FanGraphs or MLB Stats API derived stats when explicitly implemented later",
+      "access_method": "Existing Baseball Savant adapter JSON from discovery folder",
+      "reliability_grade": "A-",
+      "daily_repeatability": "Daily when adapter discovery file is present; fixture mode is placeholder only",
+      "limitations": "Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.; No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence.",
+      "status": "blocked",
+      "last_checked_utc": "2026-05-16T15:02:43.180Z",
+      "required": true,
+      "urls": [
+        "https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&player_type=batter&game_date_gt=2026-05-16&game_date_lt=2026-05-16"
+      ]
+    },
+    {
+      "source_id": "weather",
+      "data_need": "Wind, temperature, rain/postponement risk, roof, and weather-sensitive run environment",
+      "recommended_source": "National Weather Service API",
+      "backup_source": "Venue roof/status notes and official game status once implemented",
+      "access_method": "Existing weather adapter JSON from discovery folder",
+      "reliability_grade": "A-",
+      "daily_repeatability": "Daily when adapter discovery file is present; fixture mode is placeholder only",
+      "limitations": "Live read-only weather records are environment inputs only, not final model evidence or recommendations.",
+      "status": "ok",
+      "last_checked_utc": "2026-05-16T15:39:18.082Z",
+      "required": true,
+      "urls": [
+        "https://api.weather.gov",
+        "https://api.weather.gov/points/42.3391,-83.0487",
+        "https://api.weather.gov/gridpoints/DTX/66,34/forecast/hourly",
+        "https://api.weather.gov/points/38.6226,-90.1928",
+        "https://api.weather.gov/gridpoints/LSX/95,74/forecast/hourly",
+        "https://api.weather.gov/points/39.7561,-104.9942",
+        "https://api.weather.gov/gridpoints/BOU/63,62/forecast/hourly",
+        "https://api.weather.gov/points/38.8730,-77.0074",
+        "https://api.weather.gov/gridpoints/LWX/98,70/forecast/hourly",
+        "https://api.weather.gov/points/40.4469,-80.0057",
+        "https://api.weather.gov/gridpoints/PBZ/77,67/forecast/hourly",
+        "https://api.weather.gov/points/41.4962,-81.6852",
+        "https://api.weather.gov/gridpoints/CLE/84,65/forecast/hourly",
+        "https://api.weather.gov/points/29.7573,-95.3555",
+        "https://api.weather.gov/gridpoints/HGX/63,94/forecast/hourly",
+        "https://api.weather.gov/points/41.8300,-87.6339",
+        "https://api.weather.gov/gridpoints/LOT/76,71/forecast/hourly",
+        "https://api.weather.gov/points/44.9817,-93.2776",
+        "https://api.weather.gov/gridpoints/MPX/108,72/forecast/hourly",
+        "https://api.weather.gov/points/47.5914,-122.3325",
+        "https://api.weather.gov/gridpoints/SEW/124,67/forecast/hourly",
+        "https://api.weather.gov/points/33.8908,-84.4678",
+        "https://api.weather.gov/gridpoints/FFC/47,93/forecast/hourly",
+        "https://api.weather.gov/points/40.7571,-73.8458",
+        "https://api.weather.gov/gridpoints/OKX/38,45/forecast/hourly",
+        "https://api.weather.gov/points/33.8003,-117.8827",
+        "https://api.weather.gov/gridpoints/SGX/38,66/forecast/hourly",
+        "https://api.weather.gov/points/38.5804,-121.5133",
+        "https://api.weather.gov/gridpoints/STO/40,68/forecast/hourly"
+      ]
+    },
+    {
+      "source_id": "liquidity",
+      "data_need": "Kalshi market bid/ask, spread, volume, open interest",
+      "recommended_source": "Kalshi public trade API (read-only)",
+      "backup_source": "Manual Kalshi UI review",
+      "access_method": "Existing liquidity adapter JSON from discovery folder",
+      "reliability_grade": "B+",
+      "daily_repeatability": "Daily when adapter file present; fixture mode is placeholder only",
+      "limitations": "No Kalshi market tickers provided; cannot fetch liquidity.",
+      "status": "blocked",
+      "last_checked_utc": "2026-05-16T15:02:43.217Z",
+      "required": false,
+      "urls": [
+        "https://api.elections.kalshi.com/trade-api/v2"
+      ]
+    },
+    {
+      "source_id": "sportsbook_reference",
+      "data_need": "No-vig reference fair values from DraftKings/ESPN for edge comparison vs Kalshi ask",
+      "recommended_source": "ESPN scoreboard API (DraftKings odds)",
+      "backup_source": "Manual DraftKings check",
+      "access_method": "Existing sportsbook adapter JSON from discovery folder",
+      "reliability_grade": "A-",
+      "daily_repeatability": "Daily when adapter discovery file is present",
+      "limitations": "Sportsbook reference records are not Kalshi prices and are never executable prices.",
+      "status": "ok",
+      "last_checked_utc": "2026-05-16T15:39:34.189Z",
+      "required": false,
+      "urls": [
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=20260516&limit=100"
+      ]
+    },
+    {
+      "source_id": "lineup_injury_bullpen",
+      "data_need": "Lineup confirmation, injury list, probable pitcher stats, bullpen workload",
+      "recommended_source": "MLB live feed API + ESPN summary API",
+      "backup_source": "Manual lineup check",
+      "access_method": "Existing context adapter JSON from discovery folder",
+      "reliability_grade": "B+",
+      "daily_repeatability": "Daily; lineup_pending is a normal pre-game state, not a hard block",
+      "limitations": "Lineup pending is a disclosed evidence state, not a full-slate blocker.",
+      "status": "ok",
+      "last_checked_utc": "2026-05-16T15:39:50.042Z",
+      "required": false,
+      "urls": [
+        "https://statsapi.mlb.com/api/v1.1/game/824278/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815366",
+        "https://statsapi.mlb.com/api/v1.1/game/823060/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815368",
+        "https://statsapi.mlb.com/api/v1.1/game/824359/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815371",
+        "https://statsapi.mlb.com/api/v1.1/game/822737/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815360",
+        "https://statsapi.mlb.com/api/v1.1/game/823382/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815365",
+        "https://statsapi.mlb.com/api/v1.1/game/822981/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815363",
+        "https://statsapi.mlb.com/api/v1.1/game/824435/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815362",
+        "https://statsapi.mlb.com/api/v1.1/game/824193/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815370",
+        "https://statsapi.mlb.com/api/v1.1/game/824600/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815367",
+        "https://statsapi.mlb.com/api/v1.1/game/823706/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815369",
+        "https://statsapi.mlb.com/api/v1.1/game/823139/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815373",
+        "https://statsapi.mlb.com/api/v1.1/game/824924/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815361",
+        "https://statsapi.mlb.com/api/v1.1/game/823627/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815364",
+        "https://statsapi.mlb.com/api/v1.1/game/824038/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815372",
+        "https://statsapi.mlb.com/api/v1.1/game/825007/feed/live",
+        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401815374"
+      ]
+    },
+    {
+      "source_id": "optional_price_sanity",
+      "data_need": "Optional external price sanity check",
+      "recommended_source": "None required",
+      "backup_source": null,
+      "access_method": "Not called by Stage 3 dry-run",
+      "reliability_grade": "unknown",
+      "daily_repeatability": "Optional; never blocks workflow",
+      "limitations": "Not required and not used to prove Kalshi availability.",
+      "status": "skipped",
+      "last_checked_utc": null,
+      "required": false,
+      "urls": []
+    }
+  ],
+  "source_gaps": [
+    {
+      "source_id": "baseball_savant",
+      "gap": "Baseball Savant adapter status blocked; records 0.",
+      "affected_market_lanes": [
+        "moneyline",
+        "run_line",
+        "game_total",
+        "yrfi_nrfi",
+        "home_run_hitter",
+        "pitcher_strikeouts"
+      ],
+      "handling": "Do not create final picks until usable Statcast evidence records are available."
+    },
+    {
+      "source_id": "liquidity",
+      "gap": "Liquidity adapter status blocked; 0 records.",
+      "affected_market_lanes": [
+        "moneyline",
+        "run_line",
+        "game_total",
+        "yrfi_nrfi",
+        "home_run_hitter",
+        "pitcher_strikeouts"
+      ],
+      "handling": "Market classified NOT_TRADEABLE until liquidity data is available."
+    }
+  ],
+  "notes": [
+    "Source registry composed from existing discovery files only. No live fetches performed."
+  ]
+}

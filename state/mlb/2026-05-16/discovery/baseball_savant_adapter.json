@@ -1,0 +1,17 @@
+{
+  "source_id": "baseball_savant",
+  "status": "blocked",
+  "checked_at_utc": "2026-05-16T15:02:43.180Z",
+  "cache_key": "baseball_savant_statcast_2026-05-16T15:02:43.180Z",
+  "cache_path": "state/mlb/2026-05-16/discovery/baseball_savant_adapter.json",
+  "required": true,
+  "records": [],
+  "warnings": [
+    "Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.",
+    "No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence."
+  ],
+  "errors": [],
+  "source_urls": [
+    "https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&player_type=batter&game_date_gt=2026-05-16&game_date_lt=2026-05-16"
+  ]
+}

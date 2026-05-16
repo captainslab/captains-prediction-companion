@@ -1,0 +1,786 @@
+[
+  {
+    "event_ticker": "KXMLBGAME-26MAY182140SFAZ",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "San Francisco vs Arizona",
+    "category": "Sports",
+    "sub_title": "SF vs AZ (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY182140LADSD",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Los Angeles D vs San Diego",
+    "category": "Sports",
+    "sub_title": "LAD vs SD (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY182140CWSSEA",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Chicago WS vs Seattle",
+    "category": "Sports",
+    "sub_title": "CWS vs SEA (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY182138ATHLAA",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "A's vs Los Angeles A",
+    "category": "Sports",
+    "sub_title": "ATH vs LAA (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY182040TEXCOL",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Texas vs Colorado",
+    "category": "Sports",
+    "sub_title": "TEX vs COL (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181940MILCHC",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Milwaukee vs Chicago C",
+    "category": "Sports",
+    "sub_title": "MIL vs CHC (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181940HOUMIN",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Houston vs Minnesota",
+    "category": "Sports",
+    "sub_title": "HOU vs MIN (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181940BOSKC",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Boston vs Kansas City",
+    "category": "Sports",
+    "sub_title": "BOS vs KC (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181905TORNYY",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Toronto vs New York Y",
+    "category": "Sports",
+    "sub_title": "TOR vs NYY (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181845NYMWSH",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "New York M vs Washington",
+    "category": "Sports",
+    "sub_title": "NYM vs WSH (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181840CLEDET",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Cleveland vs Detroit",
+    "category": "Sports",
+    "sub_title": "CLE vs DET (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181840CINPHI",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Cincinnati vs Philadelphia",
+    "category": "Sports",
+    "sub_title": "CIN vs PHI (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181840BALTB",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Baltimore vs Tampa Bay",
+    "category": "Sports",
+    "sub_title": "BAL vs TB (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY181840ATLMIA",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Atlanta vs Miami",
+    "category": "Sports",
+    "sub_title": "ATL vs MIA (May 18)",
+    "reason": "date mismatch: event date 2026-05-18 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171920SDSEA",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "San Diego vs Seattle",
+    "category": "Sports",
+    "sub_title": "SD vs SEA (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171607LADLAA",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Los Angeles D vs Los Angeles A",
+    "category": "Sports",
+    "sub_title": "LAD vs LAA (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171605SFATH",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "San Francisco vs A's",
+    "category": "Sports",
+    "sub_title": "SF vs ATH (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171510AZCOL",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Arizona vs Colorado",
+    "category": "Sports",
+    "sub_title": "AZ vs COL (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171415KCSTL",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Kansas City vs St. Louis",
+    "category": "Sports",
+    "sub_title": "KC vs STL (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171410TEXHOU",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Texas vs Houston",
+    "category": "Sports",
+    "sub_title": "TEX vs HOU (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171410MILMIN",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Milwaukee vs Minnesota",
+    "category": "Sports",
+    "sub_title": "MIL vs MIN (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171410CHCCWS",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Chicago C vs Chicago WS",
+    "category": "Sports",
+    "sub_title": "CHC vs CWS (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171340TORDET",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Toronto vs Detroit",
+    "category": "Sports",
+    "sub_title": "TOR vs DET (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171340NYYNYM",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "New York Y vs New York M",
+    "category": "Sports",
+    "sub_title": "NYY vs NYM (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171340CINCLE",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Cincinnati vs Cleveland",
+    "category": "Sports",
+    "sub_title": "CIN vs CLE (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171335PHIPIT",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Philadelphia vs Pittsburgh",
+    "category": "Sports",
+    "sub_title": "PHI vs PIT (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171335BOSATL",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Boston vs Atlanta",
+    "category": "Sports",
+    "sub_title": "BOS vs ATL (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171335BALWSH",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Baltimore vs Washington",
+    "category": "Sports",
+    "sub_title": "BAL vs WSH (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY171215MIATB",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Miami vs Tampa Bay",
+    "category": "Sports",
+    "sub_title": "MIA vs TB (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXXISUCCESSOR-45JAN01",
+    "series_ticker": "KXXISUCCESSOR",
+    "event_title": "Who will be named as Xi Jinping's successor?",
+    "category": "Elections",
+    "sub_title": "Before Jan 1, 2045",
+    "reason": "date mismatch: event date 2045-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXNEXTROMANIAPM-45JAN01",
+    "series_ticker": "KXNEXTROMANIAPM",
+    "event_title": "Who will be the next new Prime Minister of Romania?",
+    "category": "Elections",
+    "sub_title": "Before Jan 1, 2045",
+    "reason": "date mismatch: event date 2045-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXNEXTISRAELPM-45JAN01",
+    "series_ticker": "KXNEXTISRAELPM",
+    "event_title": "Who will succeed Netanyahu as Prime Minister of Israel?",
+    "category": "Elections",
+    "sub_title": "Before Jan 1, 2045",
+    "reason": "date mismatch: event date 2045-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXG7LEADEROUT-45JAN01",
+    "series_ticker": "KXG7LEADEROUT",
+    "event_title": "Which G7 leader will leave next?",
+    "category": "Politics",
+    "sub_title": "G7 Leaders",
+    "reason": "date mismatch: event date 2045-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXJOHNNYDEPP-35",
+    "series_ticker": "KXJOHNNYDEPP",
+    "event_title": "Will Johnny Depp be cast in the next Pirates of the Caribbean?",
+    "category": "Entertainment",
+    "sub_title": "Before 2035",
+    "reason": "excluded non-same-day game market: entertainment"
+  },
+  {
+    "event_ticker": "KXTVSEASONRELEASETHELASTOFUS",
+    "series_ticker": "KXTVSEASONRELEASETHELASTOFUS",
+    "event_title": "When will \"The Last of Us\" Season 3 be released?",
+    "category": "Entertainment",
+    "sub_title": "\"The Last of Us\" Season 3",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-EHOLLIDAY",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Ethan Holliday: Debut Date",
+    "category": "Sports",
+    "sub_title": "Ethan Holliday",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXTRAVISKELCEWEDDING-30JAN01",
+    "series_ticker": "KXTRAVISKELCEWEDDING",
+    "event_title": "Who will be Groomsman for the wedding of Travis Kelce and Taylor Swift?",
+    "category": "Social",
+    "sub_title": "Travis Kelce and Taylor Swift wedding",
+    "reason": "date mismatch: event date 2030-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXTAYLORSWIFTWEDDING-30JAN01",
+    "series_ticker": "KXTAYLORSWIFTWEDDING",
+    "event_title": "Who will be a Bridesmaid for the wedding of Travis Kelce and Taylor Swift?",
+    "category": "Social",
+    "sub_title": "Travis Kelce and Taylor Swift wedding",
+    "reason": "date mismatch: event date 2030-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMEDIARELEASEPRISONBREAK-30JAN01",
+    "series_ticker": "KXMEDIARELEASEPRISONBREAK",
+    "event_title": "When will Prison Break return?",
+    "category": "Entertainment",
+    "sub_title": "A New Season of Prison Break - Worldwide",
+    "reason": "date mismatch: event date 2030-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "AMAZONFTC-29DEC31",
+    "series_ticker": "KXAMAZONFTC",
+    "event_title": "Courts consider Amazon a monopoly?",
+    "category": "Politics",
+    "sub_title": "Before 2030",
+    "reason": "date mismatch: event date 2029-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-SHERNANDEZ",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Seth Hernandez: Debut Date",
+    "category": "Sports",
+    "sub_title": "Seth Hernandez",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-LPENA",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Luis Peña: Debut Date",
+    "category": "Sports",
+    "sub_title": "Luis Peña",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-EWILLITS",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Eli Willits: Debut Date",
+    "category": "Sports",
+    "sub_title": "Eli Willits",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-EQUINTERO",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Eduardo Quintero: Debut Date",
+    "category": "Sports",
+    "sub_title": "Eduardo Quintero",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXDEBTGROWTH-28DEC31",
+    "series_ticker": "KXDEBTGROWTH",
+    "event_title": "Peak US National Debt Under Trump Administration",
+    "category": "Politics",
+    "sub_title": "Before 2029",
+    "reason": "date mismatch: event date 2028-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXEOTRUMPTERM-29JAN20",
+    "series_ticker": "KXEOTRUMPTERM",
+    "event_title": "How many executive orders will Trump sign in his second term?",
+    "category": "Politics",
+    "sub_title": "Trump's second term",
+    "reason": "date mismatch: event date 2029-01-20 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXGREENLANDPRICE-29JAN21",
+    "series_ticker": "KXGREENLANDPRICE",
+    "event_title": "How much will the US acquire Greenland for?",
+    "category": "Politics",
+    "sub_title": "During Trump's term",
+    "reason": "date mismatch: event date 2029-01-21 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXTRUMPPARDONS-29JAN21",
+    "series_ticker": "KXTRUMPPARDONS",
+    "event_title": "Who will Trump pardon?",
+    "category": "Politics",
+    "sub_title": "Before Jan 21, 2029",
+    "reason": "date mismatch: event date 2029-01-21 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXNEXTPRESSEC-29JAN21",
+    "series_ticker": "KXNEXTPRESSEC",
+    "event_title": "Who will be Trump's next Press Secretary?",
+    "category": "Elections",
+    "sub_title": "Before Jan 21, 2029",
+    "reason": "date mismatch: event date 2029-01-21 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXGREENTERRITORY-29",
+    "series_ticker": "KXGREENTERRITORY",
+    "event_title": "Will the US take control of any part of Greenland?",
+    "category": "Politics",
+    "sub_title": "During Trump's term",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXVETOOVERRIDE-29JAN20",
+    "series_ticker": "KXVETOOVERRIDE",
+    "event_title": "Will Congress override Trump's veto?",
+    "category": "Politics",
+    "sub_title": "Before Jan 20, 2029",
+    "reason": "date mismatch: event date 2029-01-20 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXTRUMPPARDONFAMILY-29JAN20",
+    "series_ticker": "KXTRUMPPARDONFAMILY",
+    "event_title": "Will Trump pardon any members of his family?",
+    "category": "Politics",
+    "sub_title": "Before Jan 20, 2029",
+    "reason": "date mismatch: event date 2029-01-20 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXTRUMPAGCOUNT-29",
+    "series_ticker": "KXTRUMPAGCOUNT",
+    "event_title": "How many Attorneys General will Trump have?",
+    "category": "Politics",
+    "sub_title": "Before Jan 20, 2029",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXNEWSCOTUSCONF-29JAN20",
+    "series_ticker": "KXNEWSCOTUSCONF",
+    "event_title": "How many Supreme Court justices will the President confirm?",
+    "category": "Politics",
+    "sub_title": "During the 2025-2029 term",
+    "reason": "date mismatch: event date 2029-01-20 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMARTIAL-29JAN20",
+    "series_ticker": "KXMARTIAL",
+    "event_title": "Will Trump impose martial law before his term ends?",
+    "category": "Politics",
+    "sub_title": "Before Jan 20, 2029",
+    "reason": "date mismatch: event date 2029-01-20 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXINSURRECTION-29",
+    "series_ticker": "KXINSURRECTION",
+    "event_title": "Will Trump invoke the Insurrection Act?",
+    "category": "Politics",
+    "sub_title": "Before Jan 20, 2029",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXGREENLAND-29",
+    "series_ticker": "KXGREENLAND",
+    "event_title": "Will Trump buy at least part of Greenland?",
+    "category": "Politics",
+    "sub_title": "During his term",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXCABOUT-26APR20",
+    "series_ticker": "KXCABOUT",
+    "event_title": "Who will leave Trump's Cabinet next?",
+    "category": "Politics",
+    "sub_title": "During Trump's term",
+    "reason": "date mismatch: event date 2026-04-20 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "ECMOV-28NOV07",
+    "series_ticker": "ECMOV",
+    "event_title": "2028 Electoral College margin of victory?",
+    "category": "Politics",
+    "sub_title": "Nov 7, 2028",
+    "reason": "date mismatch: event date 2028-11-07 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXTAYLORSWIFTWEDDINGATTEND-28DEC31",
+    "series_ticker": "KXTAYLORSWIFTWEDDINGATTEND",
+    "event_title": "Who will attend Taylor Swift and Travis Kelce's Wedding?",
+    "category": "Entertainment",
+    "sub_title": "On Dec 31, 2028",
+    "reason": "date mismatch: event date 2028-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXDEMOCRACYUS-28",
+    "series_ticker": "KXDEMOCRACYUS",
+    "event_title": "How much will US democracy weaken under Trump?",
+    "category": "Politics",
+    "sub_title": "By 2028",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXRTICKET-28NOV07",
+    "series_ticker": "KXRTICKET",
+    "event_title": "2028 Republican Presidential ticket",
+    "category": "Elections",
+    "sub_title": "2028",
+    "reason": "date mismatch: event date 2028-11-07 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXDTICKET-28NOV07",
+    "series_ticker": "KXDTICKET",
+    "event_title": "2028 Democratic Presidential ticket",
+    "category": "Elections",
+    "sub_title": "2028",
+    "reason": "date mismatch: event date 2028-11-07 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXDECLAREPRESFIRSTD-28NOV07",
+    "series_ticker": "KXDECLAREPRESFIRSTD",
+    "event_title": "Who will be the first Democrat listed to announce a presidential run?",
+    "category": "Elections",
+    "sub_title": "Before Nov 7, 2028",
+    "reason": "date mismatch: event date 2028-11-07 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXPRESOUTCOME-28NOV07",
+    "series_ticker": "KXPRESOUTCOME",
+    "event_title": "2028 Presidential race: exact outcome",
+    "category": "Elections",
+    "sub_title": "2028",
+    "reason": "date mismatch: event date 2028-11-07 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXPRESMATCHUP-28NOV07",
+    "series_ticker": "KXPRESMATCHUP",
+    "event_title": "2028 Presidential matchup",
+    "category": "Elections",
+    "sub_title": "2028",
+    "reason": "date mismatch: event date 2028-11-07 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-ZHOPE",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Zyhir Hope: Debut Date",
+    "category": "Sports",
+    "sub_title": "Zyhir Hope",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-SWALCOTT",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Sebastian Walcott: Debut Date",
+    "category": "Sports",
+    "sub_title": "Sebastian Walcott",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-KANDERSON",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Kade Anderson: Debut Date",
+    "category": "Sports",
+    "sub_title": "Kade Anderson",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-JMADE",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Jesús Made: Debut Date",
+    "category": "Sports",
+    "sub_title": "Jesús Made",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-JDEPAULA",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Josue De Paula: Debut Date",
+    "category": "Sports",
+    "sub_title": "Josue De Paula",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXMLBDEBUT-FARIAS",
+    "series_ticker": "KXMLBDEBUT",
+    "event_title": "Franklin Arias: Debut Date",
+    "category": "Sports",
+    "sub_title": "Franklin Arias",
+    "reason": "excluded non-same-day game market: \\bdebut date\\b"
+  },
+  {
+    "event_ticker": "KXAMERICAPARTY2028-28SEP01",
+    "series_ticker": "KXAMERICAPARTY2028",
+    "event_title": "Will the America Party contest the 2028 U.S. presidential election?",
+    "category": "Elections",
+    "sub_title": "Before Sep 1, 2028",
+    "reason": "date mismatch: event date 2028-09-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXCITRINI-28JUL01",
+    "series_ticker": "KXCITRINI",
+    "event_title": "Will the Citrini scenario happen?",
+    "category": "Elections",
+    "sub_title": "Before July 2028",
+    "reason": "date mismatch: event date 2028-07-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXPOPCHANGENYC-28JUN01",
+    "series_ticker": "KXPOPCHANGENYC",
+    "event_title": "NYC population change in Mamdani's first 18 months?",
+    "category": "Politics",
+    "sub_title": "2025-2027",
+    "reason": "date mismatch: event date 2028-06-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXLAMAYORADVANCE-26JUN02",
+    "series_ticker": "KXLAMAYORADVANCE",
+    "event_title": "Who will advance in the Los Angeles mayoral election?",
+    "category": "Politics",
+    "sub_title": "Jun 2, 2026",
+    "reason": "date mismatch: event date 2026-06-02 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXSHAI20PTREC-2028",
+    "series_ticker": "KXSHAI20PTREC",
+    "event_title": "How many consecutive regular season games will Shai Gilgeous-Alexander score 20+ points?",
+    "category": "Sports",
+    "sub_title": "20+ Point Streak",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXLONDONMAYOR-28MAY01",
+    "series_ticker": "KXLONDONMAYOR",
+    "event_title": "Who will win the 2028 London mayoral election?",
+    "category": "Elections",
+    "sub_title": "2028",
+    "reason": "date mismatch: event date 2028-05-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMANCHINRUN-28MAR01",
+    "series_ticker": "KXMANCHINRUN",
+    "event_title": "Will Joe Manchin run for president in 2028?",
+    "category": "Elections",
+    "sub_title": "Before Mar 1, 2028",
+    "reason": "date mismatch: event date 2028-03-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXVENUEPERFORMANCESPHERE-28JAN01",
+    "series_ticker": "KXVENUEPERFORMANCESPHERE",
+    "event_title": "Who will perform at Las Vegas Sphere in 2027?",
+    "category": "Entertainment",
+    "sub_title": "2027",
+    "reason": "date mismatch: event date 2028-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXUKRENEWOB-28JAN01",
+    "series_ticker": "KXUKRENEWOB",
+    "event_title": "UK Renewables Obligation scheme changes",
+    "category": "Politics",
+    "sub_title": "Before Jan 1, 2028",
+    "reason": "date mismatch: event date 2028-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXVENUEPERFORMANCEMSG-27DEC31",
+    "series_ticker": "KXVENUEPERFORMANCEMSG",
+    "event_title": "Who will perform at Madison Square Garden 2027?",
+    "category": "Entertainment",
+    "sub_title": "2027",
+    "reason": "date mismatch: event date 2027-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "NYTOAI-27DEC31",
+    "series_ticker": "KXNYTOAI",
+    "event_title": "New York Times wins OpenAI lawsuit?",
+    "category": "Science and Technology",
+    "sub_title": "Copyright infringement",
+    "reason": "date mismatch: event date 2027-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXSPACEXBANKPUBLIC-28JAN01",
+    "series_ticker": "KXSPACEXBANKPUBLIC",
+    "event_title": "Which bank will take SpaceX public?",
+    "category": "Companies",
+    "sub_title": "Before Jan 1, 2028",
+    "reason": "date mismatch: event date 2028-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXSENATEDEMLEAD-28JAN01",
+    "series_ticker": "KXSENATEDEMLEAD",
+    "event_title": "Who will win the next Senate Democratic Leader election?",
+    "category": "Elections",
+    "sub_title": "in 2028",
+    "reason": "date mismatch: event date 2028-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMEDIARELEASESPIDERMAN",
+    "series_ticker": "KXMEDIARELEASESPIDERMAN",
+    "event_title": "When will the official trailer for Spider-Man: Beyond the Spider-Verse be released?",
+    "category": "Entertainment",
+    "sub_title": "the official trailer for Spider-Man: Beyond the Spider-Verse - Worldwide",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXMAKERFIELDBY-27JAN01",
+    "series_ticker": "KXMAKERFIELDBY",
+    "event_title": "Makerfield by-election winner?",
+    "category": "Elections",
+    "sub_title": "in 2027",
+    "reason": "date mismatch: event date 2027-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXLAKECONF-26MAY12",
+    "series_ticker": "KXLAKECONF",
+    "event_title": "When will Kari Lake be confirmed as Ambassador to Jamaica?",
+    "category": "Politics",
+    "sub_title": "In 2026",
+    "reason": "date mismatch: event date 2026-05-12 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXIPOWHOOP",
+    "series_ticker": "KXIPOWHOOP",
+    "event_title": "When will Whoop officially announce an IPO?",
+    "category": "Economics",
+    "sub_title": "WHOOP, Inc.",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXIPOOURA",
+    "series_ticker": "KXIPOOURA",
+    "event_title": "When will Oura officially announce an IPO?",
+    "category": "Economics",
+    "sub_title": "Oura Health Oy",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXIPOFANNIE",
+    "series_ticker": "KXIPOFANNIE",
+    "event_title": "When will Fannie Mae officially announce an IPO?",
+    "category": "Economics",
+    "sub_title": "Fannie Mae",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXFREDDIE",
+    "series_ticker": "KXFREDDIE",
+    "event_title": "When will Freddie Mac officially announce an IPO?",
+    "category": "Economics",
+    "sub_title": "Freddie Mac",
+    "reason": "market has non-empty result field"
+  },
+  {
+    "event_ticker": "KXCITYNBAEXPAND-28JAN01",
+    "series_ticker": "KXCITYNBAEXPAND",
+    "event_title": "Which cities will receive Pro Basketball expansion teams before 2028?",
+    "category": "Sports",
+    "sub_title": "Before Jan 1, 2028",
+    "reason": "date mismatch: event date 2028-01-01 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXSLOVENIAPM-26MAR22",
+    "series_ticker": "KXSLOVENIAPM",
+    "event_title": "Who will be Prime Minister of Slovenia after their election?",
+    "category": "Elections",
+    "sub_title": "Before Dec 31, 2027",
+    "reason": "date mismatch: event date 2026-03-22 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXROLEATEVENTROLLING-27DEC31",
+    "series_ticker": "KXROLEATEVENTROLLING",
+    "event_title": "Who will headline Rolling Loud Miami 2026?",
+    "category": "Entertainment",
+    "sub_title": "In 2027",
+    "reason": "date mismatch: event date 2027-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXROLEATEVENTCOACHELLA-27DEC31",
+    "series_ticker": "KXROLEATEVENTCOACHELLA",
+    "event_title": "Who will headline Coachella 2027?",
+    "category": "Entertainment",
+    "sub_title": "In 2027",
+    "reason": "date mismatch: event date 2027-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXKXMOVIEDELAYBATMANPT2-27DEC31",
+    "series_ticker": "KXKXMOVIEDELAYBATMANPT2",
+    "event_title": "Will The Batman Part II be delayed again?",
+    "category": "Entertainment",
+    "sub_title": "Oct 1, 2027",
+    "reason": "date mismatch: event date 2027-12-31 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXCAHOUSEDEM-26NOV03",
+    "series_ticker": "KXCAHOUSEDEM",
+    "event_title": "How many House seats will Democrats win in California?",
+    "category": "Elections",
+    "sub_title": "On Nov 3, 2026",
+    "reason": "date mismatch: event date 2026-11-03 != run date 2026-05-16"
+  }
+]
