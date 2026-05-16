@@ -520,6 +520,7 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
   const leanCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'LEAN');
   const watchForPriceCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'WATCH_FOR_PRICE');
   const clearPickCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CLEAR_PICK');
+  const preLineupPickCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'PRE_LINEUP_PICK');
   const correlatedAlternateCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CORRELATED_ALTERNATE');
 
   // Build start-time lookup keyed on game label for use in clear-picks table
@@ -527,12 +528,24 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     safeArray(slateManifest.games).map(g => [g.game, g.start_time_utc ?? 'TBD']),
   );
 
+  const buildPickRow = (c, note) => {
+    const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
+    const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
+    return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTimeByGame.get(c.game) ?? 'TBD'} | ${tableEscape(missing)} | ${note} |`;
+  };
+
   const clearPickRows = clearPickCandidates.length > 0
-    ? clearPickCandidates.map(c => {
-        const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
-        const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
-        return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTimeByGame.get(c.game) ?? 'TBD'} | ${tableEscape(missing)} | Discovery only — no trade placed. |`;
-      })
+    ? clearPickCandidates.map(c => buildPickRow(c, 'Discovery only — no trade placed.'))
+    : ['| none |  |  |  |  |  |  |  |  |  |  |'];
+
+  const preLineupPickRows = preLineupPickCandidates.length > 0
+    ? [
+        '_All hard source gates passed. Edge >= 3pp. Awaiting lineup confirmation — enter only after starting lineups are posted._',
+        '',
+        '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+        '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
+        ...preLineupPickCandidates.map(c => buildPickRow(c, 'Pre-lineup only — do not enter until lineup confirmed.')),
+      ]
     : ['| none |  |  |  |  |  |  |  |  |  |  |'];
 
   const correlatedAlternateRows = correlatedAlternateCandidates.length > 0
@@ -597,6 +610,7 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '',
     `- Total candidates scored: ${scoring.counts.total}`,
     `- CLEAR_PICK: ${scoring.counts.clear_pick}`,
+    `- PRE_LINEUP_PICK: ${scoring.counts.pre_lineup_pick ?? 0}`,
     `- LEAN: ${scoring.counts.lean}`,
     `- WATCH_FOR_LISTING: ${scoring.counts.watch_for_listing}`,
     `- PASS: ${scoring.counts.pass}`,
@@ -610,6 +624,10 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
     '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
     ...clearPickRows,
+    '',
+    '## Pre-Lineup Picks (Lineup Pending — Do Not Enter Yet)',
+    '',
+    ...preLineupPickRows,
     '',
     '## Watch For Listing',
     '',
@@ -750,6 +768,7 @@ function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, 
     games: slateManifest.games ?? [],
     candidates: scoring.candidates,
     clear_picks: byClass('CLEAR_PICK'),
+    pre_lineup_picks: byClass('PRE_LINEUP_PICK'),
     leans: byClass('LEAN'),
     watch_for_price: byClass('WATCH_FOR_PRICE'),
     watch_for_listing: byClass('WATCH_FOR_LISTING'),
@@ -789,6 +808,7 @@ function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest
     '',
     `- Total: ${counts.total ?? 0}`,
     `- CLEAR_PICK: ${counts.clear_pick ?? 0}`,
+    `- PRE_LINEUP_PICK: ${counts.pre_lineup_pick ?? 0}`,
     `- LEAN: ${counts.lean ?? 0}`,
     `- WATCH_FOR_LISTING: ${counts.watch_for_listing ?? 0}`,
     `- PASS: ${counts.pass ?? 0}`,
@@ -808,6 +828,23 @@ function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest
             const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
             const startTime = safeArray(board.games).find(g => g.game === c.game)?.start_time_utc ?? 'TBD';
             return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Discovery only — no trade placed. |`;
+          }),
+        ].join('\n'),
+    '',
+    '## Pre-Lineup Picks (Lineup Pending — Do Not Enter Yet)',
+    '',
+    board.pre_lineup_picks.length === 0
+      ? '- none'
+      : [
+          '_All hard source gates passed. Edge >= 3pp. Awaiting lineup confirmation — enter only after starting lineups are posted._',
+          '',
+          '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+          '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
+          ...board.pre_lineup_picks.map(c => {
+            const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
+            const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
+            const startTime = safeArray(board.games).find(g => g.game === c.game)?.start_time_utc ?? 'TBD';
+            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Pre-lineup only — do not enter until lineup confirmed. |`;
           }),
         ].join('\n'),
     '',

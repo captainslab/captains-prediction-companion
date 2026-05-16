@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "run_date": "2026-05-16",
-  "generated_at_utc": "2026-05-16T16:37:23.444Z",
+  "generated_at_utc": "2026-05-16T16:46:47.638Z",
   "operator": "sports-pre-game",
   "source_health": {
     "kalshi": "degraded",
@@ -16,12 +16,13 @@
   "summary_counts": {
     "total": 195,
     "clear_pick": 1,
-    "lean": 70,
+    "pre_lineup_pick": 14,
+    "lean": 18,
     "watch_for_price": 9,
     "watch_for_listing": 0,
     "pass": 110,
     "blocked_source_gap": 0,
-    "correlated_alternate": 5
+    "correlated_alternate": 43
   },
   "picks": [
     {
@@ -30,7 +31,7 @@
       "market_title": "Arizona vs Colorado Total Runs?",
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 11,
@@ -56,7 +57,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161510AZCOL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -65,7 +67,7 @@
       "market_title": "New York Y vs New York M Total Runs?",
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
@@ -91,7 +93,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161915NYYNYM_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -100,7 +103,7 @@
       "market_title": "Milwaukee vs Minnesota Total Runs?",
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
@@ -126,7 +129,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910MILMIN_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -135,7 +139,7 @@
       "market_title": "Philadelphia vs Pittsburgh Total Runs?",
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
@@ -161,7 +165,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605PHIPIT_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -202,12 +207,12 @@
       "market_title": "Arizona vs Colorado Total Runs?",
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 8.681,
       "fair_value": 0.8568,
       "kalshi_ask": 0.77,
@@ -228,7 +233,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -237,7 +242,7 @@
       "market_title": "Los Angeles D vs Los Angeles A Total Runs?",
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
@@ -263,7 +268,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY162138LADLAA_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -272,12 +278,12 @@
       "market_title": "Chicago C vs Chicago WS Total Runs?",
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 8.04,
       "fair_value": 0.8504,
       "kalshi_ask": 0.77,
@@ -298,7 +304,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -307,7 +313,7 @@
       "market_title": "Cincinnati vs Cleveland Total Runs?",
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
@@ -334,7 +340,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161810CINCLE_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -343,7 +350,7 @@
       "market_title": "Texas vs Houston Total Runs?",
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8,
@@ -370,7 +377,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910TEXHOU_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -379,12 +387,12 @@
       "market_title": "Kansas City vs St. Louis Total Runs?",
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 7.431,
       "fair_value": 0.8843,
       "kalshi_ask": 0.81,
@@ -406,7 +414,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -415,7 +423,7 @@
       "market_title": "Arizona vs Colorado Total Runs?",
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 11,
@@ -441,7 +449,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161510AZCOL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -482,7 +491,7 @@
       "market_title": "Baltimore vs Washington Total Runs?",
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 10,
@@ -508,7 +517,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605BALWSH_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -517,7 +527,7 @@
       "market_title": "Texas vs Houston Total Runs?",
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8,
@@ -544,7 +554,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910TEXHOU_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -553,7 +564,7 @@
       "market_title": "Milwaukee vs Minnesota Total Runs?",
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
@@ -579,7 +590,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910MILMIN_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -620,12 +632,12 @@
       "market_title": "Philadelphia vs Pittsburgh Total Runs?",
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 6.382,
       "fair_value": 0.7438,
       "kalshi_ask": 0.68,
@@ -646,7 +658,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -655,7 +667,7 @@
       "market_title": "Texas vs Houston Total Runs?",
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8,
@@ -682,7 +694,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910TEXHOU_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -691,12 +704,12 @@
       "market_title": "Baltimore vs Washington Total Runs?",
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 5.978,
       "fair_value": 0.7798,
       "kalshi_ask": 0.72,
@@ -717,7 +730,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -726,7 +739,7 @@
       "market_title": "Los Angeles D vs Los Angeles A Total Runs?",
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
@@ -752,7 +765,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY162138LADLAA_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -761,7 +775,7 @@
       "market_title": "New York Y vs New York M Total Runs?",
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
@@ -787,7 +801,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161915NYYNYM_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -796,7 +811,7 @@
       "market_title": "Cincinnati vs Cleveland Total Runs?",
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
@@ -823,7 +838,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161810CINCLE_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -832,7 +848,7 @@
       "market_title": "Philadelphia vs Pittsburgh Total Runs?",
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
@@ -858,7 +874,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605PHIPIT_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -867,7 +884,7 @@
       "market_title": "Kansas City vs St. Louis Total Runs?",
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 9,
@@ -894,7 +911,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161415KCSTL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -903,12 +921,12 @@
       "market_title": "Los Angeles D vs Los Angeles A Total Runs?",
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 5.382,
       "fair_value": 0.7438,
       "kalshi_ask": 0.69,
@@ -929,7 +947,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -938,7 +956,7 @@
       "market_title": "New York Y vs New York M Total Runs?",
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
@@ -964,7 +982,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161915NYYNYM_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -973,7 +992,7 @@
       "market_title": "Milwaukee vs Minnesota Total Runs?",
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
@@ -999,7 +1018,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910MILMIN_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1040,7 +1060,7 @@
       "market_title": "Baltimore vs Washington Total Runs?",
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 10,
@@ -1066,7 +1086,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605BALWSH_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1075,7 +1096,7 @@
       "market_title": "San Francisco vs A's Total Runs?",
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 9.5,
@@ -1101,7 +1122,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY162140SFATH_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1110,7 +1132,7 @@
       "market_title": "Boston vs Atlanta Total Runs?",
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 7.5,
@@ -1136,7 +1158,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161915BOSATL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1145,12 +1168,12 @@
       "market_title": "Miami vs Tampa Bay Total Runs?",
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 5.085,
       "fair_value": 0.9409,
       "kalshi_ask": 0.89,
@@ -1172,7 +1195,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1181,7 +1204,7 @@
       "market_title": "Los Angeles D vs Los Angeles A Total Runs?",
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
@@ -1207,7 +1230,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY162138LADLAA_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1216,7 +1240,7 @@
       "market_title": "New York Y vs New York M Total Runs?",
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
@@ -1242,7 +1266,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161915NYYNYM_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1251,7 +1276,7 @@
       "market_title": "Milwaukee vs Minnesota Total Runs?",
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
@@ -1277,7 +1302,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910MILMIN_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1286,7 +1312,7 @@
       "market_title": "Cincinnati vs Cleveland Total Runs?",
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
@@ -1313,7 +1339,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161810CINCLE_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1322,7 +1349,7 @@
       "market_title": "Philadelphia vs Pittsburgh Total Runs?",
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
@@ -1348,7 +1375,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605PHIPIT_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1357,7 +1385,7 @@
       "market_title": "San Diego vs Seattle Total Runs?",
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 7,
@@ -1384,7 +1412,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161915SDSEA_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1393,7 +1422,7 @@
       "market_title": "Arizona vs Colorado Total Runs?",
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 11,
@@ -1419,7 +1448,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161510AZCOL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1428,12 +1458,12 @@
       "market_title": "Texas vs Houston Total Runs?",
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 4.663,
       "fair_value": 0.6866,
       "kalshi_ask": 0.64,
@@ -1455,7 +1485,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1464,7 +1494,7 @@
       "market_title": "Chicago C vs Chicago WS Total Runs?",
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
@@ -1490,7 +1520,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910CHCCWS_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1499,7 +1530,7 @@
       "market_title": "San Francisco vs A's Total Runs?",
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 9.5,
@@ -1525,7 +1556,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY162140SFATH_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1565,7 +1597,7 @@
       "market_title": "Cincinnati vs Cleveland Total Runs?",
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
@@ -1592,7 +1624,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161810CINCLE_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1601,7 +1634,7 @@
       "market_title": "Chicago C vs Chicago WS Total Runs?",
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
@@ -1627,7 +1660,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910CHCCWS_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1636,7 +1670,7 @@
       "market_title": "Kansas City vs St. Louis Total Runs?",
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 9,
@@ -1663,7 +1697,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161415KCSTL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1672,12 +1707,12 @@
       "market_title": "Boston vs Atlanta Total Runs?",
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 3.856,
       "fair_value": 0.7586,
       "kalshi_ask": 0.72,
@@ -1698,7 +1733,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1707,12 +1742,12 @@
       "market_title": "San Diego vs Seattle Total Runs?",
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 3.701,
       "fair_value": 0.827,
       "kalshi_ask": 0.79,
@@ -1734,7 +1769,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1743,12 +1778,12 @@
       "market_title": "New York Y vs New York M Total Runs?",
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 3.44,
       "fair_value": 0.6144,
       "kalshi_ask": 0.58,
@@ -1769,7 +1804,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1778,12 +1813,12 @@
       "market_title": "Milwaukee vs Minnesota Total Runs?",
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 3.44,
       "fair_value": 0.6144,
       "kalshi_ask": 0.58,
@@ -1804,7 +1839,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1813,12 +1848,12 @@
       "market_title": "Cincinnati vs Cleveland Total Runs?",
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 3.44,
       "fair_value": 0.6144,
       "kalshi_ask": 0.58,
@@ -1840,7 +1875,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1849,7 +1884,7 @@
       "market_title": "Philadelphia vs Pittsburgh Total Runs?",
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
@@ -1875,7 +1910,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605PHIPIT_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1884,7 +1920,7 @@
       "market_title": "Chicago C vs Chicago WS Total Runs?",
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
@@ -1910,7 +1946,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161910CHCCWS_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1919,7 +1956,7 @@
       "market_title": "Kansas City vs St. Louis Total Runs?",
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 9,
@@ -1946,7 +1983,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161415KCSTL_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -1955,12 +1993,12 @@
       "market_title": "San Francisco vs A's Total Runs?",
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
-      "classification": "LEAN",
+      "classification": "PRE_LINEUP_PICK",
       "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
-      "primary_pick": false,
+      "primary_pick": true,
       "edge_pp": 3.134,
       "fair_value": 0.7313,
       "kalshi_ask": 0.7,
@@ -1981,7 +2019,7 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed."
       ]
     },
     {
@@ -1990,7 +2028,7 @@
       "market_title": "Baltimore vs Washington Total Runs?",
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
-      "classification": "LEAN",
+      "classification": "CORRELATED_ALTERNATE",
       "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 10,
@@ -2016,7 +2054,8 @@
       "gates_failed": [],
       "fixture_mode": false,
       "notes": [
-        "Edge >= 1.5pp but confirmations pending. Monitor before acting."
+        "Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.",
+        "Correlated alternate: primary pick for group KXMLBTOTAL-26MAY161605BALWSH_total_over selected elsewhere. Listed for reference only."
       ]
     },
     {
@@ -6425,7 +6464,7 @@
   "notes": [
     "Discovery-only output writer dry-run.",
     "Live-readonly mode: CLEAR_PICK requires all evidence gates to pass.",
-    "Scored 195 market candidates: 1 CLEAR_PICK, 70 LEAN, 0 WATCH_FOR_LISTING, undefined BLOCKED, undefined NOT_TRADEABLE.",
+    "Scored 195 market candidates: 1 CLEAR_PICK, 18 LEAN, 0 WATCH_FOR_LISTING, undefined BLOCKED, undefined NOT_TRADEABLE.",
     "No live picks made. No trades placed."
   ]
 }

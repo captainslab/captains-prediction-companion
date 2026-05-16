@@ -412,6 +412,30 @@ function classifyMarket({
     return { classification, target_entry, missing_confirmations: missing, notes };
   }
 
+  // PRE_LINEUP_PICK: all hard gates pass, lineup pending, edge >= 3.0
+  if (
+    !failed.includes('kalshi_tradable') &&
+    !failed.includes('mlb_game_match') &&
+    !failed.includes('reference_price') &&
+    !failed.includes('weather') &&
+    !failed.includes('not_fixture') &&
+    lineupStatus === 'pending' &&
+    edge_pp >= 3.0
+  ) {
+    classification = 'PRE_LINEUP_PICK';
+    missing.push('lineup_pending');
+    if (typeof weatherRiskPct === 'number' && weatherRiskPct >= 30) missing.push('weather_risk');
+    if (weatherRiskPct === null && WEATHER_SENSITIVE_LANES.has(lane)) {
+      const roofNorm = (venueRoofType ?? '').toLowerCase();
+      if (roofNorm === 'dome' || roofNorm === 'retractable') missing.push('roof_state_unknown');
+      else missing.push('weather_data_pending');
+    }
+    if (hasInjuries) missing.push('injury_activation_pending');
+    if (bullpenUnknown) missing.push('bullpen_unknown');
+    notes.push('Pre-lineup pick: edge >= 3pp, all source gates passed. Do not enter until lineup is confirmed.');
+    return { classification, target_entry, missing_confirmations: missing, notes };
+  }
+
   // LEAN: core gates pass, edge >= 1.5, not_fixture passes
   if (
     !failed.includes('kalshi_tradable') &&
@@ -518,6 +542,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
   const counts = {
     total: 0,
     clear_pick: 0,
+    pre_lineup_pick: 0,
     lean: 0,
     watch_for_price: 0,
     watch_for_listing: 0,
@@ -691,9 +716,10 @@ function buildCorrelationGroup(record, market) {
  * Mutates `candidates` and `counts` in place.
  */
 function selectPrimaryPicks(candidates, counts) {
+  const ELIGIBLE_CLASSES = new Set(['CLEAR_PICK', 'PRE_LINEUP_PICK']);
   const groups = new Map();
   for (const c of candidates) {
-    if (c.classification !== 'CLEAR_PICK') continue;
+    if (!ELIGIBLE_CLASSES.has(c.classification)) continue;
     const g = c.correlation_group ?? 'ungrouped';
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(c);
@@ -730,13 +756,15 @@ function selectPrimaryPicks(candidates, counts) {
       if (c === best) {
         c.primary_pick = true;
       } else {
+        const origClass = c.classification;
         c.classification = 'CORRELATED_ALTERNATE';
         c.primary_pick = false;
         c.notes = [
           ...(c.notes ?? []),
           `Correlated alternate: primary pick for group ${c.correlation_group} selected elsewhere. Listed for reference only.`,
         ];
-        counts.clear_pick = Math.max(0, counts.clear_pick - 1);
+        const countKey = origClass.toLowerCase();
+        if (countKey in counts) counts[countKey] = Math.max(0, counts[countKey] - 1);
         counts.correlated_alternate = (counts.correlated_alternate ?? 0) + 1;
       }
     }
