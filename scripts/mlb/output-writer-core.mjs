@@ -522,17 +522,33 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
   const clearPickCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CLEAR_PICK');
   const correlatedAlternateCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CORRELATED_ALTERNATE');
 
+  // Build start-time lookup keyed on game label for use in clear-picks table
+  const startTimeByGame = new Map(
+    safeArray(slateManifest.games).map(g => [g.game, g.start_time_utc ?? 'TBD']),
+  );
+
   const clearPickRows = clearPickCandidates.length > 0
-    ? clearPickCandidates.map(c =>
-        `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} |`,
-      )
-    : ['| none |  |  |  |  |  |'];
+    ? clearPickCandidates.map(c => {
+        const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
+        const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
+        return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTimeByGame.get(c.game) ?? 'TBD'} | ${tableEscape(missing)} | Discovery only — no trade placed. |`;
+      })
+    : ['| none |  |  |  |  |  |  |  |  |  |  |'];
 
   const correlatedAlternateRows = correlatedAlternateCandidates.length > 0
     ? correlatedAlternateCandidates.map(c =>
         `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.correlation_group ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} |`,
       )
     : ['| none |  |  |  |  |'];
+
+  // Deduplicate LEANs to one per correlation group for the guide (full list stays in JSON)
+  const leanSeenGroups = new Set();
+  const leanDeduped = leanCandidates.filter(c => {
+    const g = c.correlation_group ?? c.market_ticker;
+    if (leanSeenGroups.has(g)) return false;
+    leanSeenGroups.add(g);
+    return true;
+  });
 
   const blockedRows = blockedCandidates.length > 0
     ? blockedCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(safeArray(c.missing_sources).join(', ') || 'source gap')} | Re-run discovery or wait for source availability |`)
@@ -541,20 +557,29 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
         '| Kalshi tradable MLB board | Valid same-day Kalshi records | Re-run discovery closer to first pitch or inspect Kalshi UI manually |',
       ];
 
-  const leanRows = leanCandidates.length > 0
+  const leanRows = leanDeduped.length > 0
     ? [
-        ...leanCandidates.slice(0, 10).map(c =>
+        ...leanDeduped.slice(0, 10).map(c =>
           `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
         ),
-        ...(leanCandidates.length > 10
-          ? [`| _+${leanCandidates.length - 10} more_ | see today-execution-board.json |  |  |  |  |  |`]
+        ...(leanDeduped.length > 10 || leanCandidates.length > leanDeduped.length
+          ? [`| _+${leanCandidates.length - Math.min(leanDeduped.length, 10)} more_ | see today-execution-board.json for full list |  |  |  |  |  |`]
           : []),
       ]
     : ['| none |  |  |  |  |  |  |'];
 
   const watchForPriceRows = watchForPriceCandidates.length > 0
-    ? watchForPriceCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.watch_reason ?? '')} | ${tableEscape(c.target_price ?? '')} | ${tableEscape(c.recheck_time ?? '')} |`)
-    : ['| none |  |  |  |'];
+    ? watchForPriceCandidates.map(c => {
+        const side = c.market_lane === 'game_total'
+          ? `over ${c.total_strike ?? 'n/a'}`
+          : (c.contract_title ?? c.market_title ?? 'n/a');
+        const reason = safeArray(c.missing_confirmations).join(', ') || 'positive edge below LEAN threshold';
+        const recheck = c.target_entry !== null
+          ? `Enter at ${c.target_entry} or below`
+          : 'Monitor for price drop';
+        return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.market_lane ?? 'n/a'} | ${tableEscape(side)} | ${c.kalshi_ask ?? 'n/a'} | ${c.target_entry ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(reason)} | ${tableEscape(recheck)} |`;
+      })
+    : ['| none |  |  |  |  |  |  |  |  |'];
 
   const lines = [
     `# Daily Baseball Guide - ${runDate}`,
@@ -582,8 +607,8 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '',
     '## Clear Picks',
     '',
-    '| Market | Game | Strike | Fair | Ask | Edge |',
-    '|---|---|---:|---:|---:|---:|',
+    '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+    '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
     ...clearPickRows,
     '',
     '## Watch For Listing',
@@ -604,8 +629,8 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '',
     '## Watch For Price',
     '',
-    '| Market | Why watching | Target price | Recheck time |',
-    '|---|---|---|---|',
+    '| Market | Game | Lane | Side/Strike | Ask | Target | Edge | Reason | Recheck |',
+    '|---|---|---|---|---:|---:|---:|---|---|',
     ...watchForPriceRows,
     '',
     '## Correlated Alternates',
@@ -772,29 +797,64 @@ function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest
     `- CORRELATED_ALTERNATE: ${counts.correlated_alternate ?? 0}`,
     '',
     '## Clear Picks',
+    '',
     board.clear_picks.length === 0
       ? '- none'
-      : board.clear_picks.map(c =>
-          `- ${c.market_ticker ?? c.market_title ?? 'unknown'} (strike ${c.total_strike ?? 'n/a'}, ask ${c.kalshi_ask ?? 'n/a'}, edge ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'})`,
-        ).join('\n'),
+      : [
+          '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+          '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
+          ...board.clear_picks.map(c => {
+            const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
+            const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
+            const startTime = safeArray(board.games).find(g => g.game === c.game)?.start_time_utc ?? 'TBD';
+            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Discovery only — no trade placed. |`;
+          }),
+        ].join('\n'),
     '',
-    '## Leans (Top 10 by Edge)',
+    '## Leans (Top 10 by Edge, one per group)',
     '',
     board.leans.length === 0
       ? '- none'
-      : [
-          '| Market | Game | Strike | Ask | Fair | Edge | Missing |',
-          '|---|---|---:|---:|---:|---:|---|',
-          ...board.leans.slice(0, 10).map(c =>
-            `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
-          ),
-          ...(board.leans.length > 10
-            ? [`\n_${board.leans.length - 10} more leans — see today-execution-board.json for full list._`]
-            : []),
-        ].join('\n'),
+      : (() => {
+          const seen = new Set();
+          const deduped = board.leans.filter(c => {
+            const g = c.correlation_group ?? c.market_ticker;
+            if (seen.has(g)) return false;
+            seen.add(g);
+            return true;
+          });
+          const top10 = deduped.slice(0, 10);
+          const overflowCount = board.leans.length - top10.length;
+          return [
+            '| Market | Game | Strike | Ask | Fair | Edge | Missing |',
+            '|---|---|---:|---:|---:|---:|---|',
+            ...top10.map(c =>
+              `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
+            ),
+            ...(overflowCount > 0
+              ? [`\n_${overflowCount} more leans — see today-execution-board.json for full list._`]
+              : []),
+          ].join('\n');
+        })(),
     '',
     '## Watch For Price',
-    board.watch_for_price.length === 0 ? '- none' : board.watch_for_price.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    '',
+    board.watch_for_price.length === 0
+      ? '- none'
+      : [
+          '| Market | Game | Lane | Side/Strike | Ask | Target | Edge | Reason | Recheck |',
+          '|---|---|---|---|---:|---:|---:|---|---|',
+          ...board.watch_for_price.map(c => {
+            const side = c.market_lane === 'game_total'
+              ? `over ${c.total_strike ?? 'n/a'}`
+              : (c.contract_title ?? c.market_title ?? 'n/a');
+            const reason = safeArray(c.missing_confirmations).join(', ') || 'positive edge below LEAN threshold';
+            const recheck = c.target_entry !== null
+              ? `Enter at ${c.target_entry} or below`
+              : 'Monitor for price drop';
+            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.market_lane ?? 'n/a'} | ${tableEscape(side)} | ${c.kalshi_ask ?? 'n/a'} | ${c.target_entry ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(reason)} | ${tableEscape(recheck)} |`;
+          }),
+        ].join('\n'),
     '',
     '## Correlated Alternates',
     board.correlated_alternates.length === 0

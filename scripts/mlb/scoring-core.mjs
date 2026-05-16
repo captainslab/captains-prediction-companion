@@ -292,21 +292,31 @@ function evaluateGates({ market, record, kalshi, mlb, weather, sportsbook, conte
     failed.push('not_fixture: Fixture mode detected across one or more adapters');
   }
 
-  // Estimate weather risk pct for total lanes (simple heuristic from wind/precip if available)
+  // Estimate weather risk pct — match by game_pk; no cross-game fallback
   let weatherRiskPct = null;
   if (WEATHER_SENSITIVE_LANES.has(lane) && weatherRecords.length > 0) {
-    // Look for a weather record matching this game
     const wRecord = weatherRecords.find(r =>
       (gamePk && r.game_pk === gamePk) ||
       (gameAway && gameHome && r.away_team === gameAway && r.home_team === gameHome),
-    ) ?? weatherRecords[0];
+    ) ?? null;
     if (wRecord) {
-      const precip = wRecord.precip_probability ?? wRecord.precip_pct ?? null;
-      weatherRiskPct = typeof precip === 'number' ? precip * 100 : null;
+      // precip_probability / precip_pct are 0–1 decimals; precipitation_risk is already 0–100
+      if (typeof wRecord.precip_probability === 'number') {
+        weatherRiskPct = wRecord.precip_probability * 100;
+      } else if (typeof wRecord.precip_pct === 'number') {
+        weatherRiskPct = wRecord.precip_pct * 100;
+      } else if (typeof wRecord.precipitation_risk === 'number') {
+        weatherRiskPct = wRecord.precipitation_risk;
+      }
     }
   }
 
-  return { passed, failed, lineupStatus, weatherRiskPct };
+  // Derive venue and roster signals from context record for richer missing_confirmations
+  const venueRoofType = ctxRecord?.venue_roof_type ?? null; // 'Open', 'Dome', 'Retractable'
+  const hasInjuries = safeArray(ctxRecord?.key_injuries).length > 0;
+  const bullpenUnknown = !ctxRecord || /no machine-readable/i.test(ctxRecord?.bullpen_usage_note ?? '');
+
+  return { passed, failed, lineupStatus, weatherRiskPct, venueRoofType, hasInjuries, bullpenUnknown };
 }
 
 function gateNamesFailed(gatesFailed) {
@@ -328,6 +338,9 @@ function classifyMarket({
   lineupStatus,
   weatherRiskPct,
   lane,
+  venueRoofType = null,
+  hasInjuries = false,
+  bullpenUnknown = false,
 }) {
   const failed = gateNamesFailed(gatesFailed);
   const missing = [];
@@ -414,8 +427,19 @@ function classifyMarket({
 
     if (lineupPending || weatherUnconfirmed || contextMissing) {
       classification = 'LEAN';
-      if (lineupPending) missing.push('lineup_confirmation');
-      if (weatherUnconfirmed) missing.push('weather_confirmation');
+      if (lineupPending) missing.push('lineup_pending');
+      if (weatherUnconfirmed) {
+        const roofNorm = (venueRoofType ?? '').toLowerCase();
+        if (roofNorm === 'dome' || roofNorm === 'retractable') {
+          missing.push('roof_state_unknown');
+        } else {
+          missing.push('weather_data_pending');
+        }
+      } else if (typeof weatherRiskPct === 'number' && weatherRiskPct >= 30) {
+        missing.push('weather_risk');
+      }
+      if (hasInjuries) missing.push('injury_activation_pending');
+      if (bullpenUnknown) missing.push('bullpen_unknown');
       notes.push('Edge >= 1.5pp but confirmations pending. Monitor before acting.');
       return { classification, target_entry, missing_confirmations: missing, notes };
     }
@@ -423,13 +447,17 @@ function classifyMarket({
     // All confirmations present but below CLEAR_PICK threshold (edge >= 1.5 but < 2.0, or lineup not CONFIRMED)
     if (lineupStatus !== 'confirmed') {
       classification = 'LEAN';
-      missing.push('lineup_confirmation');
+      missing.push('lineup_pending');
+      if (hasInjuries) missing.push('injury_activation_pending');
+      if (bullpenUnknown) missing.push('bullpen_unknown');
       notes.push('Edge >= 1.5pp but lineup not yet confirmed.');
       return { classification, target_entry, missing_confirmations: missing, notes };
     }
 
-    // Edge >= 1.5 with confirmed lineup but gatesFailed non-empty (other non-blocking gates)
+    // Edge >= 1.5 with confirmed lineup
     classification = 'LEAN';
+    if (hasInjuries) missing.push('injury_activation_pending');
+    if (bullpenUnknown) missing.push('bullpen_unknown');
     notes.push('Edge >= 1.5pp. Some non-critical gates pending.');
     return { classification, target_entry, missing_confirmations: missing, notes };
   }
@@ -446,8 +474,10 @@ function classifyMarket({
       classification = 'WATCH_FOR_PRICE';
       target_entry = kalshi_ask !== null ? Math.round(kalshi_ask * 0.98 * 1000) / 1000 : null;
       if (edge_pp < 1.5) missing.push('stronger_edge');
-      if (lineupNotConfirmed) missing.push('lineup_confirmation');
-      if (highWeatherRisk) missing.push('weather_improvement');
+      if (lineupNotConfirmed) missing.push('lineup_pending');
+      if (highWeatherRisk) missing.push('weather_risk');
+      if (hasInjuries) missing.push('injury_activation_pending');
+      if (bullpenUnknown) missing.push('bullpen_unknown');
       notes.push(
         `Edge ${edge_pp.toFixed(2)}pp positive but below threshold. ` +
         (target_entry !== null ? `Target entry: ${target_entry} (2% below current ask).` : ''),
@@ -533,7 +563,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
       const lane = market.market_lane ?? null;
       const kalshi_ask = market.yes_ask ?? null;
 
-      const { passed, failed, lineupStatus, weatherRiskPct } = evaluateGates({
+      const { passed, failed, lineupStatus, weatherRiskPct, venueRoofType, hasInjuries, bullpenUnknown } = evaluateGates({
         market,
         record,
         kalshi,
@@ -557,6 +587,9 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
         lineupStatus,
         weatherRiskPct,
         lane,
+        venueRoofType,
+        hasInjuries,
+        bullpenUnknown,
       });
 
       if (fixtureMode && classification !== 'WATCH_FOR_LISTING' && classification !== 'BLOCKED_SOURCE_GAP') {
@@ -570,6 +603,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
         market_lane: lane,
         game: gameLabel,
         classification,
+        contract_title: market.contract_title ?? null,
         total_strike: market.total_strike ?? null,
         dk_line: lane === 'game_total' ? (sbRecord?.over_under ?? null) : null,
         correlation_group: buildCorrelationGroup(record, market),

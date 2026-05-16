@@ -1,7 +1,7 @@
 # Execution Board - 2026-05-16
 
-- Generated UTC: 2026-05-16T16:23:38.790Z
-- Generated Chicago: 5/16/2026, 11:23:38 AM
+- Generated UTC: 2026-05-16T16:37:23.444Z
+- Generated Chicago: 5/16/2026, 11:37:23 AM
 - No trades placed.
 - Automated trade execution: not called.
 
@@ -26,35 +26,41 @@
 - CORRELATED_ALTERNATE: 5
 
 ## Clear Picks
-- KXMLBTOTAL-26MAY161310TORDET-8 (strike 7.5, ask 0.57, edge 4.44pp)
 
-## Leans (Top 10 by Edge)
+| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |
+|---|---|---|---:|---:|---:|---:|---:|---|---|---|
+| KXMLBTOTAL-26MAY161310TORDET-8 | Toronto Blue Jays at Detroit Tigers | Over 7.5 runs scored | 7.5 | 0.57 | 0.6144 | 4.44pp | $89 | 2026-05-16T17:10:00Z | none | Discovery only — no trade placed. |
+
+## Leans (Top 10 by Edge, one per group)
 
 | Market | Game | Strike | Ask | Fair | Edge | Missing |
 |---|---|---:|---:|---:|---:|---|
-| KXMLBTOTAL-26MAY161510AZCOL-7 | Arizona Diamondbacks at Colorado Rockies | 6.5 | 0.83 | 0.9214 | 9.139pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161915NYYNYM-6 | New York Yankees at New York Mets | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161910MILMIN-6 | Milwaukee Brewers at Minnesota Twins | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161605PHIPIT-6 | Philadelphia Phillies at Pittsburgh Pirates | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161510AZCOL-8 | Arizona Diamondbacks at Colorado Rockies | 7.5 | 0.77 | 0.8568 | 8.681pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY162138LADLAA-6 | Los Angeles Dodgers at Los Angeles Angels | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161910CHCCWS-6 | Chicago Cubs at Chicago White Sox | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161810CINCLE-6 | Cincinnati Reds at Cleveland Guardians | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161910TEXHOU-6 | Texas Rangers at Houston Astros | 5.5 | 0.73 | 0.8088 | 7.876pp | lineup_confirmation, weather_confirmation |
-| KXMLBTOTAL-26MAY161415KCSTL-6 | Kansas City Royals at St. Louis Cardinals | 5.5 | 0.81 | 0.8843 | 7.431pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161510AZCOL-7 | Arizona Diamondbacks at Colorado Rockies | 6.5 | 0.83 | 0.9214 | 9.139pp | lineup_pending, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161915NYYNYM-6 | New York Yankees at New York Mets | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_pending, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161910MILMIN-6 | Milwaukee Brewers at Minnesota Twins | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_pending, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161605PHIPIT-6 | Philadelphia Phillies at Pittsburgh Pirates | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_pending, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY162138LADLAA-6 | Los Angeles Dodgers at Los Angeles Angels | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_pending, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161910CHCCWS-6 | Chicago Cubs at Chicago White Sox | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_pending, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161810CINCLE-6 | Cincinnati Reds at Cleveland Guardians | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_pending, weather_risk, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161910TEXHOU-6 | Texas Rangers at Houston Astros | 5.5 | 0.73 | 0.8088 | 7.876pp | lineup_pending, roof_state_unknown, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161415KCSTL-6 | Kansas City Royals at St. Louis Cardinals | 5.5 | 0.81 | 0.8843 | 7.431pp | lineup_pending, weather_risk, injury_activation_pending, bullpen_unknown |
+| KXMLBTOTAL-26MAY161605BALWSH-7 | Baltimore Orioles at Washington Nationals | 6.5 | 0.8 | 0.8699 | 6.986pp | lineup_pending, injury_activation_pending, bullpen_unknown |
 
 _60 more leans — see today-execution-board.json for full list._
 
 ## Watch For Price
-- KXMLBTOTAL-26MAY161915SDSEA-2
-- KXMLBTOTAL-26MAY162138LADLAA-3
-- KXMLBTOTAL-26MAY161910MILMIN-3
-- KXMLBTOTAL-26MAY161605PHIPIT-3
-- KXMLBGAME-26MAY161510AZCOL-COL
-- KXMLBGAME-26MAY161915BOSATL-BOS
-- KXMLBTOTAL-26MAY161910TEXHOU-3
-- KXMLBGAME-26MAY161310TORDET-DET
-- KXMLBTOTAL-26MAY161915SDSEA-3
+
+| Market | Game | Lane | Side/Strike | Ask | Target | Edge | Reason | Recheck |
+|---|---|---|---|---:|---:|---:|---|---|
+| KXMLBTOTAL-26MAY161915SDSEA-2 | San Diego Padres at Seattle Mariners | game_total | over 1.5 | 0.98 | 0.96 | 1.27pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.96 or below |
+| KXMLBTOTAL-26MAY162138LADLAA-3 | Los Angeles Dodgers at Los Angeles Angels | game_total | over 2.5 | 0.98 | 0.96 | 1.072pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.96 or below |
+| KXMLBTOTAL-26MAY161910MILMIN-3 | Milwaukee Brewers at Minnesota Twins | game_total | over 2.5 | 0.98 | 0.96 | 1.072pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.96 or below |
+| KXMLBTOTAL-26MAY161605PHIPIT-3 | Philadelphia Phillies at Pittsburgh Pirates | game_total | over 2.5 | 0.98 | 0.96 | 1.072pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.96 or below |
+| KXMLBGAME-26MAY161510AZCOL-COL | Arizona Diamondbacks at Colorado Rockies | moneyline | Colorado | 0.43 | 0.421 | 0.69pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.421 or below |
+| KXMLBGAME-26MAY161915BOSATL-BOS | Boston Red Sox at Atlanta Braves | moneyline | Boston | 0.45 | 0.441 | 0.68pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.441 or below |
+| KXMLBTOTAL-26MAY161910TEXHOU-3 | Texas Rangers at Houston Astros | game_total | over 2.5 | 0.98 | 0.96 | 0.625pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.96 or below |
+| KXMLBGAME-26MAY161310TORDET-DET | Toronto Blue Jays at Detroit Tigers | moneyline | Detroit | 0.52 | 0.51 | 0.05pp | stronger_edge, injury_activation_pending, bullpen_unknown | Enter at 0.51 or below |
+| KXMLBTOTAL-26MAY161915SDSEA-3 | San Diego Padres at Seattle Mariners | game_total | over 2.5 | 0.97 | 0.951 | 0.036pp | stronger_edge, lineup_pending, injury_activation_pending, bullpen_unknown | Enter at 0.951 or below |
 
 ## Correlated Alternates
 - KXMLBTOTAL-26MAY161310TORDET-6 (strike 5.5, ask 0.76, edge 9.04pp)

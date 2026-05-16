@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "run_date": "2026-05-16",
-  "generated_at_utc": "2026-05-16T16:23:38.790Z",
+  "generated_at_utc": "2026-05-16T16:37:23.444Z",
   "operator": "sports-pre-game",
   "source_health": {
     "kalshi": "degraded",
@@ -31,6 +31,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -40,8 +41,9 @@
       "kalshi_ask": 0.83,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -64,6 +66,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -73,8 +76,9 @@
       "kalshi_ask": 0.76,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -97,6 +101,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -106,8 +111,9 @@
       "kalshi_ask": 0.76,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -130,6 +136,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -139,8 +146,9 @@
       "kalshi_ask": 0.76,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -163,6 +171,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "CORRELATED_ALTERNATE",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -194,6 +203,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -203,8 +213,9 @@
       "kalshi_ask": 0.77,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -227,6 +238,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -236,8 +248,9 @@
       "kalshi_ask": 0.77,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -260,6 +273,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -269,8 +283,9 @@
       "kalshi_ask": 0.77,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -293,6 +308,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -302,8 +318,10 @@
       "kalshi_ask": 0.77,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -326,6 +344,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -335,8 +354,10 @@
       "kalshi_ask": 0.73,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -359,6 +380,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -368,8 +390,10 @@
       "kalshi_ask": 0.81,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -392,6 +416,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -401,8 +426,9 @@
       "kalshi_ask": 0.89,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -425,6 +451,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "CORRELATED_ALTERNATE",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -456,6 +483,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -465,8 +493,9 @@
       "kalshi_ask": 0.8,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -489,6 +518,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -498,8 +528,10 @@
       "kalshi_ask": 0.89,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -522,6 +554,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -531,8 +564,9 @@
       "kalshi_ask": 0.86,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -555,6 +589,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "CORRELATED_ALTERNATE",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -586,6 +621,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -595,8 +631,9 @@
       "kalshi_ask": 0.68,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -619,6 +656,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -628,8 +666,10 @@
       "kalshi_ask": 0.84,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -652,6 +692,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -661,8 +702,9 @@
       "kalshi_ask": 0.72,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -685,6 +727,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -694,8 +737,9 @@
       "kalshi_ask": 0.87,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -718,6 +762,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -727,8 +772,9 @@
       "kalshi_ask": 0.87,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -751,6 +797,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -760,8 +807,10 @@
       "kalshi_ask": 0.87,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -784,6 +833,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -793,8 +843,9 @@
       "kalshi_ask": 0.87,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -817,6 +868,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -826,8 +878,10 @@
       "kalshi_ask": 0.89,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -850,6 +904,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -859,8 +914,9 @@
       "kalshi_ask": 0.69,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -883,6 +939,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -892,8 +949,9 @@
       "kalshi_ask": 0.69,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -916,6 +974,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -925,8 +984,9 @@
       "kalshi_ask": 0.69,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -949,6 +1009,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "CORRELATED_ALTERNATE",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -980,6 +1041,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -989,8 +1051,9 @@
       "kalshi_ask": 0.88,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1013,6 +1076,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -1022,8 +1086,9 @@
       "kalshi_ask": 0.86,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1046,6 +1111,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -1055,8 +1121,9 @@
       "kalshi_ask": 0.89,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1079,6 +1146,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -1088,8 +1156,10 @@
       "kalshi_ask": 0.89,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1112,6 +1182,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -1121,8 +1192,9 @@
       "kalshi_ask": 0.92,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1145,6 +1217,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -1154,8 +1227,9 @@
       "kalshi_ask": 0.92,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1178,6 +1252,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -1187,8 +1262,9 @@
       "kalshi_ask": 0.92,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1211,6 +1287,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -1220,8 +1297,10 @@
       "kalshi_ask": 0.92,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1244,6 +1323,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -1253,8 +1333,9 @@
       "kalshi_ask": 0.92,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1277,6 +1358,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -1286,8 +1368,10 @@
       "kalshi_ask": 0.87,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1310,6 +1394,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "LEAN",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -1319,8 +1404,9 @@
       "kalshi_ask": 0.72,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1343,6 +1429,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -1352,8 +1439,10 @@
       "kalshi_ask": 0.64,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1376,6 +1465,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -1385,8 +1475,9 @@
       "kalshi_ask": 0.88,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1409,6 +1500,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -1418,8 +1510,9 @@
       "kalshi_ask": 0.79,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1442,6 +1535,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "CLEAR_PICK",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -1472,6 +1566,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -1481,8 +1576,10 @@
       "kalshi_ask": 0.7,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1505,6 +1602,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -1514,8 +1612,9 @@
       "kalshi_ask": 0.93,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1538,6 +1637,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -1547,8 +1647,10 @@
       "kalshi_ask": 0.94,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1571,6 +1673,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -1580,8 +1683,9 @@
       "kalshi_ask": 0.72,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1604,6 +1708,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -1613,8 +1718,10 @@
       "kalshi_ask": 0.79,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1637,6 +1744,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -1646,8 +1754,9 @@
       "kalshi_ask": 0.58,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1670,6 +1779,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -1679,8 +1789,9 @@
       "kalshi_ask": 0.58,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1703,6 +1814,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -1712,8 +1824,10 @@
       "kalshi_ask": 0.58,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1736,6 +1850,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -1745,8 +1860,9 @@
       "kalshi_ask": 0.58,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1769,6 +1885,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -1778,8 +1895,9 @@
       "kalshi_ask": 0.71,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1802,6 +1920,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "LEAN",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -1811,8 +1930,10 @@
       "kalshi_ask": 0.76,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1835,6 +1956,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -1844,8 +1966,9 @@
       "kalshi_ask": 0.7,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1868,6 +1991,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -1877,8 +2001,9 @@
       "kalshi_ask": 0.94,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1901,6 +2026,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -1910,8 +2036,9 @@
       "kalshi_ask": 0.93,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1934,6 +2061,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "LEAN",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -1943,8 +2071,9 @@
       "kalshi_ask": 0.63,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -1967,6 +2096,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -1976,8 +2106,10 @@
       "kalshi_ask": 0.67,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2000,6 +2132,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "LEAN",
+      "contract_title": "Over 5.5 runs scored",
       "total_strike": 5.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -2009,8 +2142,10 @@
       "kalshi_ask": 0.73,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2033,6 +2168,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -2042,8 +2178,9 @@
       "kalshi_ask": 0.84,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2066,6 +2203,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "LEAN",
+      "contract_title": "Over 4.5 runs scored",
       "total_strike": 4.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -2075,8 +2213,10 @@
       "kalshi_ask": 0.84,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2099,6 +2239,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -2108,8 +2249,10 @@
       "kalshi_ask": 0.65,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2132,6 +2275,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -2141,8 +2285,9 @@
       "kalshi_ask": 0.59,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2165,6 +2310,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -2174,8 +2320,9 @@
       "kalshi_ask": 0.59,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2198,6 +2345,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "LEAN",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -2207,8 +2355,9 @@
       "kalshi_ask": 0.97,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2231,6 +2380,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "LEAN",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -2240,8 +2390,9 @@
       "kalshi_ask": 0.97,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2264,6 +2415,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "LEAN",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -2273,8 +2425,10 @@
       "kalshi_ask": 0.97,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "weather_risk",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2297,6 +2451,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "CORRELATED_ALTERNATE",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -2328,6 +2483,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "LEAN",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -2337,8 +2493,9 @@
       "kalshi_ask": 0.96,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2361,6 +2518,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -2370,8 +2528,9 @@
       "kalshi_ask": 0.97,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2394,6 +2553,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "LEAN",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -2403,8 +2563,9 @@
       "kalshi_ask": 0.65,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2427,6 +2588,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "LEAN",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -2436,8 +2598,10 @@
       "kalshi_ask": 0.53,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2460,6 +2624,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "LEAN",
+      "contract_title": "Over 1.5 runs scored",
       "total_strike": 1.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -2469,8 +2634,10 @@
       "kalshi_ask": 0.98,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "roof_state_unknown",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2493,6 +2660,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "LEAN",
+      "contract_title": "Over 3.5 runs scored",
       "total_strike": 3.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -2502,8 +2670,9 @@
       "kalshi_ask": 0.97,
       "target_entry": null,
       "missing_confirmations": [
-        "lineup_confirmation",
-        "weather_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2526,6 +2695,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Over 1.5 runs scored",
       "total_strike": 1.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -2536,7 +2706,9 @@
       "target_entry": 0.96,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2559,6 +2731,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -2569,7 +2742,9 @@
       "target_entry": 0.96,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2592,6 +2767,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -2602,7 +2778,9 @@
       "target_entry": 0.96,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2625,6 +2803,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -2635,7 +2814,9 @@
       "target_entry": 0.96,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2658,6 +2839,7 @@
       "market_lane": "moneyline",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Colorado",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161510AZCOL_ml",
@@ -2668,7 +2850,9 @@
       "target_entry": 0.421,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2691,6 +2875,7 @@
       "market_lane": "moneyline",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Boston",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161915BOSATL_ml",
@@ -2701,7 +2886,9 @@
       "target_entry": 0.441,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2724,6 +2911,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -2734,7 +2922,9 @@
       "target_entry": 0.96,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2757,6 +2947,7 @@
       "market_lane": "moneyline",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Detroit",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161310TORDET_ml",
@@ -2766,7 +2957,9 @@
       "kalshi_ask": 0.52,
       "target_entry": 0.51,
       "missing_confirmations": [
-        "stronger_edge"
+        "stronger_edge",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2789,6 +2982,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "WATCH_FOR_PRICE",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -2799,7 +2993,9 @@
       "target_entry": 0.951,
       "missing_confirmations": [
         "stronger_edge",
-        "lineup_confirmation"
+        "lineup_pending",
+        "injury_activation_pending",
+        "bullpen_unknown"
       ],
       "gates_passed": [
         "kalshi_tradable: Records present with valid yes_ask",
@@ -2822,6 +3018,7 @@
       "market_lane": "moneyline",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Chicago WS",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161910CHCCWS_ml",
@@ -2852,6 +3049,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 2.5 runs scored",
       "total_strike": 2.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -2882,6 +3080,7 @@
       "market_lane": "moneyline",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Kansas City",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161415KCSTL_ml",
@@ -2912,6 +3111,7 @@
       "market_lane": "moneyline",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Houston",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161910TEXHOU_ml",
@@ -2942,6 +3142,7 @@
       "market_lane": "moneyline",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Pittsburgh",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161605PHIPIT_ml",
@@ -2972,6 +3173,7 @@
       "market_lane": "moneyline",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Minnesota",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161910MILMIN_ml",
@@ -3002,6 +3204,7 @@
       "market_lane": "moneyline",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Cincinnati",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161810CINCLE_ml",
@@ -3032,6 +3235,7 @@
       "market_lane": "moneyline",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "San Diego",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161915SDSEA_ml",
@@ -3062,6 +3266,7 @@
       "market_lane": "moneyline",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Baltimore",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161605BALWSH_ml",
@@ -3092,6 +3297,7 @@
       "market_lane": "moneyline",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Miami",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161610MIATB_ml",
@@ -3122,6 +3328,7 @@
       "market_lane": "moneyline",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Washington",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161605BALWSH_ml",
@@ -3152,6 +3359,7 @@
       "market_lane": "moneyline",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Seattle",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161915SDSEA_ml",
@@ -3182,6 +3390,7 @@
       "market_lane": "moneyline",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Los Angeles D",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY162138LADLAA_ml",
@@ -3212,6 +3421,7 @@
       "market_lane": "moneyline",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Arizona",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161510AZCOL_ml",
@@ -3242,6 +3452,7 @@
       "market_lane": "moneyline",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "New York M",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161915NYYNYM_ml",
@@ -3272,6 +3483,7 @@
       "market_lane": "moneyline",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Milwaukee",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161910MILMIN_ml",
@@ -3302,6 +3514,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -3332,6 +3545,7 @@
       "market_lane": "moneyline",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Philadelphia",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161605PHIPIT_ml",
@@ -3362,6 +3576,7 @@
       "market_lane": "moneyline",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Texas",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161910TEXHOU_ml",
@@ -3392,6 +3607,7 @@
       "market_lane": "moneyline",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "A's",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY162140SFATH_ml",
@@ -3422,6 +3638,7 @@
       "market_lane": "moneyline",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "St. Louis",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161415KCSTL_ml",
@@ -3452,6 +3669,7 @@
       "market_lane": "moneyline",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Chicago C",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161910CHCCWS_ml",
@@ -3482,6 +3700,7 @@
       "market_lane": "moneyline",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "PASS",
+      "contract_title": "Toronto",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161310TORDET_ml",
@@ -3512,6 +3731,7 @@
       "market_lane": "moneyline",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "San Francisco",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY162140SFATH_ml",
@@ -3542,6 +3762,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -3572,6 +3793,7 @@
       "market_lane": "moneyline",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "New York Y",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161915NYYNYM_ml",
@@ -3602,6 +3824,7 @@
       "market_lane": "moneyline",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Los Angeles A",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY162138LADLAA_ml",
@@ -3632,6 +3855,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -3662,6 +3886,7 @@
       "market_lane": "moneyline",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Tampa Bay",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161610MIATB_ml",
@@ -3692,6 +3917,7 @@
       "market_lane": "moneyline",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Atlanta",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161915BOSATL_ml",
@@ -3722,6 +3948,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -3752,6 +3979,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -3782,6 +4010,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -3812,6 +4041,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -3842,6 +4072,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -3872,6 +4103,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -3902,6 +4134,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -3932,6 +4165,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -3962,6 +4196,7 @@
       "market_lane": "moneyline",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Cleveland",
       "total_strike": null,
       "dk_line": null,
       "correlation_group": "KXMLBGAME-26MAY161810CINCLE_ml",
@@ -3992,6 +4227,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Over 6.5 runs scored",
       "total_strike": 6.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -4022,6 +4258,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -4052,6 +4289,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -4082,6 +4320,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -4112,6 +4351,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -4142,6 +4382,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -4172,6 +4413,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -4202,6 +4444,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -4232,6 +4475,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -4262,6 +4506,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -4292,6 +4537,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -4322,6 +4568,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -4352,6 +4599,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -4382,6 +4630,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -4412,6 +4661,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -4442,6 +4692,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -4472,6 +4723,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -4502,6 +4754,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Over 7.5 runs scored",
       "total_strike": 7.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -4532,6 +4785,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -4562,6 +4816,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -4592,6 +4847,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -4622,6 +4878,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -4652,6 +4909,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -4682,6 +4940,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -4712,6 +4971,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -4742,6 +5002,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -4772,6 +5033,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -4802,6 +5064,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -4832,6 +5095,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -4862,6 +5126,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -4892,6 +5157,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -4922,6 +5188,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -4952,6 +5219,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -4982,6 +5250,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -5012,6 +5281,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -5042,6 +5312,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Over 13.5 runs scored",
       "total_strike": 13.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -5072,6 +5343,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -5102,6 +5374,7 @@
       "market_lane": "game_total",
       "game": "Texas Rangers at Houston Astros",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8,
       "correlation_group": "KXMLBTOTAL-26MAY161910TEXHOU_total_over",
@@ -5132,6 +5405,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -5162,6 +5436,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -5192,6 +5467,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -5222,6 +5498,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -5252,6 +5529,7 @@
       "market_lane": "game_total",
       "game": "Cincinnati Reds at Cleveland Guardians",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161810CINCLE_total_over",
@@ -5282,6 +5560,7 @@
       "market_lane": "game_total",
       "game": "Philadelphia Phillies at Pittsburgh Pirates",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161605PHIPIT_total_over",
@@ -5312,6 +5591,7 @@
       "market_lane": "game_total",
       "game": "Toronto Blue Jays at Detroit Tigers",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161310TORDET_total_over",
@@ -5342,6 +5622,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Over 13.5 runs scored",
       "total_strike": 13.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -5372,6 +5653,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -5402,6 +5684,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -5432,6 +5715,7 @@
       "market_lane": "game_total",
       "game": "Kansas City Royals at St. Louis Cardinals",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 9,
       "correlation_group": "KXMLBTOTAL-26MAY161415KCSTL_total_over",
@@ -5462,6 +5746,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -5492,6 +5777,7 @@
       "market_lane": "game_total",
       "game": "Los Angeles Dodgers at Los Angeles Angels",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY162138LADLAA_total_over",
@@ -5522,6 +5808,7 @@
       "market_lane": "game_total",
       "game": "New York Yankees at New York Mets",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915NYYNYM_total_over",
@@ -5552,6 +5839,7 @@
       "market_lane": "game_total",
       "game": "Milwaukee Brewers at Minnesota Twins",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910MILMIN_total_over",
@@ -5582,6 +5870,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -5612,6 +5901,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -5642,6 +5932,7 @@
       "market_lane": "game_total",
       "game": "Baltimore Orioles at Washington Nationals",
       "classification": "PASS",
+      "contract_title": "Over 13.5 runs scored",
       "total_strike": 13.5,
       "dk_line": 10,
       "correlation_group": "KXMLBTOTAL-26MAY161605BALWSH_total_over",
@@ -5672,6 +5963,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -5702,6 +5994,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 9.5 runs scored",
       "total_strike": 9.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -5732,6 +6025,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -5762,6 +6056,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -5792,6 +6087,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Over 15.5 runs scored",
       "total_strike": 15.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -5822,6 +6118,7 @@
       "market_lane": "game_total",
       "game": "Chicago Cubs at Chicago White Sox",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 8.5,
       "correlation_group": "KXMLBTOTAL-26MAY161910CHCCWS_total_over",
@@ -5852,6 +6149,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Over 8.5 runs scored",
       "total_strike": 8.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -5882,6 +6180,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -5912,6 +6211,7 @@
       "market_lane": "game_total",
       "game": "Arizona Diamondbacks at Colorado Rockies",
       "classification": "PASS",
+      "contract_title": "Over 14.5 runs scored",
       "total_strike": 14.5,
       "dk_line": 11,
       "correlation_group": "KXMLBTOTAL-26MAY161510AZCOL_total_over",
@@ -5942,6 +6242,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "Over 13.5 runs scored",
       "total_strike": 13.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -5972,6 +6273,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 11.5 runs scored",
       "total_strike": 11.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
@@ -6002,6 +6304,7 @@
       "market_lane": "game_total",
       "game": "San Diego Padres at Seattle Mariners",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 7,
       "correlation_group": "KXMLBTOTAL-26MAY161915SDSEA_total_over",
@@ -6032,6 +6335,7 @@
       "market_lane": "game_total",
       "game": "Miami Marlins at Tampa Bay Rays",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161610MIATB_total_over",
@@ -6062,6 +6366,7 @@
       "market_lane": "game_total",
       "game": "San Francisco Giants at Athletics",
       "classification": "PASS",
+      "contract_title": "Over 12.5 runs scored",
       "total_strike": 12.5,
       "dk_line": 9.5,
       "correlation_group": "KXMLBTOTAL-26MAY162140SFATH_total_over",
@@ -6092,6 +6397,7 @@
       "market_lane": "game_total",
       "game": "Boston Red Sox at Atlanta Braves",
       "classification": "PASS",
+      "contract_title": "Over 10.5 runs scored",
       "total_strike": 10.5,
       "dk_line": 7.5,
       "correlation_group": "KXMLBTOTAL-26MAY161915BOSATL_total_over",
