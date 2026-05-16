@@ -1,12 +1,12 @@
 {
   "schema_version": "1.0",
   "run_date": "2026-05-16",
-  "generated_at_utc": "2026-05-16T16:18:30.002Z",
-  "generated_america_chicago": "5/16/2026, 11:18:30 AM",
+  "generated_at_utc": "2026-05-16T16:23:38.790Z",
+  "generated_america_chicago": "5/16/2026, 11:23:38 AM",
   "no_trades_placed": true,
   "automated_trade_execution_called": false,
   "source_health": {
-    "mlb_official": "blocked",
+    "mlb_official": "ok",
     "kalshi_api": "ok",
     "sportsbook_reference": "ok",
     "lineup_injury_bullpen": "ok",

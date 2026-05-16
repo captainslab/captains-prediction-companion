@@ -1,6 +1,6 @@
 # Daily Baseball Guide - 2026-05-16
 
-- Generated UTC: 2026-05-16T16:18:30.002Z
+- Generated UTC: 2026-05-16T16:23:38.790Z
 - Discovery only.
 - No final picks.
 - No trades placed.
@@ -82,80 +82,21 @@
 | Market | Reason | Spread | Depth | Last update | Recheck |
 |---|---|---:|---:|---|---|
 
-## Leans
+## Leans (Top 10 by Edge)
 
-| Market | Why interesting | Missing evidence | Needed trigger |
-|---|---|---|---|
-| KXMLBTOTAL-26MAY161510AZCOL-7 |  |  |  |
-| KXMLBTOTAL-26MAY161915NYYNYM-6 |  |  |  |
-| KXMLBTOTAL-26MAY161910MILMIN-6 |  |  |  |
-| KXMLBTOTAL-26MAY161605PHIPIT-6 |  |  |  |
-| KXMLBTOTAL-26MAY161510AZCOL-8 |  |  |  |
-| KXMLBTOTAL-26MAY162138LADLAA-6 |  |  |  |
-| KXMLBTOTAL-26MAY161910CHCCWS-6 |  |  |  |
-| KXMLBTOTAL-26MAY161810CINCLE-6 |  |  |  |
-| KXMLBTOTAL-26MAY161910TEXHOU-6 |  |  |  |
-| KXMLBTOTAL-26MAY161415KCSTL-6 |  |  |  |
-| KXMLBTOTAL-26MAY161510AZCOL-6 |  |  |  |
-| KXMLBTOTAL-26MAY161605BALWSH-7 |  |  |  |
-| KXMLBTOTAL-26MAY161910TEXHOU-4 |  |  |  |
-| KXMLBTOTAL-26MAY161910MILMIN-5 |  |  |  |
-| KXMLBTOTAL-26MAY161605PHIPIT-7 |  |  |  |
-| KXMLBTOTAL-26MAY161910TEXHOU-5 |  |  |  |
-| KXMLBTOTAL-26MAY161605BALWSH-8 |  |  |  |
-| KXMLBTOTAL-26MAY162138LADLAA-5 |  |  |  |
-| KXMLBTOTAL-26MAY161915NYYNYM-5 |  |  |  |
-| KXMLBTOTAL-26MAY161810CINCLE-5 |  |  |  |
-| KXMLBTOTAL-26MAY161605PHIPIT-5 |  |  |  |
-| KXMLBTOTAL-26MAY161415KCSTL-5 |  |  |  |
-| KXMLBTOTAL-26MAY162138LADLAA-7 |  |  |  |
-| KXMLBTOTAL-26MAY161915NYYNYM-7 |  |  |  |
-| KXMLBTOTAL-26MAY161910MILMIN-7 |  |  |  |
-| KXMLBTOTAL-26MAY161605BALWSH-6 |  |  |  |
-| KXMLBTOTAL-26MAY162140SFATH-6 |  |  |  |
-| KXMLBTOTAL-26MAY161915BOSATL-4 |  |  |  |
-| KXMLBTOTAL-26MAY161610MIATB-4 |  |  |  |
-| KXMLBTOTAL-26MAY162138LADLAA-4 |  |  |  |
-| KXMLBTOTAL-26MAY161915NYYNYM-4 |  |  |  |
-| KXMLBTOTAL-26MAY161910MILMIN-4 |  |  |  |
-| KXMLBTOTAL-26MAY161810CINCLE-4 |  |  |  |
-| KXMLBTOTAL-26MAY161605PHIPIT-4 |  |  |  |
-| KXMLBTOTAL-26MAY161915SDSEA-4 |  |  |  |
-| KXMLBTOTAL-26MAY161510AZCOL-9 |  |  |  |
-| KXMLBTOTAL-26MAY161910TEXHOU-7 |  |  |  |
-| KXMLBTOTAL-26MAY161910CHCCWS-5 |  |  |  |
-| KXMLBTOTAL-26MAY162140SFATH-7 |  |  |  |
-| KXMLBTOTAL-26MAY161810CINCLE-7 |  |  |  |
-| KXMLBTOTAL-26MAY161910CHCCWS-4 |  |  |  |
-| KXMLBTOTAL-26MAY161415KCSTL-4 |  |  |  |
-| KXMLBTOTAL-26MAY161915BOSATL-6 |  |  |  |
-| KXMLBTOTAL-26MAY161915SDSEA-5 |  |  |  |
-| KXMLBTOTAL-26MAY161915NYYNYM-8 |  |  |  |
-| KXMLBTOTAL-26MAY161910MILMIN-8 |  |  |  |
-| KXMLBTOTAL-26MAY161810CINCLE-8 |  |  |  |
-| KXMLBTOTAL-26MAY161605PHIPIT-8 |  |  |  |
-| KXMLBTOTAL-26MAY161910CHCCWS-7 |  |  |  |
-| KXMLBTOTAL-26MAY161415KCSTL-7 |  |  |  |
-| KXMLBTOTAL-26MAY162140SFATH-8 |  |  |  |
-| KXMLBTOTAL-26MAY161605BALWSH-5 |  |  |  |
-| KXMLBTOTAL-26MAY162140SFATH-5 |  |  |  |
-| KXMLBTOTAL-26MAY161510AZCOL-10 |  |  |  |
-| KXMLBTOTAL-26MAY161915SDSEA-6 |  |  |  |
-| KXMLBTOTAL-26MAY161610MIATB-6 |  |  |  |
-| KXMLBTOTAL-26MAY161915BOSATL-5 |  |  |  |
-| KXMLBTOTAL-26MAY161610MIATB-5 |  |  |  |
-| KXMLBTOTAL-26MAY161415KCSTL-8 |  |  |  |
-| KXMLBTOTAL-26MAY162138LADLAA-8 |  |  |  |
-| KXMLBTOTAL-26MAY161910CHCCWS-8 |  |  |  |
-| KXMLBTOTAL-26MAY161915NYYNYM-3 |  |  |  |
-| KXMLBTOTAL-26MAY161910CHCCWS-3 |  |  |  |
-| KXMLBTOTAL-26MAY161810CINCLE-3 |  |  |  |
-| KXMLBTOTAL-26MAY161915BOSATL-3 |  |  |  |
-| KXMLBTOTAL-26MAY161605BALWSH-4 |  |  |  |
-| KXMLBTOTAL-26MAY161605BALWSH-9 |  |  |  |
-| KXMLBTOTAL-26MAY161910TEXHOU-8 |  |  |  |
-| KXMLBTOTAL-26MAY161610MIATB-2 |  |  |  |
-| KXMLBTOTAL-26MAY162140SFATH-4 |  |  |  |
+| Market | Game | Strike | Ask | Fair | Edge | Missing |
+|---|---|---:|---:|---:|---:|---|
+| KXMLBTOTAL-26MAY161510AZCOL-7 | Arizona Diamondbacks at Colorado Rockies | 6.5 | 0.83 | 0.9214 | 9.139pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161915NYYNYM-6 | New York Yankees at New York Mets | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161910MILMIN-6 | Milwaukee Brewers at Minnesota Twins | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161605PHIPIT-6 | Philadelphia Phillies at Pittsburgh Pirates | 5.5 | 0.76 | 0.8504 | 9.04pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161510AZCOL-8 | Arizona Diamondbacks at Colorado Rockies | 7.5 | 0.77 | 0.8568 | 8.681pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY162138LADLAA-6 | Los Angeles Dodgers at Los Angeles Angels | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161910CHCCWS-6 | Chicago Cubs at Chicago White Sox | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161810CINCLE-6 | Cincinnati Reds at Cleveland Guardians | 5.5 | 0.77 | 0.8504 | 8.04pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161910TEXHOU-6 | Texas Rangers at Houston Astros | 5.5 | 0.73 | 0.8088 | 7.876pp | lineup_confirmation, weather_confirmation |
+| KXMLBTOTAL-26MAY161415KCSTL-6 | Kansas City Royals at St. Louis Cardinals | 5.5 | 0.81 | 0.8843 | 7.431pp | lineup_confirmation, weather_confirmation |
+| _+60 more_ | see today-execution-board.json |  |  |  |  |  |
 
 ## Watch For Price
 

@@ -2,7 +2,7 @@
 
 ## Run Metadata
 - Operator: sports-pre-game
-- Started UTC: 2026-05-16T16:18:30.002Z
+- Started UTC: 2026-05-16T16:23:38.790Z
 - Run date: 2026-05-16
 - Run folder: state/mlb/2026-05-16/
 - Schema version: 1.0
@@ -75,13 +75,13 @@
 ## Output Writes
 | File | Wrote UTC | Status |
 |---|---|---|
-| state/mlb/2026-05-16/slate_manifest.json | 2026-05-16T16:18:30.002Z | ok |
-| state/mlb/2026-05-16/source_registry.json | 2026-05-16T16:18:30.002Z | ok |
-| state/mlb/2026-05-16/picks.json | 2026-05-16T16:18:30.002Z | ok |
-| state/mlb/2026-05-16/daily-baseball-guide.md | 2026-05-16T16:18:30.002Z | ok |
-| state/mlb/2026-05-16/run_log.md | 2026-05-16T16:18:30.002Z | ok |
-| state/mlb/2026-05-16/today-execution-board.json | 2026-05-16T16:18:30.002Z | ok |
-| state/mlb/2026-05-16/today-execution-board.md | 2026-05-16T16:18:30.002Z | ok |
+| state/mlb/2026-05-16/slate_manifest.json | 2026-05-16T16:23:38.790Z | ok |
+| state/mlb/2026-05-16/source_registry.json | 2026-05-16T16:23:38.790Z | ok |
+| state/mlb/2026-05-16/picks.json | 2026-05-16T16:23:38.790Z | ok |
+| state/mlb/2026-05-16/daily-baseball-guide.md | 2026-05-16T16:23:38.790Z | ok |
+| state/mlb/2026-05-16/run_log.md | 2026-05-16T16:23:38.790Z | ok |
+| state/mlb/2026-05-16/today-execution-board.json | 2026-05-16T16:23:38.790Z | ok |
+| state/mlb/2026-05-16/today-execution-board.md | 2026-05-16T16:23:38.790Z | ok |
 
 ## No-Trade Confirmation
 - No live picks placed.

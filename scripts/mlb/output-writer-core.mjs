@@ -542,8 +542,15 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
       ];
 
   const leanRows = leanCandidates.length > 0
-    ? leanCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.lean_reason ?? '')} | ${tableEscape(safeArray(c.missing_evidence).join(', ') || '')} | ${tableEscape(c.needed_trigger ?? '')} |`)
-    : ['| none |  |  |  |'];
+    ? [
+        ...leanCandidates.slice(0, 10).map(c =>
+          `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
+        ),
+        ...(leanCandidates.length > 10
+          ? [`| _+${leanCandidates.length - 10} more_ | see today-execution-board.json |  |  |  |  |  |`]
+          : []),
+      ]
+    : ['| none |  |  |  |  |  |  |'];
 
   const watchForPriceRows = watchForPriceCandidates.length > 0
     ? watchForPriceCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.watch_reason ?? '')} | ${tableEscape(c.target_price ?? '')} | ${tableEscape(c.recheck_time ?? '')} |`)
@@ -589,10 +596,10 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '| Market | Reason | Spread | Depth | Last update | Recheck |',
     '|---|---|---:|---:|---|---|',
     '',
-    '## Leans',
+    '## Leans (Top 10 by Edge)',
     '',
-    '| Market | Why interesting | Missing evidence | Needed trigger |',
-    '|---|---|---|---|',
+    '| Market | Game | Strike | Ask | Fair | Edge | Missing |',
+    '|---|---|---:|---:|---:|---:|---|',
     ...leanRows,
     '',
     '## Watch For Price',
@@ -695,7 +702,7 @@ function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, wea
   ].join('\n');
 }
 
-function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather }) {
+function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb }) {
   const now = new Date(generatedAtUtc);
   const chicagoTime = now.toLocaleString('en-US', { timeZone: 'America/Chicago' });
   const byClass = (cls) => safeArray(scoring.candidates).filter(c => c.classification === cls);
@@ -707,7 +714,7 @@ function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, 
     no_trades_placed: true,
     automated_trade_execution_called: false,
     source_health: {
-      mlb_official: sourceStatus(slateManifest.source_timestamps ? 'ok' : 'unknown'),
+      mlb_official: sourceStatus(mlb),
       kalshi_api: 'ok',
       sportsbook_reference: sourceStatus(sportsbook),
       lineup_injury_bullpen: sourceStatus(context),
@@ -733,8 +740,8 @@ function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, 
   };
 }
 
-function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather }) {
-  const board = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather });
+function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb }) {
+  const board = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb });
   const counts = board.summary_counts;
   const lines = [
     `# Execution Board - ${runDate}`,
@@ -771,8 +778,20 @@ function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest
           `- ${c.market_ticker ?? c.market_title ?? 'unknown'} (strike ${c.total_strike ?? 'n/a'}, ask ${c.kalshi_ask ?? 'n/a'}, edge ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'})`,
         ).join('\n'),
     '',
-    '## Leans',
-    board.leans.length === 0 ? '- none' : board.leans.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    '## Leans (Top 10 by Edge)',
+    '',
+    board.leans.length === 0
+      ? '- none'
+      : [
+          '| Market | Game | Strike | Ask | Fair | Edge | Missing |',
+          '|---|---|---:|---:|---:|---:|---|',
+          ...board.leans.slice(0, 10).map(c =>
+            `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
+          ),
+          ...(board.leans.length > 10
+            ? [`\n_${board.leans.length - 10} more leans — see today-execution-board.json for full list._`]
+            : []),
+        ].join('\n'),
     '',
     '## Watch For Price',
     board.watch_for_price.length === 0 ? '- none' : board.watch_for_price.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
@@ -864,8 +883,8 @@ export function composeMlbDailyOutputs({
   const picks = buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring });
   const dailyGuide = buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring, slateManifest });
   const runLog = buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, outDir, outputPaths });
-  const executionBoard = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather });
-  const executionBoardMd = buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather });
+  const executionBoard = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb });
+  const executionBoardMd = buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb });
 
   const written = {
     slate_manifest: writeJsonAtomic(outputPaths.slate_manifest, slateManifest),
