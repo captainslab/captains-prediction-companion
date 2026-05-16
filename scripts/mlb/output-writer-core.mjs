@@ -519,6 +519,20 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
   const blockedCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'BLOCKED_SOURCE_GAP');
   const leanCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'LEAN');
   const watchForPriceCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'WATCH_FOR_PRICE');
+  const clearPickCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CLEAR_PICK');
+  const correlatedAlternateCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CORRELATED_ALTERNATE');
+
+  const clearPickRows = clearPickCandidates.length > 0
+    ? clearPickCandidates.map(c =>
+        `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} |`,
+      )
+    : ['| none |  |  |  |  |  |'];
+
+  const correlatedAlternateRows = correlatedAlternateCandidates.length > 0
+    ? correlatedAlternateCandidates.map(c =>
+        `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.correlation_group ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} |`,
+      )
+    : ['| none |  |  |  |  |'];
 
   const blockedRows = blockedCandidates.length > 0
     ? blockedCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(safeArray(c.missing_sources).join(', ') || 'source gap')} | Re-run discovery or wait for source availability |`)
@@ -556,12 +570,14 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     `- PASS: ${scoring.counts.pass}`,
     `- BLOCKED: ${scoring.counts.blocked}`,
     `- NOT_TRADEABLE: ${scoring.counts.not_tradeable}`,
+    `- CORRELATED_ALTERNATE: ${scoring.counts.correlated_alternate ?? 0}`,
     `- Fixture mode: ${scoring.fixture_mode}`,
     '',
     '## Clear Picks',
     '',
-    '| Market | Side | Fair | Kalshi price | Edge | Confidence | Max entry | Cap | Why |',
-    '|---|---|---:|---:|---:|---:|---:|---:|---|',
+    '| Market | Game | Strike | Fair | Ask | Edge |',
+    '|---|---|---:|---:|---:|---:|',
+    ...clearPickRows,
     '',
     '## Watch For Listing',
     '',
@@ -584,6 +600,12 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '| Market | Why watching | Target price | Recheck time |',
     '|---|---|---|---|',
     ...watchForPriceRows,
+    '',
+    '## Correlated Alternates',
+    '',
+    '| Market | Group | Strike | Ask | Edge |',
+    '|---|---|---:|---:|---:|',
+    ...correlatedAlternateRows,
     '',
     '## Passes',
     '',
@@ -701,6 +723,7 @@ function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, 
     watch_for_listing: byClass('WATCH_FOR_LISTING'),
     passes: byClass('PASS'),
     blocked: byClass('BLOCKED_SOURCE_GAP'),
+    correlated_alternates: byClass('CORRELATED_ALTERNATE'),
     safety: [
       'No trades placed.',
       'No CLEAR_PICK emitted without all evidence gates passing.',
@@ -739,15 +762,27 @@ function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest
     `- PASS: ${counts.pass ?? 0}`,
     `- BLOCKED: ${counts.blocked ?? 0}`,
     `- NOT_TRADEABLE: ${counts.not_tradeable ?? 0}`,
+    `- CORRELATED_ALTERNATE: ${counts.correlated_alternate ?? 0}`,
     '',
     '## Clear Picks',
-    board.clear_picks.length === 0 ? '- none' : board.clear_picks.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    board.clear_picks.length === 0
+      ? '- none'
+      : board.clear_picks.map(c =>
+          `- ${c.market_ticker ?? c.market_title ?? 'unknown'} (strike ${c.total_strike ?? 'n/a'}, ask ${c.kalshi_ask ?? 'n/a'}, edge ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'})`,
+        ).join('\n'),
     '',
     '## Leans',
     board.leans.length === 0 ? '- none' : board.leans.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
     '',
     '## Watch For Price',
     board.watch_for_price.length === 0 ? '- none' : board.watch_for_price.map(c => `- ${c.market_ticker ?? c.market_title ?? 'unknown'}`).join('\n'),
+    '',
+    '## Correlated Alternates',
+    board.correlated_alternates.length === 0
+      ? '- none'
+      : board.correlated_alternates.map(c =>
+          `- ${c.market_ticker ?? c.market_title ?? 'unknown'} (strike ${c.total_strike ?? 'n/a'}, ask ${c.kalshi_ask ?? 'n/a'}, edge ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'})`,
+        ).join('\n'),
     '',
     '## Safety',
     ...board.safety.map(s => `- ${s}`),

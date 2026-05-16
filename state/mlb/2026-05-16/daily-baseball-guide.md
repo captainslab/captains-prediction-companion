@@ -1,6 +1,6 @@
 # Daily Baseball Guide - 2026-05-16
 
-- Generated UTC: 2026-05-16T16:06:43.200Z
+- Generated UTC: 2026-05-16T16:18:30.002Z
 - Discovery only.
 - No final picks.
 - No trades placed.
@@ -57,18 +57,20 @@
 ## Scoring Summary
 
 - Total candidates scored: 195
-- CLEAR_PICK: 6
+- CLEAR_PICK: 1
 - LEAN: 70
 - WATCH_FOR_LISTING: 0
 - PASS: 110
 - BLOCKED: undefined
 - NOT_TRADEABLE: undefined
+- CORRELATED_ALTERNATE: 5
 - Fixture mode: false
 
 ## Clear Picks
 
-| Market | Side | Fair | Kalshi price | Edge | Confidence | Max entry | Cap | Why |
-|---|---|---:|---:|---:|---:|---:|---:|---|
+| Market | Game | Strike | Fair | Ask | Edge |
+|---|---|---:|---:|---:|---:|
+| KXMLBTOTAL-26MAY161310TORDET-8 | Toronto Blue Jays at Detroit Tigers | 7.5 | 0.6144 | 0.57 | 4.44pp |
 
 ## Watch For Listing
 
@@ -168,6 +170,16 @@
 | KXMLBTOTAL-26MAY161910TEXHOU-3 |  |  |  |
 | KXMLBGAME-26MAY161310TORDET-DET |  |  |  |
 | KXMLBTOTAL-26MAY161915SDSEA-3 |  |  |  |
+
+## Correlated Alternates
+
+| Market | Group | Strike | Ask | Edge |
+|---|---|---:|---:|---:|
+| KXMLBTOTAL-26MAY161310TORDET-6 | KXMLBTOTAL-26MAY161310TORDET_total_over | 5.5 | 0.76 | 9.04pp |
+| KXMLBTOTAL-26MAY161310TORDET-4 | KXMLBTOTAL-26MAY161310TORDET_total_over | 3.5 | 0.9 | 6.989pp |
+| KXMLBTOTAL-26MAY161310TORDET-5 | KXMLBTOTAL-26MAY161310TORDET_total_over | 4.5 | 0.86 | 6.564pp |
+| KXMLBTOTAL-26MAY161310TORDET-7 | KXMLBTOTAL-26MAY161310TORDET_total_over | 6.5 | 0.69 | 5.382pp |
+| KXMLBTOTAL-26MAY161310TORDET-3 | KXMLBTOTAL-26MAY161310TORDET_total_over | 2.5 | 0.97 | 2.072pp |
 
 ## Passes
 

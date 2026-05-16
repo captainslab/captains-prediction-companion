@@ -493,6 +493,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
     watch_for_listing: 0,
     pass: 0,
     blocked_source_gap: 0,
+    correlated_alternate: 0,
   };
 
   const notes = [];
@@ -569,6 +570,10 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
         market_lane: lane,
         game: gameLabel,
         classification,
+        total_strike: market.total_strike ?? null,
+        dk_line: lane === 'game_total' ? (sbRecord?.over_under ?? null) : null,
+        correlation_group: buildCorrelationGroup(record, market),
+        primary_pick: false,
         edge_pp: edge_pp !== null ? Math.round(edge_pp * 1000) / 1000 : null,
         fair_value: fair_value !== null ? Math.round(fair_value * 10000) / 10000 : null,
         kalshi_ask,
@@ -584,6 +589,9 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
       incrementCount(counts, classification);
     }
   }
+
+  // Promote one primary CLEAR_PICK per correlation group; demote the rest to CORRELATED_ALTERNATE
+  selectPrimaryPicks(candidates, counts);
 
   // Sort by edge_pp descending, nulls last
   candidates.sort((a, b) => {
@@ -619,4 +627,84 @@ function buildGameLabel(record) {
   if (away && home) return `${away} at ${home}`;
   if (away) return away;
   return record.event_ticker ?? null;
+}
+
+/**
+ * Build a correlation group key.
+ * All game_total overs from the same event share a group; same for unders and moneylines.
+ */
+function buildCorrelationGroup(record, market) {
+  const lane = market.market_lane ?? 'unknown';
+  const eventTicker = record.event_ticker ?? `game_${record.matched_game_pk ?? 'unknown'}`;
+  if (lane === 'game_total') {
+    const title = (market.contract_title ?? '').toLowerCase();
+    const dir = title.includes('under') ? 'under' : 'over';
+    return `${eventTicker}_total_${dir}`;
+  }
+  if (lane === 'moneyline') {
+    return `${eventTicker}_ml`;
+  }
+  return `${eventTicker}_${lane}`;
+}
+
+/**
+ * Selects one primary CLEAR_PICK per correlation group; demotes the rest to CORRELATED_ALTERNATE.
+ *
+ * Primary selection score = edge_pp × (1 − ask) / (1 + |strike − dk_line| × 0.5)
+ * Candidates with ask > 0.85 are excluded from primary contention (low upside) unless they
+ * are the only eligible pick in the group.
+ *
+ * Mutates `candidates` and `counts` in place.
+ */
+function selectPrimaryPicks(candidates, counts) {
+  const groups = new Map();
+  for (const c of candidates) {
+    if (c.classification !== 'CLEAR_PICK') continue;
+    const g = c.correlation_group ?? 'ungrouped';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(c);
+  }
+
+  for (const [, members] of groups) {
+    if (members.length === 1) {
+      members[0].primary_pick = true;
+      continue;
+    }
+
+    // Exclude low-upside candidates (ask > 0.85) unless all are above threshold
+    const eligible = members.filter(c => (c.kalshi_ask ?? 1) <= 0.85);
+    const pool = eligible.length > 0 ? eligible : members;
+
+    let best = null;
+    let bestScore = -Infinity;
+    for (const c of pool) {
+      const edgePp = c.edge_pp ?? 0;
+      const ask = c.kalshi_ask ?? 0.5;
+      const strike = c.total_strike ?? 0;
+      const dkLine = c.dk_line ?? strike;
+      const upside = 1 - ask;
+      // Penalise strikes far from the sportsbook total line
+      const proximityFactor = 1 / (1 + Math.abs(strike - dkLine) * 0.5);
+      const score = edgePp * upside * proximityFactor;
+      if (score > bestScore || (score === bestScore && ask < (best?.kalshi_ask ?? 1))) {
+        bestScore = score;
+        best = c;
+      }
+    }
+
+    for (const c of members) {
+      if (c === best) {
+        c.primary_pick = true;
+      } else {
+        c.classification = 'CORRELATED_ALTERNATE';
+        c.primary_pick = false;
+        c.notes = [
+          ...(c.notes ?? []),
+          `Correlated alternate: primary pick for group ${c.correlation_group} selected elsewhere. Listed for reference only.`,
+        ];
+        counts.clear_pick = Math.max(0, counts.clear_pick - 1);
+        counts.correlated_alternate = (counts.correlated_alternate ?? 0) + 1;
+      }
+    }
+  }
 }

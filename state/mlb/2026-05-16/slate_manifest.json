@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "run_date": "2026-05-16",
-  "generated_at_utc": "2026-05-16T16:06:43.200Z",
+  "generated_at_utc": "2026-05-16T16:18:30.002Z",
   "operator": "sports-pre-game",
   "kalshi_calendar_url": "https://kalshi.com/calendar/sports/baseball",
   "source_timestamps": {
