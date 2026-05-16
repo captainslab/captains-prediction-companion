@@ -1,6 +1,6 @@
 # MLB Source Adapter Discovery - 2026-05-16
 
-- Checked UTC: 2026-05-16T17:13:15.141Z
+- Checked UTC: 2026-05-16T23:15:43.118Z
 - Mode: live-readonly
 - Kalshi source status: degraded
 - MLB source status: ok
@@ -9,8 +9,8 @@
 - Liquidity source status: ok
 - Sportsbook reference status: ok
 - Lineup/injury/bullpen status: ok
-- Kalshi records found: 30
-- Kalshi rejected records: 98
+- Kalshi records found: 20
+- Kalshi rejected records: 115
 - MLB games found: 15
 - Baseball Savant records found: 0
 - Weather records found: 17

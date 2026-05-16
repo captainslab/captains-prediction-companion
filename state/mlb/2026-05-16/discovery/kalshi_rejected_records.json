@@ -1,5 +1,45 @@
 [
   {
+    "event_ticker": "KXMLBGAME-26MAY191845NYMWSH",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "New York M vs Washington",
+    "category": "Sports",
+    "sub_title": "NYM vs WSH (May 19)",
+    "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY191840CLEDET",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Cleveland vs Detroit",
+    "category": "Sports",
+    "sub_title": "CLE vs DET (May 19)",
+    "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY191840CINPHI",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Cincinnati vs Philadelphia",
+    "category": "Sports",
+    "sub_title": "CIN vs PHI (May 19)",
+    "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY191840BALTB",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Baltimore vs Tampa Bay",
+    "category": "Sports",
+    "sub_title": "BAL vs TB (May 19)",
+    "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBGAME-26MAY191610ATLMIA",
+    "series_ticker": "KXMLBGAME",
+    "event_title": "Atlanta vs Miami",
+    "category": "Sports",
+    "sub_title": "ATL vs MIA (May 19)",
+    "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16"
+  },
+  {
     "event_ticker": "KXMLBGAME-26MAY182140SFAZ",
     "series_ticker": "KXMLBGAME",
     "event_title": "San Francisco vs Arizona",
@@ -227,6 +267,102 @@
     "event_ticker": "KXMLBGAME-26MAY171215MIATB",
     "series_ticker": "KXMLBGAME",
     "event_title": "Miami vs Tampa Bay",
+    "category": "Sports",
+    "sub_title": "MIA vs TB (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171920SDSEA",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "San Diego vs Seattle: Total Runs",
+    "category": "Sports",
+    "sub_title": "SD vs SEA (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171607LADLAA",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Los Angeles D vs Los Angeles A: Total Runs",
+    "category": "Sports",
+    "sub_title": "LAD vs LAA (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171605SFATH",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "San Francisco vs A's: Total Runs",
+    "category": "Sports",
+    "sub_title": "SF vs ATH (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171510AZCOL",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Arizona vs Colorado: Total Runs",
+    "category": "Sports",
+    "sub_title": "AZ vs COL (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171415KCSTL",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Kansas City vs St. Louis: Total Runs",
+    "category": "Sports",
+    "sub_title": "KC vs STL (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171410CHCCWS",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Chicago C vs Chicago WS: Total Runs",
+    "category": "Sports",
+    "sub_title": "CHC vs CWS (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171340TORDET",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Toronto vs Detroit: Total Runs",
+    "category": "Sports",
+    "sub_title": "TOR vs DET (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171340NYYNYM",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "New York Y vs New York M: Total Runs",
+    "category": "Sports",
+    "sub_title": "NYY vs NYM (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171340CINCLE",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Cincinnati vs Cleveland: Total Runs",
+    "category": "Sports",
+    "sub_title": "CIN vs CLE (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171335PHIPIT",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Philadelphia vs Pittsburgh: Total Runs",
+    "category": "Sports",
+    "sub_title": "PHI vs PIT (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171335BALWSH",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Baltimore vs Washington: Total Runs",
+    "category": "Sports",
+    "sub_title": "BAL vs WSH (May 17)",
+    "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"
+  },
+  {
+    "event_ticker": "KXMLBTOTAL-26MAY171215MIATB",
+    "series_ticker": "KXMLBTOTAL",
+    "event_title": "Miami vs Tampa Bay: Total Runs",
     "category": "Sports",
     "sub_title": "MIA vs TB (May 17)",
     "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16"

@@ -1,8 +1,8 @@
 {
   "source_id": "mlb_official",
   "status": "ok",
-  "checked_at_utc": "2026-05-16T17:13:15.141Z",
-  "cache_key": "mlb_official_schedule_2026-05-16T17:13:15.141Z",
+  "checked_at_utc": "2026-05-16T23:15:43.119Z",
+  "cache_key": "mlb_official_schedule_2026-05-16T23:15:43.119Z",
   "cache_path": "state/mlb/2026-05-16/discovery/mlb_official_adapter.json",
   "required": true,
   "records": [
@@ -12,7 +12,7 @@
       "start_time_utc": "2026-05-16T17:10:00Z",
       "away_team": "Toronto Blue Jays",
       "home_team": "Detroit Tigers",
-      "mlb_status": "In Progress",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Mason Fluharty",
         "home": "Casey Mize",
@@ -28,7 +28,7 @@
       "start_time_utc": "2026-05-16T18:15:00Z",
       "away_team": "Kansas City Royals",
       "home_team": "St. Louis Cardinals",
-      "mlb_status": "Pre-Game",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Noah Cameron",
         "home": "Kyle Leahy",
@@ -44,7 +44,7 @@
       "start_time_utc": "2026-05-16T19:10:00Z",
       "away_team": "Arizona Diamondbacks",
       "home_team": "Colorado Rockies",
-      "mlb_status": "Pre-Game",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Eduardo Rodriguez",
         "home": "Tomoyuki Sugano",
@@ -60,7 +60,7 @@
       "start_time_utc": "2026-05-16T20:05:00Z",
       "away_team": "Baltimore Orioles",
       "home_team": "Washington Nationals",
-      "mlb_status": "Pre-Game",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Chris Bassitt",
         "home": "Cade Cavalli",
@@ -76,7 +76,7 @@
       "start_time_utc": "2026-05-16T20:05:00Z",
       "away_team": "Philadelphia Phillies",
       "home_team": "Pittsburgh Pirates",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Cristopher Sánchez",
         "home": "Bubba Chandler",
@@ -92,7 +92,7 @@
       "start_time_utc": "2026-05-16T20:10:00Z",
       "away_team": "Miami Marlins",
       "home_team": "Tampa Bay Rays",
-      "mlb_status": "Pre-Game",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Sandy Alcantara",
         "home": "Nick Martinez",
@@ -108,7 +108,7 @@
       "start_time_utc": "2026-05-16T22:10:00Z",
       "away_team": "Cincinnati Reds",
       "home_team": "Cleveland Guardians",
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Chris Paddack",
         "home": "Joey Cantillo",
@@ -124,7 +124,7 @@
       "start_time_utc": "2026-05-16T23:10:00Z",
       "away_team": "Texas Rangers",
       "home_team": "Houston Astros",
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Jacob deGrom",
         "home": "Kai-Wei Teng",
@@ -140,7 +140,7 @@
       "start_time_utc": "2026-05-16T23:10:00Z",
       "away_team": "Chicago Cubs",
       "home_team": "Chicago White Sox",
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Jameson Taillon",
         "home": "Davis Martin",
@@ -156,7 +156,7 @@
       "start_time_utc": "2026-05-16T23:10:00Z",
       "away_team": "Milwaukee Brewers",
       "home_team": "Minnesota Twins",
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Logan Henderson",
         "home": "Connor Prielipp",
@@ -172,7 +172,7 @@
       "start_time_utc": "2026-05-16T23:15:00Z",
       "away_team": "San Diego Padres",
       "home_team": "Seattle Mariners",
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Walker Buehler",
         "home": "Logan Gilbert",
@@ -188,7 +188,7 @@
       "start_time_utc": "2026-05-16T23:15:00Z",
       "away_team": "Boston Red Sox",
       "home_team": "Atlanta Braves",
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Payton Tolle",
         "home": "Bryce Elder",
@@ -204,7 +204,7 @@
       "start_time_utc": "2026-05-16T23:15:00Z",
       "away_team": "New York Yankees",
       "home_team": "New York Mets",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Warmup",
       "probable_pitchers": {
         "away": "Carlos Rodón",
         "home": "Huascar Brazobán",
@@ -220,7 +220,7 @@
       "start_time_utc": "2026-05-17T01:38:00Z",
       "away_team": "Los Angeles Dodgers",
       "home_team": "Los Angeles Angels",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Justin Wrobleski",
         "home": "José Soriano",
@@ -236,7 +236,7 @@
       "start_time_utc": "2026-05-17T01:40:00Z",
       "away_team": "San Francisco Giants",
       "home_team": "Athletics",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Trevor McDonald",
         "home": "Luis Severino",

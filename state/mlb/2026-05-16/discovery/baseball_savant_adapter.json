@@ -1,8 +1,8 @@
 {
   "source_id": "baseball_savant",
   "status": "blocked",
-  "checked_at_utc": "2026-05-16T17:13:19.428Z",
-  "cache_key": "baseball_savant_statcast_2026-05-16T17:13:19.428Z",
+  "checked_at_utc": "2026-05-16T23:15:47.403Z",
+  "cache_key": "baseball_savant_statcast_2026-05-16T23:15:47.403Z",
   "cache_path": "state/mlb/2026-05-16/discovery/baseball_savant_adapter.json",
   "required": true,
   "records": [],

@@ -2,7 +2,7 @@
 
 ## Run Metadata
 - Operator: sports-pre-game
-- Started UTC: 2026-05-16T22:10:32.411Z
+- Started UTC: 2026-05-16T23:15:55.678Z
 - Run date: 2026-05-16
 - Run folder: state/mlb/2026-05-16/
 - Schema version: 1.0
@@ -11,13 +11,13 @@
 ## Source Checks
 | Source | Status | Checked UTC | Access method | Limitation |
 |---|---|---|---|---|
-| Kalshi | degraded | 2026-05-16T17:13:15.673Z | Existing discovery JSON | Kalshi calendar inaccessible or challenge-gated: HTTP 429. |
-| MLB official | ok | 2026-05-16T17:13:15.141Z | Existing discovery JSON | Schedule/status only |
-| Baseball Savant | blocked | 2026-05-16T17:13:19.428Z | Existing discovery JSON | Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.; No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence. |
-| Weather | ok | 2026-05-16T17:13:22.907Z | Existing discovery JSON | Live read-only weather records are environment inputs only, not final model evidence or recommendations. |
-| Liquidity | ok | 2026-05-16T17:13:29.757Z | Existing discovery JSON | Live read-only liquidity records are order book inputs only, not final recommendations. |
-| Sportsbook reference | ok | 2026-05-16T17:13:30.946Z | Existing discovery JSON | Sportsbook reference records are not Kalshi prices and are never executable prices. |
-| Lineup/injury/bullpen | ok | 2026-05-16T17:13:31.096Z | Existing discovery JSON | Lineup pending is a disclosed evidence state, not a full-slate blocker. |
+| Kalshi | degraded | 2026-05-16T23:15:43.674Z | Existing discovery JSON | Kalshi calendar inaccessible or challenge-gated: HTTP 429. |
+| MLB official | ok | 2026-05-16T23:15:43.119Z | Existing discovery JSON | Schedule/status only |
+| Baseball Savant | blocked | 2026-05-16T23:15:47.403Z | Existing discovery JSON | Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.; No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence. |
+| Weather | ok | 2026-05-16T23:15:47.760Z | Existing discovery JSON | Live read-only weather records are environment inputs only, not final model evidence or recommendations. |
+| Liquidity | ok | 2026-05-16T23:15:48.120Z | Existing discovery JSON | Live read-only liquidity records are order book inputs only, not final recommendations. |
+| Sportsbook reference | ok | 2026-05-16T23:15:49.303Z | Existing discovery JSON | Sportsbook reference records are not Kalshi prices and are never executable prices. |
+| Lineup/injury/bullpen | ok | 2026-05-16T23:15:49.450Z | Existing discovery JSON | Lineup pending is a disclosed evidence state, not a full-slate blocker. |
 | Optional price sanity | skipped |  | Not called | Optional only |
 
 ## Kalshi Intake
@@ -33,11 +33,6 @@
 | Chicago C vs Chicago WS | captured | KXMLBGAME-26MAY161910CHCCWS | listed | Discovery only |
 | Cincinnati vs Cleveland | captured | KXMLBGAME-26MAY161810CINCLE | listed | Discovery only |
 | Miami vs Tampa Bay | captured | KXMLBGAME-26MAY161610MIATB | listed | Discovery only |
-| Philadelphia vs Pittsburgh | captured | KXMLBGAME-26MAY161605PHIPIT | listed | Discovery only |
-| Baltimore vs Washington | captured | KXMLBGAME-26MAY161605BALWSH | listed | Discovery only |
-| Arizona vs Colorado | captured | KXMLBGAME-26MAY161510AZCOL | listed | Discovery only |
-| Kansas City vs St. Louis | captured | KXMLBGAME-26MAY161415KCSTL | listed | Discovery only |
-| Toronto vs Detroit | captured | KXMLBGAME-26MAY161310TORDET | listed | Discovery only |
 | San Francisco vs A's: Total Runs | captured | KXMLBTOTAL-26MAY162140SFATH | listed | Discovery only |
 | Los Angeles D vs Los Angeles A: Total Runs | captured | KXMLBTOTAL-26MAY162138LADLAA | listed | Discovery only |
 | San Diego vs Seattle: Total Runs | captured | KXMLBTOTAL-26MAY161915SDSEA | listed | Discovery only |
@@ -48,11 +43,6 @@
 | Chicago C vs Chicago WS: Total Runs | captured | KXMLBTOTAL-26MAY161910CHCCWS | listed | Discovery only |
 | Cincinnati vs Cleveland: Total Runs | captured | KXMLBTOTAL-26MAY161810CINCLE | listed | Discovery only |
 | Miami vs Tampa Bay: Total Runs | captured | KXMLBTOTAL-26MAY161610MIATB | listed | Discovery only |
-| Philadelphia vs Pittsburgh: Total Runs | captured | KXMLBTOTAL-26MAY161605PHIPIT | listed | Discovery only |
-| Baltimore vs Washington: Total Runs | captured | KXMLBTOTAL-26MAY161605BALWSH | listed | Discovery only |
-| Arizona vs Colorado: Total Runs | captured | KXMLBTOTAL-26MAY161510AZCOL | listed | Discovery only |
-| Kansas City vs St. Louis: Total Runs | captured | KXMLBTOTAL-26MAY161415KCSTL | listed | Discovery only |
-| Toronto vs Detroit: Total Runs | captured | KXMLBTOTAL-26MAY161310TORDET | listed | Discovery only |
 
 ## Router Results
 | Market | Route status | Lane | Candidates | Needed clarification |
@@ -75,13 +65,13 @@
 ## Output Writes
 | File | Wrote UTC | Status |
 |---|---|---|
-| state/mlb/2026-05-16/slate_manifest.json | 2026-05-16T22:10:32.411Z | ok |
-| state/mlb/2026-05-16/source_registry.json | 2026-05-16T22:10:32.411Z | ok |
-| state/mlb/2026-05-16/picks.json | 2026-05-16T22:10:32.411Z | ok |
-| state/mlb/2026-05-16/daily-baseball-guide.md | 2026-05-16T22:10:32.411Z | ok |
-| state/mlb/2026-05-16/run_log.md | 2026-05-16T22:10:32.411Z | ok |
-| state/mlb/2026-05-16/today-execution-board.json | 2026-05-16T22:10:32.411Z | ok |
-| state/mlb/2026-05-16/today-execution-board.md | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/slate_manifest.json | 2026-05-16T23:15:55.678Z | ok |
+| state/mlb/2026-05-16/source_registry.json | 2026-05-16T23:15:55.678Z | ok |
+| state/mlb/2026-05-16/picks.json | 2026-05-16T23:15:55.678Z | ok |
+| state/mlb/2026-05-16/daily-baseball-guide.md | 2026-05-16T23:15:55.678Z | ok |
+| state/mlb/2026-05-16/run_log.md | 2026-05-16T23:15:55.678Z | ok |
+| state/mlb/2026-05-16/today-execution-board.json | 2026-05-16T23:15:55.678Z | ok |
+| state/mlb/2026-05-16/today-execution-board.md | 2026-05-16T23:15:55.678Z | ok |
 
 ## No-Trade Confirmation
 - No live picks placed.

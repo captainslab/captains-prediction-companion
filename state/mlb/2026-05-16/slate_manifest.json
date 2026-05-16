@@ -1,17 +1,17 @@
 {
   "schema_version": "1.0",
   "run_date": "2026-05-16",
-  "generated_at_utc": "2026-05-16T22:10:32.411Z",
+  "generated_at_utc": "2026-05-16T23:15:55.678Z",
   "operator": "sports-pre-game",
   "kalshi_calendar_url": "https://kalshi.com/calendar/sports/baseball",
   "source_timestamps": {
-    "kalshi": "2026-05-16T17:13:15.673Z",
-    "mlb_official": "2026-05-16T17:13:15.141Z",
-    "baseball_savant": "2026-05-16T17:13:19.428Z",
-    "weather": "2026-05-16T17:13:22.907Z",
-    "liquidity": "2026-05-16T17:13:29.757Z",
-    "sportsbook_reference": "2026-05-16T17:13:30.946Z",
-    "lineup_injury_bullpen": "2026-05-16T17:13:31.096Z",
+    "kalshi": "2026-05-16T23:15:43.674Z",
+    "mlb_official": "2026-05-16T23:15:43.119Z",
+    "baseball_savant": "2026-05-16T23:15:47.403Z",
+    "weather": "2026-05-16T23:15:47.760Z",
+    "liquidity": "2026-05-16T23:15:48.120Z",
+    "sportsbook_reference": "2026-05-16T23:15:49.303Z",
+    "lineup_injury_bullpen": "2026-05-16T23:15:49.450Z",
     "optional_price_sanity": null
   },
   "games": [
@@ -24,42 +24,13 @@
         "away": "Toronto Blue Jays",
         "home": "Detroit Tigers"
       },
-      "mlb_status": "In Progress",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Mason Fluharty",
         "home": "Casey Mize"
       },
-      "kalshi_events": [
-        {
-          "event_ticker": "KXMLBGAME-26MAY161310TORDET",
-          "event_title": "Toronto vs Detroit",
-          "market_tickers": [
-            "KXMLBGAME-26MAY161310TORDET-TOR",
-            "KXMLBGAME-26MAY161310TORDET-DET"
-          ]
-        },
-        {
-          "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-          "event_title": "Toronto vs Detroit: Total Runs",
-          "market_tickers": [
-            "KXMLBTOTAL-26MAY161310TORDET-3",
-            "KXMLBTOTAL-26MAY161310TORDET-4",
-            "KXMLBTOTAL-26MAY161310TORDET-5",
-            "KXMLBTOTAL-26MAY161310TORDET-6",
-            "KXMLBTOTAL-26MAY161310TORDET-7",
-            "KXMLBTOTAL-26MAY161310TORDET-8",
-            "KXMLBTOTAL-26MAY161310TORDET-9",
-            "KXMLBTOTAL-26MAY161310TORDET-10",
-            "KXMLBTOTAL-26MAY161310TORDET-11",
-            "KXMLBTOTAL-26MAY161310TORDET-12",
-            "KXMLBTOTAL-26MAY161310TORDET-13"
-          ]
-        }
-      ],
-      "listed_market_lanes": [
-        "moneyline",
-        "game_total"
-      ],
+      "kalshi_events": [],
+      "listed_market_lanes": [],
       "weather_status": "ok"
     },
     {
@@ -71,42 +42,13 @@
         "away": "Kansas City Royals",
         "home": "St. Louis Cardinals"
       },
-      "mlb_status": "Pre-Game",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Noah Cameron",
         "home": "Kyle Leahy"
       },
-      "kalshi_events": [
-        {
-          "event_ticker": "KXMLBGAME-26MAY161415KCSTL",
-          "event_title": "Kansas City vs St. Louis",
-          "market_tickers": [
-            "KXMLBGAME-26MAY161415KCSTL-KC",
-            "KXMLBGAME-26MAY161415KCSTL-STL"
-          ]
-        },
-        {
-          "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-          "event_title": "Kansas City vs St. Louis: Total Runs",
-          "market_tickers": [
-            "KXMLBTOTAL-26MAY161415KCSTL-4",
-            "KXMLBTOTAL-26MAY161415KCSTL-5",
-            "KXMLBTOTAL-26MAY161415KCSTL-6",
-            "KXMLBTOTAL-26MAY161415KCSTL-7",
-            "KXMLBTOTAL-26MAY161415KCSTL-8",
-            "KXMLBTOTAL-26MAY161415KCSTL-9",
-            "KXMLBTOTAL-26MAY161415KCSTL-10",
-            "KXMLBTOTAL-26MAY161415KCSTL-11",
-            "KXMLBTOTAL-26MAY161415KCSTL-12",
-            "KXMLBTOTAL-26MAY161415KCSTL-13",
-            "KXMLBTOTAL-26MAY161415KCSTL-14"
-          ]
-        }
-      ],
-      "listed_market_lanes": [
-        "moneyline",
-        "game_total"
-      ],
+      "kalshi_events": [],
+      "listed_market_lanes": [],
       "weather_status": "ok"
     },
     {
@@ -118,42 +60,13 @@
         "away": "Arizona Diamondbacks",
         "home": "Colorado Rockies"
       },
-      "mlb_status": "Pre-Game",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Eduardo Rodriguez",
         "home": "Tomoyuki Sugano"
       },
-      "kalshi_events": [
-        {
-          "event_ticker": "KXMLBGAME-26MAY161510AZCOL",
-          "event_title": "Arizona vs Colorado",
-          "market_tickers": [
-            "KXMLBGAME-26MAY161510AZCOL-AZ",
-            "KXMLBGAME-26MAY161510AZCOL-COL"
-          ]
-        },
-        {
-          "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-          "event_title": "Arizona vs Colorado: Total Runs",
-          "market_tickers": [
-            "KXMLBTOTAL-26MAY161510AZCOL-6",
-            "KXMLBTOTAL-26MAY161510AZCOL-7",
-            "KXMLBTOTAL-26MAY161510AZCOL-8",
-            "KXMLBTOTAL-26MAY161510AZCOL-9",
-            "KXMLBTOTAL-26MAY161510AZCOL-10",
-            "KXMLBTOTAL-26MAY161510AZCOL-11",
-            "KXMLBTOTAL-26MAY161510AZCOL-12",
-            "KXMLBTOTAL-26MAY161510AZCOL-13",
-            "KXMLBTOTAL-26MAY161510AZCOL-14",
-            "KXMLBTOTAL-26MAY161510AZCOL-15",
-            "KXMLBTOTAL-26MAY161510AZCOL-16"
-          ]
-        }
-      ],
-      "listed_market_lanes": [
-        "moneyline",
-        "game_total"
-      ],
+      "kalshi_events": [],
+      "listed_market_lanes": [],
       "weather_status": "ok"
     },
     {
@@ -165,42 +78,13 @@
         "away": "Baltimore Orioles",
         "home": "Washington Nationals"
       },
-      "mlb_status": "Pre-Game",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Chris Bassitt",
         "home": "Cade Cavalli"
       },
-      "kalshi_events": [
-        {
-          "event_ticker": "KXMLBGAME-26MAY161605BALWSH",
-          "event_title": "Baltimore vs Washington",
-          "market_tickers": [
-            "KXMLBGAME-26MAY161605BALWSH-BAL",
-            "KXMLBGAME-26MAY161605BALWSH-WSH"
-          ]
-        },
-        {
-          "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-          "event_title": "Baltimore vs Washington: Total Runs",
-          "market_tickers": [
-            "KXMLBTOTAL-26MAY161605BALWSH-4",
-            "KXMLBTOTAL-26MAY161605BALWSH-5",
-            "KXMLBTOTAL-26MAY161605BALWSH-6",
-            "KXMLBTOTAL-26MAY161605BALWSH-7",
-            "KXMLBTOTAL-26MAY161605BALWSH-8",
-            "KXMLBTOTAL-26MAY161605BALWSH-9",
-            "KXMLBTOTAL-26MAY161605BALWSH-10",
-            "KXMLBTOTAL-26MAY161605BALWSH-11",
-            "KXMLBTOTAL-26MAY161605BALWSH-12",
-            "KXMLBTOTAL-26MAY161605BALWSH-13",
-            "KXMLBTOTAL-26MAY161605BALWSH-14"
-          ]
-        }
-      ],
-      "listed_market_lanes": [
-        "moneyline",
-        "game_total"
-      ],
+      "kalshi_events": [],
+      "listed_market_lanes": [],
       "weather_status": "ok"
     },
     {
@@ -212,42 +96,13 @@
         "away": "Philadelphia Phillies",
         "home": "Pittsburgh Pirates"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "Final",
       "probable_pitchers": {
         "away": "Cristopher Sánchez",
         "home": "Bubba Chandler"
       },
-      "kalshi_events": [
-        {
-          "event_ticker": "KXMLBGAME-26MAY161605PHIPIT",
-          "event_title": "Philadelphia vs Pittsburgh",
-          "market_tickers": [
-            "KXMLBGAME-26MAY161605PHIPIT-PHI",
-            "KXMLBGAME-26MAY161605PHIPIT-PIT"
-          ]
-        },
-        {
-          "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-          "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-          "market_tickers": [
-            "KXMLBTOTAL-26MAY161605PHIPIT-3",
-            "KXMLBTOTAL-26MAY161605PHIPIT-4",
-            "KXMLBTOTAL-26MAY161605PHIPIT-5",
-            "KXMLBTOTAL-26MAY161605PHIPIT-6",
-            "KXMLBTOTAL-26MAY161605PHIPIT-7",
-            "KXMLBTOTAL-26MAY161605PHIPIT-8",
-            "KXMLBTOTAL-26MAY161605PHIPIT-9",
-            "KXMLBTOTAL-26MAY161605PHIPIT-10",
-            "KXMLBTOTAL-26MAY161605PHIPIT-11",
-            "KXMLBTOTAL-26MAY161605PHIPIT-12",
-            "KXMLBTOTAL-26MAY161605PHIPIT-13"
-          ]
-        }
-      ],
-      "listed_market_lanes": [
-        "moneyline",
-        "game_total"
-      ],
+      "kalshi_events": [],
+      "listed_market_lanes": [],
       "weather_status": "ok"
     },
     {
@@ -259,7 +114,7 @@
         "away": "Miami Marlins",
         "home": "Tampa Bay Rays"
       },
-      "mlb_status": "Pre-Game",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Sandy Alcantara",
         "home": "Nick Martinez"
@@ -287,7 +142,14 @@
             "KXMLBTOTAL-26MAY161610MIATB-9",
             "KXMLBTOTAL-26MAY161610MIATB-10",
             "KXMLBTOTAL-26MAY161610MIATB-11",
-            "KXMLBTOTAL-26MAY161610MIATB-12"
+            "KXMLBTOTAL-26MAY161610MIATB-12",
+            "KXMLBTOTAL-26MAY161610MIATB-13",
+            "KXMLBTOTAL-26MAY161610MIATB-14",
+            "KXMLBTOTAL-26MAY161610MIATB-15",
+            "KXMLBTOTAL-26MAY161610MIATB-16",
+            "KXMLBTOTAL-26MAY161610MIATB-17",
+            "KXMLBTOTAL-26MAY161610MIATB-18",
+            "KXMLBTOTAL-26MAY161610MIATB-19"
           ]
         }
       ],
@@ -306,7 +168,7 @@
         "away": "Cincinnati Reds",
         "home": "Cleveland Guardians"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Chris Paddack",
         "home": "Joey Cantillo"
@@ -353,7 +215,7 @@
         "away": "Texas Rangers",
         "home": "Houston Astros"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Jacob deGrom",
         "home": "Kai-Wei Teng"
@@ -400,7 +262,7 @@
         "away": "Chicago Cubs",
         "home": "Chicago White Sox"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Jameson Taillon",
         "home": "Davis Martin"
@@ -447,7 +309,7 @@
         "away": "Milwaukee Brewers",
         "home": "Minnesota Twins"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Logan Henderson",
         "home": "Connor Prielipp"
@@ -494,7 +356,7 @@
         "away": "San Diego Padres",
         "home": "Seattle Mariners"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Walker Buehler",
         "home": "Logan Gilbert"
@@ -541,7 +403,7 @@
         "away": "Boston Red Sox",
         "home": "Atlanta Braves"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Payton Tolle",
         "home": "Bryce Elder"
@@ -588,7 +450,7 @@
         "away": "New York Yankees",
         "home": "New York Mets"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "Warmup",
       "probable_pitchers": {
         "away": "Carlos Rodón",
         "home": "Huascar Brazobán"
@@ -635,7 +497,7 @@
         "away": "Los Angeles Dodgers",
         "home": "Los Angeles Angels"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Justin Wrobleski",
         "home": "José Soriano"
@@ -682,7 +544,7 @@
         "away": "San Francisco Giants",
         "home": "Athletics"
       },
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Trevor McDonald",
         "home": "Luis Severino"
@@ -1323,316 +1185,6 @@
       "event_title": "Miami vs Tampa Bay",
       "market_title": "Miami vs Tampa Bay Winner?",
       "contract_title": "Tampa Bay",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBGAME-26MAY161605PHIPIT-PHI",
-      "event_title": "Philadelphia vs Pittsburgh",
-      "market_title": "Philadelphia vs Pittsburgh Winner?",
-      "contract_title": "Philadelphia",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBGAME-26MAY161605PHIPIT-PIT",
-      "event_title": "Philadelphia vs Pittsburgh",
-      "market_title": "Philadelphia vs Pittsburgh Winner?",
-      "contract_title": "Pittsburgh",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161605BALWSH",
-      "market_ticker": "KXMLBGAME-26MAY161605BALWSH-BAL",
-      "event_title": "Baltimore vs Washington",
-      "market_title": "Baltimore vs Washington Winner?",
-      "contract_title": "Baltimore",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161605BALWSH",
-      "market_ticker": "KXMLBGAME-26MAY161605BALWSH-WSH",
-      "event_title": "Baltimore vs Washington",
-      "market_title": "Baltimore vs Washington Winner?",
-      "contract_title": "Washington",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161510AZCOL",
-      "market_ticker": "KXMLBGAME-26MAY161510AZCOL-AZ",
-      "event_title": "Arizona vs Colorado",
-      "market_title": "Arizona vs Colorado Winner?",
-      "contract_title": "Arizona",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161510AZCOL",
-      "market_ticker": "KXMLBGAME-26MAY161510AZCOL-COL",
-      "event_title": "Arizona vs Colorado",
-      "market_title": "Arizona vs Colorado Winner?",
-      "contract_title": "Colorado",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161415KCSTL",
-      "market_ticker": "KXMLBGAME-26MAY161415KCSTL-KC",
-      "event_title": "Kansas City vs St. Louis",
-      "market_title": "Kansas City vs St. Louis Winner?",
-      "contract_title": "Kansas City",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161415KCSTL",
-      "market_ticker": "KXMLBGAME-26MAY161415KCSTL-STL",
-      "event_title": "Kansas City vs St. Louis",
-      "market_title": "Kansas City vs St. Louis Winner?",
-      "contract_title": "St. Louis",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161310TORDET",
-      "market_ticker": "KXMLBGAME-26MAY161310TORDET-TOR",
-      "event_title": "Toronto vs Detroit",
-      "market_title": "Toronto vs Detroit Winner?",
-      "contract_title": "Toronto",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed moneyline"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "moneyline",
-      "candidate_lanes": [
-        "moneyline"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBGAME-26MAY161310TORDET",
-      "market_ticker": "KXMLBGAME-26MAY161310TORDET-DET",
-      "event_title": "Toronto vs Detroit",
-      "market_title": "Toronto vs Detroit Winner?",
-      "contract_title": "Detroit",
       "game_date": "2026-05-16",
       "teams": {
         "away": null,
@@ -5069,320 +4621,10 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-3",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 2.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-4",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 3.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-5",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 4.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-6",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 5.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-7",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 6.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-8",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 7.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-9",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 8.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-10",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 9.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-11",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 10.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-12",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
-      "contract_title": "Over 11.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605PHIPIT",
-      "market_ticker": "KXMLBTOTAL-26MAY161605PHIPIT-13",
-      "event_title": "Philadelphia vs Pittsburgh: Total Runs",
-      "market_title": "Philadelphia vs Pittsburgh Total Runs?",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-13",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
       "contract_title": "Over 12.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
@@ -5410,320 +4652,10 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-4",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 3.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-5",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 4.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-6",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 5.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-7",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 6.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-8",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 7.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-9",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 8.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-10",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 9.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-11",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 10.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-12",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 11.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-13",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
-      "contract_title": "Over 12.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161605BALWSH",
-      "market_ticker": "KXMLBTOTAL-26MAY161605BALWSH-14",
-      "event_title": "Baltimore vs Washington: Total Runs",
-      "market_title": "Baltimore vs Washington Total Runs?",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-14",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
       "contract_title": "Over 13.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
@@ -5751,289 +4683,10 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-6",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 5.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-7",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 6.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-8",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 7.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-9",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 8.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-10",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 9.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-11",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 10.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-12",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 11.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-13",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 12.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-14",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
-      "contract_title": "Over 13.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-15",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-15",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
       "contract_title": "Over 14.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
@@ -6061,10 +4714,10 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161510AZCOL",
-      "market_ticker": "KXMLBTOTAL-26MAY161510AZCOL-16",
-      "event_title": "Arizona vs Colorado: Total Runs",
-      "market_title": "Arizona vs Colorado Total Runs?",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-16",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
       "contract_title": "Over 15.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
@@ -6092,11 +4745,11 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-4",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 3.5 runs scored",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-17",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
+      "contract_title": "Over 16.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
         "away": null,
@@ -6123,11 +4776,11 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-5",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 4.5 runs scored",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-18",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
+      "contract_title": "Over 17.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
         "away": null,
@@ -6154,600 +4807,11 @@
         "game_total"
       ],
       "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-6",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 5.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-7",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 6.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-8",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 7.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-9",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 8.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-10",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 9.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-11",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 10.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-12",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 11.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-13",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 12.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161415KCSTL",
-      "market_ticker": "KXMLBTOTAL-26MAY161415KCSTL-14",
-      "event_title": "Kansas City vs St. Louis: Total Runs",
-      "market_title": "Kansas City vs St. Louis Total Runs?",
-      "contract_title": "Over 13.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-3",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 2.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-4",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 3.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-5",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 4.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-6",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 5.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-7",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 6.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-8",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 7.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-9",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 8.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-10",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 9.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-11",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 10.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-12",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 11.5 runs scored",
-      "game_date": "2026-05-16",
-      "teams": {
-        "away": null,
-        "home": null
-      },
-      "player_name": null,
-      "threshold": null,
-      "side_hint": null,
-      "confidence": 70,
-      "matched_signals": [
-        "adapter routed game_total"
-      ],
-      "reject_signals": [],
-      "needed_clarification": [],
-      "next_workflow": "runbooks/mlb-prediction-process.md",
-      "notes": [
-        "Discovery-only router result; no prediction created."
-      ]
-    },
-    {
-      "route_status": "ROUTED",
-      "market_lane": "game_total",
-      "candidate_lanes": [
-        "game_total"
-      ],
-      "kalshi_url": null,
-      "event_ticker": "KXMLBTOTAL-26MAY161310TORDET",
-      "market_ticker": "KXMLBTOTAL-26MAY161310TORDET-13",
-      "event_title": "Toronto vs Detroit: Total Runs",
-      "market_title": "Toronto vs Detroit Total Runs?",
-      "contract_title": "Over 12.5 runs scored",
+      "event_ticker": "KXMLBTOTAL-26MAY161610MIATB",
+      "market_ticker": "KXMLBTOTAL-26MAY161610MIATB-19",
+      "event_title": "Miami vs Tampa Bay: Total Runs",
+      "market_title": "Miami vs Tampa Bay Total Runs?",
+      "contract_title": "Over 18.5 runs scored",
       "game_date": "2026-05-16",
       "teams": {
         "away": null,
@@ -6769,6 +4833,41 @@
     }
   ],
   "unmatched_or_excluded_markets": [
+    {
+      "market_title": "New York M vs Washington",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Cleveland vs Detroit",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Cincinnati vs Philadelphia",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Baltimore vs Tampa Bay",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Atlanta vs Miami",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-19 != run date 2026-05-16",
+      "needed_clarification": []
+    },
     {
       "market_title": "San Francisco vs Arizona",
       "market_ticker": null,
@@ -6967,6 +5066,90 @@
     },
     {
       "market_title": "Miami vs Tampa Bay",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "San Diego vs Seattle: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Los Angeles D vs Los Angeles A: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "San Francisco vs A's: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Arizona vs Colorado: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Kansas City vs St. Louis: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Chicago C vs Chicago WS: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Toronto vs Detroit: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "New York Y vs New York M: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Cincinnati vs Cleveland: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Philadelphia vs Pittsburgh: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Baltimore vs Washington: Total Runs",
+      "market_ticker": null,
+      "route_status": "OUT_OF_SCOPE",
+      "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
+      "needed_clarification": []
+    },
+    {
+      "market_title": "Miami vs Tampa Bay: Total Runs",
       "market_ticker": null,
       "route_status": "OUT_OF_SCOPE",
       "reason": "date mismatch: event date 2026-05-17 != run date 2026-05-16",
@@ -7458,8 +5641,8 @@
   ],
   "notes": [
     "Dry-run output composed from existing discovery files only.",
-    "Kalshi same-day records kept: 30.",
-    "Kalshi rejected diagnostic records: 98.",
+    "Kalshi same-day records kept: 20.",
+    "Kalshi rejected diagnostic records: 115.",
     "Baseball Savant adapter status: blocked; records: 0.",
     "Weather adapter status: ok; records: 17.",
     "Liquidity adapter status: ok; records: 10.",

@@ -9,7 +9,12 @@ import {
   fixtureKalshiBlockedEnvelope,
   fixtureKalshiSuccessEnvelope,
 } from '../scripts/mlb/source-adapters/kalshi-readonly.mjs';
-import { buildSameGameCombos, calculateComboEstimates } from '../scripts/mlb/output-writer-core.mjs';
+import {
+  buildSameGameCombos,
+  calculateComboEstimates,
+  classifyCombo,
+  comboStatusFromMembers,
+} from '../scripts/mlb/output-writer-core.mjs';
 import { fixtureMlbScheduleEnvelope } from '../scripts/mlb/source-adapters/mlb-official-readonly.mjs';
 
 function makeJsonResponse(payload, status = 200) {
@@ -308,10 +313,42 @@ test('same-game combos keep multi-lane groups and exclude single-lane clusters',
 
   assert.equal(combos.length, 1);
   assert.equal(combos[0].event_ticker, 'KXTEST-ACESBET');
+  assert.equal(combos[0].combo_status, 'LEAN');
   assert.deepEqual(combos[0].lanes_present, ['moneyline', 'game_total']);
   assert.equal(combos[0].members.length, 2);
   assert.match(combos[0].display_markets, /moneyline: KXTEST-ML-AWAY/);
   assert.match(combos[0].display_markets, /game_total: KXTEST-TOTAL-OVER/);
+});
+
+test('combo status tracks the weakest actionable member', () => {
+  assert.equal(
+    comboStatusFromMembers([
+      { classification: 'CLEAR_PICK' },
+      { classification: 'WATCH_FOR_PRICE' },
+    ]),
+    'WATCH_FOR_PRICE',
+  );
+  assert.equal(
+    comboStatusFromMembers([
+      { classification: 'CLEAR_PICK' },
+      { classification: 'LEAN' },
+    ]),
+    'LEAN',
+  );
+  assert.equal(
+    comboStatusFromMembers([
+      { classification: 'CLEAR_PICK' },
+      { classification: 'PRE_LINEUP_PICK' },
+    ]),
+    'PRE_LINEUP_PICK',
+  );
+  assert.equal(
+    comboStatusFromMembers([
+      { classification: 'CLEAR_PICK' },
+      { classification: 'CLEAR_PICK' },
+    ]),
+    'CLEAR_PICK',
+  );
 });
 
 test('combo estimates multiply cost and fair values', () => {
@@ -327,6 +364,72 @@ test('combo estimates multiply cost and fair values', () => {
   assert.equal(estimates.estimatedComboCost, 0.3591);
   assert.equal(estimates.estimatedComboFair, 0.4255);
   assert.equal(estimates.comboEdgePp, (0.4255 - 0.3591) * 100);
+});
+
+test('classifyCombo maps leg pairs to combo-specific classifications', () => {
+  const leg = (classification, missing_confirmations = []) => ({ classification, missing_confirmations });
+
+  // Rule 4: WATCH_FOR_PRICE leg => COMBO_WATCH
+  assert.equal(classifyCombo(leg('WATCH_FOR_PRICE', ['stronger_edge']), leg('CLEAR_PICK')), 'COMBO_WATCH');
+  assert.equal(classifyCombo(leg('CLEAR_PICK'), leg('WATCH_FOR_PRICE', ['injury_activation_pending'])), 'COMBO_WATCH');
+
+  // Rule 5: PASS leg => COMBO_PASS
+  assert.equal(classifyCombo(leg('PASS'), leg('CLEAR_PICK')), 'COMBO_PASS');
+  assert.equal(classifyCombo(leg('CLEAR_PICK'), leg('PASS')), 'COMBO_PASS');
+
+  // Rule 6: BLOCKED_SOURCE_GAP leg propagates
+  assert.equal(classifyCombo(leg('BLOCKED_SOURCE_GAP'), leg('CLEAR_PICK')), 'BLOCKED_SOURCE_GAP');
+  assert.equal(classifyCombo(leg('CLEAR_PICK'), leg('BLOCKED_SOURCE_GAP')), 'BLOCKED_SOURCE_GAP');
+
+  // Rule 3: CLEAR_PICK + CLEAR_PICK, no missing => COMBO_CLEAR
+  assert.equal(classifyCombo(leg('CLEAR_PICK'), leg('CLEAR_PICK')), 'COMBO_CLEAR');
+
+  // Rule 3 + Rule 8: CLEAR_PICK + CLEAR_PICK, with missing => COMBO_WATCH (not COMBO_CLEAR)
+  assert.equal(classifyCombo(leg('CLEAR_PICK', ['bullpen_unknown']), leg('CLEAR_PICK')), 'COMBO_WATCH');
+  assert.equal(classifyCombo(leg('CLEAR_PICK'), leg('CLEAR_PICK', ['stronger_edge'])), 'COMBO_WATCH');
+
+  // Rule 7: PRE_LINEUP_PICK + CLEAR_PICK, no missing => COMBO_LEAN
+  assert.equal(classifyCombo(leg('PRE_LINEUP_PICK'), leg('CLEAR_PICK')), 'COMBO_LEAN');
+  assert.equal(classifyCombo(leg('CLEAR_PICK'), leg('PRE_LINEUP_PICK')), 'COMBO_LEAN');
+
+  // Rule 7: LEAN + CLEAR_PICK, no missing => COMBO_LEAN
+  assert.equal(classifyCombo(leg('LEAN'), leg('CLEAR_PICK')), 'COMBO_LEAN');
+
+  // Rule 7 + Rule 8: PRE_LINEUP_PICK + CLEAR_PICK, with missing => COMBO_WATCH
+  assert.equal(classifyCombo(leg('PRE_LINEUP_PICK', ['injury_activation_pending']), leg('CLEAR_PICK')), 'COMBO_WATCH');
+  assert.equal(classifyCombo(leg('PRE_LINEUP_PICK'), leg('CLEAR_PICK', ['bullpen_unknown'])), 'COMBO_WATCH');
+});
+
+test('no combo candidate uses a plain singles classification', () => {
+  const PLAIN_SINGLES = new Set(['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN', 'WATCH_FOR_PRICE', 'PASS']);
+  const ALLOWED_COMBO = new Set(['COMBO_CLEAR', 'COMBO_LEAN', 'COMBO_WATCH', 'COMBO_PASS', 'BLOCKED_SOURCE_GAP']);
+
+  const legPairs = [
+    ['CLEAR_PICK', 'CLEAR_PICK'],
+    ['CLEAR_PICK', 'LEAN'],
+    ['LEAN', 'CLEAR_PICK'],
+    ['CLEAR_PICK', 'PRE_LINEUP_PICK'],
+    ['PRE_LINEUP_PICK', 'PRE_LINEUP_PICK'],
+    ['WATCH_FOR_PRICE', 'CLEAR_PICK'],
+    ['CLEAR_PICK', 'WATCH_FOR_PRICE'],
+    ['PASS', 'CLEAR_PICK'],
+    ['CLEAR_PICK', 'PASS'],
+    ['BLOCKED_SOURCE_GAP', 'CLEAR_PICK'],
+    ['CLEAR_PICK', 'BLOCKED_SOURCE_GAP'],
+    ['LEAN', 'LEAN'],
+  ];
+
+  for (const [cls1, cls2] of legPairs) {
+    const result = classifyCombo({ classification: cls1, missing_confirmations: [] }, { classification: cls2, missing_confirmations: [] });
+    assert.ok(
+      ALLOWED_COMBO.has(result),
+      `classifyCombo('${cls1}', '${cls2}') returned '${result}' which is a plain singles label`,
+    );
+    assert.ok(
+      !PLAIN_SINGLES.has(result),
+      `classifyCombo('${cls1}', '${cls2}') returned plain singles label '${result}'`,
+    );
+  }
 });
 
 test('scoring blocks CLEAR_PICK when fixture mode detected', async () => {
@@ -702,6 +805,16 @@ test('output writer surfaces same-game combo visibility in json and markdown', a
     assert.equal(board.combo_candidates[0].leg_2_market_lane, 'game_total');
     assert.match(board.combo_candidates[0].display_markets, /moneyline: KXTEST-ML-AWAY/);
     assert.match(board.combo_candidates[0].display_markets, /game_total: KXTEST-TOTAL-OVER/);
+    // Combo candidates must never carry plain singles classifications
+    const PLAIN_SINGLES_LABELS = new Set(['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN', 'WATCH_FOR_PRICE', 'PASS']);
+    for (const combo of board.combo_candidates) {
+      assert.ok(
+        !PLAIN_SINGLES_LABELS.has(combo.classification),
+        `combo classification '${combo.classification}' is a plain singles label`,
+      );
+    }
+    assert.ok(Object.hasOwn(board.combo_candidates[0], 'leg_1_classification'), 'leg_1_classification missing');
+    assert.ok(Object.hasOwn(board.combo_candidates[0], 'leg_2_classification'), 'leg_2_classification missing');
 
     const guide = readFileSync(join(outDir, 'daily-baseball-guide.md'), 'utf8');
     const boardMd = readFileSync(join(outDir, 'today-execution-board.md'), 'utf8');

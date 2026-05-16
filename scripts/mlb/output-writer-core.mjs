@@ -80,11 +80,51 @@ function classificationPriority(classification) {
   return SAME_GAME_COMBO_CLASSIFICATION_PRIORITY.get(classification) ?? Number.MAX_SAFE_INTEGER;
 }
 
-function comboStatusFromMembers(members) {
-  const bestMember = [...safeArray(members)].sort(
-    (left, right) => classificationPriority(left.classification) - classificationPriority(right.classification),
+/**
+ * Return the weakest actionable status present in a combo group (informational view).
+ * Used by buildSameGameCombos for same-game exposure visibility only.
+ * For tradeable combo candidate classification use classifyCombo().
+ */
+export function comboStatusFromMembers(members) {
+  const worstMember = [...safeArray(members)].sort(
+    (left, right) => classificationPriority(right.classification) - classificationPriority(left.classification),
   )[0];
-  return bestMember?.classification ?? null;
+  return worstMember?.classification ?? null;
+}
+
+/**
+ * Derive a conservative combo-specific classification from two leg objects.
+ * Never returns plain singles labels (CLEAR_PICK, LEAN, etc.).
+ * Priority: BLOCKED_SOURCE_GAP > COMBO_PASS > COMBO_WATCH > COMBO_CLEAR > COMBO_LEAN > COMBO_WATCH fallback.
+ */
+export function classifyCombo(leg1, leg2) {
+  const cls1 = leg1?.classification ?? null;
+  const cls2 = leg2?.classification ?? null;
+  const hasMissing =
+    safeArray(leg1?.missing_confirmations).length > 0 ||
+    safeArray(leg2?.missing_confirmations).length > 0;
+
+  if (cls1 === 'BLOCKED_SOURCE_GAP' || cls2 === 'BLOCKED_SOURCE_GAP') {
+    return 'BLOCKED_SOURCE_GAP';
+  }
+  if (cls1 === 'PASS' || cls2 === 'PASS') {
+    return 'COMBO_PASS';
+  }
+  if (cls1 === 'WATCH_FOR_PRICE' || cls2 === 'WATCH_FOR_PRICE') {
+    return 'COMBO_WATCH';
+  }
+  if (cls1 === 'CLEAR_PICK' && cls2 === 'CLEAR_PICK') {
+    return hasMissing ? 'COMBO_WATCH' : 'COMBO_CLEAR';
+  }
+  const leanEligible = new Set(['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN']);
+  if (
+    leanEligible.has(cls1) &&
+    leanEligible.has(cls2) &&
+    (cls1 === 'PRE_LINEUP_PICK' || cls1 === 'LEAN' || cls2 === 'PRE_LINEUP_PICK' || cls2 === 'LEAN')
+  ) {
+    return hasMissing ? 'COMBO_WATCH' : 'COMBO_LEAN';
+  }
+  return 'COMBO_WATCH';
 }
 
 function isBetterMoneylineEdgeCandidate(left, right) {
@@ -289,6 +329,7 @@ function buildComboCandidates(candidates) {
       );
       const bestMember = sortedComboMembers[0] ?? null;
       const secondMember = sortedComboMembers[1] ?? null;
+      const comboClassification = classifyCombo(moneylineMember, totalMember);
       const { estimatedComboCost, estimatedComboFair, comboEdgePp } = calculateComboEstimates(
         {
           leg_1_ask: moneylineMember?.kalshi_ask ?? null,
@@ -300,24 +341,25 @@ function buildComboCandidates(candidates) {
       const missingConfirmations = [
         ...new Set(comboMembers.flatMap(member => safeArray(member.missing_confirmations))),
       ];
-      const comboStatus = bestMember?.classification ?? null;
 
       return {
         group_key: groupKey,
         game_pk: members[0]?.matched_game_pk ?? null,
         event_ticker: members[0]?.event_ticker ?? null,
         game: members[0]?.game ?? null,
-        combo_status: comboStatus,
-        classification: comboStatus,
+        combo_status: comboClassification,
+        classification: comboClassification,
         combo_edge_pp: comboEdgePp ?? bestMember?.edge_pp ?? null,
         leg_1_market_ticker: moneylineMember?.market_ticker ?? null,
         leg_1_market_lane: moneylineMember?.market_lane ?? null,
+        leg_1_classification: moneylineMember?.classification ?? null,
         leg_1_side: moneylineMember?.contract_title ?? moneylineMember?.market_title ?? null,
         leg_1_strike: moneylineMember?.total_strike ?? null,
         leg_1_ask: moneylineMember?.kalshi_ask ?? null,
         leg_1_fair: moneylineMember?.fair_value ?? null,
         leg_2_market_ticker: totalMember?.market_ticker ?? null,
         leg_2_market_lane: totalMember?.market_lane ?? null,
+        leg_2_classification: totalMember?.classification ?? null,
         leg_2_side: totalMember?.contract_title ?? totalMember?.market_title ?? null,
         leg_2_strike: totalMember?.total_strike ?? null,
         leg_2_ask: totalMember?.kalshi_ask ?? null,
@@ -392,10 +434,10 @@ function buildMarketLaneDiagnostics({ candidates, sameGameCombos, comboCandidate
     })),
     combo_summary: {
       combo_candidates: actionableComboCandidates.length,
-      combo_clear: actionableComboCandidates.filter(combo => combo.combo_status === 'CLEAR_PICK').length,
-      combo_leans: actionableComboCandidates.filter(combo => ['PRE_LINEUP_PICK', 'LEAN'].includes(combo.combo_status))
-        .length,
-      combo_watch: actionableComboCandidates.filter(combo => combo.combo_status === 'WATCH_FOR_PRICE').length,
+      combo_clear: actionableComboCandidates.filter(combo => combo.combo_status === 'COMBO_CLEAR').length,
+      combo_leans: actionableComboCandidates.filter(combo => combo.combo_status === 'COMBO_LEAN').length,
+      combo_watch: actionableComboCandidates.filter(combo => combo.combo_status === 'COMBO_WATCH').length,
+      combo_passes: actionableComboCandidates.filter(combo => combo.combo_status === 'COMBO_PASS').length,
       moneyline_visible_combo_groups: comboLaneCounts.get('moneyline') ?? 0,
       combo_lane_counts: MARKET_LANES.map(lane => ({
         lane,
@@ -1212,9 +1254,10 @@ function buildExecutionBoard({
     blocked: byClass('BLOCKED_SOURCE_GAP'),
     correlated_alternates: byClass('CORRELATED_ALTERNATE'),
     combo_candidates: comboCandidates,
-    combo_clear: comboCandidates.filter(combo => combo.combo_status === 'CLEAR_PICK'),
-    combo_leans: comboCandidates.filter(combo => ['PRE_LINEUP_PICK', 'LEAN'].includes(combo.combo_status)),
-    combo_watch: comboCandidates.filter(combo => combo.combo_status === 'WATCH_FOR_PRICE'),
+    combo_clear: comboCandidates.filter(combo => combo.combo_status === 'COMBO_CLEAR'),
+    combo_leans: comboCandidates.filter(combo => combo.combo_status === 'COMBO_LEAN'),
+    combo_watch: comboCandidates.filter(combo => combo.combo_status === 'COMBO_WATCH'),
+    combo_passes: comboCandidates.filter(combo => combo.combo_status === 'COMBO_PASS'),
     same_game_combos: sameGameCombos,
     candidate_counts_by_market_lane: marketLaneDiagnostics.candidate_counts_by_market_lane,
     moneyline_candidate_count: marketLaneDiagnostics.moneyline_candidate_count,
@@ -1404,6 +1447,7 @@ function buildExecutionBoardMd({
     `- Clear combo groups: ${board.combo_clear.length}`,
     `- Pre-lineup / lean combo groups: ${board.combo_leans.length}`,
     `- Watch combo groups: ${board.combo_watch.length}`,
+    `- Pass combo groups: ${(board.combo_passes ?? []).length}`,
     `- Moneyline candidates: ${board.moneyline_candidate_count}`,
     `- Game total candidates: ${board.game_total_candidate_count}`,
     `- Unknown/other candidates: ${board.unknown_other_candidate_count}`,
