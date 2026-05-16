@@ -14,6 +14,32 @@ const MARKET_LANES = Object.freeze([
   'home_run_hitter',
   'pitcher_strikeouts',
 ]);
+const SAME_GAME_COMBO_VISIBLE_STATUSES = new Set([
+  'CLEAR_PICK',
+  'PRE_LINEUP_PICK',
+  'LEAN',
+  'WATCH_FOR_PRICE',
+]);
+const SAME_GAME_COMBO_SURFACE_STATUSES = new Set([
+  ...SAME_GAME_COMBO_VISIBLE_STATUSES,
+  'PASS',
+]);
+const SAME_GAME_COMBO_LANE_PRIORITY = new Map([
+  ['moneyline', 0],
+  ['run_line', 1],
+  ['game_total', 2],
+  ['yrfi_nrfi', 3],
+  ['home_run_hitter', 4],
+  ['pitcher_strikeouts', 5],
+]);
+const SAME_GAME_COMBO_CLASSIFICATION_PRIORITY = new Map([
+  ['CLEAR_PICK', 0],
+  ['PRE_LINEUP_PICK', 1],
+  ['LEAN', 2],
+  ['WATCH_FOR_PRICE', 3],
+]);
+const SAME_GAME_EXPOSURE_NOTE =
+  'Informational only: review same-game markets together before sizing.';
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'));
@@ -44,6 +70,339 @@ function readOptionalAdapter(filePath, sourceId, warning) {
 
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function lanePriority(lane) {
+  return SAME_GAME_COMBO_LANE_PRIORITY.get(lane) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function classificationPriority(classification) {
+  return SAME_GAME_COMBO_CLASSIFICATION_PRIORITY.get(classification) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function comboStatusFromMembers(members) {
+  const bestMember = [...safeArray(members)].sort(
+    (left, right) => classificationPriority(left.classification) - classificationPriority(right.classification),
+  )[0];
+  return bestMember?.classification ?? null;
+}
+
+function isBetterMoneylineEdgeCandidate(left, right) {
+  if (!right) return true;
+  const edgeDelta = (left.edge_pp ?? -Infinity) - (right.edge_pp ?? -Infinity);
+  if (edgeDelta !== 0) return edgeDelta > 0;
+  const classDelta = classificationPriority(left.classification) - classificationPriority(right.classification);
+  if (classDelta !== 0) return classDelta < 0;
+  const askLeft = left.kalshi_ask ?? Number.POSITIVE_INFINITY;
+  const askRight = right.kalshi_ask ?? Number.POSITIVE_INFINITY;
+  if (askLeft !== askRight) return askLeft < askRight;
+  return String(left.market_ticker ?? '').localeCompare(String(right.market_ticker ?? '')) < 0;
+}
+
+export function buildMoneylineEdgeBoard(candidates) {
+  const grouped = new Map();
+
+  for (const candidate of safeArray(candidates)) {
+    if (candidate.market_lane !== 'moneyline') continue;
+    if (candidate.edge_pp === null || candidate.edge_pp === undefined || candidate.edge_pp <= 0) continue;
+
+    const groupKey = candidate.event_ticker ?? candidate.matched_game_pk ?? candidate.game ?? candidate.market_ticker ?? null;
+    if (!groupKey) continue;
+
+    const current = grouped.get(groupKey);
+    if (!current || isBetterMoneylineEdgeCandidate(candidate, current)) {
+      grouped.set(groupKey, candidate);
+    }
+  }
+
+  return [...grouped.entries()]
+    .map(([groupKey, candidate]) => ({
+      group_key: groupKey,
+      game: candidate.game ?? null,
+      side: candidate.contract_title ?? candidate.market_title ?? null,
+      market_ticker: candidate.market_ticker ?? null,
+      classification: candidate.classification ?? null,
+      kalshi_ask: candidate.kalshi_ask ?? null,
+      fair_value: candidate.fair_value ?? null,
+      edge_pp: candidate.edge_pp ?? null,
+      target_entry: candidate.target_entry ?? null,
+      missing_confirmations: safeArray(candidate.missing_confirmations),
+      why_not: safeArray(candidate.missing_confirmations).join(', ') || 'none',
+    }))
+    .sort((left, right) => {
+      const edgeDelta = (right.edge_pp ?? -Infinity) - (left.edge_pp ?? -Infinity);
+      if (edgeDelta !== 0) return edgeDelta;
+      const classDelta = classificationPriority(left.classification) - classificationPriority(right.classification);
+      if (classDelta !== 0) return classDelta;
+      const askLeft = left.kalshi_ask ?? Number.POSITIVE_INFINITY;
+      const askRight = right.kalshi_ask ?? Number.POSITIVE_INFINITY;
+      if (askLeft !== askRight) return askLeft - askRight;
+      return String(left.market_ticker ?? '').localeCompare(String(right.market_ticker ?? ''));
+    });
+}
+
+function sameGameComboMemberLabel(candidate) {
+  const lane = candidate.market_lane ?? 'unknown';
+  const ticker = candidate.market_ticker ?? 'unknown';
+  const classification = candidate.classification ?? 'unknown';
+  const edge = candidate.edge_pp !== null && candidate.edge_pp !== undefined ? `${candidate.edge_pp}pp` : 'n/a';
+  return `${lane}: ${ticker} (${classification}, ${edge})`;
+}
+
+export function calculateComboEstimates({ leg_1_ask, leg_1_fair, leg_2_ask, leg_2_fair }) {
+  const hasCostInputs = leg_1_ask !== null && leg_1_ask !== undefined && leg_2_ask !== null && leg_2_ask !== undefined;
+  const hasFairInputs =
+    leg_1_fair !== null && leg_1_fair !== undefined && leg_2_fair !== null && leg_2_fair !== undefined;
+  const estimatedComboCost = hasCostInputs
+    ? Math.round((leg_1_ask * leg_2_ask) * 10000) / 10000
+    : null;
+  const estimatedComboFair = hasFairInputs
+    ? Math.round((leg_1_fair * leg_2_fair) * 10000) / 10000
+    : null;
+  const comboEdgePp =
+    estimatedComboCost !== null && estimatedComboFair !== null
+      ? (estimatedComboFair - estimatedComboCost) * 100
+      : null;
+
+  return {
+    estimatedComboCost,
+    estimatedComboFair,
+    comboEdgePp,
+  };
+}
+
+export function buildSameGameCombos(candidates) {
+  const grouped = new Map();
+
+  for (const candidate of safeArray(candidates)) {
+    if (!SAME_GAME_COMBO_SURFACE_STATUSES.has(candidate.classification)) continue;
+    const groupKey =
+      candidate.matched_game_pk ?? candidate.event_ticker ?? candidate.game ?? candidate.market_ticker ?? null;
+    if (!groupKey) continue;
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, []);
+    }
+    grouped.get(groupKey).push(candidate);
+  }
+
+  return [...grouped.entries()]
+    .map(([groupKey, members]) => {
+      const actionableMembers = members.filter(member => SAME_GAME_COMBO_VISIBLE_STATUSES.has(member.classification));
+      const distinctLanes = [...new Set(members.map(member => member.market_lane).filter(Boolean))].sort(
+        (left, right) => lanePriority(left) - lanePriority(right) || left.localeCompare(right),
+      );
+
+      if (distinctLanes.length < 2 || actionableMembers.length === 0) {
+        return null;
+      }
+
+      const sortedMembers = [...members].sort((left, right) => {
+        const laneDelta = lanePriority(left.market_lane) - lanePriority(right.market_lane);
+        if (laneDelta !== 0) return laneDelta;
+        const classDelta = classificationPriority(left.classification) - classificationPriority(right.classification);
+        if (classDelta !== 0) return classDelta;
+        const edgeLeft = left.edge_pp ?? -Infinity;
+        const edgeRight = right.edge_pp ?? -Infinity;
+        if (edgeRight !== edgeLeft) return edgeRight - edgeLeft;
+        return String(left.market_ticker ?? '').localeCompare(String(right.market_ticker ?? ''));
+      });
+
+      return {
+        group_key: groupKey,
+        game_pk: members[0]?.matched_game_pk ?? null,
+        event_ticker: members[0]?.event_ticker ?? null,
+        game: members[0]?.game ?? null,
+        combo_edge_pp: Math.max(
+          ...actionableMembers.map(member => member.edge_pp ?? -Infinity),
+        ),
+        surfaced_lanes: distinctLanes,
+        lanes_present: [...new Set(actionableMembers.map(member => member.market_lane).filter(Boolean))].sort(
+          (left, right) => lanePriority(left) - lanePriority(right) || left.localeCompare(right),
+        ),
+        combo_status: comboStatusFromMembers(actionableMembers),
+        market_count: members.length,
+        visible_market_count: actionableMembers.length,
+        same_game_exposure_note: SAME_GAME_EXPOSURE_NOTE,
+        members: sortedMembers.map(member => ({
+          market_ticker: member.market_ticker ?? null,
+          market_lane: member.market_lane ?? null,
+          contract_title: member.contract_title ?? member.market_title ?? null,
+          classification: member.classification ?? null,
+          kalshi_ask: member.kalshi_ask ?? null,
+          fair_value: member.fair_value ?? null,
+          edge_pp: member.edge_pp ?? null,
+          total_strike: member.total_strike ?? null,
+          correlation_group: member.correlation_group ?? null,
+          primary_pick: member.primary_pick ?? false,
+          missing_confirmations: safeArray(member.missing_confirmations),
+        })),
+        display_markets: sortedMembers.map(sameGameComboMemberLabel).join('; '),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      const edgeLeft = Math.max(...left.members.map(member => member.edge_pp ?? -Infinity));
+      const edgeRight = Math.max(...right.members.map(member => member.edge_pp ?? -Infinity));
+      if (edgeRight !== edgeLeft) return edgeRight - edgeLeft;
+      return String(left.game ?? left.group_key ?? '').localeCompare(String(right.game ?? right.group_key ?? ''));
+    });
+}
+
+function buildComboCandidates(candidates) {
+  const grouped = new Map();
+
+  for (const candidate of safeArray(candidates)) {
+    if (!SAME_GAME_COMBO_VISIBLE_STATUSES.has(candidate.classification)) continue;
+    const groupKey =
+      candidate.matched_game_pk ?? candidate.event_ticker ?? candidate.game ?? candidate.market_ticker ?? null;
+    if (!groupKey) continue;
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, []);
+    }
+    grouped.get(groupKey).push(candidate);
+  }
+
+  return [...grouped.entries()]
+    .map(([groupKey, members]) => {
+      const selectBestLaneMember = lane =>
+        [...members]
+          .filter(member => member.market_lane === lane && SAME_GAME_COMBO_VISIBLE_STATUSES.has(member.classification))
+          .sort(
+            (left, right) =>
+              (right.edge_pp ?? -Infinity) - (left.edge_pp ?? -Infinity) ||
+              classificationPriority(left.classification) - classificationPriority(right.classification) ||
+              String(left.market_ticker ?? '').localeCompare(String(right.market_ticker ?? '')),
+          )[0] ?? null;
+
+      const moneylineMember = selectBestLaneMember('moneyline');
+      const totalMember = selectBestLaneMember('game_total');
+      if (!moneylineMember || !totalMember) {
+        return null;
+      }
+
+      const comboMembers = [moneylineMember, totalMember];
+      const sortedComboMembers = [...comboMembers].sort(
+        (left, right) =>
+          (right.edge_pp ?? -Infinity) - (left.edge_pp ?? -Infinity) ||
+          classificationPriority(left.classification) - classificationPriority(right.classification) ||
+          String(left.market_ticker ?? '').localeCompare(String(right.market_ticker ?? '')),
+      );
+      const bestMember = sortedComboMembers[0] ?? null;
+      const secondMember = sortedComboMembers[1] ?? null;
+      const { estimatedComboCost, estimatedComboFair, comboEdgePp } = calculateComboEstimates(
+        {
+          leg_1_ask: moneylineMember?.kalshi_ask ?? null,
+          leg_1_fair: moneylineMember?.fair_value ?? null,
+          leg_2_ask: totalMember?.kalshi_ask ?? null,
+          leg_2_fair: totalMember?.fair_value ?? null,
+        },
+      );
+      const missingConfirmations = [
+        ...new Set(comboMembers.flatMap(member => safeArray(member.missing_confirmations))),
+      ];
+      const comboStatus = bestMember?.classification ?? null;
+
+      return {
+        group_key: groupKey,
+        game_pk: members[0]?.matched_game_pk ?? null,
+        event_ticker: members[0]?.event_ticker ?? null,
+        game: members[0]?.game ?? null,
+        combo_status: comboStatus,
+        classification: comboStatus,
+        combo_edge_pp: comboEdgePp ?? bestMember?.edge_pp ?? null,
+        leg_1_market_ticker: moneylineMember?.market_ticker ?? null,
+        leg_1_market_lane: moneylineMember?.market_lane ?? null,
+        leg_1_side: moneylineMember?.contract_title ?? moneylineMember?.market_title ?? null,
+        leg_1_strike: moneylineMember?.total_strike ?? null,
+        leg_1_ask: moneylineMember?.kalshi_ask ?? null,
+        leg_1_fair: moneylineMember?.fair_value ?? null,
+        leg_2_market_ticker: totalMember?.market_ticker ?? null,
+        leg_2_market_lane: totalMember?.market_lane ?? null,
+        leg_2_side: totalMember?.contract_title ?? totalMember?.market_title ?? null,
+        leg_2_strike: totalMember?.total_strike ?? null,
+        leg_2_ask: totalMember?.kalshi_ask ?? null,
+        leg_2_fair: totalMember?.fair_value ?? null,
+        estimated_combo_cost: estimatedComboCost,
+        estimated_combo_fair: estimatedComboFair,
+        combo_top_market_ticker: bestMember?.market_ticker ?? null,
+        combo_top_market_lane: bestMember?.market_lane ?? null,
+        combo_member_count: comboMembers.length,
+        lanes_present: [...new Set(comboMembers.map(member => member.market_lane).filter(Boolean))].sort(
+          (left, right) => lanePriority(left) - lanePriority(right) || left.localeCompare(right),
+        ),
+        missing_confirmations: missingConfirmations,
+        note: 'No trades placed',
+        display_markets: comboMembers.map(sameGameComboMemberLabel).join('; '),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      const edgeDelta = (right.combo_edge_pp ?? -Infinity) - (left.combo_edge_pp ?? -Infinity);
+      if (edgeDelta !== 0) return edgeDelta;
+      return String(left.game ?? left.group_key ?? '').localeCompare(String(right.game ?? right.group_key ?? ''));
+    });
+}
+
+function buildMarketLaneDiagnostics({ candidates, sameGameCombos, comboCandidates }) {
+  const totalCounts = new Map(MARKET_LANES.map(lane => [lane, 0]));
+  const visibleCounts = new Map(MARKET_LANES.map(lane => [lane, 0]));
+  const actionableCounts = new Map(MARKET_LANES.map(lane => [lane, 0]));
+  const comboLaneCounts = new Map(MARKET_LANES.map(lane => [lane, 0]));
+
+  for (const candidate of safeArray(candidates)) {
+    const lane = candidate.market_lane ?? null;
+    if (!totalCounts.has(lane)) continue;
+    totalCounts.set(lane, totalCounts.get(lane) + 1);
+    if (SAME_GAME_COMBO_VISIBLE_STATUSES.has(candidate.classification)) {
+      visibleCounts.set(lane, visibleCounts.get(lane) + 1);
+      actionableCounts.set(lane, actionableCounts.get(lane) + 1);
+    }
+  }
+
+  const unknownOtherCandidateCount = safeArray(candidates).filter(
+    candidate => !MARKET_LANES.includes(candidate.market_lane),
+  ).length;
+
+  for (const combo of safeArray(comboCandidates)) {
+    for (const lane of safeArray(combo.lanes_present)) {
+      if (!comboLaneCounts.has(lane)) continue;
+      comboLaneCounts.set(lane, comboLaneCounts.get(lane) + 1);
+    }
+  }
+
+  const actionableComboCandidates = safeArray(comboCandidates);
+
+  return {
+    total_candidates: safeArray(candidates).length,
+    lane_counts: MARKET_LANES.map(lane => ({
+      lane,
+      total_candidates: totalCounts.get(lane) ?? 0,
+      visible_candidates: visibleCounts.get(lane) ?? 0,
+      actionable_candidates: actionableCounts.get(lane) ?? 0,
+    })),
+    candidate_counts_by_market_lane: MARKET_LANES.map(lane => ({
+      market_lane: lane,
+      candidate_count: totalCounts.get(lane) ?? 0,
+    })),
+    moneyline_candidate_count: totalCounts.get('moneyline') ?? 0,
+    unknown_other_candidate_count: unknownOtherCandidateCount,
+    actionable_counts_by_market_lane: MARKET_LANES.map(lane => ({
+      market_lane: lane,
+      actionable_candidate_count: actionableCounts.get(lane) ?? 0,
+    })),
+    combo_summary: {
+      combo_candidates: actionableComboCandidates.length,
+      combo_clear: actionableComboCandidates.filter(combo => combo.combo_status === 'CLEAR_PICK').length,
+      combo_leans: actionableComboCandidates.filter(combo => ['PRE_LINEUP_PICK', 'LEAN'].includes(combo.combo_status))
+        .length,
+      combo_watch: actionableComboCandidates.filter(combo => combo.combo_status === 'WATCH_FOR_PRICE').length,
+      moneyline_visible_combo_groups: comboLaneCounts.get('moneyline') ?? 0,
+      combo_lane_counts: MARKET_LANES.map(lane => ({
+        lane,
+        combo_groups: comboLaneCounts.get(lane) ?? 0,
+      })).filter(entry => entry.combo_groups > 0),
+    },
+  };
 }
 
 function sourceStatus(envelope, fallback = 'blocked') {
@@ -498,6 +857,23 @@ function guideSlateOverview({ games, kalshi, baseballSavant, weather }) {
   return lines;
 }
 
+function whyMostlyTotalsSection({ scoring }) {
+  const candidates = safeArray(scoring.candidates);
+  const moneylineCount = candidates.filter(c => c.market_lane === 'moneyline').length;
+  const gameTotalCount = candidates.filter(c => c.market_lane === 'game_total').length;
+  const otherCount = candidates.filter(c => !MARKET_LANES.includes(c.market_lane)).length;
+
+  return [
+    '## Why mostly totals?',
+    '',
+    `- Game totals account for ${gameTotalCount} of ${scoring.counts.total} scored candidates.`,
+    `- Moneyline is only ${moneylineCount} candidates, and most of those are PASS or WATCH_FOR_PRICE.`,
+    `- Weather, lineup, and bullpen uncertainty push the board toward totals while the slate is still settling.`,
+    otherCount > 0 ? `- Other lanes are limited to ${otherCount} candidate(s).` : '- Other lanes are effectively absent on this slate.',
+    '',
+  ];
+}
+
 function missingBeforeFullGuide(baseballSavant, weather, liquidity, sportsbook) {
   const missing = ['morning scan composer'];
   if (sourceStatus(liquidity) !== 'ok' || safeArray(liquidity.records).length === 0) {
@@ -515,13 +891,32 @@ function missingBeforeFullGuide(baseballSavant, weather, liquidity, sportsbook) 
   return missing.join(', ');
 }
 
-function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring, slateManifest }) {
+function buildDailyGuide({
+  runDate,
+  generatedAtUtc,
+  kalshi,
+  mlb,
+  baseballSavant,
+  weather,
+  liquidity,
+  sportsbook,
+  context,
+  scoring,
+  slateManifest,
+  sameGameCombos,
+}) {
   const blockedCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'BLOCKED_SOURCE_GAP');
   const leanCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'LEAN');
   const watchForPriceCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'WATCH_FOR_PRICE');
   const clearPickCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CLEAR_PICK');
   const preLineupPickCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'PRE_LINEUP_PICK');
   const correlatedAlternateCandidates = safeArray(scoring.candidates).filter(c => c.classification === 'CORRELATED_ALTERNATE');
+  const actionableCountsByMarketLane = MARKET_LANES.map(lane => ({
+    market_lane: lane,
+    actionable_candidate_count: safeArray(scoring.candidates).filter(
+      c => c.market_lane === lane && SAME_GAME_COMBO_VISIBLE_STATUSES.has(c.classification),
+    ).length,
+  }));
 
   // Build start-time lookup keyed on game label for use in clear-picks table
   const startTimeByGame = new Map(
@@ -594,6 +989,12 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
       })
     : ['| none |  |  |  |  |  |  |  |  |'];
 
+  const sameGameComboRows = sameGameCombos.length > 0
+    ? sameGameCombos.map(combo =>
+        `| ${tableEscape(combo.game ?? combo.group_key ?? 'unknown')} | ${tableEscape(combo.surfaced_lanes.join(', '))} | ${tableEscape(combo.display_markets)} | ${tableEscape(combo.same_game_exposure_note)} |`,
+      )
+    : ['| none |  |  |  |'];
+
   const lines = [
     `# Daily Baseball Guide - ${runDate}`,
     '',
@@ -617,8 +1018,12 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     `- BLOCKED: ${scoring.counts.blocked}`,
     `- NOT_TRADEABLE: ${scoring.counts.not_tradeable}`,
     `- CORRELATED_ALTERNATE: ${scoring.counts.correlated_alternate ?? 0}`,
+    `- Moneyline candidates: ${safeArray(scoring.candidates).filter(c => c.market_lane === 'moneyline').length}`,
+    `- Game total candidates: ${safeArray(scoring.candidates).filter(c => c.market_lane === 'game_total').length}`,
+    `- Unknown/other candidates: ${safeArray(scoring.candidates).filter(c => !MARKET_LANES.includes(c.market_lane)).length}`,
     `- Fixture mode: ${scoring.fixture_mode}`,
     '',
+    ...whyMostlyTotalsSection({ scoring }),
     '## Clear Picks',
     '',
     '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
@@ -650,6 +1055,20 @@ function buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant,
     '| Market | Game | Lane | Side/Strike | Ask | Target | Edge | Reason | Recheck |',
     '|---|---|---|---|---:|---:|---:|---|---|',
     ...watchForPriceRows,
+    '',
+    '## Same-Game Combo Visibility',
+    '',
+    '_Informational only. Same-game markets are shown together so shared exposure is visible before sizing._',
+    '',
+    '| Game | Lane mix | Surfaced markets | Exposure note |',
+    '|---|---|---|---|',
+    ...sameGameComboRows,
+    '',
+    '## Actionable Counts by Market Lane',
+    '',
+    '| Market lane | Actionable candidate count |',
+    '|---|---:|',
+    ...actionableCountsByMarketLane.map(row => `| ${row.market_lane} | ${row.actionable_candidate_count} |`),
     '',
     '## Correlated Alternates',
     '',
@@ -745,10 +1164,27 @@ function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, wea
   ].join('\n');
 }
 
-function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb }) {
+function buildExecutionBoard({
+  runDate,
+  generatedAtUtc,
+  scoring,
+  slateManifest,
+  sportsbook,
+  context,
+  weather,
+  mlb,
+  sameGameCombos,
+}) {
   const now = new Date(generatedAtUtc);
   const chicagoTime = now.toLocaleString('en-US', { timeZone: 'America/Chicago' });
   const byClass = (cls) => safeArray(scoring.candidates).filter(c => c.classification === cls);
+  const comboCandidates = buildComboCandidates(scoring.candidates);
+  const marketLaneDiagnostics = buildMarketLaneDiagnostics({
+    candidates: scoring.candidates,
+    sameGameCombos,
+    comboCandidates,
+  });
+  const moneylineEdgeBoard = buildMoneylineEdgeBoard(scoring.candidates);
   return {
     schema_version: '1.0',
     run_date: runDate,
@@ -775,6 +1211,20 @@ function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, 
     passes: byClass('PASS'),
     blocked: byClass('BLOCKED_SOURCE_GAP'),
     correlated_alternates: byClass('CORRELATED_ALTERNATE'),
+    combo_candidates: comboCandidates,
+    combo_clear: comboCandidates.filter(combo => combo.combo_status === 'CLEAR_PICK'),
+    combo_leans: comboCandidates.filter(combo => ['PRE_LINEUP_PICK', 'LEAN'].includes(combo.combo_status)),
+    combo_watch: comboCandidates.filter(combo => combo.combo_status === 'WATCH_FOR_PRICE'),
+    same_game_combos: sameGameCombos,
+    candidate_counts_by_market_lane: marketLaneDiagnostics.candidate_counts_by_market_lane,
+    moneyline_candidate_count: marketLaneDiagnostics.moneyline_candidate_count,
+    game_total_candidate_count:
+      marketLaneDiagnostics.candidate_counts_by_market_lane.find(row => row.market_lane === 'game_total')?.candidate_count ?? 0,
+    unknown_other_candidate_count: marketLaneDiagnostics.unknown_other_candidate_count,
+    moneyline_edge_board_count: moneylineEdgeBoard.length,
+    moneyline_edge_board: moneylineEdgeBoard,
+    actionable_counts_by_market_lane: marketLaneDiagnostics.actionable_counts_by_market_lane,
+    market_lane_diagnostics: marketLaneDiagnostics,
     safety: [
       'No trades placed.',
       'No CLEAR_PICK emitted without all evidence gates passing.',
@@ -784,9 +1234,36 @@ function buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, 
   };
 }
 
-function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb }) {
-  const board = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb });
+function buildExecutionBoardMd({
+  runDate,
+  generatedAtUtc,
+  scoring,
+  slateManifest,
+  sportsbook,
+  context,
+  weather,
+  mlb,
+  sameGameCombos,
+}) {
+  const board = buildExecutionBoard({
+    runDate,
+    generatedAtUtc,
+    scoring,
+    slateManifest,
+    sportsbook,
+    context,
+    weather,
+    mlb,
+    sameGameCombos,
+  });
   const counts = board.summary_counts;
+  const laneDiagnostics = board.market_lane_diagnostics;
+  const moneylineEdgeBoard = board.moneyline_edge_board ?? [];
+  const moneylineEdgeRows = moneylineEdgeBoard.length > 0
+    ? moneylineEdgeBoard.slice(0, 10).map(c =>
+        `| ${tableEscape(c.market_ticker ?? '')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.side ?? '')} | ${tableEscape(c.classification ?? '')} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${c.target_entry ?? 'n/a'} | ${tableEscape(c.why_not)} |`,
+      )
+    : ['| none |  |  |  |  |  |  |  |  |'];
   const lines = [
     `# Execution Board - ${runDate}`,
     '',
@@ -893,6 +1370,63 @@ function buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest
           }),
         ].join('\n'),
     '',
+    ...whyMostlyTotalsSection({ scoring }),
+    '## Moneyline Edge Board',
+    '',
+    '_Discovery view across all classifications. PASS and WATCH_FOR_PRICE rows are included for edge visibility, not action._',
+    '',
+    '| market_ticker | game | Side | Status | Ask | Fair | Edge | Target | Why not |',
+    '|---|---|---|---|---:|---:|---:|---:|---|',
+    ...moneylineEdgeRows,
+    ...(moneylineEdgeBoard.length > 10
+      ? [`\n_${moneylineEdgeBoard.length - 10} more rows — see today-execution-board.json for the full list._`]
+      : []),
+    '',
+    '## Same-Game Combo Visibility',
+    '',
+    board.same_game_combos.length === 0
+      ? '- none'
+      : [
+           '_Informational only. Same-game markets are shown together so shared exposure is visible before sizing._',
+           '',
+           '| Game | Lane mix | Surfaced markets | Exposure note |',
+           '|---|---|---|---|',
+          ...board.same_game_combos.map(combo =>
+            `| ${tableEscape(combo.game ?? combo.group_key ?? 'unknown')} | ${tableEscape(combo.surfaced_lanes.join(', '))} | ${tableEscape(combo.display_markets)} | ${tableEscape(combo.same_game_exposure_note)} |`,
+          ),
+        ].join('\n'),
+    '',
+    '## Market-Lane Diagnostics',
+    '',
+    `- Total candidates: ${laneDiagnostics.total_candidates}`,
+    `- Actionable same-game combo groups: ${board.combo_candidates.length}`,
+    `- Same-game visibility groups: ${board.same_game_combos.length}`,
+    `- Clear combo groups: ${board.combo_clear.length}`,
+    `- Pre-lineup / lean combo groups: ${board.combo_leans.length}`,
+    `- Watch combo groups: ${board.combo_watch.length}`,
+    `- Moneyline candidates: ${board.moneyline_candidate_count}`,
+    `- Game total candidates: ${board.game_total_candidate_count}`,
+    `- Unknown/other candidates: ${board.unknown_other_candidate_count}`,
+    `- Moneyline-visible combo groups: ${laneDiagnostics.combo_summary.moneyline_visible_combo_groups}`,
+    '',
+    '### Candidate Counts by Market Lane',
+    '',
+    '| Market lane | Candidate count |',
+    '|---|---:|',
+    ...board.candidate_counts_by_market_lane.map(row => `| ${row.market_lane} | ${row.candidate_count} |`),
+    '',
+    '### Actionable Counts by Market Lane',
+    '',
+    '| Market lane | Actionable candidate count |',
+    '|---|---:|',
+    ...board.actionable_counts_by_market_lane.map(row => `| ${row.market_lane} | ${row.actionable_candidate_count} |`),
+    '',
+    '| Lane | Total candidates | Visible candidates | Combo groups |',
+    '|---|---:|---:|---:|',
+    ...laneDiagnostics.lane_counts.map(row =>
+      `| ${row.lane} | ${row.total_candidates} | ${row.visible_candidates} | ${laneDiagnostics.combo_summary.combo_lane_counts.find(comboRow => comboRow.lane === row.lane)?.combo_groups ?? 0} |`,
+    ),
+    '',
     '## Correlated Alternates',
     board.correlated_alternates.length === 0
       ? '- none'
@@ -964,6 +1498,7 @@ export function composeMlbDailyOutputs({
   );
 
   const scoring = scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context });
+  const sameGameCombos = buildSameGameCombos(scoring.candidates);
 
   const outputPaths = {
     slate_manifest: `${outDir}/slate_manifest.json`,
@@ -978,10 +1513,43 @@ export function composeMlbDailyOutputs({
   const slateManifest = buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context });
   const sourceRegistry = buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context });
   const picks = buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring });
-  const dailyGuide = buildDailyGuide({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, scoring, slateManifest });
+  const dailyGuide = buildDailyGuide({
+    runDate,
+    generatedAtUtc,
+    kalshi,
+    mlb,
+    baseballSavant,
+    weather,
+    liquidity,
+    sportsbook,
+    context,
+    scoring,
+    slateManifest,
+    sameGameCombos,
+  });
   const runLog = buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weather, liquidity, sportsbook, context, outDir, outputPaths });
-  const executionBoard = buildExecutionBoard({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb });
-  const executionBoardMd = buildExecutionBoardMd({ runDate, generatedAtUtc, scoring, slateManifest, sportsbook, context, weather, mlb });
+  const executionBoard = buildExecutionBoard({
+    runDate,
+    generatedAtUtc,
+    scoring,
+    slateManifest,
+    sportsbook,
+    context,
+    weather,
+    mlb,
+    sameGameCombos,
+  });
+  const executionBoardMd = buildExecutionBoardMd({
+    runDate,
+    generatedAtUtc,
+    scoring,
+    slateManifest,
+    sportsbook,
+    context,
+    weather,
+    mlb,
+    sameGameCombos,
+  });
 
   const written = {
     slate_manifest: writeJsonAtomic(outputPaths.slate_manifest, slateManifest),

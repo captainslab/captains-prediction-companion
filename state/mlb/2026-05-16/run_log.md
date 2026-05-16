@@ -2,7 +2,7 @@
 
 ## Run Metadata
 - Operator: sports-pre-game
-- Started UTC: 2026-05-16T16:46:47.638Z
+- Started UTC: 2026-05-16T22:10:32.411Z
 - Run date: 2026-05-16
 - Run folder: state/mlb/2026-05-16/
 - Schema version: 1.0
@@ -11,13 +11,13 @@
 ## Source Checks
 | Source | Status | Checked UTC | Access method | Limitation |
 |---|---|---|---|---|
-| Kalshi | degraded | 2026-05-16T15:39:22.043Z | Existing discovery JSON | Kalshi calendar inaccessible or challenge-gated: HTTP 429. |
-| MLB official | ok | 2026-05-16T15:02:39.418Z | Existing discovery JSON | Schedule/status only |
-| Baseball Savant | blocked | 2026-05-16T15:02:43.180Z | Existing discovery JSON | Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.; No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence. |
-| Weather | ok | 2026-05-16T15:39:18.082Z | Existing discovery JSON | Live read-only weather records are environment inputs only, not final model evidence or recommendations. |
-| Liquidity | blocked | 2026-05-16T15:02:43.217Z | Existing discovery JSON | No Kalshi market tickers provided; cannot fetch liquidity. |
-| Sportsbook reference | ok | 2026-05-16T15:39:34.189Z | Existing discovery JSON | Sportsbook reference records are not Kalshi prices and are never executable prices. |
-| Lineup/injury/bullpen | ok | 2026-05-16T15:39:50.042Z | Existing discovery JSON | Lineup pending is a disclosed evidence state, not a full-slate blocker. |
+| Kalshi | degraded | 2026-05-16T17:13:15.673Z | Existing discovery JSON | Kalshi calendar inaccessible or challenge-gated: HTTP 429. |
+| MLB official | ok | 2026-05-16T17:13:15.141Z | Existing discovery JSON | Schedule/status only |
+| Baseball Savant | blocked | 2026-05-16T17:13:19.428Z | Existing discovery JSON | Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.; No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence. |
+| Weather | ok | 2026-05-16T17:13:22.907Z | Existing discovery JSON | Live read-only weather records are environment inputs only, not final model evidence or recommendations. |
+| Liquidity | ok | 2026-05-16T17:13:29.757Z | Existing discovery JSON | Live read-only liquidity records are order book inputs only, not final recommendations. |
+| Sportsbook reference | ok | 2026-05-16T17:13:30.946Z | Existing discovery JSON | Sportsbook reference records are not Kalshi prices and are never executable prices. |
+| Lineup/injury/bullpen | ok | 2026-05-16T17:13:31.096Z | Existing discovery JSON | Lineup pending is a disclosed evidence state, not a full-slate blocker. |
 | Optional price sanity | skipped |  | Not called | Optional only |
 
 ## Kalshi Intake
@@ -75,13 +75,13 @@
 ## Output Writes
 | File | Wrote UTC | Status |
 |---|---|---|
-| state/mlb/2026-05-16/slate_manifest.json | 2026-05-16T16:46:47.638Z | ok |
-| state/mlb/2026-05-16/source_registry.json | 2026-05-16T16:46:47.638Z | ok |
-| state/mlb/2026-05-16/picks.json | 2026-05-16T16:46:47.638Z | ok |
-| state/mlb/2026-05-16/daily-baseball-guide.md | 2026-05-16T16:46:47.638Z | ok |
-| state/mlb/2026-05-16/run_log.md | 2026-05-16T16:46:47.638Z | ok |
-| state/mlb/2026-05-16/today-execution-board.json | 2026-05-16T16:46:47.638Z | ok |
-| state/mlb/2026-05-16/today-execution-board.md | 2026-05-16T16:46:47.638Z | ok |
+| state/mlb/2026-05-16/slate_manifest.json | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/source_registry.json | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/picks.json | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/daily-baseball-guide.md | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/run_log.md | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/today-execution-board.json | 2026-05-16T22:10:32.411Z | ok |
+| state/mlb/2026-05-16/today-execution-board.md | 2026-05-16T22:10:32.411Z | ok |
 
 ## No-Trade Confirmation
 - No live picks placed.

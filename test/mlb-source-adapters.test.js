@@ -9,6 +9,7 @@ import {
   fixtureKalshiBlockedEnvelope,
   fixtureKalshiSuccessEnvelope,
 } from '../scripts/mlb/source-adapters/kalshi-readonly.mjs';
+import { buildSameGameCombos, calculateComboEstimates } from '../scripts/mlb/output-writer-core.mjs';
 import { fixtureMlbScheduleEnvelope } from '../scripts/mlb/source-adapters/mlb-official-readonly.mjs';
 
 function makeJsonResponse(payload, status = 200) {
@@ -265,6 +266,69 @@ test('single-source discover does not overwrite other adapter files', () => {
   }
 });
 
+test('same-game combos keep multi-lane groups and exclude single-lane clusters', () => {
+  const combos = buildSameGameCombos([
+    {
+      event_ticker: 'KXTEST-ACESBET',
+      game: 'Alpha City Aces at Beta Town Bears',
+      market_ticker: 'KXTEST-ML-AWAY',
+      market_lane: 'moneyline',
+      classification: 'CLEAR_PICK',
+      edge_pp: 4.2,
+      kalshi_ask: 0.46,
+    },
+    {
+      event_ticker: 'KXTEST-ACESBET',
+      game: 'Alpha City Aces at Beta Town Bears',
+      market_ticker: 'KXTEST-TOTAL-OVER',
+      market_lane: 'game_total',
+      classification: 'LEAN',
+      edge_pp: 2.8,
+      kalshi_ask: 0.58,
+    },
+    {
+      event_ticker: 'KXTEST-ONLYTOTAL',
+      game: 'Gamma City Gulls at Delta Bay Ducks',
+      market_ticker: 'KXTEST-TOTAL-1',
+      market_lane: 'game_total',
+      classification: 'CLEAR_PICK',
+      edge_pp: 5.1,
+      kalshi_ask: 0.49,
+    },
+    {
+      event_ticker: 'KXTEST-ACESBET',
+      game: 'Alpha City Aces at Beta Town Bears',
+      market_ticker: 'KXTEST-TOTAL-ALT',
+      market_lane: 'game_total',
+      classification: 'CORRELATED_ALTERNATE',
+      edge_pp: 6.1,
+      kalshi_ask: 0.51,
+    },
+  ]);
+
+  assert.equal(combos.length, 1);
+  assert.equal(combos[0].event_ticker, 'KXTEST-ACESBET');
+  assert.deepEqual(combos[0].lanes_present, ['moneyline', 'game_total']);
+  assert.equal(combos[0].members.length, 2);
+  assert.match(combos[0].display_markets, /moneyline: KXTEST-ML-AWAY/);
+  assert.match(combos[0].display_markets, /game_total: KXTEST-TOTAL-OVER/);
+});
+
+test('combo estimates multiply cost and fair values', () => {
+  const estimates = calculateComboEstimates(
+    {
+      leg_1_ask: 0.63,
+      leg_1_fair: 0.7112,
+      leg_2_ask: 0.57,
+      leg_2_fair: 0.5983,
+    },
+  );
+
+  assert.equal(estimates.estimatedComboCost, 0.3591);
+  assert.equal(estimates.estimatedComboFair, 0.4255);
+  assert.equal(estimates.comboEdgePp, (0.4255 - 0.3591) * 100);
+});
+
 test('scoring blocks CLEAR_PICK when fixture mode detected', async () => {
   const { scoreMarkets } = await import('../scripts/mlb/scoring-core.mjs');
   const { fixtureKalshiSuccessEnvelope } = await import('../scripts/mlb/source-adapters/kalshi-readonly.mjs');
@@ -346,6 +410,727 @@ test('output writer reads optional liquidity adapter when present', async () => 
     const registry = JSON.parse(readFileSync(join(outDir, 'source_registry.json'), 'utf8'));
     const sourceIds = registry.sources.map(s => s.source_id);
     assert.ok(sourceIds.includes('liquidity'), `Expected 'liquidity' in source_ids, got: ${sourceIds.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('moneyline edge board keeps best positive-edge rows across classifications', async () => {
+  const { buildMoneylineEdgeBoard } = await import('../scripts/mlb/output-writer-core.mjs');
+
+  const rows = buildMoneylineEdgeBoard([
+    {
+      event_ticker: 'EVT1',
+      game: 'Alpha City Aces at Beta Town Bears',
+      market_ticker: 'ML-A',
+      contract_title: 'Alpha City Aces',
+      market_lane: 'moneyline',
+      classification: 'PASS',
+      edge_pp: 0.8,
+      kalshi_ask: 0.6,
+      fair_value: 0.608,
+      missing_confirmations: ['lineup_pending'],
+    },
+    {
+      event_ticker: 'EVT1',
+      game: 'Alpha City Aces at Beta Town Bears',
+      market_ticker: 'ML-A-NEG',
+      contract_title: 'Beta Town Bears',
+      market_lane: 'moneyline',
+      classification: 'PASS',
+      edge_pp: -0.4,
+      kalshi_ask: 0.64,
+      fair_value: 0.6,
+      missing_confirmations: ['lineup_pending'],
+    },
+    {
+      event_ticker: 'EVT2',
+      game: 'Gamma City Gulls at Delta Bay Ducks',
+      market_ticker: 'ML-B',
+      contract_title: 'Gamma City Gulls',
+      market_lane: 'moneyline',
+      classification: 'WATCH_FOR_PRICE',
+      edge_pp: 1.1,
+      kalshi_ask: 0.49,
+      fair_value: 0.501,
+      target_entry: 0.48,
+      missing_confirmations: ['stronger_edge'],
+    },
+    {
+      event_ticker: 'EVT3',
+      game: 'Epsilon City Eagles at Zeta Town Zebras',
+      market_ticker: 'ML-C',
+      contract_title: 'Epsilon City Eagles',
+      market_lane: 'moneyline',
+      classification: 'LEAN',
+      edge_pp: 2.4,
+      kalshi_ask: 0.44,
+      fair_value: 0.464,
+      missing_confirmations: [],
+    },
+    {
+      event_ticker: 'EVT4',
+      game: 'Theta City Tides at Iota Bay Iguanas',
+      market_ticker: 'RL-1',
+      contract_title: 'Theta City Tides',
+      market_lane: 'run_line',
+      classification: 'WATCH_FOR_PRICE',
+      edge_pp: 3.2,
+      kalshi_ask: 0.41,
+      fair_value: 0.442,
+      missing_confirmations: ['lineup_pending'],
+    },
+    {
+      event_ticker: 'EVT5',
+      game: 'Kappa City Kings at Lambda Bay Lizards',
+      market_ticker: 'ML-ZERO',
+      contract_title: 'Kappa City Kings',
+      market_lane: 'moneyline',
+      classification: 'PASS',
+      edge_pp: 0,
+      kalshi_ask: 0.55,
+      fair_value: 0.55,
+      missing_confirmations: [],
+    },
+  ]);
+
+  assert.deepEqual(rows.map(row => row.market_ticker), ['ML-C', 'ML-B', 'ML-A']);
+  assert.equal(rows[0].classification, 'LEAN');
+  assert.equal(rows[1].classification, 'WATCH_FOR_PRICE');
+  assert.equal(rows[2].classification, 'PASS');
+  assert.match(rows[1].why_not, /stronger_edge/);
+  assert.ok(rows.every(row => row.edge_pp > 0));
+  assert.ok(!rows.some(row => row.market_ticker === 'ML-A-NEG'));
+  assert.ok(!rows.some(row => row.market_ticker === 'RL-1'));
+  assert.ok(!rows.some(row => row.market_ticker === 'ML-ZERO'));
+});
+
+test('output writer surfaces same-game combo visibility in json and markdown', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const { composeMlbDailyOutputs } = await import('../scripts/mlb/output-writer-core.mjs');
+
+  const dir = mkdtempSync(join(tmpdir(), 'mlb-same-game-combos-'));
+  const discoveryDir = join(dir, 'discovery');
+  const outDir = join(dir, 'out');
+  mkdirSync(discoveryDir, { recursive: true });
+  mkdirSync(outDir, { recursive: true });
+
+  const checkedAtUtc = '2026-05-15T14:00:00.000Z';
+  const runDate = '2026-05-15';
+
+  const kalshiEnvelope = {
+    source_id: 'kalshi',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'kalshi_fixture',
+    cache_path: join(discoveryDir, 'kalshi_adapter.json'),
+    required: true,
+    records: [
+      {
+        event_ticker: 'KXTEST-ACESBET',
+        event_title: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        matched_game_pk: 100001,
+        markets: [
+          {
+            market_ticker: 'KXTEST-ML-AWAY',
+            market_title: 'Will the Alpha City Aces beat the Beta Town Bears?',
+            contract_title: 'Alpha City Aces',
+            market_lane: 'moneyline',
+            candidate_lanes: ['moneyline'],
+            yes_ask: 0.44,
+            team_name: 'Alpha City Aces',
+            team_code: 'ACES',
+          },
+          {
+            market_ticker: 'KXTEST-TOTAL-OVER',
+            market_title: 'Alpha City Aces vs Beta Town Bears total runs',
+            contract_title: 'Over 8.5 runs scored',
+            market_lane: 'game_total',
+            candidate_lanes: ['game_total'],
+            yes_ask: 0.28,
+            total_strike: 8.5,
+          },
+        ],
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const mlbEnvelope = {
+    source_id: 'mlb_official',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'mlb_fixture',
+    cache_path: join(discoveryDir, 'mlb_official_adapter.json'),
+    required: true,
+    records: [
+      {
+        game_pk: 100001,
+        game_date: runDate,
+        start_time_utc: `${runDate}T23:05:00Z`,
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        mlb_status: 'Scheduled',
+        probable_pitchers: {
+          away: 'Starter A',
+          home: 'Starter B',
+        },
+        venue: 'Placeholder Park',
+        venue_timezone: 'America/New_York',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const sportsbookEnvelope = {
+    source_id: 'sportsbook_reference',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'sportsbook_fixture',
+    cache_path: join(discoveryDir, 'sportsbook_adapter.json'),
+    required: false,
+    records: [
+      {
+        query_type: 'sportsbook_no_vig_reference',
+        game: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        away_no_vig_fair: 0.63,
+        home_no_vig_fair: 0.37,
+        over_under: 8.5,
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const weatherEnvelope = {
+    source_id: 'weather',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'weather_fixture',
+    cache_path: join(discoveryDir, 'weather_adapter.json'),
+    required: true,
+    records: [
+      {
+        query_type: 'game_weather_environment',
+        game_pk: 100001,
+        game_date: runDate,
+        game: 'Alpha City Aces at Beta Town Bears',
+        venue: 'Placeholder Park',
+        checked_at_utc: checkedAtUtc,
+        precipitation_risk: 0.1,
+        roof_status: 'open_air',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const contextEnvelope = {
+    source_id: 'lineup_injury_bullpen',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'context_fixture',
+    cache_path: join(discoveryDir, 'context_adapter.json'),
+    required: false,
+    records: [
+      {
+        query_type: 'lineup_injury_bullpen_context',
+        game_pk: 100001,
+        game_date: runDate,
+        game: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        lineup_status: 'confirmed_or_boxscore_available',
+        venue_roof_type: 'open_air',
+        key_injuries: [],
+        bullpen_usage_note: 'Bullpen usage normal.',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  try {
+    writeFileSync(join(discoveryDir, 'kalshi_adapter.json'), `${JSON.stringify(kalshiEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'mlb_official_adapter.json'), `${JSON.stringify(mlbEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'sportsbook_adapter.json'), `${JSON.stringify(sportsbookEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'weather_adapter.json'), `${JSON.stringify(weatherEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'context_adapter.json'), `${JSON.stringify(contextEnvelope, null, 2)}\n`);
+
+    composeMlbDailyOutputs({
+      runDate,
+      discoveryDir,
+      outDir,
+      now: new Date(checkedAtUtc),
+    });
+
+    const board = JSON.parse(readFileSync(join(outDir, 'today-execution-board.json'), 'utf8'));
+    assert.equal(board.same_game_combos.length, 1);
+    assert.equal(board.same_game_combos[0].event_ticker, 'KXTEST-ACESBET');
+    assert.deepEqual(board.same_game_combos[0].lanes_present, ['moneyline', 'game_total']);
+    assert.deepEqual(board.same_game_combos[0].surfaced_lanes, ['moneyline', 'game_total']);
+    assert.match(board.same_game_combos[0].display_markets, /moneyline: KXTEST-ML-AWAY/);
+    assert.match(board.same_game_combos[0].display_markets, /game_total: KXTEST-TOTAL-OVER/);
+    assert.deepEqual(board.actionable_counts_by_market_lane, [
+      { market_lane: 'moneyline', actionable_candidate_count: 1 },
+      { market_lane: 'run_line', actionable_candidate_count: 0 },
+      { market_lane: 'game_total', actionable_candidate_count: 1 },
+      { market_lane: 'yrfi_nrfi', actionable_candidate_count: 0 },
+      { market_lane: 'home_run_hitter', actionable_candidate_count: 0 },
+      { market_lane: 'pitcher_strikeouts', actionable_candidate_count: 0 },
+    ]);
+    assert.equal(board.moneyline_candidate_count, 1);
+    assert.equal(board.game_total_candidate_count, 1);
+    assert.equal(board.unknown_other_candidate_count, 0);
+    assert.equal(board.moneyline_edge_board_count, 1);
+    assert.equal(board.moneyline_edge_board.length, 1);
+    assert.equal(board.market_lane_diagnostics.lane_counts[0].actionable_candidates, 1);
+    assert.equal(board.market_lane_diagnostics.lane_counts[2].actionable_candidates, 1);
+    assert.equal(board.combo_candidates.length, 1);
+    assert.equal(board.combo_candidates[0].leg_1_market_lane, 'moneyline');
+    assert.equal(board.combo_candidates[0].leg_2_market_lane, 'game_total');
+    assert.match(board.combo_candidates[0].display_markets, /moneyline: KXTEST-ML-AWAY/);
+    assert.match(board.combo_candidates[0].display_markets, /game_total: KXTEST-TOTAL-OVER/);
+
+    const guide = readFileSync(join(outDir, 'daily-baseball-guide.md'), 'utf8');
+    const boardMd = readFileSync(join(outDir, 'today-execution-board.md'), 'utf8');
+    assert.match(boardMd, /Moneyline Edge Board/);
+    assert.match(boardMd, /\| market_ticker \| game \| Side \| Status \| Ask \| Fair \| Edge \| Target \| Why not \|/);
+    assert.match(boardMd, /Alpha City Aces at Beta Town Bears/);
+    assert.match(boardMd, /Why mostly totals\?/i);
+    assert.match(guide, /Same-Game Combo Visibility/);
+    assert.match(guide, /Actionable Counts by Market Lane/);
+    assert.match(guide, /Why mostly totals\?/i);
+    assert.match(guide, /Moneyline candidates: 1/);
+    assert.match(guide, /Game total candidates: 1/);
+    assert.match(guide, /Unknown\/other candidates: 0/);
+    assert.match(boardMd, /Unknown\/other candidates: 0/);
+    assert.match(guide, /Alpha City Aces at Beta Town Bears/);
+    assert.match(guide, /Informational only/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('same-game visibility keeps PASS legs in the exposure group without emitting a combo row', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const { composeMlbDailyOutputs } = await import('../scripts/mlb/output-writer-core.mjs');
+
+  const dir = mkdtempSync(join(tmpdir(), 'mlb-same-game-pass-'));
+  const discoveryDir = join(dir, 'discovery');
+  const outDir = join(dir, 'out');
+  mkdirSync(discoveryDir, { recursive: true });
+  mkdirSync(outDir, { recursive: true });
+
+  const checkedAtUtc = '2026-05-15T14:00:00.000Z';
+  const runDate = '2026-05-15';
+
+  const kalshiEnvelope = {
+    source_id: 'kalshi',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'kalshi_fixture',
+    cache_path: join(discoveryDir, 'kalshi_adapter.json'),
+    required: true,
+    records: [
+      {
+        event_ticker: 'KXTEST-MIXED',
+        event_title: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        matched_game_pk: 100001,
+        markets: [
+          {
+            market_ticker: 'KXTEST-ML-AWAY',
+            market_title: 'Will the Alpha City Aces beat the Beta Town Bears?',
+            contract_title: 'Alpha City Aces',
+            market_lane: 'moneyline',
+            candidate_lanes: ['moneyline'],
+            yes_ask: 0.68,
+            team_name: 'Alpha City Aces',
+            team_code: 'ACES',
+          },
+          {
+            market_ticker: 'KXTEST-ML-HOME',
+            market_title: 'Will the Beta Town Bears beat the Alpha City Aces?',
+            contract_title: 'Beta Town Bears',
+            market_lane: 'moneyline',
+            candidate_lanes: ['moneyline'],
+            yes_ask: 0.45,
+            team_name: 'Beta Town Bears',
+            team_code: 'BEARS',
+          },
+          {
+            market_ticker: 'KXTEST-TOTAL-OVER',
+            market_title: 'Alpha City Aces vs Beta Town Bears total runs',
+            contract_title: 'Over 7.5 runs scored',
+            market_lane: 'game_total',
+            candidate_lanes: ['game_total'],
+            yes_ask: 0.4,
+            total_strike: 7.5,
+          },
+        ],
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const mlbEnvelope = {
+    source_id: 'mlb_official',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'mlb_fixture',
+    cache_path: join(discoveryDir, 'mlb_official_adapter.json'),
+    required: true,
+    records: [
+      {
+        game_pk: 100001,
+        game_date: runDate,
+        start_time_utc: `${runDate}T23:05:00Z`,
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        mlb_status: 'Scheduled',
+        probable_pitchers: {
+          away: 'Starter A',
+          home: 'Starter B',
+        },
+        venue: 'Placeholder Park',
+        venue_timezone: 'America/New_York',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const sportsbookEnvelope = {
+    source_id: 'sportsbook_reference',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'sportsbook_fixture',
+    cache_path: join(discoveryDir, 'sportsbook_adapter.json'),
+    required: false,
+    records: [
+      {
+        query_type: 'sportsbook_no_vig_reference',
+        game: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        away_no_vig_fair: 0.63,
+        home_no_vig_fair: 0.37,
+        over_under: 8.5,
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const weatherEnvelope = {
+    source_id: 'weather',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'weather_fixture',
+    cache_path: join(discoveryDir, 'weather_adapter.json'),
+    required: true,
+    records: [
+      {
+        query_type: 'game_weather_environment',
+        game_pk: 100001,
+        game_date: runDate,
+        game: 'Alpha City Aces at Beta Town Bears',
+        venue: 'Placeholder Park',
+        checked_at_utc: checkedAtUtc,
+        precipitation_risk: 0.1,
+        roof_status: 'open_air',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const contextEnvelope = {
+    source_id: 'lineup_injury_bullpen',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'context_fixture',
+    cache_path: join(discoveryDir, 'context_adapter.json'),
+    required: false,
+    records: [
+      {
+        query_type: 'lineup_injury_bullpen_context',
+        game_pk: 100001,
+        game_date: runDate,
+        game: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        lineup_status: 'confirmed_or_boxscore_available',
+        venue_roof_type: 'open_air',
+        key_injuries: [],
+        bullpen_usage_note: 'Bullpen usage normal.',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  try {
+    writeFileSync(join(discoveryDir, 'kalshi_adapter.json'), `${JSON.stringify(kalshiEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'mlb_official_adapter.json'), `${JSON.stringify(mlbEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'sportsbook_adapter.json'), `${JSON.stringify(sportsbookEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'weather_adapter.json'), `${JSON.stringify(weatherEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'context_adapter.json'), `${JSON.stringify(contextEnvelope, null, 2)}\n`);
+
+    composeMlbDailyOutputs({
+      runDate,
+      discoveryDir,
+      outDir,
+      now: new Date(checkedAtUtc),
+    });
+
+    const board = JSON.parse(readFileSync(join(outDir, 'today-execution-board.json'), 'utf8'));
+    assert.equal(board.same_game_combos.length, 1);
+    assert.ok(Object.hasOwn(board.same_game_combos[0], 'combo_edge_pp'));
+    assert.equal(board.same_game_combos[0].market_count, 3);
+    assert.equal(board.same_game_combos[0].visible_market_count, 1);
+    assert.deepEqual(board.same_game_combos[0].lanes_present, ['game_total']);
+    assert.deepEqual(board.same_game_combos[0].surfaced_lanes, ['moneyline', 'game_total']);
+    assert.match(board.same_game_combos[0].display_markets, /PASS/);
+    assert.equal(board.combo_candidates.length, 0);
+    assert.equal(board.market_lane_diagnostics.combo_summary.combo_candidates, 0);
+    assert.equal(board.market_lane_diagnostics.combo_summary.moneyline_visible_combo_groups, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('PASS moneylines do not emit combo candidates', async () => {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const { composeMlbDailyOutputs } = await import('../scripts/mlb/output-writer-core.mjs');
+
+  const dir = mkdtempSync(join(tmpdir(), 'mlb-combo-pair-'));
+  const discoveryDir = join(dir, 'discovery');
+  const outDir = join(dir, 'out');
+  mkdirSync(discoveryDir, { recursive: true });
+  mkdirSync(outDir, { recursive: true });
+
+  const checkedAtUtc = '2026-05-15T14:00:00.000Z';
+  const runDate = '2026-05-15';
+
+  const kalshiEnvelope = {
+    source_id: 'kalshi',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'kalshi_fixture',
+    cache_path: join(discoveryDir, 'kalshi_adapter.json'),
+    required: true,
+    records: [
+      {
+        event_ticker: 'KXTEST-PAIR',
+        event_title: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        matched_game_pk: 100001,
+        markets: [
+          {
+            market_ticker: 'KXTEST-ML-AWAY',
+            market_title: 'Will the Alpha City Aces beat the Beta Town Bears?',
+            contract_title: 'Alpha City Aces',
+            market_lane: 'moneyline',
+            candidate_lanes: ['moneyline'],
+            yes_ask: 0.44,
+            team_name: 'Alpha City Aces',
+            team_code: 'ACES',
+          },
+          {
+            market_ticker: 'KXTEST-ML-HOME-PASS',
+            market_title: 'Will the Beta Town Bears beat the Alpha City Aces?',
+            contract_title: 'Beta Town Bears',
+            market_lane: 'moneyline',
+            candidate_lanes: ['moneyline'],
+            yes_ask: 0.76,
+            team_name: 'Beta Town Bears',
+            team_code: 'BEARS',
+          },
+          {
+            market_ticker: 'KXTEST-TOTAL-OVER-A',
+            market_title: 'Alpha City Aces vs Beta Town Bears total runs',
+            contract_title: 'Over 7.5 runs scored',
+            market_lane: 'game_total',
+            candidate_lanes: ['game_total'],
+            yes_ask: 0.15,
+            total_strike: 7.5,
+          },
+          {
+            market_ticker: 'KXTEST-TOTAL-OVER-B',
+            market_title: 'Alpha City Aces vs Beta Town Bears total runs alt',
+            contract_title: 'Over 8.5 runs scored',
+            market_lane: 'game_total',
+            candidate_lanes: ['game_total'],
+            yes_ask: 0.1,
+            total_strike: 8.5,
+          },
+        ],
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const mlbEnvelope = {
+    source_id: 'mlb_official',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'mlb_fixture',
+    cache_path: join(discoveryDir, 'mlb_official_adapter.json'),
+    required: true,
+    records: [
+      {
+        game_pk: 100001,
+        game_date: runDate,
+        start_time_utc: `${runDate}T23:05:00Z`,
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        mlb_status: 'Scheduled',
+        probable_pitchers: {
+          away: 'Starter A',
+          home: 'Starter B',
+        },
+        venue: 'Placeholder Park',
+        venue_timezone: 'America/New_York',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const sportsbookEnvelope = {
+    source_id: 'sportsbook_reference',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'sportsbook_fixture',
+    cache_path: join(discoveryDir, 'sportsbook_adapter.json'),
+    required: false,
+    records: [
+      {
+        query_type: 'sportsbook_no_vig_reference',
+        game: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        away_no_vig_fair: 0.63,
+        home_no_vig_fair: 0.37,
+        over_under: 8.5,
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const weatherEnvelope = {
+    source_id: 'weather',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'weather_fixture',
+    cache_path: join(discoveryDir, 'weather_adapter.json'),
+    required: true,
+    records: [
+      {
+        query_type: 'game_weather_environment',
+        game_pk: 100001,
+        game_date: runDate,
+        game: 'Alpha City Aces at Beta Town Bears',
+        venue: 'Placeholder Park',
+        checked_at_utc: checkedAtUtc,
+        precipitation_risk: 0.1,
+        roof_status: 'open_air',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const contextEnvelope = {
+    source_id: 'lineup_injury_bullpen',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    cache_key: 'context_fixture',
+    cache_path: join(discoveryDir, 'context_adapter.json'),
+    required: false,
+    records: [
+      {
+        query_type: 'lineup_injury_bullpen_context',
+        game_pk: 100001,
+        game_date: runDate,
+        game: 'Alpha City Aces at Beta Town Bears',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        lineup_status: 'confirmed_or_boxscore_available',
+        venue_roof_type: 'open_air',
+        key_injuries: [],
+        bullpen_usage_note: 'Bullpen usage normal.',
+      },
+    ],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  try {
+    writeFileSync(join(discoveryDir, 'kalshi_adapter.json'), `${JSON.stringify(kalshiEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'mlb_official_adapter.json'), `${JSON.stringify(mlbEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'sportsbook_adapter.json'), `${JSON.stringify(sportsbookEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'weather_adapter.json'), `${JSON.stringify(weatherEnvelope, null, 2)}\n`);
+    writeFileSync(join(discoveryDir, 'context_adapter.json'), `${JSON.stringify(contextEnvelope, null, 2)}\n`);
+
+    composeMlbDailyOutputs({
+      runDate,
+      discoveryDir,
+      outDir,
+      now: new Date(checkedAtUtc),
+    });
+
+    const board = JSON.parse(readFileSync(join(outDir, 'today-execution-board.json'), 'utf8'));
+    assert.equal(board.same_game_combos.length, 1);
+    assert.ok(Object.hasOwn(board.same_game_combos[0], 'combo_edge_pp'));
+    assert.equal(board.combo_candidates.length, 1);
+    assert.equal(board.combo_candidates[0].combo_member_count, 2);
+    assert.ok(Object.hasOwn(board.combo_candidates[0], 'leg_1_market_lane'));
+    assert.ok(Object.hasOwn(board.combo_candidates[0], 'leg_1_strike'));
+    assert.ok(Object.hasOwn(board.combo_candidates[0], 'leg_2_market_lane'));
+    assert.equal(board.combo_candidates[0].note, 'No trades placed');
+    assert.equal(board.combo_candidates[0].leg_1_market_lane, 'moneyline');
+    assert.equal(board.combo_candidates[0].leg_1_market_ticker, 'KXTEST-ML-AWAY');
+    assert.equal(board.combo_candidates[0].leg_2_market_lane, 'game_total');
+    assert.equal(
+      board.combo_candidates[0].estimated_combo_cost,
+      Math.round((board.combo_candidates[0].leg_1_ask * board.combo_candidates[0].leg_2_ask) * 10000) / 10000,
+    );
+    assert.equal(
+      board.combo_candidates[0].estimated_combo_fair,
+      Math.round((board.combo_candidates[0].leg_1_fair * board.combo_candidates[0].leg_2_fair) * 10000) / 10000,
+    );
+    assert.match(board.combo_candidates[0].display_markets, /KXTEST-ML-AWAY/);
+    assert.match(board.combo_candidates[0].display_markets, /KXTEST-TOTAL-OVER-[AB]/);
+    assert.doesNotMatch(board.combo_candidates[0].display_markets, /KXTEST-ML-HOME-PASS/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

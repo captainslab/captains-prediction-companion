@@ -341,6 +341,8 @@ function classifyMarket({
   venueRoofType = null,
   hasInjuries = false,
   bullpenUnknown = false,
+  total_strike = null,
+  dk_line = null,
 }) {
   const failed = gateNamesFailed(gatesFailed);
   const missing = [];
@@ -624,6 +626,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
       const candidate = {
         market_ticker: market.market_ticker ?? null,
         event_ticker: record.event_ticker ?? null,
+        matched_game_pk: record.matched_game_pk ?? null,
         market_title: market.market_title ?? null,
         market_lane: lane,
         game: gameLabel,

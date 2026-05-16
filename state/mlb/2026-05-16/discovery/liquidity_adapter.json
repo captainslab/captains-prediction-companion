@@ -1,16 +1,187 @@
 {
   "source_id": "liquidity",
-  "status": "blocked",
-  "checked_at_utc": "2026-05-16T15:02:43.217Z",
-  "cache_key": "liquidity_2026-05-16T15:02:43.217Z",
+  "status": "ok",
+  "checked_at_utc": "2026-05-16T17:13:29.757Z",
+  "cache_key": "liquidity_2026-05-16T17:13:29.757Z",
   "cache_path": "state/mlb/2026-05-16/discovery/liquidity_adapter.json",
   "required": false,
-  "records": [],
+  "records": [
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY162140SFATH-SF",
+      "event_ticker": "KXMLBGAME-26MAY162140SFATH",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162140SFATH-SF"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY162140SFATH-ATH",
+      "event_ticker": "KXMLBGAME-26MAY162140SFATH",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162140SFATH-ATH"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY162138LADLAA-LAD",
+      "event_ticker": "KXMLBGAME-26MAY162138LADLAA",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162138LADLAA-LAD"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY162138LADLAA-LAA",
+      "event_ticker": "KXMLBGAME-26MAY162138LADLAA",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162138LADLAA-LAA"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY161915SDSEA-SD",
+      "event_ticker": "KXMLBGAME-26MAY161915SDSEA",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915SDSEA-SD"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY161915SDSEA-SEA",
+      "event_ticker": "KXMLBGAME-26MAY161915SDSEA",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915SDSEA-SEA"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY161915NYYNYM-NYY",
+      "event_ticker": "KXMLBGAME-26MAY161915NYYNYM",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915NYYNYM-NYY"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY161915NYYNYM-NYM",
+      "event_ticker": "KXMLBGAME-26MAY161915NYYNYM",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915NYYNYM-NYM"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY161915BOSATL-BOS",
+      "event_ticker": "KXMLBGAME-26MAY161915BOSATL",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915BOSATL-BOS"
+      ],
+      "warnings": []
+    },
+    {
+      "query_type": "market_liquidity",
+      "market_ticker": "KXMLBGAME-26MAY161915BOSATL-ATL",
+      "event_ticker": "KXMLBGAME-26MAY161915BOSATL",
+      "checked_at_utc": "2026-05-16T17:13:29.757Z",
+      "best_bid": null,
+      "best_ask": null,
+      "spread": null,
+      "volume": null,
+      "open_interest": null,
+      "liquidity_status": "degraded",
+      "source_urls": [
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915BOSATL-ATL"
+      ],
+      "warnings": []
+    }
+  ],
   "warnings": [
-    "No Kalshi market tickers provided; cannot fetch liquidity."
+    "Live read-only liquidity records are order book inputs only, not final recommendations."
   ],
   "errors": [],
   "source_urls": [
-    "https://api.elections.kalshi.com/trade-api/v2"
+    "https://api.elections.kalshi.com/trade-api/v2",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162140SFATH-SF",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162140SFATH-ATH",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162138LADLAA-LAD",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162138LADLAA-LAA",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915SDSEA-SD",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915SDSEA-SEA",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915NYYNYM-NYY",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915NYYNYM-NYM",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915BOSATL-BOS",
+    "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915BOSATL-ATL"
   ]
 }

@@ -1,8 +1,8 @@
 {
   "source_id": "mlb_official",
   "status": "ok",
-  "checked_at_utc": "2026-05-16T15:02:39.418Z",
-  "cache_key": "mlb_official_schedule_2026-05-16T15:02:39.418Z",
+  "checked_at_utc": "2026-05-16T17:13:15.141Z",
+  "cache_key": "mlb_official_schedule_2026-05-16T17:13:15.141Z",
   "cache_path": "state/mlb/2026-05-16/discovery/mlb_official_adapter.json",
   "required": true,
   "records": [
@@ -12,12 +12,15 @@
       "start_time_utc": "2026-05-16T17:10:00Z",
       "away_team": "Toronto Blue Jays",
       "home_team": "Detroit Tigers",
-      "mlb_status": "Pre-Game",
+      "mlb_status": "In Progress",
       "probable_pitchers": {
         "away": "Mason Fluharty",
-        "home": "Casey Mize"
+        "home": "Casey Mize",
+        "away_id": 689254,
+        "home_id": 663554
       },
-      "venue": "Comerica Park"
+      "venue": "Comerica Park",
+      "venue_timezone": "America/Detroit"
     },
     {
       "game_pk": 823060,
@@ -25,12 +28,15 @@
       "start_time_utc": "2026-05-16T18:15:00Z",
       "away_team": "Kansas City Royals",
       "home_team": "St. Louis Cardinals",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Noah Cameron",
-        "home": "Kyle Leahy"
+        "home": "Kyle Leahy",
+        "away_id": 702070,
+        "home_id": 681517
       },
-      "venue": "Busch Stadium"
+      "venue": "Busch Stadium",
+      "venue_timezone": "America/Chicago"
     },
     {
       "game_pk": 824359,
@@ -38,12 +44,15 @@
       "start_time_utc": "2026-05-16T19:10:00Z",
       "away_team": "Arizona Diamondbacks",
       "home_team": "Colorado Rockies",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Eduardo Rodriguez",
-        "home": "Tomoyuki Sugano"
+        "home": "Tomoyuki Sugano",
+        "away_id": 593958,
+        "home_id": 608372
       },
-      "venue": "Coors Field"
+      "venue": "Coors Field",
+      "venue_timezone": "America/Denver"
     },
     {
       "game_pk": 822737,
@@ -51,12 +60,15 @@
       "start_time_utc": "2026-05-16T20:05:00Z",
       "away_team": "Baltimore Orioles",
       "home_team": "Washington Nationals",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Chris Bassitt",
-        "home": "Cade Cavalli"
+        "home": "Cade Cavalli",
+        "away_id": 605135,
+        "home_id": 676917
       },
-      "venue": "Nationals Park"
+      "venue": "Nationals Park",
+      "venue_timezone": "America/New_York"
     },
     {
       "game_pk": 823382,
@@ -67,9 +79,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Cristopher Sánchez",
-        "home": "Bubba Chandler"
+        "home": "Bubba Chandler",
+        "away_id": 650911,
+        "home_id": 696149
       },
-      "venue": "PNC Park"
+      "venue": "PNC Park",
+      "venue_timezone": "America/New_York"
     },
     {
       "game_pk": 822981,
@@ -77,12 +92,15 @@
       "start_time_utc": "2026-05-16T20:10:00Z",
       "away_team": "Miami Marlins",
       "home_team": "Tampa Bay Rays",
-      "mlb_status": "Scheduled",
+      "mlb_status": "Pre-Game",
       "probable_pitchers": {
         "away": "Sandy Alcantara",
-        "home": "Nick Martinez"
+        "home": "Nick Martinez",
+        "away_id": 645261,
+        "home_id": 607259
       },
-      "venue": "Tropicana Field"
+      "venue": "Tropicana Field",
+      "venue_timezone": "America/New_York"
     },
     {
       "game_pk": 824435,
@@ -93,9 +111,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Chris Paddack",
-        "home": "Joey Cantillo"
+        "home": "Joey Cantillo",
+        "away_id": 663978,
+        "home_id": 676282
       },
-      "venue": "Progressive Field"
+      "venue": "Progressive Field",
+      "venue_timezone": "America/New_York"
     },
     {
       "game_pk": 824193,
@@ -106,9 +127,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Jacob deGrom",
-        "home": "Kai-Wei Teng"
+        "home": "Kai-Wei Teng",
+        "away_id": 594798,
+        "home_id": 678906
       },
-      "venue": "Daikin Park"
+      "venue": "Daikin Park",
+      "venue_timezone": "America/Chicago"
     },
     {
       "game_pk": 824600,
@@ -119,9 +143,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Jameson Taillon",
-        "home": "Davis Martin"
+        "home": "Davis Martin",
+        "away_id": 592791,
+        "home_id": 663436
       },
-      "venue": "Rate Field"
+      "venue": "Rate Field",
+      "venue_timezone": "America/Chicago"
     },
     {
       "game_pk": 823706,
@@ -132,9 +159,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Logan Henderson",
-        "home": "Connor Prielipp"
+        "home": "Connor Prielipp",
+        "away_id": 701656,
+        "home_id": 687570
       },
-      "venue": "Target Field"
+      "venue": "Target Field",
+      "venue_timezone": "America/Chicago"
     },
     {
       "game_pk": 823139,
@@ -145,9 +175,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Walker Buehler",
-        "home": "Logan Gilbert"
+        "home": "Logan Gilbert",
+        "away_id": 621111,
+        "home_id": 669302
       },
-      "venue": "T-Mobile Park"
+      "venue": "T-Mobile Park",
+      "venue_timezone": "America/Los_Angeles"
     },
     {
       "game_pk": 824924,
@@ -158,9 +191,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Payton Tolle",
-        "home": "Bryce Elder"
+        "home": "Bryce Elder",
+        "away_id": 801139,
+        "home_id": 693821
       },
-      "venue": "Truist Park"
+      "venue": "Truist Park",
+      "venue_timezone": "America/New_York"
     },
     {
       "game_pk": 823627,
@@ -171,9 +207,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Carlos Rodón",
-        "home": "Huascar Brazobán"
+        "home": "Huascar Brazobán",
+        "away_id": 607074,
+        "home_id": 623211
       },
-      "venue": "Citi Field"
+      "venue": "Citi Field",
+      "venue_timezone": "America/New_York"
     },
     {
       "game_pk": 824038,
@@ -184,9 +223,12 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Justin Wrobleski",
-        "home": "José Soriano"
+        "home": "José Soriano",
+        "away_id": 680736,
+        "home_id": 667755
       },
-      "venue": "Angel Stadium"
+      "venue": "Angel Stadium",
+      "venue_timezone": "America/Los_Angeles"
     },
     {
       "game_pk": 825007,
@@ -197,14 +239,17 @@
       "mlb_status": "Scheduled",
       "probable_pitchers": {
         "away": "Trevor McDonald",
-        "home": "Luis Severino"
+        "home": "Luis Severino",
+        "away_id": 686790,
+        "home_id": 622663
       },
-      "venue": "Sutter Health Park"
+      "venue": "Sutter Health Park",
+      "venue_timezone": "America/Los_Angeles"
     }
   ],
   "warnings": [],
   "errors": [],
   "source_urls": [
-    "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-05-16&hydrate=probablePitcher%2Cteam"
+    "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-05-16&hydrate=probablePitcher%2Cteam%2Cvenue%28timezone%29"
   ]
 }

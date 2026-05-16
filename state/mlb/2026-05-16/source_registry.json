@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "run_date": "2026-05-16",
-  "generated_at_utc": "2026-05-16T16:46:47.638Z",
+  "generated_at_utc": "2026-05-16T22:10:32.411Z",
   "operator": "sports-pre-game",
   "sources": [
     {
@@ -14,7 +14,7 @@
       "daily_repeatability": "Daily, subject to UI challenge gates and public endpoint availability",
       "limitations": "Kalshi calendar inaccessible or challenge-gated: HTTP 429.",
       "status": "degraded",
-      "last_checked_utc": "2026-05-16T15:39:22.043Z",
+      "last_checked_utc": "2026-05-16T17:13:15.673Z",
       "required": true,
       "urls": [
         "https://kalshi.com/calendar/sports/baseball",
@@ -40,10 +40,10 @@
       "daily_repeatability": "Daily public API access",
       "limitations": "Official schedule source; not a betting or player-prop model.",
       "status": "ok",
-      "last_checked_utc": "2026-05-16T15:02:39.418Z",
+      "last_checked_utc": "2026-05-16T17:13:15.141Z",
       "required": true,
       "urls": [
-        "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-05-16&hydrate=probablePitcher%2Cteam"
+        "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-05-16&hydrate=probablePitcher%2Cteam%2Cvenue%28timezone%29"
       ]
     },
     {
@@ -56,7 +56,7 @@
       "daily_repeatability": "Daily when adapter discovery file is present; fixture mode is placeholder only",
       "limitations": "Live read-only Statcast CSV checked; Stage 4 records discovery summaries only and makes no picks.; No usable Statcast rows were returned; MLB schedule context was not emitted as Baseball Savant evidence.",
       "status": "blocked",
-      "last_checked_utc": "2026-05-16T15:02:43.180Z",
+      "last_checked_utc": "2026-05-16T17:13:19.428Z",
       "required": true,
       "urls": [
         "https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details&player_type=batter&game_date_gt=2026-05-16&game_date_lt=2026-05-16"
@@ -72,7 +72,7 @@
       "daily_repeatability": "Daily when adapter discovery file is present; fixture mode is placeholder only",
       "limitations": "Live read-only weather records are environment inputs only, not final model evidence or recommendations.",
       "status": "ok",
-      "last_checked_utc": "2026-05-16T15:39:18.082Z",
+      "last_checked_utc": "2026-05-16T17:13:22.907Z",
       "required": true,
       "urls": [
         "https://api.weather.gov",
@@ -114,12 +114,22 @@
       "access_method": "Existing liquidity adapter JSON from discovery folder",
       "reliability_grade": "B+",
       "daily_repeatability": "Daily when adapter file present; fixture mode is placeholder only",
-      "limitations": "No Kalshi market tickers provided; cannot fetch liquidity.",
-      "status": "blocked",
-      "last_checked_utc": "2026-05-16T15:02:43.217Z",
+      "limitations": "Live read-only liquidity records are order book inputs only, not final recommendations.",
+      "status": "ok",
+      "last_checked_utc": "2026-05-16T17:13:29.757Z",
       "required": false,
       "urls": [
-        "https://api.elections.kalshi.com/trade-api/v2"
+        "https://api.elections.kalshi.com/trade-api/v2",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162140SFATH-SF",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162140SFATH-ATH",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162138LADLAA-LAD",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY162138LADLAA-LAA",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915SDSEA-SD",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915SDSEA-SEA",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915NYYNYM-NYY",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915NYYNYM-NYM",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915BOSATL-BOS",
+        "https://api.elections.kalshi.com/trade-api/v2/markets/KXMLBGAME-26MAY161915BOSATL-ATL"
       ]
     },
     {
@@ -132,7 +142,7 @@
       "daily_repeatability": "Daily when adapter discovery file is present",
       "limitations": "Sportsbook reference records are not Kalshi prices and are never executable prices.",
       "status": "ok",
-      "last_checked_utc": "2026-05-16T15:39:34.189Z",
+      "last_checked_utc": "2026-05-16T17:13:30.946Z",
       "required": false,
       "urls": [
         "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=20260516&limit=100"
@@ -148,7 +158,7 @@
       "daily_repeatability": "Daily; lineup_pending is a normal pre-game state, not a hard block",
       "limitations": "Lineup pending is a disclosed evidence state, not a full-slate blocker.",
       "status": "ok",
-      "last_checked_utc": "2026-05-16T15:39:50.042Z",
+      "last_checked_utc": "2026-05-16T17:13:31.096Z",
       "required": false,
       "urls": [
         "https://statsapi.mlb.com/api/v1.1/game/824278/feed/live",
@@ -211,19 +221,6 @@
         "pitcher_strikeouts"
       ],
       "handling": "Do not create final picks until usable Statcast evidence records are available."
-    },
-    {
-      "source_id": "liquidity",
-      "gap": "Liquidity adapter status blocked; 0 records.",
-      "affected_market_lanes": [
-        "moneyline",
-        "run_line",
-        "game_total",
-        "yrfi_nrfi",
-        "home_run_hitter",
-        "pitcher_strikeouts"
-      ],
-      "handling": "Market classified NOT_TRADEABLE until liquidity data is available."
     }
   ],
   "notes": [
