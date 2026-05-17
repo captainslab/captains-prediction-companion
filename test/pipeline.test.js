@@ -218,41 +218,70 @@ test('runHermesOracle accepts strong live oracle output with structured reasonin
       research_summary: 'Official issuer source located.',
       source_quality: 'high',
       evidence_strength: 'high',
+      speaker_repertoire: {
+        speaker: 'Donald Trump',
+        target_phrase: 'Oil',
+        historical_evidence: ['Prior FII-style remarks used energy and oil framing.'],
+        naturalness: 'medium',
+      },
+      transcript_mechanics: {
+        controlling_source: 'official transcript',
+        exact_match_required: true,
+        allowed_segments: ['prepared remarks', 'Q&A'],
+        excluded_segments: ['moderator-only wording'],
+      },
+      verified_evidence: ['Official transcript packet located.'],
+      inference_notes: ['Oil is natural only if energy prices enter the remarks.'],
       user_facing: buildReadyCard(RECENT_URL, 'KXTEST-ORACLE').user_facing,
     },
     { url: RECENT_URL },
     {
       forceOracleCall: true,
       localPlan: buildReadyCard(RECENT_URL, 'KXTEST-ORACLE'),
-      oracleChatRunner: async () => ({
-        ok: true,
-        parsed: {
-          board_headline: 'The live oracle sees mild YES overpricing into the event window.',
-          board_recommendation: 'buy_no',
-          board_confidence: 'medium',
-          edge_type: 'market_structure',
-          catalyst: 'earnings-call Q&A timing',
-          reasoning_chain: [
-            '[timing/catalyst insight] This is a live earnings-call board and Q&A often broadens topic coverage late in the event.',
-            '[market-structure mismatch] The market is leaning too hard on immediate phrase certainty relative to the fair probability implied by the source packet and pricing context.'
-          ],
-          invalidation_condition: 'If the official transcript confirms the exact phrase early, the short thesis fails.',
-          time_sensitivity: 'high'
-        }
-      })
+      oracleChatRunner: async (query) => {
+        assert.match(query, /"target_phrase"\s*:\s*"Oil"/);
+        assert.match(query, /"speaker"\s*:\s*"Donald Trump"/);
+        assert.match(query, /speaker_repertoire/);
+        assert.match(query, /transcript_mechanics/);
+        assert.match(query, /verified_evidence/);
+        assert.match(query, /inference_notes/);
+        assert.match(query, /exact target phrase/i);
+        assert.match(query, /speaker repertoire/i);
+        assert.match(query, /transcript mechanics/i);
+        return {
+          ok: true,
+          parsed: {
+            board_headline: 'Oil is phrase-specific, but the YES price overstates exact-word confidence.',
+            board_recommendation: 'buy_no',
+            board_confidence: 'medium',
+            edge_type: 'market_structure',
+            catalyst: 'official transcript exact-word settlement',
+            reasoning_chain: [
+              '[behavioral tendency] Target phrase "Oil" is only a medium-natural Donald Trump repertoire word for FII remarks; verified evidence supports energy-topic inference, not exact Oil certainty.',
+              '[timing/catalyst insight] The transcript mechanics require the exact target phrase from Donald Trump in eligible remarks or Q&A, so moderator-only or paraphrased energy wording does not count.',
+              '[market-structure mismatch] The market implies 79% YES while local fair probability is 75% YES because the contract is pricing broad topic spillover as if it were exact transcript proof.'
+            ],
+            invalidation_condition: 'If the official transcript shows Donald Trump saying the exact word Oil in an eligible segment, the NO thesis fails.',
+            time_sensitivity: 'high'
+          }
+        };
+      }
     }
   );
 
   assert.equal(oracleBoard.board_recommendation, 'buy_no');
   assert.equal(oracleBoard.edge_type, 'market_structure');
-  assert.equal(oracleBoard.catalyst, 'earnings-call Q&A timing');
+  assert.equal(oracleBoard.catalyst, 'official transcript exact-word settlement');
   assert.equal(oracleBoard.time_sensitivity, 'high');
   assert.equal(oracleBoard.board_no_edge_reason_code, null);
-  assert.match(oracleBoard.reasoning_chain[0], /timing\/catalyst insight/i);
-  assert.match(oracleBoard.reasoning_chain[1], /market-structure mismatch/i);
+  assert.match(oracleBoard.reasoning_chain.join(' '), /Target phrase "Oil"/);
+  assert.match(oracleBoard.reasoning_chain.join(' '), /Donald Trump repertoire/);
+  assert.match(oracleBoard.reasoning_chain.join(' '), /exact target phrase/);
+  assert.match(oracleBoard.reasoning_chain.join(' '), /verified evidence supports.*inference/i);
+  assert.match(oracleBoard.reasoning_chain.join(' '), /moderator-only|paraphrased/);
   assert.equal(
     oracleBoard.invalidation_condition,
-    'If the official transcript confirms the exact phrase early, the short thesis fails.'
+    'If the official transcript shows Donald Trump saying the exact word Oil in an eligible segment, the NO thesis fails.'
   );
 });
 
@@ -288,6 +317,84 @@ test('runHermesOracle explicitly downgrades weak live oracle output when evidenc
   assert.equal(oracleBoard.edge_type, 'none');
   assert.match(oracleBoard.board_no_edge_reason_code, /evidence|oracle|research/i);
   assert.match(oracleBoard.board_no_edge_reason, /missing|generic|official-source|evidence/i);
+});
+
+test('runHermesOracle keeps board URL neutral and asks for contract selection before mention pricing', async () => {
+  let oracleCalled = false;
+  const boardUrl = 'https://kalshi.com/markets/kxtrumpmention/what-will-trump-say/KXTRUMPMENTION-26MAR27';
+  const boardPlan = {
+    user_facing: {
+      source: {
+        platform: 'Kalshi',
+        url: boardUrl,
+        market_id: 'KXTRUMPMENTION-26MAR27',
+      },
+      event_domain: 'politics',
+      event_type: 'speech',
+      market_type: 'mention',
+      status: 'waiting',
+      confidence: 'low',
+      summary: {
+        headline: 'The mention board is loaded, but the app still needs a specific contract.',
+        recommendation: 'watch',
+        one_line_reason: 'The Kalshi link resolves to a board with multiple phrase contracts, so the app needs one specific contract before it can take a side.',
+      },
+      next_action: 'select_specific_contract',
+      context: {
+        speaker: 'Donald Trump',
+        event_name: 'Remarks at FII PRIORITY Summit',
+      },
+      market_view: {
+        available_contracts: [
+          { market_ticker: 'KXTRUMPMENTION-26MAR27-OIL', label: 'Oil', market_yes: 0.79 },
+          { market_ticker: 'KXTRUMPMENTION-26MAR27-BIDE', label: 'Biden', market_yes: 0.14 },
+        ],
+      },
+    },
+  };
+
+  const oracleBoard = await runHermesOracle(
+    {
+      board_url: boardUrl,
+      board_recommendation: 'watch',
+      board_confidence: 'low',
+      source_packet_kind: 'mention',
+      reasoning_chain: [],
+      user_facing: boardPlan.user_facing,
+    },
+    { url: boardUrl },
+    {
+      forceOracleCall: true,
+      localPlan: boardPlan,
+      oracleChatRunner: async () => {
+        oracleCalled = true;
+        return {
+          ok: true,
+          parsed: {
+            board_headline: 'Should not be used for board URL',
+            board_recommendation: 'buy_yes',
+            board_confidence: 'high',
+            edge_type: 'information',
+            catalyst: 'premature contract selection',
+            reasoning_chain: ['[behavioral tendency] Generic forced pick.'],
+            invalidation_condition: 'none',
+            time_sensitivity: 'high',
+          },
+        };
+      },
+    }
+  );
+
+  assert.equal(oracleCalled, false);
+  assert.equal(oracleBoard.board_recommendation, 'watch');
+  assert.equal(oracleBoard.board_confidence, 'low');
+  assert.equal(oracleBoard.edge_type, 'none');
+  assert.equal(oracleBoard.board_no_edge_reason_code, 'select_specific_contract');
+  assert.match(oracleBoard.board_no_edge_reason, /specific contract/i);
+  assert.equal(oracleBoard.child_contracts.length, 2);
+  assert.equal(oracleBoard.child_contracts[0].ticker, 'KXTRUMPMENTION-26MAR27-OIL');
+  assert.match(oracleBoard.reasoning_chain.join(' '), /board URL/i);
+  assert.match(oracleBoard.reasoning_chain.join(' '), /exact target phrase/i);
 });
 
 test('pipeline service persists oracle reasoning metadata without breaking board output', async () => {

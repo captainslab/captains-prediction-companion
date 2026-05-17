@@ -263,6 +263,37 @@ function buildBaseBoard(researchResult = {}, input = {}, localSummary = {}) {
   };
 }
 
+function isBoardSelectionPending(localSummary = {}) {
+  return Boolean(
+    localSummary?.market_type === 'mention' &&
+      localSummary?.status === 'waiting' &&
+      localSummary?.next_action === 'select_specific_contract' &&
+      !normalizeNullableString(localSummary?.market_view?.target_phrase) &&
+      Array.isArray(localSummary?.market_view?.available_contracts) &&
+      localSummary.market_view.available_contracts.length > 0
+  );
+}
+
+function deriveBoardSelectionGate(baseBoard = {}, localSummary = {}) {
+  return {
+    ...baseBoard,
+    board_headline: 'The mention board is loaded, but the app still needs a specific contract before Oracle pricing.',
+    board_recommendation: 'watch',
+    board_confidence: 'low',
+    board_no_edge_reason_code: 'select_specific_contract',
+    board_no_edge_reason:
+      'This is a board URL with multiple phrase contracts; select one specific contract and exact target phrase before evaluating speaker repertoire, transcript mechanics, fair value, or edge.',
+    edge_type: 'none',
+    catalyst: normalizeNullableString(localSummary?.context?.event_name) ?? 'contract selection gate',
+    reasoning_chain: [
+      '[market-structure mismatch] A board URL lists available contracts but has no selected exact target phrase, so pricing any child contract would be premature.',
+      '[timing/catalyst insight] The next valid step is selecting a specific phrase contract; only then can the Oracle analyze speaker repertoire and transcript resolution mechanics.',
+    ],
+    invalidation_condition: 'If the user selects a specific child contract ticker, rerun the mention Oracle on that exact target phrase.',
+    time_sensitivity: 'low',
+  };
+}
+
 function buildHermesOraclePrompt(researchResult = {}, input = {}, localSummary = {}, baseBoard = {}) {
   const packet = readHermesOraclePacket();
   const tradeView = localSummary?.market_view?.trade_view ?? {};
@@ -302,6 +333,10 @@ function buildHermesOraclePrompt(researchResult = {}, input = {}, localSummary =
       timing_relevance: baseBoard.timing_relevance,
       why_valid_under_kalshi_rules: baseBoard.why_valid_under_kalshi_rules,
       exact_phrase_status: baseBoard.exact_phrase_status,
+      speaker_repertoire: researchResult?.speaker_repertoire ?? null,
+      transcript_mechanics: researchResult?.transcript_mechanics ?? null,
+      verified_evidence: Array.isArray(researchResult?.verified_evidence) ? researchResult.verified_evidence : [],
+      inference_notes: Array.isArray(researchResult?.inference_notes) ? researchResult.inference_notes : [],
       unresolved_gaps: baseBoard.unresolved_gaps,
       official_source_candidates: baseBoard.official_source_candidates,
     },
@@ -418,6 +453,10 @@ export async function runHermesOracle(researchResult = {}, input = {}, options =
   const localPlan = await resolveLocalPlan(input, options);
   const localSummary = buildEventMarketPlanSummary(localPlan ?? researchResult);
   const baseBoard = buildBaseBoard(researchResult, input, localSummary);
+
+  if (isBoardSelectionPending(localSummary)) {
+    return deriveBoardSelectionGate(baseBoard, localSummary);
+  }
 
   if (!options.forceOracleCall && hasCompleteOracleDecision(researchResult)) {
     if (!ACTIONABLE_RECOMMENDATIONS.has(baseBoard.board_recommendation) && !baseBoard.board_no_edge_reason_code) {

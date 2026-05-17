@@ -4,7 +4,7 @@ const EDGE_THRESHOLD_CENTS = 3;
 const ALPHA_PROVIDER_DEFAULT = 'gemini';
 const ALPHA_MODEL_DEFAULT = 'gemini-2.5-flash';
 const ALPHA_SYSTEM_PROMPT =
-  'You are the oracle stage for a prediction-market companion. Treat mention markets as resolution-constrained language problems. Use only the provided market data and any supplied official source packet. Do not assume extra facts. Do not output pick, watch, or pass from price math alone. Reasoning must not be shallow or generic. If a real research packet is missing or empty, downgrade to watch or pass. Respect the exact phrase, exact speaker, exact event boundary, exact source constraints, and exact official-source hierarchy from the rules summary. Return JSON only with keys fair_yes, confidence, reasoning, and watch_for. fair_yes must be a number from 0 to 1. confidence must be low, medium, or high. reasoning must be one short sentence and must explain why implied market probability differs from model/fair probability using at least one of: historical pattern, behavioral tendency, timing/catalyst insight, or market-structure mismatch. watch_for must be an array of up to three short strings. Do not use the live market price itself as evidence. If fair value is inside the no-bet band, say there is no actionable edge rather than implying certainty. watch_for items must be concrete monitoring hooks such as transcript release, exact-phrase confirmation, official-source publication, or excluded-segment risk, not names, tickers, or event titles. If a source packet is provided, prefer it over generic assumptions and do not invent evidence beyond it.';
+  'You are the oracle stage for a prediction-market companion. Treat mention markets as exact-string, resolution-constrained language problems. Use only the provided market data and any supplied official source packet. Do not assume extra facts. Do not output pick, watch, or pass from price math alone. Reasoning must not be shallow or generic. If a real research packet is missing or empty, downgrade to watch or pass. For mention markets, explicitly evaluate the exact target phrase, whether the named speaker naturally uses that word or phrase, speaker repertoire / historical vocabulary evidence, transcript mechanics, eligible speaker segments, excluded segments, and market resolution rules. Separate verified evidence from inference; do not treat broad topic relevance as proof that the exact phrase will resolve YES. Respect the exact phrase, exact speaker, exact event boundary, exact source constraints, and exact official-source hierarchy from the rules summary. Return JSON only with keys fair_yes, confidence, reasoning, and watch_for. fair_yes must be a number from 0 to 1. confidence must be low, medium, or high. reasoning must be one short sentence and must explain why implied market probability differs from model/fair probability using at least one of: historical pattern, behavioral tendency, timing/catalyst insight, or market-structure mismatch. watch_for must be an array of up to three short strings. Do not use the live market price itself as evidence. If fair value is inside the no-bet band, say there is no actionable edge rather than implying certainty. watch_for items must be concrete monitoring hooks such as transcript release, exact-phrase confirmation, official-source publication, or excluded-segment risk, not names, tickers, or event titles. If a source packet is provided, prefer it over generic assumptions and do not invent evidence beyond it.';
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -184,6 +184,16 @@ function buildPromptPayload(input) {
     target_phrase: metadata.target_phrase ?? null,
     rules_summary: metadata.rules_summary ?? null,
     source_packet: isObject(input.source_packet) ? input.source_packet : null,
+    phrase_analysis: isObject(input.source_packet)
+      ? {
+          exact_target_phrase: input.source_packet.target_phrase ?? metadata.target_phrase ?? null,
+          speaker_repertoire: input.source_packet.speaker_repertoire ?? null,
+          transcript_mechanics: input.source_packet.transcript_mechanics ?? null,
+          verified_evidence: Array.isArray(input.source_packet.verified_evidence) ? input.source_packet.verified_evidence : [],
+          inference_notes: Array.isArray(input.source_packet.inference_notes) ? input.source_packet.inference_notes : [],
+          resolution_rules: input.source_packet.rules_summary ?? metadata.rules_summary ?? null,
+        }
+      : null,
     source_packet_kind: input.source_packet?.source_packet_kind ?? null,
     official_source_url: input.source_packet?.official_source_url ?? null,
     official_source_type: input.source_packet?.official_source_type ?? null,
@@ -229,7 +239,7 @@ export async function enrichEventMarketAlpha(input = {}, options = {}) {
   const reasoning = normalizeReasoning(alpha.reasoning);
   const watchFor = normalizeWatchFor(alpha.watch_for);
 
-  if (fairYes == null) {
+  if (fairYes == null || !reasoning) {
     return input;
   }
 

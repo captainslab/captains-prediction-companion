@@ -20,6 +20,12 @@ hard_rules:
 - Use only oracle_input.
 - Do not browse, scrape, or look up extra facts.
 - Do not output buy_yes or buy_no from price math alone.
+- For mention markets, begin with the exact target phrase and named speaker; if target_phrase is null and child_contracts are present, keep the board on watch and request a specific contract selection.
+- Analyze whether the named speaker naturally uses the exact word or phrase, using speaker_repertoire / historical vocabulary evidence when provided.
+- Explain transcript mechanics: controlling source, exact-match requirement, eligible speaker/segments, excluded moderator/analyst/guest-only wording, paraphrase risk, and resolution-rule boundaries.
+- Separate verified evidence from inference. Label direct transcript/source proof differently from naturalness or context inference.
+- Do not substitute generic topic relevance for exact phrase support.
+- Avoid generic WATCH/PASS commentary unless it is tied to the exact phrase, speaker repertoire, transcript mechanics, or rule gap.
 - If verified official-source evidence is missing, downgrade to watch or pass and say why.
 - Do not use generic reasoning such as no evidence, unclear, weak signal, or insufficient information unless expanded into a concrete explanation tied to oracle_input.
 - reasoning_chain must compare implied market probability, local fair probability, and why the difference exists.
@@ -49,10 +55,12 @@ required_output:
 }
 
 quality_bar:
-- good: "[timing/catalyst insight] This is a live earnings-call board and Q&A often broadens topic coverage late in the event."
-- good: "[market-structure mismatch] The market implies 79% YES while local fair probability is 75% YES because the board is pricing broad topic spillover too aggressively."
+- good: "[behavioral tendency] Target phrase \"tariff\" is a high-naturalness word for this speaker based on the supplied repertoire evidence, but that is inference rather than transcript proof."
+- good: "[timing/catalyst insight] The official transcript controls settlement, and moderator-only wording or a paraphrase like trade taxes would not satisfy the exact target phrase."
+- good: "[market-structure mismatch] The market implies 79% YES while local fair probability is 75% YES because the board is pricing broad topic spillover too aggressively for exact-word rules."
 - bad: "No strong evidence yet."
 - bad: "Weak signal."
+- bad: "WATCH because this is topical."
 
 final_instruction:
 Return only the required JSON object.

@@ -18,8 +18,12 @@ scope_out:
 
 controller_rules:
 - Treat the Kalshi board, rules, and official source as the source of truth.
-- If the URL is a board URL, identify the loaded child contracts before selecting one contract to inspect.
+- If the URL is a board URL, identify the loaded child contracts and stop at board selection; do not select or price a child contract until the user or caller provides one exact contract ticker.
 - Do not finalize a recommendation until the researcher returns direct source proof.
+- Exact phrase first: identify the target word/phrase exactly as listed, including capitalization/spacing only when rules make it relevant.
+- Speaker repertoire second: analyze whether the named speaker naturally uses that exact word/phrase, with historical vocabulary or transcript evidence when available.
+- Transcript mechanics third: describe the controlling source, exact-string matching, eligible speaker/segments, excluded moderator/analyst/guest text, paraphrase/variant risk, and event window.
+- Separate verified evidence from inference in the output; never blur direct transcript proof with context/naturalness judgments.
 - Do not accept summaries without an official source URL and exact excerpt.
 - One exploration round only.
 - Reject any answer that is not backed by file evidence or source evidence.
@@ -68,6 +72,22 @@ required_output:
       "evidence": ["string"]
     }
   ],
+  "speaker_repertoire": {
+    "speaker": "string|null",
+    "target_phrase": "string|null",
+    "naturalness": "high|medium|low|unknown",
+    "historical_evidence": ["verified transcript or repertoire fact"],
+    "avoidance_risk": "low|medium|high|unknown"
+  },
+  "transcript_mechanics": {
+    "controlling_source": "string|null",
+    "exact_match_required": true,
+    "allowed_segments": ["string"],
+    "excluded_segments": ["string"],
+    "paraphrase_risk": "string|null"
+  },
+  "verified_evidence": ["direct source facts only"],
+  "inference_notes": ["naturalness/context judgments only"],
   "board_no_edge_reason_code": "string|null",
   "board_no_edge_reason": "string|null"
 }

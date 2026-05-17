@@ -637,6 +637,89 @@ test('event market board previews and alpha payload include more than five contr
   assert.match(observedQuery, /\"market_ticker\":\"KXTRUMPMENTIONB-26MAR27-EPST\"/);
 });
 
+test('event market alpha sends exact phrase, speaker repertoire, transcript mechanics, and evidence separation to the model', async () => {
+  const eventPayload = buildTrumpEventPayload();
+  const marketPayload = {
+    market: {
+      ...eventPayload.markets[1],
+      event_ticker: 'KXTRUMPMENTIONB-26MAR27',
+      rules_secondary: 'Official transcript of the remarks and Q&A will be used as the settlement source.',
+    },
+  };
+  const orderbookPayload = {
+    orderbook_fp: {
+      yes_dollars: [[0.65, 100]],
+      no_dollars: [[0.35, 40]],
+    },
+  };
+  const fetchImpl = createFetchStub(
+    new Map([
+      [`${KALSHI_BASE_URL}/markets/KXTRUMPMENTIONB-26MAR27-TARI`, marketPayload],
+      [`${KALSHI_BASE_URL}/markets/KXTRUMPMENTIONB-26MAR27-TARI/orderbook`, orderbookPayload],
+      [`${KALSHI_BASE_URL}/events/KXTRUMPMENTIONB-26MAR27`, eventPayload],
+    ])
+  );
+  const sourcePacket = {
+    source_packet_kind: 'mention',
+    official_source_url: 'https://example.com/transcript',
+    official_source_type: 'official_transcript',
+    source_quality: 'high',
+    evidence_strength: 'medium',
+    target_phrase: 'Tariff',
+    rules_summary: 'Resolves Yes only if Donald Trump says the exact word Tariff in eligible remarks or Q&A.',
+    speaker_repertoire: {
+      speaker: 'Donald Trump',
+      target_phrase: 'Tariff',
+      naturalness: 'high',
+      historical_evidence: ['Trump used tariff repeatedly in trade-focused remarks.'],
+      avoidance_risk: 'low',
+    },
+    transcript_mechanics: {
+      controlling_source: 'official transcript',
+      exact_match_required: true,
+      allowed_segments: ['prepared remarks', 'Q&A'],
+      excluded_segments: ['moderator-only text'],
+    },
+    verified_evidence: ['Official transcript source identified.'],
+    inference_notes: ['Historical repertoire supports naturalness; current event fit remains inferred.'],
+  };
+  const alphaRunner = createAlphaRunnerStub(
+    {
+      fair_yes: 0.72,
+      confidence: 'medium',
+      reasoning: 'Tariff is a high-naturalness Trump word, but exact transcript settlement still controls.',
+      watch_for: ['official transcript exact word', 'moderator-only exclusion'],
+    },
+    (query) => {
+      assert.match(query, /"target_phrase"\s*:\s*"Tariff"/);
+      assert.match(query, /"speaker"\s*:\s*"Donald Trump"/);
+      assert.match(query, /speaker_repertoire/);
+      assert.match(query, /transcript_mechanics/);
+      assert.match(query, /verified_evidence/);
+      assert.match(query, /inference_notes/);
+      assert.match(query, /exact target phrase/i);
+      assert.match(query, /naturally uses/i);
+      assert.match(query, /resolution mechanics/i);
+    }
+  );
+
+  const result = await buildEventMarketPlan(
+    {
+      venue: 'Kalshi',
+      market_id: 'KXTRUMPMENTIONB-26MAR27-TARI',
+      url: 'https://kalshi.com/markets/kxtrumpmentionb/trump-mention-b/KXTRUMPMENTIONB-26MAR27-TARI',
+      source_packet: sourcePacket,
+    },
+    { fetchImpl, alphaRunner }
+  );
+
+  assert.equal(result.user_facing.market_view.target_phrase, 'Tariff');
+  assert.equal(result.user_facing.status, 'needs_pricing');
+  assert.equal(result.user_facing.summary.one_line_reason, 'The contract has live Kalshi prices, but the alpha pipeline has not produced fair value or edge yet.');
+  assert.equal(result.user_facing.market_view.trade_view.fair_yes, null);
+  assert.equal(result.user_facing.market_view.trade_view.edge_cents, null);
+});
+
 test('event market tool routes earnings markets into the mention workflow', async () => {
   const result = await buildEventMarketPlan({
     venue: 'Kalshi',
