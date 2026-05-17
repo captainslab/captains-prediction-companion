@@ -1,0 +1,56 @@
+{
+  "schema_version": "nascar_source_registry_v1",
+  "mode": "fixtures-only",
+  "run_date": "2026-02-13",
+  "checked_at_utc": "2026-02-13T12:00:00.000Z",
+  "sources": {
+    "kalshi_race": {
+      "source_id": "kalshi_race",
+      "status": "ok",
+      "record_count": 6,
+      "warnings": 1,
+      "errors": 0,
+      "required": true,
+      "source_urls": [
+        "https://kalshi.com/markets"
+      ]
+    },
+    "nascar_official": {
+      "source_id": "nascar_official",
+      "status": "ok",
+      "record_count": 1,
+      "warnings": 1,
+      "errors": 0,
+      "required": true,
+      "source_urls": [
+        "https://www.nascar.com/schedule"
+      ]
+    },
+    "practice_qualifying": {
+      "source_id": "practice_qualifying",
+      "status": "ok",
+      "record_count": 3,
+      "warnings": 2,
+      "errors": 0,
+      "required": false,
+      "source_urls": [
+        "https://www.nascar.com/stats"
+      ]
+    },
+    "liquidity": {
+      "source_id": "liquidity",
+      "status": "ok",
+      "record_count": 3,
+      "warnings": 2,
+      "errors": 0,
+      "required": false,
+      "source_urls": [
+        "https://kalshi.com/markets"
+      ]
+    }
+  },
+  "safety_notes": [
+    "Source registry only summarizes Stage 2 envelope metadata.",
+    "No trades placed by this workflow."
+  ]
+}

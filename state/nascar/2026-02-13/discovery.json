@@ -1,0 +1,202 @@
+{
+  "schema_version": "nascar_discovery_v1",
+  "mode": "fixtures-only",
+  "run_date": "2026-02-13",
+  "checked_at_utc": "2026-02-13T12:00:00.000Z",
+  "event_context": {
+    "race_name": "Daytona 500",
+    "series": "NCS",
+    "track": "Daytona International Speedway",
+    "track_type": "superspeedway",
+    "scheduled_start_utc": "2026-02-15T19:30:00.000Z",
+    "race_type": "points",
+    "event_format": "points",
+    "stage_lengths": [
+      65,
+      65,
+      70
+    ]
+  },
+  "supported_market_lanes": [
+    {
+      "market_lane": "win",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver wins the race outright."
+    },
+    {
+      "market_lane": "top3",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 3."
+    },
+    {
+      "market_lane": "top5",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 5."
+    },
+    {
+      "market_lane": "top10",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 10."
+    },
+    {
+      "market_lane": "top20",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 20; this is a race market lane, not the current-points pool rule."
+    },
+    {
+      "market_lane": "fastest_lap",
+      "lane_type": "special_prop",
+      "source_available": true,
+      "description": "Driver records the fastest single lap; special prop lane, not a finish-position ceiling."
+    }
+  ],
+  "pool_rules": {
+    "default_active_rule": "current_points_rank <= 20",
+    "field_rule": "current_points_rank > 20 without allowed override reasons stays in FIELD",
+    "top20_lane_separation": "top20 market lane is a race finish-position market, not the current-points pool filter",
+    "fastest_lap_lane_note": "fastest_lap is a special prop lane, not a finish-position ceiling",
+    "allowed_override_reasons": [
+      "pole_winner",
+      "top5_starting_position",
+      "top5_practice_speed",
+      "strong_multi_lap_average",
+      "elite_track_history",
+      "kalshi_price_or_liquidity",
+      "special_format_rule"
+    ]
+  },
+  "driver_universe": [
+    {
+      "driver_id": "driver-a-11",
+      "driver_name": "Driver A",
+      "car_number": 11,
+      "current_points_rank": 4,
+      "starting_position": 2,
+      "practice_rank": 3,
+      "multi_lap_rank": 2,
+      "track_history_signal": "strong",
+      "liquidity_signal": "strong",
+      "override_reasons": [
+        "top5_starting_position",
+        "top5_practice_speed",
+        "strong_multi_lap_average"
+      ],
+      "pool_status": "active",
+      "pool_entry_reason": "current_points_top_20"
+    },
+    {
+      "driver_id": "driver-b-24",
+      "driver_name": "Driver B",
+      "car_number": 24,
+      "current_points_rank": 17,
+      "starting_position": 8,
+      "practice_rank": 12,
+      "multi_lap_rank": 9,
+      "track_history_signal": "neutral",
+      "liquidity_signal": "thin",
+      "override_reasons": [],
+      "pool_status": "active",
+      "pool_entry_reason": "current_points_top_20"
+    },
+    {
+      "driver_id": "driver-c-99",
+      "driver_name": "Driver C",
+      "car_number": 99,
+      "current_points_rank": 27,
+      "starting_position": 22,
+      "practice_rank": 19,
+      "multi_lap_rank": 25,
+      "track_history_signal": "weak",
+      "liquidity_signal": "noisy",
+      "override_reasons": [],
+      "pool_status": "field",
+      "pool_entry_reason": "field_longshot"
+    }
+  ],
+  "active_candidate_pool": [
+    {
+      "driver_id": "driver-a-11",
+      "driver_name": "Driver A",
+      "car_number": 11,
+      "current_points_rank": 4,
+      "starting_position": 2,
+      "practice_rank": 3,
+      "multi_lap_rank": 2,
+      "track_history_signal": "strong",
+      "liquidity_signal": "strong",
+      "override_reasons": [
+        "top5_starting_position",
+        "top5_practice_speed",
+        "strong_multi_lap_average"
+      ],
+      "pool_status": "active",
+      "pool_entry_reason": "current_points_top_20"
+    },
+    {
+      "driver_id": "driver-b-24",
+      "driver_name": "Driver B",
+      "car_number": 24,
+      "current_points_rank": 17,
+      "starting_position": 8,
+      "practice_rank": 12,
+      "multi_lap_rank": 9,
+      "track_history_signal": "neutral",
+      "liquidity_signal": "thin",
+      "override_reasons": [],
+      "pool_status": "active",
+      "pool_entry_reason": "current_points_top_20"
+    }
+  ],
+  "field_bucket": {
+    "bucket_id": "FIELD",
+    "longshot_driver_count": 1,
+    "driver_names": [
+      "Driver C"
+    ],
+    "summary": "1 non-active driver(s) collapsed into FIELD longshot bucket; no individual modeling output emitted."
+  },
+  "override_promoted_drivers": [],
+  "special_event_override": {
+    "active": false,
+    "format_type": null,
+    "reason": null,
+    "default_points_pool_disabled": false,
+    "metadata_only": true
+  },
+  "source_envelopes_used": {
+    "kalshi_race": {
+      "source_id": "kalshi_race",
+      "status": "ok",
+      "record_count": 6,
+      "checked_at_utc": "2026-02-13T12:00:00.000Z"
+    },
+    "nascar_official": {
+      "source_id": "nascar_official",
+      "status": "ok",
+      "record_count": 1,
+      "checked_at_utc": "2026-02-13T12:00:00.000Z"
+    },
+    "practice_qualifying": {
+      "source_id": "practice_qualifying",
+      "status": "ok",
+      "record_count": 3,
+      "checked_at_utc": "2026-02-13T12:00:00.000Z"
+    },
+    "liquidity": {
+      "source_id": "liquidity",
+      "status": "ok",
+      "record_count": 3,
+      "checked_at_utc": "2026-02-13T12:00:00.000Z"
+    }
+  },
+  "safety_notes": [
+    "Dry-run discovery composer only.",
+    "No individual FIELD outputs.",
+    "No fair-value, sizing, or execution fields are emitted."
+  ]
+}

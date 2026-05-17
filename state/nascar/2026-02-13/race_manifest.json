@@ -1,0 +1,86 @@
+{
+  "schema_version": "nascar_race_manifest_v1",
+  "run_date": "2026-02-13",
+  "checked_at_utc": "2026-02-13T12:00:00.000Z",
+  "event_context": {
+    "race_name": "Daytona 500",
+    "series": "NCS",
+    "track": "Daytona International Speedway",
+    "track_type": "superspeedway",
+    "scheduled_start_utc": "2026-02-15T19:30:00.000Z",
+    "race_type": "points",
+    "event_format": "points",
+    "stage_lengths": [
+      65,
+      65,
+      70
+    ]
+  },
+  "event_format": "points",
+  "special_event_override": {
+    "active": false,
+    "format_type": null,
+    "reason": null,
+    "default_points_pool_disabled": false,
+    "metadata_only": true
+  },
+  "supported_market_lanes": [
+    {
+      "market_lane": "win",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver wins the race outright."
+    },
+    {
+      "market_lane": "top3",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 3."
+    },
+    {
+      "market_lane": "top5",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 5."
+    },
+    {
+      "market_lane": "top10",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 10."
+    },
+    {
+      "market_lane": "top20",
+      "lane_type": "finish_position",
+      "source_available": true,
+      "description": "Driver finishes in the top 20; this is a race market lane, not the current-points pool rule."
+    },
+    {
+      "market_lane": "fastest_lap",
+      "lane_type": "special_prop",
+      "source_available": true,
+      "description": "Driver records the fastest single lap; special prop lane, not a finish-position ceiling."
+    }
+  ],
+  "pool_rules": {
+    "default_active_rule": "current_points_rank <= 20",
+    "field_rule": "current_points_rank > 20 without allowed override reasons stays in FIELD",
+    "top20_lane_separation": "top20 market lane is a race finish-position market, not the current-points pool filter",
+    "fastest_lap_lane_note": "fastest_lap is a special prop lane, not a finish-position ceiling",
+    "allowed_override_reasons": [
+      "pole_winner",
+      "top5_starting_position",
+      "top5_practice_speed",
+      "strong_multi_lap_average",
+      "elite_track_history",
+      "kalshi_price_or_liquidity",
+      "special_format_rule"
+    ]
+  },
+  "run_metadata": {
+    "mode": "fixtures-only",
+    "generator": "scripts/nascar/lib/output-writer.mjs",
+    "stage": "stage_4_output_writer_dry_run",
+    "no_trades": true
+  }
+}
