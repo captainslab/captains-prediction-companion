@@ -48,9 +48,5 @@
         "https://kalshi.com/markets"
       ]
     }
-  },
-  "safety_notes": [
-    "Source registry only summarizes Stage 2 envelope metadata.",
-    "No trades placed by this workflow."
-  ]
+  }
 }

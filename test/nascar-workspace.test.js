@@ -23,7 +23,7 @@ const JSON_FILES = [
   'ceiling_board.json',
 ];
 
-const FORBIDDEN = [
+const FORBIDDEN_FIELDS = [
   'trade',
   'order',
   'stake',
@@ -33,6 +33,13 @@ const FORBIDDEN = [
   'edge',
   'kelly',
   'execution',
+];
+
+const FORBIDDEN_RUNTIME_STATUS_VALUES = [
+  'TRADE_YES',
+  'TRADE_NO',
+  'PLACE_PASSIVE_ORDER',
+  'NO_TRADE',
 ];
 
 function tempStateRoot() {
@@ -55,8 +62,19 @@ function assertNoForbiddenJsonFields(value) {
     }
     if (node && typeof node === 'object') {
       for (const [key, child] of Object.entries(node)) {
-        assert.equal(FORBIDDEN.includes(key), false, `forbidden field ${key} at ${[...path, key].join('.')}`);
+        const normalized = key.toLowerCase();
+        assert.equal(
+          FORBIDDEN_FIELDS.some(token => normalized.includes(token)),
+          false,
+          `forbidden field token at ${[...path, key].join('.')}`,
+        );
         walk(child, [...path, key]);
+      }
+      return;
+    }
+    if (typeof node === 'string') {
+      for (const status of FORBIDDEN_RUNTIME_STATUS_VALUES) {
+        assert.equal(node.includes(status), false, `forbidden runtime status value ${status} at ${path.join('.')}`);
       }
     }
   };
@@ -74,27 +92,29 @@ async function runWorkspace(eventFormat = 'points') {
   return { root, summary };
 }
 
-function runWorkspaceCli(eventFormat = 'points') {
+function runWorkspaceCli(eventFormat = 'points', { fixturesFlag = true } = {}) {
   const root = tempStateRoot();
+  const args = [
+    'scripts/nascar/nascar-workspace.mjs',
+    '--date',
+    '2026-02-13',
+    '--event-format',
+    eventFormat,
+    '--state-root',
+    root,
+  ];
+  if (fixturesFlag) args.splice(5, 0, '--fixtures-only');
+
   const stdout = execFileSync(
     process.execPath,
-    [
-      'scripts/nascar/nascar-workspace.mjs',
-      '--date',
-      '2026-02-13',
-      '--event-format',
-      eventFormat,
-      '--fixtures-only',
-      '--state-root',
-      root,
-    ],
+    args,
     { encoding: 'utf8' },
   );
   return { root, summary: JSON.parse(stdout) };
 }
 
 test('workspace command runs points fixture end-to-end', () => {
-  const { root, summary } = runWorkspaceCli('points');
+  const { root, summary } = runWorkspaceCli('points', { fixturesFlag: false });
   try {
     assert.equal(summary.run_date, '2026-02-13');
     assert.equal(summary.event_format, 'points');

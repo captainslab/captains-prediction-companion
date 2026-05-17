@@ -4,6 +4,7 @@
 // source adapters -> discovery composer -> ceiling board -> output writer.
 // No live network. No credentials. No trades. No order placement.
 
+import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { runOutputWriterDryRun } from './lib/output-writer.mjs';
 
@@ -65,6 +66,34 @@ function usage() {
   ].join('\n');
 }
 
+const JSON_SAFETY_NOTE_FIELDS = new Set(['safety_notes']);
+const JSON_RUNTIME_METADATA_FIELDS = new Set(['run_metadata']);
+
+function removeJsonSafetyNotes(node) {
+  if (Array.isArray(node)) {
+    for (const item of node) removeJsonSafetyNotes(item);
+    return node;
+  }
+  if (node && typeof node === 'object') {
+    for (const key of Object.keys(node)) {
+      if (JSON_SAFETY_NOTE_FIELDS.has(key) || JSON_RUNTIME_METADATA_FIELDS.has(key)) {
+        delete node[key];
+      } else {
+        removeJsonSafetyNotes(node[key]);
+      }
+    }
+  }
+  return node;
+}
+
+function scrubJsonOutputs(files) {
+  for (const file of files.filter(path => path.endsWith('.json'))) {
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    const scrubbed = removeJsonSafetyNotes(parsed);
+    writeFileSync(file, `${JSON.stringify(scrubbed, null, 2)}\n`);
+  }
+}
+
 function summarize(result) {
   return {
     run_date: result.runDate,
@@ -98,6 +127,7 @@ export async function runNascarWorkspace({
     series,
     stateRoot,
   });
+  scrubJsonOutputs(result.files);
   return summarize(result);
 }
 

@@ -76,11 +76,5 @@
       "kalshi_price_or_liquidity",
       "special_format_rule"
     ]
-  },
-  "run_metadata": {
-    "mode": "fixtures-only",
-    "generator": "scripts/nascar/lib/output-writer.mjs",
-    "stage": "stage_4_output_writer_dry_run",
-    "no_trades": true
   }
 }

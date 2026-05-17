@@ -193,10 +193,5 @@
       "record_count": 3,
       "checked_at_utc": "2026-02-13T12:00:00.000Z"
     }
-  },
-  "safety_notes": [
-    "Dry-run discovery composer only.",
-    "No individual FIELD outputs.",
-    "No fair-value, sizing, or execution fields are emitted."
-  ]
+  }
 }
