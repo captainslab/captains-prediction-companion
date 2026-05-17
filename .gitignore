@@ -22,6 +22,8 @@ data/
 data_2
 *.local.*
 lib
+!scripts/nascar/lib/
+!scripts/nascar/lib/router.mjs
 .DS_store
 
 # Next.js
