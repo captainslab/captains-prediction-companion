@@ -22,22 +22,37 @@ NASCAR lives under `fightAndRacingApp(type="NASCAR")` as the canonical shell, ma
 
 `nascarRaceApp` and `nascarSeriesFuturesApp`, as referenced in `docs/BUILDSTATUS.md` row #7, are LANE GROUPS under that shell, not separate top-level apps:
 
-- `nascarRaceApp` covers per-race markets: `race_winner`, `top3`.
-- `nascarSeriesFuturesApp` covers season-long markets: `series_champion`.
+- `nascarRaceApp` covers per-race markets: `win`, `top3`, `top5`, `top10`, `top20`, `fastest_lap`.
+- `nascarSeriesFuturesApp` covers season-long markets (see "Series futures scope" below). Series futures are FUTURE SCOPE — they are not part of the Stage 1 race-market router lane set.
 
-Canonical lanes (the only values a NASCAR router may return as `market_lane`):
+Canonical race-market lanes (the only values a NASCAR race-market router may return as `market_lane`, matching the real Kalshi NASCAR race board):
 
-- `race_winner`
-- `top3`
-- `series_champion`
+- `win` — driver wins the race outright
+- `top3` — driver finishes in the top 3
+- `top5` — driver finishes in the top 5
+- `top10` — driver finishes in the top 10
+- `top20` — driver finishes in the top 20 (a "top20 finish" market — see naming note below)
+- `fastest_lap` — driver records the fastest single lap of the race
 
 A router result outside this set must be one of `AMBIGUOUS`, `BLOCKED`, `OUT_OF_SCOPE`, or `NOT_NASCAR`.
 
-Confirmed Kalshi NASCAR series futures tickers (per `docs/SPORTSAPP.md`):
+Naming note (do not confuse these two uses of "top 20"):
+
+- `top20` AS A MARKET LANE means "driver finishes top 20" in this specific race. It is a finishing-position market on the race board.
+- "top 20 in current points" is a MODELING CANDIDATE-POOL RULE (see "Driver Universe And Candidate Pool" below). It governs which drivers we model by default; it is not a market.
+- The router emits `market_lane: "top20"` only for top20 finish markets. It never emits `market_lane: "top20"` because a driver happens to be top 20 in season points.
+
+### Series futures scope
+
+Series futures (season-long championship markets) are tracked separately from the race-market lane set above. The Stage 1 router does NOT need to return a series futures lane; series futures routing is future scope and will be handled by `nascarSeriesFuturesApp` later.
+
+Confirmed Kalshi NASCAR series futures tickers (per `docs/SPORTSAPP.md`) — kept here for reference only:
 
 - `KXNASCARTRUCKSERIES-NTS26` — NASCAR Trucks championship
 - `KXNASCARCUPSERIES-NCS26` — NASCAR Cup championship
 - `KXNASCARAUTOPARTSSERIES-NAPS26` — NASCAR O'Reilly (Xfinity / Auto Parts) championship
+
+When a market title or ticker matches one of these series futures tickers, the race-market router returns `route_status: "OUT_OF_SCOPE"` with `market_scope: "series"` and the matching `kalshi_ticker_hint`. Pricing series futures is deferred to `nascarSeriesFuturesApp`.
 
 Series enums (per `docs/SPORTSAPP.md`): `NASCAR_CUP`, `NASCAR_TRUCKS`, `NASCAR_OREILLY`.
 
@@ -148,7 +163,7 @@ Required market distinction (router contract):
 
 ## Driver Universe And Candidate Pool (Race-Winner Default)
 
-This section governs the default `race_winner` modeling universe for a normal Cup points race. It exists to keep the model from spraying probability mass across the entire 36+ car field and to keep candidate selection grounded in evidence rather than ticker enumeration.
+This section governs the default `win` (race-winner) modeling universe for a normal Cup points race. It also informs the wider finishing-position lanes (`top3`, `top5`, `top10`, `top20`) which share the same driver pool, just with different finishing-position thresholds. It exists to keep the model from spraying probability mass across the entire 36+ car field and to keep candidate selection grounded in evidence rather than ticker enumeration.
 
 Default pool:
 
@@ -218,6 +233,55 @@ Separation rule:
 - A race record is exactly one of: normal points race OR `special_event_override`. Never both.
 - If event classification is ambiguous, the router emits `ESCALATE` rather than guessing which model to apply.
 
+## User-Facing Output Model (Driver Ceiling)
+
+The user-facing NASCAR board is driver-ceiling based, not a probability dump and not an exact finishing prediction. Internal modeling may compute probabilities across every lane; the user-facing card compresses each driver to a single best ceiling label.
+
+Output rule (per driver line on the user-facing card):
+
+- `[driver_name] [ceiling]`
+- Example: `Kyle Larson Win`
+
+`ceiling_market` definition:
+
+- `ceiling_market` = the best realistic market tier for that driver in this race, not a literal finish-position prediction.
+- It is the highest lane where the model judges the driver to have a defensible, evidence-backed shot — not the most likely finish, and not every lane the driver clears.
+- One driver gets exactly one `ceiling_market` value on the user-facing card.
+
+Allowed `ceiling_market` values:
+
+- `win`
+- `top3`
+- `top5`
+- `top10`
+- `top20`
+- `fastest_lap`
+- `pass`
+
+Notes on the values:
+
+- `fastest_lap` is a special prop lane, not a finish-position ceiling. It does not sit on the win → top3 → top5 → top10 → top20 ladder. A driver may be assigned `fastest_lap` as their ceiling when their realistic edge is the speed prop rather than a finishing-position market, or it may appear as an additional standalone prop callout — never as a substitute for a finish-position ceiling implied by the ladder.
+- `pass` means no recommended ceiling; the driver is acknowledged but not pushed to the user-facing board for this race.
+
+Example user-facing lines:
+
+- `Kyle Larson Win`
+- `Denny Hamlin Top 3`
+- `Chase Elliott Top 5`
+- `Bubba Wallace Top 10`
+- `Ricky Stenhouse Jr. Top 20`
+
+Anti-duplication rule:
+
+- The final user-facing card must NOT list the same driver across Top 3, Top 5, Top 10, and Top 20 just because they cascade mathematically. Pick the single best ceiling lane for that driver and show only that line, unless the user explicitly requests the full ladder.
+- Internal storage may keep per-lane probabilities for audit, CLV, and calibration; the user-facing card is the compressed view.
+
+Lane vs candidate-pool naming (must not be conflated):
+
+- `top20` market lane = "driver finishes Top 20" (a Kalshi finishing-position market and a valid `ceiling_market` value).
+- "top 20 in current points" = a candidate-pool filter on the modeling side (see Driver Universe section). It is NOT a market lane and NOT a `ceiling_market` value.
+- Any code, doc, or card copy must keep these two meanings of "top 20" visibly distinct.
+
 ## Minimum Dry-Run Implementation Stages
 
 ### Stage 1: Router Dry-Run
@@ -225,8 +289,8 @@ Separation rule:
 Goal:
 
 - Implement lane routing for placeholder or supplied Kalshi NASCAR market titles.
-- Return exactly one of `race_winner`, `top3`, `series_champion`, or one of `AMBIGUOUS`, `BLOCKED`, `OUT_OF_SCOPE`, `NOT_NASCAR`.
-- Tag `market_scope` as `"race"` or `"series"`.
+- Return exactly one of `win`, `top3`, `top5`, `top10`, `top20`, `fastest_lap`, or one of `AMBIGUOUS`, `BLOCKED`, `OUT_OF_SCOPE`, `NOT_NASCAR`.
+- Tag `market_scope` as `"race"`. (Series futures are future scope; if a series futures ticker is detected, return `OUT_OF_SCOPE` with `market_scope: "series"`.)
 - Produce no picks and no trades.
 
 Future files to create:
@@ -256,12 +320,13 @@ node scripts/nascar/router-dry-run.mjs --title "Will Driver A win the Cup Series
 Proof required:
 
 - `node --test test/nascar-router.test.js` passes.
-- Router returns `race_winner` for a per-race win-only title.
+- Router returns `win` for a per-race win-only title.
 - Router returns `top3` for a per-race top-3 / podium title.
-- Router returns `series_champion` for a season-long Cup / Trucks / Xfinity championship title and tags the matching Kalshi ticker hint.
-- Title referencing `KXNASCARCUPSERIES-NCS26` routes to `series_champion` with `series: "NASCAR_CUP"`.
-- Title referencing `KXNASCARTRUCKSERIES-NTS26` routes to `series_champion` with `series: "NASCAR_TRUCKS"`.
-- Title referencing `KXNASCARAUTOPARTSSERIES-NAPS26` routes to `series_champion` with `series: "NASCAR_OREILLY"`.
+- Router returns `top5` for a per-race top-5 finish title.
+- Router returns `top10` for a per-race top-10 finish title.
+- Router returns `top20` for a per-race top-20 finish title (a "top20 finish" market — distinct from the "top 20 in current points" modeling rule).
+- Router returns `fastest_lap` for a per-race fastest-lap title.
+- Title referencing a series futures ticker (`KXNASCARCUPSERIES-NCS26`, `KXNASCARTRUCKSERIES-NTS26`, or `KXNASCARAUTOPARTSSERIES-NAPS26`) returns `route_status: "OUT_OF_SCOPE"` with `market_scope: "series"` and the matching `kalshi_ticker_hint` and `series` enum (deferred to `nascarSeriesFuturesApp`).
 - Ambiguous placeholder title returns `route_status: "AMBIGUOUS"` with `market_lane: null`.
 - Non-NASCAR title (e.g. UFC, MLB) returns `route_status: "NOT_NASCAR"`.
 - `git status --short` shows only expected dry-run files.
@@ -335,7 +400,7 @@ Future files to create:
 Inputs:
 
 - Placeholder adapter envelopes.
-- Placeholder router results (mix of `race_winner`, `top3`, `series_champion`).
+- Placeholder router results (mix of `win`, `top3`, `top5`, `top10`, `top20`, `fastest_lap`, and series-futures `OUT_OF_SCOPE` cases).
 - Placeholder pick candidates.
 
 Outputs:
@@ -445,7 +510,7 @@ Proof required:
 
 - `WATCH_FOR_LISTING` can transition to `NOT_TRADEABLE` when market appears with weak liquidity.
 - `CLEAR_PICK` can downgrade when weather or liquidity changes.
-- Driver-withdrawal event removes affected `race_winner` / `top3` candidates.
+- Driver-withdrawal event removes affected `win` / `top3` / `top5` / `top10` / `top20` / `fastest_lap` candidates.
 - Rerunning the same refresh does not duplicate pick IDs.
 - Prior outputs are snapshotted before overwrite.
 - `run_log.md` contains old status, new status, reason, UTC timestamp, and `No trades placed`.
@@ -616,7 +681,7 @@ node --test test/nascar-router.test.js
 node scripts/nascar/router-dry-run.mjs --title "Driver A over/under 12.5 finishing position"
 Expected: route_status AMBIGUOUS, market_lane null
 node scripts/nascar/router-dry-run.mjs --title "Who will win the 2026 NASCAR Cup Series championship? (KXNASCARCUPSERIES-NCS26)"
-Expected: market_lane series_champion, series NASCAR_CUP, market_scope series
+Expected: route_status OUT_OF_SCOPE, market_scope series, series NASCAR_CUP, kalshi_ticker_hint KXNASCARCUPSERIES-NCS26 (series futures deferred to nascarSeriesFuturesApp)
 git status --short
 ```
 
@@ -715,6 +780,6 @@ Implementation safeguards:
 
 The next implementation step, if approved later, is Stage 1 only:
 
-Create `scripts/nascar/router-dry-run.mjs`, `scripts/nascar/lib/router.mjs`, and `test/nascar-router.test.js`. Lanes are `race_winner`, `top3`, `series_champion`. Tag `market_scope`. Recognize the three Kalshi futures tickers (`KXNASCARTRUCKSERIES-NTS26`, `KXNASCARCUPSERIES-NCS26`, `KXNASCARAUTOPARTSSERIES-NAPS26`). Return `NOT_NASCAR` for non-NASCAR titles.
+Create `scripts/nascar/router-dry-run.mjs`, `scripts/nascar/lib/router.mjs`, and `test/nascar-router.test.js`. Race-market lanes are `win`, `top3`, `top5`, `top10`, `top20`, `fastest_lap`. Tag `market_scope: "race"` for race-market lanes. Recognize the three Kalshi series futures tickers (`KXNASCARTRUCKSERIES-NTS26`, `KXNASCARCUPSERIES-NCS26`, `KXNASCARAUTOPARTSSERIES-NAPS26`) and return `route_status: "OUT_OF_SCOPE"` with `market_scope: "series"` for them (series futures are deferred to `nascarSeriesFuturesApp`). Return `NOT_NASCAR` for non-NASCAR titles.
 
 Do not start source adapters, output writers, weekend scan, pre-race refresh, cron, or runtime integration until Stage 1 proof passes.
