@@ -26,6 +26,9 @@ lib
 !scripts/nascar/lib/router.mjs
 !scripts/packets/lib/
 !scripts/packets/lib/common.mjs
+!scripts/mlb/lib/
+!scripts/mlb/lib/series-discovery.mjs
+!scripts/mlb/lib/report-render.mjs
 .DS_store
 
 # Next.js

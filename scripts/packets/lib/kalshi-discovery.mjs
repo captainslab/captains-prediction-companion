@@ -29,6 +29,31 @@ export const KALSHI_SOURCES = Object.freeze({
     page_url: 'https://kalshi.com/calendar/sports/baseball',
     api_url: `${KALSHI_API_BASE}/events?series_ticker=KXMLBGAME&status=open&limit=200&with_nested_markets=true`,
   },
+  mlb_spread: {
+    label: 'kalshi-mlb-spread',
+    page_url: 'https://kalshi.com/calendar/sports/baseball',
+    api_url: `${KALSHI_API_BASE}/events?series_ticker=KXMLBSPREAD&status=open&limit=200&with_nested_markets=true`,
+  },
+  mlb_total: {
+    label: 'kalshi-mlb-total',
+    page_url: 'https://kalshi.com/calendar/sports/baseball',
+    api_url: `${KALSHI_API_BASE}/events?series_ticker=KXMLBTOTAL&status=open&limit=200&with_nested_markets=true`,
+  },
+  mlb_hr: {
+    label: 'kalshi-mlb-hr',
+    page_url: 'https://kalshi.com/calendar/sports/baseball',
+    api_url: `${KALSHI_API_BASE}/events?series_ticker=KXMLBHR&status=open&limit=200&with_nested_markets=true`,
+  },
+  mlb_ks: {
+    label: 'kalshi-mlb-ks',
+    page_url: 'https://kalshi.com/calendar/sports/baseball',
+    api_url: `${KALSHI_API_BASE}/events?series_ticker=KXMLBKS&status=open&limit=200&with_nested_markets=true`,
+  },
+  mlb_rfi: {
+    label: 'kalshi-mlb-rfi',
+    page_url: 'https://kalshi.com/calendar/sports/baseball',
+    api_url: `${KALSHI_API_BASE}/events?series_ticker=KXMLBRFI&status=open&limit=200&with_nested_markets=true`,
+  },
   ufc: {
     label: 'kalshi-calendar-ufc',
     page_url: 'https://kalshi.com/calendar/sports/mma/ufc',

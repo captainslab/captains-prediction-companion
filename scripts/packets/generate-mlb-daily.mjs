@@ -25,8 +25,10 @@ import {
   persistEventArtifacts,
   summarizeEvent,
   renderMarketBlocks,
+  normalizeMarket,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
+import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
 
 const PACKET_TYPE = 'mlb-daily';
 
@@ -139,12 +141,31 @@ function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSu
   lines.push(`event_ticker: ${s.ticker}`);
   lines.push(`event_title: ${s.title}`);
   lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
+  const evDisp = buildEventDisplay(event);
+  lines.push(`display_event_title: ${evDisp.display_event_title}`);
+  lines.push(`display_name_status: ${evDisp.display_name_status}`);
   lines.push(`series_ticker: ${s.series}`);
   lines.push(`market_count: ${s.marketCount}`);
   lines.push(`close_time_utc: ${s.close}`);
   lines.push('');
   lines.push('markets:');
   for (const l of block.lines) lines.push(l);
+  // Per-market display enrichment block, separate from raw market dump so the
+  // raw Kalshi text emitted above is preserved verbatim for audit.
+  const rawMarkets = Array.isArray(event?.markets) ? event.markets : [];
+  if (rawMarkets.length) {
+    lines.push('');
+    lines.push('market_display:');
+    for (const raw of rawMarkets) {
+      const m = normalizeMarket(raw);
+      const md = buildMarketDisplay(m, evDisp);
+      lines.push(`  - market_ticker: ${m.ticker || 'MISSING'}`);
+      lines.push(`    display_market_title: ${md.display_market_title}`);
+      lines.push(`    display_yes_label: ${md.display_yes_label}`);
+      lines.push(`    display_no_label: ${md.display_no_label}`);
+      lines.push(`    display_name_status: ${md.display_name_status}`);
+    }
+  }
   lines.push('');
   lines.push('pre_final_caveats:');
   lines.push('  - lineups not finalized; pitching can scratch');
