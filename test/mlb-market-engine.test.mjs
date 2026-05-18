@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   analyzeMl, analyzeSpread, analyzeTotal, analyzeTotalCeiling,
   analyzeHr, analyzeKs, analyzeYfri, analyzeGame, findLadderInversion,
+  _internal,
 } from '../scripts/mlb/lib/market-engine.mjs';
 
 const m = (overrides = {}) => ({
@@ -41,7 +42,7 @@ test('Ladder inversion: detects worst delta', () => {
   const inv = findLadderInversion([
     { strike: 1, yesAsk: 30, label: '1+' },
     { strike: 2, yesAsk: 20, label: '2+' },
-    { strike: 3, yesAsk: 25, label: '3+' }, // inverted vs 2+ by 5¢
+    { strike: 3, yesAsk: 25, label: '3+' },
   ]);
   assert.ok(inv);
   assert.equal(inv.delta, 5);
@@ -55,22 +56,41 @@ test('Ladder: noise <=1¢ is ignored', () => {
   assert.equal(inv, null);
 });
 
+test('isStaleRung: yes+no overround > 10¢ flagged stale', () => {
+  assert.equal(_internal.isStaleRung(19, 98), true);
+  assert.equal(_internal.isStaleRung(50, 52), false);
+  assert.equal(_internal.isStaleRung(null, 50), true);
+  assert.equal(_internal.isStaleRung(40, null), false);
+});
+
 test('Total: monotone ladder → PASS', () => {
   const r = analyzeTotal([
-    { ticker: 't1', yes_sub_title: 'Over 6.5 runs', yes_ask_dollars: 0.70 },
-    { ticker: 't2', yes_sub_title: 'Over 7.5 runs', yes_ask_dollars: 0.55 },
-    { ticker: 't3', yes_sub_title: 'Over 8.5 runs', yes_ask_dollars: 0.40 },
+    { ticker: 't1', yes_sub_title: 'Over 6.5 runs', yes_ask_dollars: 0.70, no_ask_dollars: 0.32 },
+    { ticker: 't2', yes_sub_title: 'Over 7.5 runs', yes_ask_dollars: 0.55, no_ask_dollars: 0.47 },
+    { ticker: 't3', yes_sub_title: 'Over 8.5 runs', yes_ask_dollars: 0.40, no_ask_dollars: 0.62 },
   ]);
   assert.equal(r.decision, 'PASS');
 });
 
 test('Total: inverted ladder ≥4¢ → CLEAR', () => {
   const r = analyzeTotal([
-    { ticker: 't1', yes_sub_title: 'Over 6.5 runs', yes_ask_dollars: 0.55 },
-    { ticker: 't2', yes_sub_title: 'Over 7.5 runs', yes_ask_dollars: 0.62 },
+    { ticker: 't1', yes_sub_title: 'Over 6.5 runs', yes_ask_dollars: 0.55, no_ask_dollars: 0.47 },
+    { ticker: 't2', yes_sub_title: 'Over 7.5 runs', yes_ask_dollars: 0.62, no_ask_dollars: 0.40 },
   ]);
   assert.equal(r.decision, 'CLEAR');
   assert.match(r.reason, /inverted/);
+});
+
+test('Total: stale rung does NOT cause fake inversion', () => {
+  // 9+ rung is stale (yes 19¢ + no 100¢ = 119¢, overround 19¢).
+  // Without stale-drop, this would invert against 8+ (12¢) → CLEAR.
+  // With stale-drop, the live ladder is monotone → PASS.
+  const r = analyzeTotal([
+    { ticker: 't1', yes_sub_title: 'Over 7.5 runs', yes_ask_dollars: 0.21, no_ask_dollars: 0.86 },
+    { ticker: 't2', yes_sub_title: 'Over 8.5 runs', yes_ask_dollars: 0.12, no_ask_dollars: 0.94 },
+    { ticker: 't3', yes_sub_title: 'Over 9.5 runs', yes_ask_dollars: 0.19, no_ask_dollars: 1.00 },
+  ]);
+  assert.equal(r.decision, 'PASS');
 });
 
 test('Total ceiling: returns highest live rung >= 10¢', () => {
@@ -82,41 +102,129 @@ test('Total ceiling: returns highest live rung >= 10¢', () => {
   assert.equal(r.ceiling.strike, 7.5);
 });
 
-test('Spread: inverted ladder → LEAN', () => {
+// ---- spread bucketing -------------------------------------------------------
+
+test('Spread: stable ticker-suffix bucketing yields CLEAR/LEAN', () => {
+  // Two MIL ladder rungs encoded by ticker suffix; no event teams needed.
   const r = analyzeSpread([
-    { ticker: 's1', yes_sub_title: 'milwaukee wins by over 1.5 runs', yes_ask_dollars: 0.40 },
-    { ticker: 's2', yes_sub_title: 'milwaukee wins by over 2.5 runs', yes_ask_dollars: 0.43 },
-  ]);
+    { ticker: 'KXMLBSPREAD-X-MIL', event_ticker: 'KXMLBSPREAD-X',
+      yes_sub_title: 'milwaukee wins by over 1.5 runs',
+      yes_ask_dollars: 0.40, no_ask_dollars: 0.62 },
+    { ticker: 'KXMLBSPREAD-X-MIL', event_ticker: 'KXMLBSPREAD-X',
+      yes_sub_title: 'milwaukee wins by over 2.5 runs',
+      yes_ask_dollars: 0.45, no_ask_dollars: 0.58 },
+  ], { away: 'MIL', home: 'CHC' });
   assert.ok(['LEAN', 'CLEAR'].includes(r.decision));
 });
 
+test('Spread: free-text "Phillies" + "Philadelphia" land in SAME bucket via event teams', () => {
+  // The W01 false-positive shape: same team, two nickname variants. Old code
+  // split them into two buckets; new code resolves both to PHI.
+  const markets = [
+    { ticker: 's1', yes_sub_title: 'Philadelphia wins by over 2.5 runs', yes_ask_dollars: 0.29, no_ask_dollars: 0.78 },
+    { ticker: 's2', yes_sub_title: 'Phillies wins by over 4.5 runs',     yes_ask_dollars: 0.49, no_ask_dollars: 0.99 },
+    { ticker: 's3', yes_sub_title: 'Philadelphia wins by over 3.5 runs', yes_ask_dollars: 0.54, no_ask_dollars: 0.81 },
+  ];
+  const r = analyzeSpread(markets, { away: 'CIN', home: 'PHI' });
+  // All three rungs are STALE (no_ask huge), so live ladder is empty → PASS.
+  // The key assertion: we did NOT emit CLEAR on a parsing artifact.
+  assert.notEqual(r.decision, 'CLEAR');
+  assert.notEqual(r.decision, 'LEAN');
+});
+
+test('Spread: ambiguous bucket (unknown team in text, no ticker suffix) → WATCH not CLEAR', () => {
+  const markets = [
+    { ticker: 's1', yes_sub_title: 'Atlantis wins by over 1.5 runs', yes_ask_dollars: 0.30, no_ask_dollars: 0.72 },
+    { ticker: 's2', yes_sub_title: 'Atlantis wins by over 2.5 runs', yes_ask_dollars: 0.45, no_ask_dollars: 0.57 },
+  ];
+  const r = analyzeSpread(markets, { away: 'CIN', home: 'PHI' });
+  assert.equal(r.decision, 'WATCH');
+  assert.match(r.reason, /ambiguous market grouping/);
+});
+
+test('Spread: when one half of a same-team ladder is stale, no fake CLEAR', () => {
+  // PHI live: 1.5=47¢. Stale (high overround) rungs at 2.5/3.5 must not
+  // generate "inversion".
+  const markets = [
+    { ticker: 'KXMLBSPREAD-X-PHI', event_ticker: 'KXMLBSPREAD-X',
+      yes_sub_title: 'Philadelphia wins by over 1.5 runs', yes_ask_dollars: 0.47, no_ask_dollars: 0.74 },
+    { ticker: 'KXMLBSPREAD-X-PHI', event_ticker: 'KXMLBSPREAD-X',
+      yes_sub_title: 'Philadelphia wins by over 2.5 runs', yes_ask_dollars: 0.29, no_ask_dollars: 0.78 },
+    { ticker: 'KXMLBSPREAD-X-PHI', event_ticker: 'KXMLBSPREAD-X',
+      yes_sub_title: 'Philadelphia wins by over 3.5 runs', yes_ask_dollars: 0.54, no_ask_dollars: 0.81 },
+  ], r = analyzeSpread(markets, { away: 'CIN', home: 'PHI' });
+  // 1.5 and 3.5 rungs: yes+no = 121¢ and 135¢ → stale, dropped.
+  // 2.5 alone is also stale (overround 7¢ is ok actually; 29+78=107¢ → 7¢ overround, NOT stale).
+  // Live = [2.5@29¢]. Single rung → no inversion → PASS.
+  assert.equal(r.decision, 'PASS');
+});
+
+// ---- HR ---------------------------------------------------------------------
+
 test('HR: monotone ladder per player → NO CLEAR PICK', () => {
   const r = analyzeHr([
-    { ticker: 'KXMLBHR-X-NYYJUDGE-1', title: 'Aaron Judge: 1+ home runs?', floor_strike: 1, yes_ask_dollars: 0.40 },
-    { ticker: 'KXMLBHR-X-NYYJUDGE-2', title: 'Aaron Judge: 2+ home runs?', floor_strike: 2, yes_ask_dollars: 0.08 },
-  ]);
+    { ticker: 'KXMLBHR-26MAY-NYYJUDGE-1', title: 'Aaron Judge: 1+ home runs?', floor_strike: 1, yes_ask_dollars: 0.40, no_ask_dollars: 0.62 },
+    { ticker: 'KXMLBHR-26MAY-NYYJUDGE-2', title: 'Aaron Judge: 2+ home runs?', floor_strike: 2, yes_ask_dollars: 0.08, no_ask_dollars: 0.94 },
+  ], { away: 'NYY', home: 'BOS' });
   assert.equal(r.decision, 'NO CLEAR PICK');
   assert.equal(r.perPlayer.length, 1);
 });
 
+test('HR: ambiguous player tokens (no team prefix match) → all dropped → NO CLEAR PICK', () => {
+  // Player token "XXJUDGE" doesn't prefix-match NYY or BOS → ambiguous.
+  const r = analyzeHr([
+    { ticker: 'KXMLBHR-26MAY-XXJUDGE-1', title: 'Aaron Judge: 1+', floor_strike: 1, yes_ask_dollars: 0.20, no_ask_dollars: 0.82 },
+    { ticker: 'KXMLBHR-26MAY-XXJUDGE-2', title: 'Aaron Judge: 2+', floor_strike: 2, yes_ask_dollars: 0.40, no_ask_dollars: 0.62 },
+  ], { away: 'NYY', home: 'BOS' });
+  // No groups formed; ambiguous>0 but no signal to downgrade.
+  assert.equal(r.decision, 'NO CLEAR PICK');
+});
+
+// ---- K ----------------------------------------------------------------------
+
 test('K props: monotone ladder → WATCH with context-required reason', () => {
   const r = analyzeKs([
-    { ticker: 'KXMLBKS-X-LADCOLE-4', title: 'Gerrit Cole: 4.5+ strikeouts?', floor_strike: 4, yes_ask_dollars: 0.72 },
-    { ticker: 'KXMLBKS-X-LADCOLE-5', title: 'Gerrit Cole: 5.5+ strikeouts?', floor_strike: 5, yes_ask_dollars: 0.55 },
-    { ticker: 'KXMLBKS-X-LADCOLE-6', title: 'Gerrit Cole: 6.5+ strikeouts?', floor_strike: 6, yes_ask_dollars: 0.35 },
-  ], 'LAD');
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-4', title: 'Gerrit Cole: 4.5+ strikeouts?', floor_strike: 4, yes_ask_dollars: 0.72, no_ask_dollars: 0.30 },
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-5', title: 'Gerrit Cole: 5.5+ strikeouts?', floor_strike: 5, yes_ask_dollars: 0.55, no_ask_dollars: 0.47 },
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-6', title: 'Gerrit Cole: 6.5+ strikeouts?', floor_strike: 6, yes_ask_dollars: 0.35, no_ask_dollars: 0.67 },
+  ], 'LAD', { away: 'LAD', home: 'SD' });
   assert.equal(r.decision, 'WATCH');
   assert.match(r.reason, /context|IP|K%/i);
 });
 
 test('K props: inverted ladder LEAN cites exact rungs in cents', () => {
   const r = analyzeKs([
-    { ticker: 'KXMLBKS-X-LADCOLE-4', title: 'Gerrit Cole: 4.5+ strikeouts?', floor_strike: 4, yes_ask_dollars: 0.50 },
-    { ticker: 'KXMLBKS-X-LADCOLE-5', title: 'Gerrit Cole: 5.5+ strikeouts?', floor_strike: 5, yes_ask_dollars: 0.53 },
-  ], 'LAD');
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-4', title: 'Gerrit Cole: 4.5+ strikeouts?', floor_strike: 4, yes_ask_dollars: 0.50, no_ask_dollars: 0.52 },
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-5', title: 'Gerrit Cole: 5.5+ strikeouts?', floor_strike: 5, yes_ask_dollars: 0.53, no_ask_dollars: 0.49 },
+  ], 'LAD', { away: 'LAD', home: 'SD' });
   assert.ok(['LEAN', 'CLEAR'].includes(r.decision));
   assert.match(r.reason, /\d+¢/);
 });
+
+test('K props: stale tail rung does NOT invent a CLEAR (Cecconi 8+ case)', () => {
+  // Reproduces W01 Cecconi: 7+ yes 15¢ / no 91¢ (live); 8+ yes 19¢ / no 98¢ (stale).
+  // Old code: 8+ > 7+ by 4¢ → CLEAR. New code drops 8+ as stale → WATCH.
+  const r = analyzeKs([
+    { ticker: 'KXMLBKS-26MAY-CLECECCONI-5', title: 'Slade Cecconi: 5.5+?', floor_strike: 5, yes_ask_dollars: 0.40, no_ask_dollars: 0.62 },
+    { ticker: 'KXMLBKS-26MAY-CLECECCONI-6', title: 'Slade Cecconi: 6.5+?', floor_strike: 6, yes_ask_dollars: 0.27, no_ask_dollars: 0.80 },
+    { ticker: 'KXMLBKS-26MAY-CLECECCONI-7', title: 'Slade Cecconi: 7.5+?', floor_strike: 7, yes_ask_dollars: 0.15, no_ask_dollars: 0.91 },
+    { ticker: 'KXMLBKS-26MAY-CLECECCONI-8', title: 'Slade Cecconi: 8.5+?', floor_strike: 8, yes_ask_dollars: 0.19, no_ask_dollars: 0.98 },
+  ], 'CLE', { away: 'CLE', home: 'DET' });
+  assert.equal(r.decision, 'WATCH');
+});
+
+test('K props: ambiguous player ticker downgrades CLEAR to WATCH', () => {
+  // First two rungs bucketed cleanly to LAD pitcher; third ticker is malformed.
+  const r = analyzeKs([
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-4', floor_strike: 4, yes_ask_dollars: 0.50, no_ask_dollars: 0.52 },
+    { ticker: 'KXMLBKS-26MAY-LADCOLE-5', floor_strike: 5, yes_ask_dollars: 0.56, no_ask_dollars: 0.46 },
+    { ticker: 'badticker', floor_strike: 6, yes_ask_dollars: 0.30, no_ask_dollars: 0.72 },
+  ], 'LAD', { away: 'LAD', home: 'SD' });
+  assert.equal(r.decision, 'WATCH');
+  assert.match(r.reason, /ambiguous market grouping/);
+});
+
+// ---- YFRI / analyzeGame -----------------------------------------------------
 
 test('YFRI: incomplete quotes → WATCH; complete fair → PASS', () => {
   const w = analyzeYfri([{ ticker: 'rfi-1', yes_ask_dollars: 0.5, no_ask_dollars: null }]);
@@ -162,4 +270,30 @@ test('analyzeGame: ML arb makes final CLEAR and best_angle includes evidence', (
   const out = analyzeGame(game);
   assert.equal(out.final.decision, 'CLEAR');
   assert.match(out.final.best_angle, /arb/i);
+});
+
+test('analyzeGame: W01 Phillies 25¢ inversion shape no longer emits CLEAR', () => {
+  // Same shape as the suspect signal: free-text "Philadelphia" / "Phillies"
+  // ladder with stale rungs around the headline number.
+  const game = {
+    away: 'CIN', home: 'PHI',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-CIN', yes_ask_dollars: 0.47, no_ask_dollars: 0.55 },
+        { ticker: 'KXMLBGAME-X-PHI', yes_ask_dollars: 0.55, no_ask_dollars: 0.46 },
+      ]},
+      spread: { markets: [
+        { ticker: 's1', yes_sub_title: 'Phillies wins by over 4.5 runs',     yes_ask_dollars: 0.49, no_ask_dollars: 0.99 },
+        { ticker: 's2', yes_sub_title: 'Philadelphia wins by over 3.5 runs', yes_ask_dollars: 0.54, no_ask_dollars: 0.81 },
+        { ticker: 's3', yes_sub_title: 'Philadelphia wins by over 2.5 runs', yes_ask_dollars: 0.29, no_ask_dollars: 0.78 },
+        { ticker: 's4', yes_sub_title: 'Philadelphia wins by over 1.5 runs', yes_ask_dollars: 0.47, no_ask_dollars: 0.74 },
+        { ticker: 's5', yes_sub_title: 'Cincinnati wins by over 1.5 runs',   yes_ask_dollars: 0.64, no_ask_dollars: 0.79 },
+      ]},
+      total: { markets: [] }, hr: { markets: [] }, ks: { markets: [] }, rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.notEqual(out.sections.spread.decision, 'CLEAR');
+  assert.notEqual(out.sections.spread.decision, 'LEAN');
+  assert.notEqual(out.final.decision, 'CLEAR');
 });

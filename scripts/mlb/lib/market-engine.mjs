@@ -6,12 +6,14 @@
 //
 //   - CLEAR: cross-side arbitrage on a 2-sided pair (YES_A_ask + YES_B_ask < 100¢)
 //            or strict ladder violations exceeding noise threshold (e.g. a higher
-//            strike priced strictly above a lower strike on the same ladder).
-//   - LEAN : weak ladder inversion (>= 1¢) or wide-but-priced asymmetry that
+//            strike priced strictly above a lower strike on the same ladder),
+//            confirmed on rungs whose YES/NO quotes are NOT stale.
+//   - LEAN : weak ladder inversion (>= 2¢) or wide-but-priced asymmetry that
 //            survives a noise cushion. We do NOT call de-vig favoritism a LEAN.
 //   - WATCH: ladder is monotone and spread is wide / liquidity is thin / market
 //            posted but resolution context (which we deliberately ignore here)
-//            would be required for a CLEAR.
+//            would be required for a CLEAR — OR a candidate ladder was rejected
+//            because we could not unambiguously bucket it.
 //   - PASS : ladder is monotone and prices are unremarkable.
 //   - NO CLEAR PICK: the market is missing/unquoted entirely.
 //
@@ -21,6 +23,16 @@
 //      we touch is the no-vig re-normalization of an *observed* 2-sided pair.
 //   3. Every CLEAR/LEAN reason string names the exact market-internal evidence
 //      (which strikes, which prices, the inversion size in cents).
+//   4. Bucketing of multi-rung ladders (spread by team, HR/K by player) MUST
+//      use stable identifiers (market ticker suffix; event ticker away/home).
+//      Free-text yes_sub_title is only a tiebreaker, never the primary key.
+//   5. If a market cannot be confidently assigned to one side/team/player, the
+//      bucket is flagged ambiguous and any signal it produces is downgraded
+//      to WATCH with reason "ambiguous market grouping".
+//   6. Stale rungs (yes_ask + no_ask > 100 + STALE_OVERROUND_CENTS) do not
+//      count as ladder evidence — illiquid asks fabricate inversions.
+
+import { parseMarketTickerTeam, MLB_TEAM_BY_ABBREV } from '../../packets/lib/mlb-teams.mjs';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -45,6 +57,17 @@ const CLEAR_CENTS = 4;
 
 // Wide spread threshold for WATCH (yes_ask - yes_bid).
 const WIDE_SPREAD_CENTS = 8;
+
+// Stale-quote overround threshold. yes_ask + no_ask should sum to ~100-105¢
+// on a healthy 2-sided market; anything > 110¢ is a stale/illiquid ask and
+// must not count as ladder evidence (it routinely fabricates "inversions").
+const STALE_OVERROUND_CENTS = 10;
+
+function isStaleRung(yesAskCents, noAskCents) {
+  if (yesAskCents == null) return true;
+  if (noAskCents == null) return false; // no NO side known; can't judge stale, trust YES
+  return (yesAskCents + noAskCents) - 100 > STALE_OVERROUND_CENTS;
+}
 
 // ---- ML ----------------------------------------------------------------------
 
@@ -130,58 +153,160 @@ function classifyInversion(delta) {
   return null;
 }
 
-// ---- spread ------------------------------------------------------------------
+// Strip stale rungs from a ladder; preserves order.
+function dropStaleRungs(rungs) {
+  const live = [];
+  const dropped = [];
+  for (const r of rungs) {
+    if (isStaleRung(r.yesAsk, r.noAsk)) dropped.push(r);
+    else live.push(r);
+  }
+  return { live, dropped };
+}
 
-function bucketSpreadByTeam(markets, awayAbbrev, homeAbbrev) {
-  // Use yes_sub_title text like "Chicago C wins by over 3.5 runs" or
-  // "Milwaukee wins by over 1.5 runs" plus ticker as fallback.
-  const buckets = new Map(); // team -> [{strike, yesAsk, ticker, label}]
+// ---- stable team bucketing for spread ---------------------------------------
+
+/**
+ * Resolve a market's team abbrev using STABLE identifiers only:
+ *   1. market ticker suffix (e.g. "...-PHI") via parseMarketTickerTeam
+ *   2. leading uppercase letters of yes_sub_title matched against the event's
+ *      known away/home abbrevs (covers "Phillies wins by..." → first letters
+ *      "PHILLIES" → check prefix matches known abbrev for the event teams,
+ *      then map nickname → abbrev via known full-name lookup)
+ *   3. otherwise null (ambiguous)
+ * `eventTeams` is { away, home } abbrevs from the joined game.
+ */
+function resolveSpreadTeamAbbrev(market, eventTeams) {
+  // 1. stable ticker suffix
+  const fromTicker = parseMarketTickerTeam(market.ticker, market.event_ticker);
+  if (fromTicker) return fromTicker;
+  if (!eventTeams || !eventTeams.away || !eventTeams.home) return null;
+  const candidates = [eventTeams.away, eventTeams.home].filter((x) => MLB_TEAM_BY_ABBREV[x]);
+  if (!candidates.length) return null;
+  const text = String(market.yes_sub_title || market.title || '').toLowerCase();
+  if (!text) return null;
+  // 2. text fallback — match against the FULL team name OR city OR nickname
+  //    for each candidate. We only accept the bucket when EXACTLY ONE
+  //    candidate matches; otherwise it is ambiguous.
+  const NICKNAMES = {
+    ARI: ['arizona', 'diamondbacks', 'dbacks', 'd-backs'],
+    AZ:  ['arizona', 'diamondbacks'],
+    ATL: ['atlanta', 'braves'],
+    BAL: ['baltimore', 'orioles'],
+    BOS: ['boston', 'red sox', 'redsox'],
+    CHC: ['chicago c', 'cubs'],
+    CWS: ['chicago w', 'white sox', 'whitesox'],
+    CHW: ['chicago w', 'white sox'],
+    CIN: ['cincinnati', 'reds'],
+    CLE: ['cleveland', 'guardians'],
+    COL: ['colorado', 'rockies'],
+    DET: ['detroit', 'tigers'],
+    HOU: ['houston', 'astros'],
+    KC:  ['kansas city', 'royals'],
+    KCR: ['kansas city', 'royals'],
+    LAA: ['los angeles a', 'angels', 'la angels'],
+    LAD: ['los angeles d', 'dodgers', 'la dodgers'],
+    MIA: ['miami', 'marlins'],
+    MIL: ['milwaukee', 'brewers'],
+    MIN: ['minnesota', 'twins'],
+    NYM: ['new york m', 'mets'],
+    NYY: ['new york y', 'yankees'],
+    ATH: ['athletics', 'oakland'],
+    OAK: ['oakland', 'athletics'],
+    PHI: ['philadelphia', 'phillies'],
+    PIT: ['pittsburgh', 'pirates'],
+    SD:  ['san diego', 'padres'],
+    SDP: ['san diego', 'padres'],
+    SEA: ['seattle', 'mariners'],
+    SF:  ['san francisco', 'giants'],
+    SFG: ['san francisco', 'giants'],
+    STL: ['st. louis', 'st louis', 'cardinals'],
+    TB:  ['tampa bay', 'rays'],
+    TBR: ['tampa bay', 'rays'],
+    TEX: ['texas', 'rangers'],
+    TOR: ['toronto', 'blue jays', 'bluejays'],
+    WSH: ['washington', 'nationals'],
+    WAS: ['washington', 'nationals'],
+  };
+  let matches = [];
+  for (const ab of candidates) {
+    const keys = NICKNAMES[ab] || [];
+    if (keys.some((k) => text.includes(k))) matches.push(ab);
+  }
+  if (matches.length === 1) return matches[0];
+  return null; // ambiguous
+}
+
+function bucketSpreadByTeam(markets, eventTeams) {
+  // Returns { buckets: Map<abbrev, rungs[]>, ambiguousCount }
+  const buckets = new Map();
+  let ambiguous = 0;
   for (const m of markets) {
     const label = (m.yes_sub_title || m.title || m.ticker || '').trim();
     const lower = label.toLowerCase();
     const match = lower.match(/by over (\d+(?:\.\d+)?)/);
-    if (!match) continue;
+    if (!match) continue; // not a strike rung
     const strike = Number(match[1]);
-    // Team detection: look for known team words at start; fall back to "team1"/"team2" by order.
-    let team = null;
-    // crude heuristic: which side of "wins"
-    const teamWord = lower.split(' wins by')[0].trim();
-    team = teamWord || 'unknown';
-    const yesAsk = toCents(m.yes_ask_dollars);
+    const team = resolveSpreadTeamAbbrev(m, eventTeams);
+    if (!team) { ambiguous += 1; continue; }
     if (!buckets.has(team)) buckets.set(team, []);
-    buckets.get(team).push({ strike, yesAsk, ticker: m.ticker, label });
+    buckets.get(team).push({
+      strike,
+      yesAsk: toCents(m.yes_ask_dollars),
+      noAsk: toCents(m.no_ask_dollars),
+      ticker: m.ticker,
+      label,
+    });
   }
   for (const arr of buckets.values()) arr.sort((a, b) => a.strike - b.strike);
-  return buckets;
+  return { buckets, ambiguous };
 }
 
-export function analyzeSpread(markets) {
+export function analyzeSpread(markets, gameMeta = {}) {
   if (!markets || markets.length === 0) {
     return { decision: 'NO CLEAR PICK', reason: 'Spread market missing for this game.' };
   }
-  const buckets = bucketSpreadByTeam(markets);
+  const eventTeams = { away: gameMeta.away || null, home: gameMeta.home || null };
+  const { buckets, ambiguous } = bucketSpreadByTeam(markets, eventTeams);
   let bestInversion = null;
   let bestTeam = null;
-  for (const [team, rungs] of buckets) {
-    const inv = findLadderInversion(rungs);
+  let bestDropped = [];
+  for (const [team, allRungs] of buckets) {
+    const { live, dropped } = dropStaleRungs(allRungs);
+    const inv = findLadderInversion(live);
     if (inv && (!bestInversion || inv.delta > bestInversion.delta)) {
       bestInversion = inv;
       bestTeam = team;
+      bestDropped = dropped;
     }
   }
   if (bestInversion) {
     const cls = classifyInversion(bestInversion.delta);
     if (cls) {
+      // If any market for this game could not be bucketed, downgrade.
+      if (ambiguous > 0) {
+        return {
+          decision: 'WATCH',
+          reason: `Spread candidate inversion for ${bestTeam} of ${bestInversion.delta}¢ downgraded: ambiguous market grouping (${ambiguous} spread market(s) could not be tied to a known team via ticker suffix or event abbrevs).`,
+          evidence: { bestInversion, bestTeam, ambiguous },
+        };
+      }
       return {
         decision: cls,
         reason: `Spread ladder inverted for ${bestTeam}: ${bestInversion.hi.label} (${bestInversion.hi.yesAsk}¢) priced above ${bestInversion.lo.label} (${bestInversion.lo.yesAsk}¢) by ${bestInversion.delta}¢ — fade YES on the higher strike or buy NO.`,
-        evidence: bestInversion,
+        evidence: { ...bestInversion, droppedStaleCount: bestDropped.length },
       };
     }
   }
+  if (ambiguous > 0) {
+    return {
+      decision: 'WATCH',
+      reason: `Spread ladders monotone on stable-bucketed rungs but ${ambiguous} market(s) failed to bucket cleanly — ambiguous market grouping prevents claiming PASS.`,
+    };
+  }
   return {
     decision: 'PASS',
-    reason: 'Spread ladders monotone within noise; no market-internal edge.',
+    reason: 'Spread ladders monotone within noise on stable-bucketed, non-stale rungs; no market-internal edge.',
   };
 }
 
@@ -196,6 +321,7 @@ function parseTotalRungs(markets) {
     rungs.push({
       strike: Number(match[1]),
       yesAsk: toCents(m.yes_ask_dollars),
+      noAsk: toCents(m.no_ask_dollars),
       ticker: m.ticker,
       label,
     });
@@ -209,7 +335,8 @@ export function analyzeTotal(markets) {
     return { decision: 'NO CLEAR PICK', reason: 'Total market missing for this game.' };
   }
   const rungs = parseTotalRungs(markets);
-  const inv = findLadderInversion(rungs);
+  const { live } = dropStaleRungs(rungs);
+  const inv = findLadderInversion(live);
   if (inv) {
     const cls = classifyInversion(inv.delta);
     if (cls) {
@@ -222,7 +349,7 @@ export function analyzeTotal(markets) {
   }
   return {
     decision: 'PASS',
-    reason: `Total ladder monotone across ${rungs.length} rungs; no inversion above ${LEAN_CENTS}¢ noise.`,
+    reason: `Total ladder monotone across ${live.length} non-stale rungs; no inversion above ${LEAN_CENTS}¢ noise.`,
   };
 }
 
@@ -244,18 +371,58 @@ export function analyzeTotalCeiling(markets) {
   };
 }
 
-// ---- HR props ---------------------------------------------------------------
+// ---- HR / K props (player ladders) -----------------------------------------
 
-function groupByPlayer(markets) {
-  const groups = new Map();
-  for (const m of markets) {
-    const t = m.ticker || '';
-    const parts = t.split('-');
-    const playerTok = parts.length >= 3 ? parts[parts.length - 2] : t;
-    if (!groups.has(playerTok)) groups.set(playerTok, []);
-    groups.get(playerTok).push(m);
+/**
+ * Parse player token from a market ticker. Convention:
+ *   KXMLBHR-<gameKey>-<PLAYERTOK>-<strikeOrIdx>
+ *   KXMLBKS-<gameKey>-<PLAYERTOK>-<strikeOrIdx>
+ * Player token is the second-to-last hyphen segment. Returns null if the
+ * ticker doesn't decompose cleanly.
+ */
+function playerTokenFromTicker(ticker) {
+  if (typeof ticker !== 'string') return null;
+  const parts = ticker.split('-');
+  if (parts.length < 4) return null;
+  const tok = parts[parts.length - 2];
+  if (!tok || !/^[A-Z]/.test(tok)) return null;
+  return tok;
+}
+
+/**
+ * Leading uppercase letters of the player token = the team abbreviation
+ * prefix Kalshi attaches. e.g. "AZZGALLEN23" → "AZ" or "AZZ"... we extract
+ * the LONGEST known abbrev that prefixes the token and matches one of the
+ * event's known team abbrevs. Returns abbrev or null.
+ */
+function playerTokTeam(tok, eventTeams) {
+  if (!tok) return null;
+  const m = tok.match(/^([A-Z]+)/);
+  if (!m) return null;
+  const lead = m[1];
+  const candidates = [eventTeams?.away, eventTeams?.home].filter(Boolean);
+  // Prefer the longest candidate that prefixes the leading letters.
+  let best = null;
+  for (const ab of candidates) {
+    if (!MLB_TEAM_BY_ABBREV[ab]) continue;
+    if (lead.startsWith(ab) && (!best || ab.length > best.length)) best = ab;
   }
-  return groups;
+  return best;
+}
+
+function groupPlayerMarkets(markets, eventTeams) {
+  // Returns { groups: Map<tok, {team, mks: []}>, ambiguous: number }
+  const groups = new Map();
+  let ambiguous = 0;
+  for (const m of markets) {
+    const tok = playerTokenFromTicker(m.ticker);
+    if (!tok) { ambiguous += 1; continue; }
+    const team = playerTokTeam(tok, eventTeams);
+    if (!team) { ambiguous += 1; continue; }
+    if (!groups.has(tok)) groups.set(tok, { team, mks: [] });
+    groups.get(tok).mks.push(m);
+  }
+  return { groups, ambiguous };
 }
 
 function playerName(m) {
@@ -265,25 +432,28 @@ function playerName(m) {
   return null;
 }
 
-export function analyzeHr(markets) {
+export function analyzeHr(markets, gameMeta = {}) {
   if (!markets || markets.length === 0) {
     return { perPlayer: [], decision: 'NO CLEAR PICK', reason: 'HR market missing for this game.' };
   }
-  const groups = groupByPlayer(markets);
+  const eventTeams = { away: gameMeta.away || null, home: gameMeta.home || null };
+  const { groups, ambiguous } = groupPlayerMarkets(markets, eventTeams);
   const perPlayer = [];
   let bestLean = null;
-  for (const [tok, mks] of groups) {
+  for (const [tok, { mks }] of groups) {
     const name = playerName(mks[0]) || tok;
     const rungs = mks
       .map((m) => ({
         strike: num(m.floor_strike),
         yesAsk: toCents(m.yes_ask_dollars),
+        noAsk: toCents(m.no_ask_dollars),
         ticker: m.ticker,
         label: m.floor_strike != null ? `${m.floor_strike}+ HR` : 'HR',
       }))
       .filter((r) => r.strike != null)
       .sort((a, b) => a.strike - b.strike);
-    const inv = findLadderInversion(rungs);
+    const { live } = dropStaleRungs(rungs);
+    const inv = findLadderInversion(live);
     const cls = inv ? classifyInversion(inv.delta) : null;
     if (cls) {
       const entry = {
@@ -297,9 +467,17 @@ export function analyzeHr(markets) {
     } else {
       perPlayer.push({
         name, decision: 'NO CLEAR PICK',
-        reason: 'HR ladder monotone; lineup/park/weather/handedness context required for any LEAN — not modeled here.',
+        reason: 'HR ladder monotone on non-stale rungs; lineup/park/weather/handedness context required for any LEAN — not modeled here.',
       });
     }
+  }
+  // If we have a candidate signal but ambiguous markets exist, downgrade.
+  if (bestLean && ambiguous > 0) {
+    return {
+      perPlayer,
+      decision: 'WATCH',
+      reason: `HR candidate signal ${bestLean.name} (${bestLean.reason}) downgraded: ambiguous market grouping (${ambiguous} HR market(s) could not be tied to a player/team via ticker).`,
+    };
   }
   return {
     perPlayer,
@@ -308,54 +486,69 @@ export function analyzeHr(markets) {
   };
 }
 
-// ---- K props ----------------------------------------------------------------
-
-export function analyzeKs(markets, sideAbbrev) {
+export function analyzeKs(markets, sideAbbrev, gameMeta = {}) {
   if (!markets || markets.length === 0) {
     return { perPitcher: [], decision: 'NO CLEAR PICK', reason: 'K-prop market missing for this game.' };
   }
-  const sideMks = markets.filter((m) => {
-    const parts = (m.ticker || '').split('-');
-    const playerTok = parts.length >= 3 ? parts[parts.length - 2] : '';
-    return playerTok.startsWith(sideAbbrev || '___NEVER___');
-  });
-  if (!sideMks.length) {
-    return { perPitcher: [], decision: 'NO CLEAR PICK', reason: 'Starter K ladder not posted at report time.' };
+  const eventTeams = { away: gameMeta.away || null, home: gameMeta.home || null };
+  // Stable-side filter: only keep markets whose ticker player token maps to
+  // sideAbbrev. Any market we can't bucket bumps the ambiguous counter.
+  const sideMks = [];
+  let ambiguous = 0;
+  for (const m of markets) {
+    const tok = playerTokenFromTicker(m.ticker);
+    if (!tok) { ambiguous += 1; continue; }
+    const team = playerTokTeam(tok, eventTeams);
+    if (!team) { ambiguous += 1; continue; }
+    if (team === sideAbbrev) sideMks.push(m);
   }
-  const groups = groupByPlayer(sideMks);
+  if (!sideMks.length) {
+    return { perPitcher: [], decision: 'NO CLEAR PICK', reason: 'Starter K ladder not posted at report time for this side.' };
+  }
+  const { groups } = groupPlayerMarkets(sideMks, eventTeams);
   const perPitcher = [];
   let bestLean = null;
-  for (const [tok, mks] of groups) {
+  for (const [tok, { mks }] of groups) {
     const name = playerName(mks[0]) || tok;
     const rungs = mks
       .map((m) => ({
         strike: num(m.floor_strike),
         yesAsk: toCents(m.yes_ask_dollars),
+        noAsk: toCents(m.no_ask_dollars),
         ticker: m.ticker,
         label: m.floor_strike != null ? `${m.floor_strike + 0.5}+` : 'K',
       }))
       .filter((r) => r.strike != null)
       .sort((a, b) => a.strike - b.strike);
-    const inv = findLadderInversion(rungs);
+    const { live, dropped } = dropStaleRungs(rungs);
+    const inv = findLadderInversion(live);
     const cls = inv ? classifyInversion(inv.delta) : null;
     if (cls) {
       const entry = {
         name, decision: cls,
         reason: `K ladder inverted: ${inv.hi.label} ${inv.hi.yesAsk}¢ > ${inv.lo.label} ${inv.lo.yesAsk}¢ by ${inv.delta}¢ — fade YES on the higher rung.`,
+        droppedStaleCount: dropped.length,
       };
       perPitcher.push(entry);
       if (!bestLean || inv.delta > (bestLean._delta ?? 0)) bestLean = { ...entry, _delta: inv.delta };
     } else {
       perPitcher.push({
         name, decision: 'WATCH',
-        reason: 'K ladder monotone; projected IP, opp K% vs handedness, park, ump/weather NOT checked — required before any LEAN.',
+        reason: 'K ladder monotone on non-stale rungs; projected IP, opp K% vs handedness, park, ump/weather NOT checked — required before any LEAN.',
       });
     }
+  }
+  if (bestLean && ambiguous > 0) {
+    return {
+      perPitcher,
+      decision: 'WATCH',
+      reason: `K candidate signal ${bestLean.name} downgraded: ambiguous market grouping (${ambiguous} K market(s) could not be tied to a player/team via ticker).`,
+    };
   }
   return {
     perPitcher,
     decision: bestLean ? bestLean.decision : 'WATCH',
-    reason: bestLean ? `Best K signal: ${bestLean.name} — ${bestLean.reason}` : 'K ladders monotone; context gates unchecked.',
+    reason: bestLean ? `Best K signal: ${bestLean.name} — ${bestLean.reason}` : 'K ladders monotone on non-stale rungs; context gates unchecked.',
   };
 }
 
@@ -387,13 +580,14 @@ export function analyzeYfri(markets) {
 // ---- whole-game aggregation -------------------------------------------------
 
 export function analyzeGame(game) {
+  const gameMeta = { away: game.away, home: game.home };
   const mlAnalysis = analyzeMl(game.series.ml?.markets || []);
-  const spreadAnalysis = analyzeSpread(game.series.spread?.markets || []);
+  const spreadAnalysis = analyzeSpread(game.series.spread?.markets || [], gameMeta);
   const totalAnalysis = analyzeTotal(game.series.total?.markets || []);
   const ceilingAnalysis = analyzeTotalCeiling(game.series.total?.markets || []);
-  const hrAnalysis = analyzeHr(game.series.hr?.markets || []);
-  const ksAwayAnalysis = analyzeKs(game.series.ks?.markets || [], game.away);
-  const ksHomeAnalysis = analyzeKs(game.series.ks?.markets || [], game.home);
+  const hrAnalysis = analyzeHr(game.series.hr?.markets || [], gameMeta);
+  const ksAwayAnalysis = analyzeKs(game.series.ks?.markets || [], game.away, gameMeta);
+  const ksHomeAnalysis = analyzeKs(game.series.ks?.markets || [], game.home, gameMeta);
   const yfriAnalysis = analyzeYfri(game.series.rfi?.markets || []);
 
   const sectionDecisions = [mlAnalysis, spreadAnalysis, totalAnalysis, hrAnalysis, ksAwayAnalysis, ksHomeAnalysis, yfriAnalysis];
@@ -443,4 +637,7 @@ export function aggregateClusterAnalyses(gameAnalyses) {
   return { clear_lean_total: total, items };
 }
 
-export const _internal = { NOISE_CENTS, LEAN_CENTS, CLEAR_CENTS, WIDE_SPREAD_CENTS };
+export const _internal = {
+  NOISE_CENTS, LEAN_CENTS, CLEAR_CENTS, WIDE_SPREAD_CENTS, STALE_OVERROUND_CENTS,
+  isStaleRung, resolveSpreadTeamAbbrev, playerTokenFromTicker, playerTokTeam,
+};
