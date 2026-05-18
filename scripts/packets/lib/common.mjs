@@ -1,6 +1,7 @@
 // Shared helpers for packet generators.
-// No network. No credentials. No trades. No order placement.
+// No credentials. No trades. No order placement.
 
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -108,6 +109,41 @@ export function readJsonIfExists(path) {
   } catch {
     return null;
   }
+}
+
+function textFromSpawnValue(value) {
+  if (value == null) return '';
+  if (Buffer.isBuffer(value)) return value.toString('utf8');
+  return String(value);
+}
+
+export function formatPacketCommand(command, args = []) {
+  return [command, ...args].join(' ');
+}
+
+export function runPacketCommand(command, args = [], options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const runner = options.runner ?? spawnSync;
+  const result = runner(command, args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: options.maxBuffer ?? 10 * 1024 * 1024,
+  });
+  const status = typeof result?.status === 'number' ? result.status : result?.error ? 1 : 0;
+  const stdout = textFromSpawnValue(result?.stdout).trim();
+  const stderr = textFromSpawnValue(result?.stderr).trim();
+  const error = result?.error ? (result.error.message ?? String(result.error)) : null;
+  return {
+    ok: status === 0 && !error,
+    command,
+    args,
+    cwd,
+    status,
+    stdout,
+    stderr,
+    error,
+    label: formatPacketCommand(command, args),
+  };
 }
 
 export function packetHeader({ title, date, packetType, sources = [] }) {
