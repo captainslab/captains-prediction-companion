@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 // Mentions daily packet generator.
-// One packet per mention event (politician + earnings-call). No trades. No execution.
+// One packet per Kalshi Mentions event. No trades. No execution.
 // Marks MISSING when source data is unavailable instead of inventing.
+//
+// Routing rules:
+//   * Events are containers. event.event_ticker, title, sub_title, series.
+//   * Markets are the contracts. Each gets its own block under the event.
+//   * Display strike text comes from market title/subtitle/strike fields,
+//     never from ticker shorthand.
+//   * Undated long-horizon events are DROPPED from daily windows unless the
+//     caller explicitly enables --allow-undated.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -16,13 +24,20 @@ import {
   readJsonIfExists,
   runPacketCommand,
 } from './lib/common.mjs';
+import {
+  fetchKalshiEvents,
+  filterByEventDate,
+  persistEventArtifacts,
+  summarizeEvent,
+  renderMarketBlocks,
+  KALSHI_SOURCES,
+} from './lib/kalshi-discovery.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
+const DEFAULT_WINDOW_DAYS = 7; // forward-looking week
+const PACKET_LIMIT = 60;       // safety cap on packets emitted per run
 
 export function discoverMentionEvents(stateRoot, date) {
-  // Look for upstream research artifacts under conventional locations.
-  // The repo has agents/mentions-researcher/ and agents/mentions-mcp-forecaster/.
-  // Packet stays source-of-truth-only — never fabricates events.
   const roots = [
     resolve(stateRoot, 'mentions', date),
     resolve(stateRoot, 'mentions', 'events', date),
@@ -46,10 +61,44 @@ export function discoverMentionEvents(stateRoot, date) {
   return events;
 }
 
-function buildEventPacket({ date, event }) {
-  const p = event.parsed || {};
+function buildKalshiEventPacket({ date, event, sourceUrl }) {
+  const s = summarizeEvent(event);
+  const block = renderMarketBlocks(event, { limit: PACKET_LIMIT });
   const header = packetHeader({
     title: 'Captain Mentions — Daily Event Packet',
+    date,
+    packetType: PACKET_TYPE,
+    sources: [sourceUrl, KALSHI_SOURCES.mentions.page_url],
+  });
+  const lines = [];
+  lines.push(`event_ticker: ${s.ticker}`);
+  lines.push(`event_title: ${s.title}`);
+  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
+  lines.push(`series_ticker: ${s.series}`);
+  lines.push(`market_count: ${s.marketCount}`);
+  lines.push(`close_time_utc: ${s.close}`);
+  lines.push('');
+  lines.push('markets:');
+  for (const l of block.lines) lines.push(l);
+  lines.push('');
+  lines.push('resolution_mechanics:');
+  lines.push('  See market.rules_primary/rules_secondary per Kalshi listing.');
+  lines.push('  Verify exact-string mention criteria before publishing.');
+  lines.push('');
+  lines.push('verified_vs_inference: MISSING (research-only packet; verification required by mentions-researcher)');
+  lines.push('posture: PASS (insufficient verified evidence)  // WATCH / LEAN / PASS only');
+  return {
+    text: header + lines.join('\n') + packetFooter(),
+    marketCount: block.marketCount,
+    missingStrikeCount: block.missingStrikeCount,
+    missingMarkets: block.missingMarkets,
+  };
+}
+
+function buildLegacyEventPacket({ date, event }) {
+  const p = event.parsed || {};
+  const header = packetHeader({
+    title: 'Captain Mentions — Daily Event Packet (legacy artifact)',
     date,
     packetType: PACKET_TYPE,
     sources: [event.file],
@@ -73,22 +122,16 @@ function buildEventPacket({ date, event }) {
   lines.push('');
   lines.push(`verified_vs_inference: ${p.verified_vs_inference || 'MISSING'}`);
   lines.push(`posture: ${p.posture || 'PASS (insufficient verified evidence)'}  // WATCH / LEAN / PASS only`);
-  lines.push('');
-  if (!event.parsed) {
-    lines.push('raw_excerpt:');
-    lines.push(event.body.slice(0, 600));
-    lines.push('');
-  }
   return header + lines.join('\n') + packetFooter();
 }
 
-function buildEmptyDayPacket(date, primeAttempts = []) {
+function buildEmptyDayPacket(date, primeAttempts = [], discovery = null) {
   return (
     packetHeader({
       title: 'Captain Mentions — Daily Event Packet',
       date,
       packetType: PACKET_TYPE,
-      sources: [],
+      sources: discovery?.source ? [discovery.source.api_url, discovery.source.page_url] : [],
     }) +
     [
       'research_prime:',
@@ -100,14 +143,14 @@ function buildEmptyDayPacket(date, primeAttempts = []) {
           ])
         : ['  - MISSING: no discovery command attempted']),
       '',
-      'status: MISSING',
-      'reason: no mention-event source artifacts discovered for this date after attempting the available discovery workflow.',
-      'expected_roots:',
-      '  - state/mentions/<date>/',
-      '  - state/mentions/events/<date>/',
-      '  - channels/mentions/<date>/',
+      'kalshi_discovery:',
+      `  source_page: ${KALSHI_SOURCES.mentions.page_url}`,
+      `  source_api: ${KALSHI_SOURCES.mentions.api_url}`,
+      `  reachable: ${discovery?.ok ? 'yes' : 'no'}`,
+      ...(discovery?.error ? [`  error: ${discovery.error}`] : []),
       '',
-      'missing_command_interface: node scripts/mentions/mentions-workspace.mjs discover --date <date> --live-readonly (or equivalent safe read-only mention discovery CLI)',
+      'status: MISSING',
+      `reason: no Kalshi Mentions events found with derived event-date inside window [${date}, +${DEFAULT_WINDOW_DAYS}d].`,
       'posture: PASS (no data)',
     ].join('\n') +
     packetFooter()
@@ -124,7 +167,6 @@ export function resolveMentionDiscoveryWorkflow(options = {}) {
       note: 'Detected scripts/mentions/mentions-workspace.mjs.',
     };
   }
-
   const alternatePath = resolve('scripts', 'mentions', 'discover.mjs');
   if (existsSync(alternatePath)) {
     return {
@@ -134,7 +176,6 @@ export function resolveMentionDiscoveryWorkflow(options = {}) {
       note: 'Detected scripts/mentions/discover.mjs.',
     };
   }
-
   return {
     available: false,
     missing_interface:
@@ -150,27 +191,92 @@ export function primeMentionResearch(date, options = {}) {
   return [runPacketCommand(workflow.command, workflow.argsForDate(date), { cwd: options.cwd ?? process.cwd(), runner: options.runner })];
 }
 
+function parseExtraArgs(argv) {
+  // Lets caller pass --allow-undated and --window-days N without breaking parsePacketArgs.
+  const passthrough = [];
+  const extra = { allowUndated: false, windowDays: DEFAULT_WINDOW_DAYS };
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === '--allow-undated') extra.allowUndated = true;
+    else if (a === '--window-days') { extra.windowDays = Number(argv[++i]); }
+    else passthrough.push(a);
+  }
+  if (!Number.isFinite(extra.windowDays)) extra.windowDays = DEFAULT_WINDOW_DAYS;
+  return { passthrough, extra };
+}
+
 async function main() {
-  const opts = parsePacketArgs(process.argv.slice(2));
+  const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
+  const opts = parsePacketArgs(passthrough);
   if (opts.help) {
-    console.log('Usage: node scripts/packets/generate-mentions-daily.mjs --date YYYY-MM-DD [--dry-run]');
+    console.log('Usage: node scripts/packets/generate-mentions-daily.mjs --date YYYY-MM-DD [--dry-run] [--window-days N] [--allow-undated]');
     return;
   }
   const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
   const primeAttempts = primeMentionResearch(opts.date);
-  const events = discoverMentionEvents(opts.stateRoot, opts.date);
+
+  const discovery = await fetchKalshiEvents('mentions');
+  const dateFilter = filterByEventDate(opts.date, {
+    windowDays: extra.windowDays,
+    allowUndated: extra.allowUndated,
+  });
+  const filteredEvents = discovery.events.filter(dateFilter);
+
+  let persistedCount = 0;
+  if (filteredEvents.length) {
+    const persisted = persistEventArtifacts({
+      stateRoot: opts.stateRoot,
+      sport: 'mentions',
+      date: opts.date,
+      events: filteredEvents,
+    });
+    persistedCount = persisted.written.length;
+  }
+
+  const localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
+
+  let totalMarketCount = 0;
+  let missingMarketEventCount = 0;
+  let missingStrikeTextCount = 0;
   const items = [];
-  if (!events.length) {
-    const txt = buildEmptyDayPacket(opts.date, primeAttempts);
+
+  if (!localEvents.length && !filteredEvents.length) {
+    const txt = buildEmptyDayPacket(opts.date, primeAttempts, discovery);
     const w = writeAudit(dir, `${opts.date}-no-events`, txt, {
       event_count: 0,
+      total_market_count: 0,
+      missing_market_count: 0,
+      missing_strike_text_count: 0,
+      window_days: extra.windowDays,
+      allow_undated: extra.allowUndated,
+      kalshi_discovery: { ok: discovery.ok, error: discovery.error, total_returned: discovery.events.length, window_matched: filteredEvents.length },
       research_prime: primeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
     });
     items.push({ name: 'no-events', ...w });
   } else {
-    for (const ev of events) {
+    const seen = new Set();
+    for (const ev of filteredEvents) {
+      const ticker = ev?.event_ticker;
+      if (!ticker || seen.has(ticker)) continue;
+      seen.add(ticker);
+      const sourcePath = resolve(opts.stateRoot, 'mentions', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
+      const built = buildKalshiEventPacket({ date: opts.date, event: ev, sourceUrl: sourcePath });
+      totalMarketCount += built.marketCount;
+      if (built.missingMarkets) missingMarketEventCount += 1;
+      missingStrikeTextCount += built.missingStrikeCount;
+      const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
+        event_ticker: ticker,
+        market_count: built.marketCount,
+        missing_markets: built.missingMarkets,
+        missing_strike_text_count: built.missingStrikeCount,
+        kalshi_source_api: KALSHI_SOURCES.mentions.api_url,
+        kalshi_source_page: KALSHI_SOURCES.mentions.page_url,
+      });
+      items.push({ name: ticker, ...w });
+    }
+    for (const ev of localEvents) {
       const baseName = `${opts.date}-${(ev.parsed?.event_id || ev.name).toString()}`;
-      const txt = buildEventPacket({ date: opts.date, event: ev });
+      const txt = buildLegacyEventPacket({ date: opts.date, event: ev });
       const w = writeAudit(dir, baseName, txt, {
         source_file: ev.file,
         research_prime: primeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
@@ -178,7 +284,18 @@ async function main() {
       items.push({ name: baseName, ...w });
     }
   }
+
+  const eventCount = filteredEvents.length + localEvents.length;
+  // Guard: event_count > 0 but total_market_count === 0 -> fail (Kalshi side only).
+  let exitCode = 0;
+  if (filteredEvents.length > 0 && totalMarketCount === 0) {
+    console.error(`[${PACKET_TYPE}] FAIL: ${filteredEvents.length} Kalshi events but zero markets across all of them.`);
+    exitCode = 2;
+  }
+
   console.log(printDryRunSummary({ packetType: PACKET_TYPE, date: opts.date, dir, items }));
+  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${filteredEvents.length} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} allow_undated=${extra.allowUndated}`);
+  if (exitCode) process.exit(exitCode);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

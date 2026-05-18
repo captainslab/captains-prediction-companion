@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// UFC weekly packet generator. Fridays. One packet per event/card.
-// No network. No trades. No order placement. MISSING > invention.
+// UFC weekly packet generator. Fridays. One packet per Kalshi UFC event.
+// Events = the card. Markets = each fighter's win contract. No trades.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -14,8 +14,17 @@ import {
   printDryRunSummary,
   readJsonIfExists,
 } from './lib/common.mjs';
+import {
+  fetchKalshiEvents,
+  filterByEventDate,
+  persistEventArtifacts,
+  summarizeEvent,
+  renderMarketBlocks,
+  KALSHI_SOURCES,
+} from './lib/kalshi-discovery.mjs';
 
 const PACKET_TYPE = 'ufc-weekly';
+const WEEKEND_DAYS = 2; // Fri + Sat + Sun -> windowDays=2
 
 function weekendDates(fridayIso) {
   const d = new Date(`${fridayIso}T00:00:00Z`);
@@ -27,7 +36,7 @@ function weekendDates(fridayIso) {
   });
 }
 
-function locateUfcEvents(stateRoot, dates) {
+function locateUfcArtifacts(stateRoot, dates) {
   const root = resolve(stateRoot, 'ufc');
   if (!existsSync(root)) return [];
   const hits = [];
@@ -57,12 +66,45 @@ function locateUfcEvents(stateRoot, dates) {
   return hits;
 }
 
-function buildEventPacket({ weekendDates, event }) {
+function buildKalshiEventPacket({ event, dates, sourcePath }) {
+  const s = summarizeEvent(event);
+  const block = renderMarketBlocks(event, { limit: 40 });
+  const eventDate = (s.close && s.close.slice(0, 10)) || dates[0];
+  const header = packetHeader({
+    title: `Captain UFC — Weekend Event Packet: ${s.title}`,
+    date: eventDate,
+    packetType: PACKET_TYPE,
+    sources: [sourcePath, KALSHI_SOURCES.ufc.page_url],
+  });
+  const lines = [];
+  lines.push(`event_ticker: ${s.ticker}`);
+  lines.push(`event_title: ${s.title}`);
+  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
+  lines.push(`series_ticker: ${s.series}`);
+  lines.push(`window_utc: ${dates.join(' .. ')}`);
+  lines.push(`market_count: ${s.marketCount}`);
+  lines.push(`close_time_utc: ${s.close}`);
+  lines.push('');
+  lines.push('markets:');
+  for (const l of block.lines) lines.push(l);
+  lines.push('');
+  lines.push('market_watch_notes (reference-only, not sportsbook quotes):');
+  lines.push('  - confirm fighter records vs Kalshi market titles before publication (hard gate).');
+  lines.push('  - check for last-minute card changes (scratches, weight misses).');
+  return {
+    text: header + lines.join('\n') + packetFooter(),
+    marketCount: block.marketCount,
+    missingStrikeCount: block.missingStrikeCount,
+    missingMarkets: block.missingMarkets,
+  };
+}
+
+function buildLegacyEventPacket({ weekendDates: wd, event }) {
   const data = readJsonIfExists(event.file) || {};
   const eventName = data.event_name || data.name || event.file.split('/').pop().replace(/\.json$/, '');
   const fights = data.fights || data.card || [];
   const header = packetHeader({
-    title: `Captain UFC — Weekend Event Packet: ${eventName}`,
+    title: `Captain UFC — Weekend Event Packet (legacy): ${eventName}`,
     date: event.date,
     packetType: PACKET_TYPE,
     sources: [event.file],
@@ -70,12 +112,9 @@ function buildEventPacket({ weekendDates, event }) {
   const lines = [];
   lines.push(`event_name: ${eventName}`);
   lines.push(`event_date_utc: ${event.date}`);
-  lines.push(`weekend_window_utc: ${weekendDates.join(' .. ')}`);
+  lines.push(`weekend_window_utc: ${wd.join(' .. ')}`);
   lines.push(`venue: ${data.venue || 'MISSING'}`);
   lines.push(`broadcast: ${data.broadcast || 'MISSING'}`);
-  lines.push('');
-  lines.push('card_overview:');
-  lines.push(`  ${data.overview || 'MISSING'}`);
   lines.push('');
   lines.push('fights:');
   if (Array.isArray(fights) && fights.length) {
@@ -89,32 +128,27 @@ function buildEventPacket({ weekendDates, event }) {
   } else {
     lines.push('  MISSING');
   }
-  lines.push('');
-  lines.push('market_watch_notes (reference-only, not sportsbook quotes):');
-  const notes = data.watch_notes || data.notes || [];
-  if (Array.isArray(notes) && notes.length) {
-    for (const n of notes) lines.push(`  - ${n}`);
-  } else {
-    lines.push('  MISSING');
-  }
-  lines.push('');
-  lines.push(`source_status: ${data.source_status || 'reference-only'}`);
   return header + lines.join('\n') + packetFooter();
 }
 
-function buildEmptyPacket(date, dates) {
+function buildEmptyPacket(date, dates, discovery) {
   return (
     packetHeader({
       title: 'Captain UFC — Weekend Event Packet',
       date,
       packetType: PACKET_TYPE,
-      sources: [],
+      sources: [KALSHI_SOURCES.ufc.api_url, KALSHI_SOURCES.ufc.page_url],
     }) +
     [
-      'status: MISSING',
-      `reason: no UFC event artifacts discovered for weekend window ${dates.join(' .. ')}`,
-      'expected_root: state/ufc/<date>/*.json',
+      'kalshi_discovery:',
+      `  source_page: ${KALSHI_SOURCES.ufc.page_url}`,
+      `  source_api: ${KALSHI_SOURCES.ufc.api_url}`,
+      `  reachable: ${discovery.ok ? 'yes' : 'no'}`,
+      `  total_events: ${discovery.events.length}`,
+      ...(discovery.error ? [`  error: ${discovery.error}`] : []),
       '',
+      'status: MISSING',
+      `reason: no Kalshi UFC events with derived event-date inside weekend window ${dates.join(' .. ')}.`,
       'posture: PASS (no data)',
     ].join('\n') +
     packetFooter()
@@ -129,21 +163,73 @@ async function main() {
   }
   const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
   const dates = weekendDates(opts.date);
-  const events = locateUfcEvents(opts.stateRoot, dates);
+
+  const discovery = await fetchKalshiEvents('ufc');
+  const dateFilter = filterByEventDate(opts.date, { windowDays: WEEKEND_DAYS, allowUndated: false });
+  const kalshiEvents = discovery.events.filter(dateFilter);
+  let persisted = { written: [] };
+  if (kalshiEvents.length) {
+    persisted = persistEventArtifacts({
+      stateRoot: opts.stateRoot,
+      sport: 'ufc',
+      date: opts.date,
+      events: kalshiEvents,
+    });
+  }
+
+  const localEvents = locateUfcArtifacts(opts.stateRoot, dates);
+  let totalMarketCount = 0;
+  let missingMarketEventCount = 0;
+  let missingStrikeTextCount = 0;
   const items = [];
-  if (!events.length) {
-    const txt = buildEmptyPacket(opts.date, dates);
-    const w = writeAudit(dir, `${opts.date}-no-events`, txt, { event_count: 0, weekend_dates: dates });
+
+  if (!kalshiEvents.length && !localEvents.length) {
+    const txt = buildEmptyPacket(opts.date, dates, discovery);
+    const w = writeAudit(dir, `${opts.date}-no-events`, txt, {
+      event_count: 0,
+      total_market_count: 0,
+      missing_market_count: 0,
+      missing_strike_text_count: 0,
+      weekend_dates: dates,
+      kalshi_discovery: { ok: discovery.ok, error: discovery.error, total: discovery.events.length, matched: 0 },
+    });
     items.push({ name: 'no-events', ...w });
   } else {
-    for (const ev of events) {
+    for (const ev of kalshiEvents) {
+      const ticker = ev?.event_ticker;
+      if (!ticker) continue;
+      const sourcePath = resolve(opts.stateRoot, 'ufc', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
+      const built = buildKalshiEventPacket({ event: ev, dates, sourcePath });
+      totalMarketCount += built.marketCount;
+      if (built.missingMarkets) missingMarketEventCount += 1;
+      missingStrikeTextCount += built.missingStrikeCount;
+      const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
+        event_ticker: ticker,
+        market_count: built.marketCount,
+        missing_markets: built.missingMarkets,
+        missing_strike_text_count: built.missingStrikeCount,
+        kalshi_source_api: KALSHI_SOURCES.ufc.api_url,
+        kalshi_source_page: KALSHI_SOURCES.ufc.page_url,
+      });
+      items.push({ name: ticker, ...w });
+    }
+    for (const ev of localEvents) {
       const baseName = `${ev.date}-${ev.file.split('/').pop().replace(/\.json$/, '')}`;
-      const txt = buildEventPacket({ weekendDates: dates, event: ev });
+      const txt = buildLegacyEventPacket({ weekendDates: dates, event: ev });
       const w = writeAudit(dir, baseName, txt, { source_file: ev.file });
       items.push({ name: baseName, ...w });
     }
   }
+
+  let exitCode = 0;
+  if (kalshiEvents.length > 0 && totalMarketCount === 0) {
+    console.error(`[${PACKET_TYPE}] FAIL: ${kalshiEvents.length} events but zero markets total.`);
+    exitCode = 2;
+  }
+
   console.log(printDryRunSummary({ packetType: PACKET_TYPE, date: opts.date, dir, items }));
+  console.log(`[${PACKET_TYPE}] summary event_count=${kalshiEvents.length} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persisted.written.length} local=${localEvents.length}`);
+  if (exitCode) process.exit(exitCode);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

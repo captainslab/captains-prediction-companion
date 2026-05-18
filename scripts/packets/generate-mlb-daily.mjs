@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // MLB daily packet generator (pre-final-lineup research).
-// Primes the existing MLB discovery/output workflow before building packets. No trades.
+// One packet per Kalshi MLB game event (KXMLBGAME). No trades.
+//
+// Events = container (the game). Markets = the tradable contracts (per-team
+// winner, totals, etc.). Each market is emitted as its own block under the
+// event, with strike text sourced from market fields — never ticker fragments.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -15,6 +19,14 @@ import {
   readJsonIfExists,
   runPacketCommand,
 } from './lib/common.mjs';
+import {
+  fetchKalshiEvents,
+  filterByEventDate,
+  persistEventArtifacts,
+  summarizeEvent,
+  renderMarketBlocks,
+  KALSHI_SOURCES,
+} from './lib/kalshi-discovery.mjs';
 
 const PACKET_TYPE = 'mlb-daily';
 
@@ -35,7 +47,6 @@ export function primeMlbResearch(date, options = {}) {
 }
 
 export function locateMlbArtifacts(stateRoot, date) {
-  // Best-effort scan for state/mlb/**/<date>/*.json.
   const root = resolve(stateRoot, 'mlb');
   if (!existsSync(root)) return [];
   const hits = [];
@@ -50,7 +61,6 @@ export function locateMlbArtifacts(stateRoot, date) {
       try { st = statSync(p); } catch { continue; }
       if (st.isDirectory()) {
         if (e === date || p.endsWith(`/${date}`)) {
-          // collect json files
           try {
             for (const f of readdirSync(p)) {
               const fp = join(p, f);
@@ -66,96 +76,43 @@ export function locateMlbArtifacts(stateRoot, date) {
   return hits;
 }
 
-function artifactPriority(filePath) {
-  if (filePath.endsWith('/slate_manifest.json')) return 0;
-  if (filePath.endsWith('/picks.json')) return 1;
-  if (filePath.endsWith('/source_registry.json')) return 2;
-  if (filePath.endsWith('/mlb_official_adapter.json')) return 3;
-  return 9;
-}
-
-function normalizeGameShape(game = {}) {
-  const teams = game.teams && typeof game.teams === 'object' ? game.teams : {};
-  return {
-    ...game,
-    game_id: game.game_id || game.game_pk || game.gamePk || game.id || null,
-    matchup:
-      game.matchup ||
-      game.game ||
-      (game.away_team && game.home_team ? `${game.away_team} @ ${game.home_team}` : null) ||
-      (teams.away && teams.home ? `${teams.away} @ ${teams.home}` : null),
-    away_team: game.away_team || teams.away || null,
-    home_team: game.home_team || teams.home || null,
-    start_utc: game.start_utc || game.start_time_utc || game.gameDate || game.start_time || null,
-    park: game.park || game.venue || null,
-    market_board: game.market_board || game.markets || game.kalshi_events || game.listed_market_lanes || null,
-  };
-}
-
-function summarizeGame(game) {
-  const id = game.game_id || game.id || game.gamePk || 'MISSING';
-  const matchup =
-    game.matchup ||
-    (game.away_team && game.home_team ? `${game.away_team} @ ${game.home_team}` : 'MISSING');
-  const startUtc = game.start_utc || game.gameDate || game.start_time || 'MISSING';
-  const pitchers =
-    game.probable_pitchers ||
-    (game.away_pitcher || game.home_pitcher
-      ? { away: game.away_pitcher || 'MISSING', home: game.home_pitcher || 'MISSING' }
-      : 'MISSING');
-  const weather = game.weather || 'MISSING';
-  const park = game.park || game.venue || 'MISSING';
-  const lineupStatus = game.lineup_status || 'PRE-FINAL (not yet posted)';
-  const board = game.market_board || game.markets || 'MISSING';
-
-  const lines = [
-    `- game_id: ${id}`,
-    `  matchup: ${matchup}`,
-    `  start_utc: ${startUtc}`,
-    `  probable_pitchers: ${typeof pitchers === 'string' ? pitchers : JSON.stringify(pitchers)}`,
-    `  lineup_status: ${lineupStatus}`,
-    `  park: ${typeof park === 'string' ? park : JSON.stringify(park)}`,
-    `  weather: ${typeof weather === 'string' ? weather : JSON.stringify(weather)}`,
-    `  market_board: ${typeof board === 'string' ? board : JSON.stringify(board)}`,
-    `  caveat: pre-final lineup; pitchers and lineups subject to change.`,
-  ];
-  return lines.join('\n');
-}
-
-export function extractGames(artifacts) {
-  const games = [];
-  for (const fp of artifacts) {
-    const data = readJsonIfExists(fp);
-    if (!data) continue;
-    const candidates =
-      data.games ||
-      data.fixtures ||
-      data.schedule ||
-      data.records ||
-      data.slate?.games ||
-      (Array.isArray(data) ? data : null);
-    if (Array.isArray(candidates)) {
-      for (const g of candidates) games.push(normalizeGameShape(g));
-    } else if (data.game_id || data.game_pk || data.gamePk || data.matchup || data.game || data.home_team) {
-      games.push(normalizeGameShape(data));
+/**
+ * Read MLB workflow slate_manifest.json files and normalize to a flat list of
+ * { game_id, matchup, start_utc, away, home } records. Tolerates missing/bad
+ * files. Used by tests and as a fallback when no Kalshi events are available.
+ */
+export function extractGames(paths = []) {
+  const out = [];
+  for (const p of paths) {
+    if (!p || !existsSync(p)) continue;
+    let raw;
+    try { raw = readFileSync(p, 'utf8'); } catch { continue; }
+    let json;
+    try { json = JSON.parse(raw); } catch { continue; }
+    const games = Array.isArray(json?.games) ? json.games : [];
+    for (const g of games) {
+      if (!g) continue;
+      out.push({
+        game_id: g.game_pk ?? g.game_id ?? null,
+        matchup: g.game || g.matchup
+          || (g.teams ? `${g.teams.away ?? '?'} at ${g.teams.home ?? '?'}` : 'MISSING'),
+        start_utc: g.start_time_utc || g.start_utc || null,
+        away: g.teams?.away ?? g.away ?? null,
+        home: g.teams?.home ?? g.home ?? null,
+      });
     }
   }
-  // Dedup by id+matchup
-  const seen = new Set();
-  return games.filter((g) => {
-    const k = `${g.game_id || g.id || g.gamePk || ''}|${g.matchup || g.away_team || ''}|${g.home_team || ''}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  return out;
 }
 
-function buildPacket({ date, game, artifacts, primeAttempts }) {
+function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath }) {
+  const s = summarizeEvent(event);
+  const block = renderMarketBlocks(event, { limit: 40 });
   const header = packetHeader({
     title: 'Captain MLB — Daily Pre-Final-Lineup Packet',
     date,
     packetType: PACKET_TYPE,
-    sources: artifacts.length ? artifacts : [],
+    sources: [sourcePath, KALSHI_SOURCES.mlb.page_url, ...artifacts],
   });
   const lines = [];
   lines.push('research_prime:');
@@ -163,29 +120,75 @@ function buildPacket({ date, game, artifacts, primeAttempts }) {
     for (const attempt of primeAttempts) {
       lines.push(`  - command: ${attempt.label}`);
       lines.push(`    status: ${attempt.ok ? 'ok' : 'MISSING'}`);
-      if (!attempt.ok) {
-        lines.push(`    error: ${attempt.error || attempt.stderr || 'command failed'}`);
-      }
+      if (!attempt.ok) lines.push(`    error: ${attempt.error || attempt.stderr || 'command failed'}`);
     }
   } else {
     lines.push('  - MISSING: no discovery command attempted');
   }
   lines.push('');
-  if (!game) {
-    lines.push('status: MISSING');
-    lines.push('reason: MLB discovery/output workflow was attempted, but no game records were found under state/mlb/**/<date>/.');
-    lines.push('next_step: inspect `node scripts/mlb/mlb-workspace.mjs status --date ' + date + '` and discovery command stderr above.');
-  } else {
-    lines.push('game_count: 1');
+  if (kalshiSummary) {
+    lines.push('kalshi_discovery:');
+    lines.push(`  source_page: ${KALSHI_SOURCES.mlb.page_url}`);
+    lines.push(`  source_api: ${KALSHI_SOURCES.mlb.api_url}`);
+    lines.push(`  reachable: ${kalshiSummary.ok ? 'yes' : 'no'}`);
+    lines.push(`  total_events: ${kalshiSummary.total}`);
+    lines.push(`  window_matched: ${kalshiSummary.matched}`);
+    if (kalshiSummary.error) lines.push(`  error: ${kalshiSummary.error}`);
     lines.push('');
-    lines.push('game:');
-    lines.push(summarizeGame(game));
-    lines.push('');
-    lines.push('pre_final_caveats:');
-    lines.push('  - lineups not finalized; pitching can scratch');
-    lines.push('  - totals/ML board reflects pre-lineup snapshot only');
-    lines.push('  - weather snapshots may drift before first pitch');
   }
+  lines.push(`event_ticker: ${s.ticker}`);
+  lines.push(`event_title: ${s.title}`);
+  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
+  lines.push(`series_ticker: ${s.series}`);
+  lines.push(`market_count: ${s.marketCount}`);
+  lines.push(`close_time_utc: ${s.close}`);
+  lines.push('');
+  lines.push('markets:');
+  for (const l of block.lines) lines.push(l);
+  lines.push('');
+  lines.push('pre_final_caveats:');
+  lines.push('  - lineups not finalized; pitching can scratch');
+  lines.push('  - totals/ML board reflects pre-lineup snapshot only');
+  lines.push('  - weather snapshots may drift before first pitch');
+  return {
+    text: header + lines.join('\n') + packetFooter(),
+    marketCount: block.marketCount,
+    missingStrikeCount: block.missingStrikeCount,
+    missingMarkets: block.missingMarkets,
+  };
+}
+
+function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
+  const header = packetHeader({
+    title: 'Captain MLB — Daily Pre-Final-Lineup Packet',
+    date,
+    packetType: PACKET_TYPE,
+    sources: [KALSHI_SOURCES.mlb.api_url, KALSHI_SOURCES.mlb.page_url, ...artifacts],
+  });
+  const lines = [];
+  lines.push('research_prime:');
+  if (primeAttempts.length) {
+    for (const attempt of primeAttempts) {
+      lines.push(`  - command: ${attempt.label}`);
+      lines.push(`    status: ${attempt.ok ? 'ok' : 'MISSING'}`);
+      if (!attempt.ok) lines.push(`    error: ${attempt.error || attempt.stderr || 'command failed'}`);
+    }
+  } else {
+    lines.push('  - MISSING: no discovery command attempted');
+  }
+  lines.push('');
+  if (kalshiSummary) {
+    lines.push('kalshi_discovery:');
+    lines.push(`  source_page: ${KALSHI_SOURCES.mlb.page_url}`);
+    lines.push(`  source_api: ${KALSHI_SOURCES.mlb.api_url}`);
+    lines.push(`  reachable: ${kalshiSummary.ok ? 'yes' : 'no'}`);
+    lines.push(`  total_events: ${kalshiSummary.total}`);
+    lines.push(`  window_matched: ${kalshiSummary.matched}`);
+    if (kalshiSummary.error) lines.push(`  error: ${kalshiSummary.error}`);
+    lines.push('');
+  }
+  lines.push('status: MISSING');
+  lines.push(`reason: no Kalshi MLB events with derived event-date ${date}.`);
   return header + lines.join('\n') + packetFooter();
 }
 
@@ -197,35 +200,74 @@ async function main() {
   }
   const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
   const primeAttempts = primeMlbResearch(opts.date);
-  const artifacts = locateMlbArtifacts(opts.stateRoot, opts.date).sort(
-    (left, right) => artifactPriority(left) - artifactPriority(right) || left.localeCompare(right),
-  );
-  const games = extractGames(artifacts);
+  const artifacts = locateMlbArtifacts(opts.stateRoot, opts.date);
+
+  const discovery = await fetchKalshiEvents('mlb');
+  const dateFilter = filterByEventDate(opts.date, { windowDays: 0, allowUndated: false });
+  const kalshiEvents = discovery.events.filter(dateFilter);
+
+  let persistedCount = 0;
+  if (kalshiEvents.length) {
+    const p = persistEventArtifacts({ stateRoot: opts.stateRoot, sport: 'mlb', date: opts.date, events: kalshiEvents });
+    persistedCount = p.written.length;
+  }
+
+  const kalshiSummary = {
+    ok: discovery.ok,
+    total: discovery.events.length,
+    matched: kalshiEvents.length,
+    error: discovery.error,
+  };
+
+  let totalMarketCount = 0;
+  let missingMarketEventCount = 0;
+  let missingStrikeTextCount = 0;
   const items = [];
   const primeMeta = primeAttempts.map(({ label, ok, status, stderr, error }) => ({ label, ok, status, stderr, error }));
-  if (!games.length) {
-    const txt = buildPacket({ date: opts.date, game: null, artifacts, primeAttempts });
+
+  if (!kalshiEvents.length) {
+    const txt = buildEmptyPacket({ date: opts.date, artifacts, primeAttempts, kalshiSummary });
     const w = writeAudit(dir, `${opts.date}-mlb-daily-MISSING`, txt, {
-      game_count: 0,
+      event_count: 0,
+      total_market_count: 0,
+      missing_market_count: 0,
+      missing_strike_text_count: 0,
       artifact_count: artifacts.length,
+      kalshi_discovery: kalshiSummary,
       research_prime: primeMeta,
     });
     items.push({ name: 'mlb-daily-MISSING', ...w });
   } else {
-    for (const game of games) {
-      const gameId = game.game_id || game.id || game.gamePk || game.matchup || 'game';
-      const txt = buildPacket({ date: opts.date, game, artifacts, primeAttempts });
-      const w = writeAudit(dir, `${opts.date}-${gameId}`, txt, {
-        game_count: 1,
-        total_game_count: games.length,
-        game_id: gameId,
+    for (const ev of kalshiEvents) {
+      const ticker = ev?.event_ticker;
+      if (!ticker) continue;
+      const sourcePath = resolve(opts.stateRoot, 'mlb', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
+      const built = buildKalshiGamePacket({ date: opts.date, event: ev, artifacts, primeAttempts, kalshiSummary, sourcePath });
+      totalMarketCount += built.marketCount;
+      if (built.missingMarkets) missingMarketEventCount += 1;
+      missingStrikeTextCount += built.missingStrikeCount;
+      const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
+        event_ticker: ticker,
+        market_count: built.marketCount,
+        missing_markets: built.missingMarkets,
+        missing_strike_text_count: built.missingStrikeCount,
         artifact_count: artifacts.length,
+        kalshi_discovery: kalshiSummary,
         research_prime: primeMeta,
       });
-      items.push({ name: String(gameId), ...w });
+      items.push({ name: ticker, ...w });
     }
   }
+
+  let exitCode = 0;
+  if (kalshiEvents.length > 0 && totalMarketCount === 0) {
+    console.error(`[${PACKET_TYPE}] FAIL: ${kalshiEvents.length} events but zero markets total.`);
+    exitCode = 2;
+  }
+
   console.log(printDryRunSummary({ packetType: PACKET_TYPE, date: opts.date, dir, items }));
+  console.log(`[${PACKET_TYPE}] summary event_count=${kalshiEvents.length} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} local_artifacts=${artifacts.length}`);
+  if (exitCode) process.exit(exitCode);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
