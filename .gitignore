@@ -24,6 +24,8 @@ data_2
 lib
 !scripts/nascar/lib/
 !scripts/nascar/lib/router.mjs
+!scripts/packets/lib/
+!scripts/packets/lib/common.mjs
 .DS_store
 
 # Next.js
