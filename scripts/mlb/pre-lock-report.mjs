@@ -65,8 +65,23 @@ async function gatherWindowGames(date, gameKeys, options = {}) {
 }
 
 export function buildReportText({ plan, window: win, games }) {
+  const sections = games.map((g) => ({ game: g, ...renderGameSection(g) }));
+  const clearLeanItems = [];
+  for (const s of sections) {
+    if (s.analysis.clear_lean_count > 0) {
+      clearLeanItems.push({
+        matchup: `${s.game.away_full || s.game.away} at ${s.game.home_full || s.game.home}`,
+        final: s.analysis.final,
+        sections: s.analysis.sections,
+      });
+    }
+  }
+  const hasPicks = clearLeanItems.length > 0;
+  const title = hasPicks
+    ? '=== Captain MLB — Pre-Lock Pick Report ==='
+    : '=== Captain MLB — NO CLEAR PICK REPORT — board only ===';
   const lines = [];
-  lines.push('=== Captain MLB — Pre-Lock Pick Report ===');
+  lines.push(title);
   lines.push(`date: ${plan.date}`);
   lines.push(`cluster: ${win.cluster_id}`);
   lines.push(`report_at_ct: ${win.report_at_ct}`);
@@ -74,17 +89,31 @@ export function buildReportText({ plan, window: win, games }) {
   lines.push(`games_in_window: ${games.length}`);
   lines.push(`game_keys: ${win.game_keys.join(', ')}`);
   lines.push(`idempotency_key: ${win.idempotency_key}`);
+  lines.push(`mode: ${hasPicks ? 'PICK_REPORT' : 'BOARD_ONLY'}`);
+  lines.push(`clear_lean_count: ${clearLeanItems.reduce((n, x) => n + (x.final.decision === 'CLEAR' || x.final.decision === 'LEAN' ? 1 : 0), 0)}`);
   lines.push(`generated_utc: ${new Date().toISOString()}`);
   lines.push('');
-  for (const g of games) {
-    lines.push(renderGameSection(g));
+  if (hasPicks) {
+    lines.push('--- CLEAR / LEAN SUMMARY ---');
+    for (const it of clearLeanItems) {
+      lines.push(`- [${it.final.decision}] ${it.matchup}`);
+      lines.push(`    ${it.final.reason}`);
+    }
+    lines.push('');
+  } else {
+    lines.push('No section across any game produced a market-internal CLEAR or LEAN.');
+    lines.push('Board attached for review only — no pick is being claimed.');
+    lines.push('');
+  }
+  for (const s of sections) {
+    lines.push(s.text);
     lines.push('');
     lines.push('---');
     lines.push('');
   }
   lines.push('No trades placed. No bankroll sizing. Research only.');
   lines.push('Markets covered per game: ML (KXMLBGAME), Spread (KXMLBSPREAD), Total (KXMLBTOTAL), HR (KXMLBHR), K props (KXMLBKS), YFRI/NFRI (KXMLBRFI).');
-  return lines.join('\n');
+  return { text: lines.join('\n'), hasPicks, clearLeanCount: clearLeanItems.length };
 }
 
 async function main() {
@@ -104,7 +133,8 @@ async function main() {
     console.error(`[mlb-pre-lock] no games resolved for window ${win.cluster_id} keys=${win.game_keys.join(',')}`);
     process.exit(2);
   }
-  const text = buildReportText({ plan, window: win, games });
+  const built = buildReportText({ plan, window: win, games });
+  const text = built.text;
   const outDir = resolve(opts.stateRoot, 'mlb', opts.date, 'pre-lock-reports');
   mkdirSync(outDir, { recursive: true });
   const base = `${opts.date}-${win.cluster_id}`;
@@ -121,6 +151,9 @@ async function main() {
     game_count: games.length,
     game_keys: win.game_keys,
     char_count: text.length,
+    has_picks: built.hasPicks,
+    clear_lean_count: built.clearLeanCount,
+    mode: built.hasPicks ? 'PICK_REPORT' : 'BOARD_ONLY',
     dry_run: true,
     generated_utc: new Date().toISOString(),
   }, null, 2), 'utf8');

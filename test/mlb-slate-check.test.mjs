@@ -113,7 +113,8 @@ test('renderGameSection emits required structural headings + MISSING markers', (
     start_utc: '2026-05-20T01:40:00.000Z', start_ct: '2026-05-19 20:40 CT',
     series: {}, // all missing
   };
-  const txt = renderGameSection(game);
+  const out = renderGameSection(game);
+  const txt = out.text;
   for (const h of [
     'Game:', '- Matchup:', '- First pitch:', '- Venue/weather:',
     '- Probable starters:', '- Market snapshot:',

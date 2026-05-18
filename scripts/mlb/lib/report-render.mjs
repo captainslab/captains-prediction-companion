@@ -5,6 +5,7 @@
 // project rule against naive-Poisson LEANs and against forcing picks.
 
 import { MLB_SERIES } from './series-discovery.mjs';
+import { analyzeGame } from './market-engine.mjs';
 
 function dollarsToCents(v) {
   if (v == null) return null;
@@ -96,7 +97,7 @@ function playerNameFromMarket(m) {
   return null;
 }
 
-function renderHrSection(game) {
+function renderHrSection(game, analysis) {
   const s = game.series.hr;
   const lines = ['- Home runs:'];
   if (!s) {
@@ -107,6 +108,7 @@ function renderHrSection(game) {
     lines.push('  - UNQUOTED — event has no markets');
     return lines;
   }
+  const decByName = new Map(analysis.sections.hr.perPlayer.map((p) => [p.name, p]));
   const groups = groupPlayerMarkets(s.markets);
   for (const [tok, mks] of groups) {
     const name = playerNameFromMarket(mks[0]) || tok;
@@ -115,13 +117,14 @@ function renderHrSection(game) {
       const thresh = m.floor_strike != null ? `${m.floor_strike}+ HR` : 'HR';
       lines.push(`    - ${thresh}: ${bestQuote(m)}`);
     }
-    lines.push('    - Decision: NO CLEAR PICK');
-    lines.push('    - Reasoning: lineup/park/weather/handedness context not modeled in this report');
+    const d = decByName.get(name) || { decision: 'NO CLEAR PICK', reason: 'No analysis for this player.' };
+    lines.push(`    - Decision: ${d.decision}`);
+    lines.push(`    - Reasoning: ${d.reason}`);
   }
   return lines;
 }
 
-function renderKsSection(game, side /* 'away' | 'home' */) {
+function renderKsSection(game, side /* 'away' | 'home' */, analysis) {
   const s = game.series.ks;
   const heading = side === 'away'
     ? '- Away starter strikeout ceiling:'
@@ -145,6 +148,8 @@ function renderKsSection(game, side /* 'away' | 'home' */) {
     lines.push('  - Reasoning: starter K ladder not posted at report time');
     return lines;
   }
+  const sectionAnalysis = side === 'away' ? analysis.sections.ks_away : analysis.sections.ks_home;
+  const decByName = new Map((sectionAnalysis.perPitcher || []).map((p) => [p.name, p]));
   const groups = groupPlayerMarkets(sideMarkets);
   for (const [tok, mks] of groups) {
     const name = playerNameFromMarket(mks[0]) || tok;
@@ -154,15 +159,15 @@ function renderKsSection(game, side /* 'away' | 'home' */) {
       .join(' | ');
     lines.push(`  - Pitcher: ${name}`);
     lines.push(`  - Ceiling: ${ladder}`);
-    lines.push('  - Decision: WATCH');
-    lines.push('  - Reasoning: projected IP, opposing lineup K-rate vs handedness, park, and ump/weather context NOT checked in this report — required before any LEAN');
+    const d = decByName.get(name) || { decision: 'WATCH', reason: 'No analysis for this pitcher.' };
+    lines.push(`  - Decision: ${d.decision}`);
+    lines.push(`  - Reasoning: ${d.reason}`);
   }
   return lines;
 }
 
-function renderYfriSection(game) {
+function renderYfriSection(game, analysis) {
   const s = game.series.rfi;
-  const lines = ['- Pick:'];
   if (!s) {
     return ['- Pick: MISSING — KXMLBRFI event not in slate',
             '- Reasoning: YFRI/NFRI market unavailable for this game'];
@@ -171,13 +176,16 @@ function renderYfriSection(game) {
     return ['- Pick: UNQUOTED', '- Reasoning: KXMLBRFI event has no markets'];
   }
   const m = s.markets[0];
+  const d = analysis.sections.yfri;
   return [
     `- Pick: NFRI vs YFRI quote: ${bestQuote(m)}`,
-    '- Reasoning: NO CLEAR PICK — lineup top-3 handedness, both starters\' 1st-inning xWOBA, weather, and park 1st-inning run rate NOT checked in this report',
+    `- Decision: ${d.decision}`,
+    `- Reasoning: ${d.reason}`,
   ];
 }
 
 export function renderGameSection(game) {
+  const analysis = analyzeGame(game);
   const matchup = game.away_full && game.home_full
     ? `${game.away_full} at ${game.home_full}`
     : `${game.away ?? '?'} at ${game.home ?? '?'}`;
@@ -198,21 +206,31 @@ export function renderGameSection(game) {
   for (const l of renderMlBlock(game)) lines.push(l);
   for (const l of renderSpreadBlock(game)) lines.push(l);
   for (const l of renderTotalBlock(game)) lines.push(l);
-  lines.push('- Best side: NO CLEAR PICK');
-  lines.push('- Decision: PASS');
-  lines.push('- Reasoning: pre-lock report scaffolding only — model probabilities, weather, lineup, and starter splits NOT integrated yet, so no defensible edge');
+  lines.push(`- ML decision: ${analysis.sections.ml.decision}`);
+  lines.push(`  - Reasoning: ${analysis.sections.ml.reason}`);
+  lines.push(`- Spread decision: ${analysis.sections.spread.decision}`);
+  lines.push(`  - Reasoning: ${analysis.sections.spread.reason}`);
+  lines.push(`- Total decision: ${analysis.sections.total.decision}`);
+  lines.push(`  - Reasoning: ${analysis.sections.total.reason}`);
+  // Best side rolls up the strongest of ML / spread / total.
+  const mainCandidates = [analysis.sections.ml, analysis.sections.spread, analysis.sections.total];
+  const mainBest = pickBest(mainCandidates);
+  lines.push(`- Best side: ${mainBest.decision === 'CLEAR' || mainBest.decision === 'LEAN' ? mainBest.reason : 'NO CLEAR PICK'}`);
+  lines.push(`- Decision: ${mainBest.decision}`);
+  lines.push(`- Reasoning: ${mainBest.reason}`);
   lines.push('');
   lines.push('Game total ceiling:');
-  lines.push('- Ceiling: MISSING');
-  lines.push('- Reasoning: park run-environment, weather (wind/temp), and projected starter IP NOT modeled in this report');
+  const ceil = analysis.sections.ceiling.ceiling;
+  lines.push(`- Ceiling: ${ceil ? `Over ${ceil.strike} @ ${ceil.yesAsk}¢ YES` : 'MISSING / no live rung >= 10¢'}`);
+  lines.push(`- Reasoning: ${analysis.sections.ceiling.reason}`);
   lines.push('');
   lines.push('Props:');
-  for (const l of renderHrSection(game)) lines.push(l);
-  for (const l of renderKsSection(game, 'away')) lines.push(l);
-  for (const l of renderKsSection(game, 'home')) lines.push(l);
+  for (const l of renderHrSection(game, analysis)) lines.push(l);
+  for (const l of renderKsSection(game, 'away', analysis)) lines.push(l);
+  for (const l of renderKsSection(game, 'home', analysis)) lines.push(l);
   lines.push('');
   lines.push('YFRI/NFRI:');
-  for (const l of renderYfriSection(game)) lines.push(l);
+  for (const l of renderYfriSection(game, analysis)) lines.push(l);
   lines.push('');
   lines.push('Game summary and history:');
   lines.push('- Recent form: MISSING (not pulled by this report)');
@@ -221,9 +239,18 @@ export function renderGameSection(game) {
   lines.push('- Injury/lineup notes: MISSING (not pulled by this report)');
   lines.push('');
   lines.push('Final game call:');
-  lines.push('- Best available angle: NO CLEAR PICK');
-  lines.push('- Confidence: PASS');
-  lines.push('- If no clear pick exists, say: NO CLEAR PICK and explain exactly why.');
-  lines.push('- Why no pick: this report exposes the full Kalshi market board for ML, spread, total, HR, K props, and YFRI/NFRI; modeled fair-value, lineup, park, weather, ump, and starter-context inputs are not yet integrated, so no LEAN or CLEAR can be defended.');
-  return lines.join('\n');
+  lines.push(`- Best available angle: ${analysis.final.best_angle}`);
+  lines.push(`- Confidence: ${analysis.final.decision}`);
+  if (analysis.final.decision === 'NO CLEAR PICK') {
+    lines.push('- If no clear pick exists, say: NO CLEAR PICK and explain exactly why.');
+    lines.push(`- Why no pick: ${analysis.final.reason}`);
+  } else {
+    lines.push(`- Reasoning: ${analysis.final.reason}`);
+  }
+  return { text: lines.join('\n'), analysis };
+}
+
+function pickBest(sections) {
+  const order = { CLEAR: 0, LEAN: 1, WATCH: 2, PASS: 3, 'NO CLEAR PICK': 4 };
+  return sections.slice().sort((a, b) => (order[a.decision] ?? 9) - (order[b.decision] ?? 9))[0];
 }
