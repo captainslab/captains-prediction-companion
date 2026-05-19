@@ -58,6 +58,14 @@ const CLEAR_CENTS = 4;
 // Wide spread threshold for WATCH (yes_ask - yes_bid).
 const WIDE_SPREAD_CENTS = 8;
 
+// Soft-LEAN thresholds (board-internal only — no external context).
+// Used to promote PASS → LEAN when liquidity + a confirming ladder agree.
+const SOFT_FAV_GAP_CENTS = 10;          // favorite YES_ask - dog YES_ask must be >= this
+const SOFT_OI_RATIO = 1.5;              // favorite OI / dog OI must be >= this
+const SOFT_SPREAD_FAV_15_MIN_CENTS = 30; // favorite -1.5 YES_ask must be >= this to confirm
+const SOFT_SPREAD_DOG_15_MAX_CENTS = 50; // dog +1.5 implied (1 - dog -1.5 ask) NO_ask must support
+const SOFT_TOTAL_TILT_CENTS = 3;         // total coin-flip rung asymmetry vs 50
+
 // Stale-quote overround threshold. yes_ask + no_ask should sum to ~100-105¢
 // on a healthy 2-sided market; anything > 110¢ is a stale/illiquid ask and
 // must not count as ladder evidence (it routinely fabricates "inversions").
@@ -121,6 +129,62 @@ export function analyzeMl(markets) {
   return {
     decision: 'PASS',
     reason: `ML pair fair within market: YES asks total ${sumYesAsk}¢ (overround = ${sumYesAsk - 100}¢); favoritism alone is not a pick.`,
+  };
+}
+
+// ---- soft LEAN (market-internal but cross-section) -------------------------
+
+/**
+ * Pure helper: returns a soft-LEAN signal for ML when:
+ *   - ML PASS (fair within market) AND
+ *   - one side is the clear favorite by >= SOFT_FAV_GAP_CENTS, AND
+ *   - OI ratio (fav/dog) >= SOFT_OI_RATIO, AND
+ *   - that team's -1.5 spread rung YES_ask >= SOFT_SPREAD_FAV_15_MIN_CENTS
+ *     (i.e. the spread ladder is not contradicting the side).
+ *
+ * Inputs: array of two ML markets and the bucketed spread map { team => rungs[] }.
+ * Output: { side, evidence, reason } or null.
+ */
+export function softLeanMl(mlMarkets, spreadBuckets, eventTeams) {
+  if (!mlMarkets || mlMarkets.length !== 2) return null;
+  const a = mlMarkets[0]; const b = mlMarkets[1];
+  const aYesAsk = toCents(a.yes_ask_dollars);
+  const bYesAsk = toCents(b.yes_ask_dollars);
+  if (aYesAsk == null || bYesAsk == null) return null;
+  const aOi = num(a.open_interest_fp) ?? 0;
+  const bOi = num(b.open_interest_fp) ?? 0;
+  const fav = aYesAsk < bYesAsk ? 'b' : 'a';
+  const favMk = fav === 'a' ? a : b;
+  const dogMk = fav === 'a' ? b : a;
+  const favAsk = fav === 'a' ? aYesAsk : bYesAsk;
+  const dogAsk = fav === 'a' ? bYesAsk : aYesAsk;
+  const favOi = fav === 'a' ? aOi : bOi;
+  const dogOi = fav === 'a' ? bOi : aOi;
+  const gap = favAsk - dogAsk;
+  if (gap < SOFT_FAV_GAP_CENTS) return null;
+  const oiRatio = dogOi > 0 ? favOi / dogOi : (favOi > 0 ? Infinity : 0);
+  if (!Number.isFinite(oiRatio) ? favOi <= 0 : oiRatio < SOFT_OI_RATIO) return null;
+  // Resolve fav team via ticker suffix (stable).
+  const favTeam = parseMarketTickerTeam(favMk.ticker, favMk.event_ticker);
+  if (!favTeam) return null;
+  // Confirm with spread ladder: fav team's -1.5 rung YES_ask must be >= threshold.
+  // We accept missing spread (cluster like ATH/LAA has no spread block at times)
+  // only if OI ratio is comfortably above threshold (>= 2x) — otherwise require it.
+  let spreadConfirm = 'absent';
+  if (spreadBuckets && spreadBuckets.has(favTeam)) {
+    const rungs = spreadBuckets.get(favTeam);
+    const r15 = rungs.find((r) => r.strike === 1.5);
+    if (r15 && r15.yesAsk != null) {
+      if (r15.yesAsk < SOFT_SPREAD_FAV_15_MIN_CENTS) return null; // contradicts
+      spreadConfirm = `${favTeam} -1.5 YES ${r15.yesAsk}¢ ≥ ${SOFT_SPREAD_FAV_15_MIN_CENTS}¢`;
+    }
+  } else if (oiRatio < 2) {
+    return null;
+  }
+  return {
+    side: favTeam,
+    evidence: { gap, oiRatio: Number.isFinite(oiRatio) ? Math.round(oiRatio * 10) / 10 : 'inf', favOi, dogOi, spreadConfirm },
+    reason: `Soft ML LEAN ${favTeam}: gap ${gap}¢ (${favAsk}¢ vs ${dogAsk}¢), OI ratio ${Number.isFinite(oiRatio) ? oiRatio.toFixed(1) : '∞'}x (${favOi.toFixed(0)} vs ${dogOi.toFixed(0)}), spread confirms (${spreadConfirm}). No external context modeled.`,
   };
 }
 
@@ -264,7 +328,7 @@ function bucketSpreadByTeam(markets, eventTeams) {
 
 export function analyzeSpread(markets, gameMeta = {}) {
   if (!markets || markets.length === 0) {
-    return { decision: 'NO CLEAR PICK', reason: 'Spread market missing for this game.' };
+    return { decision: 'NO CLEAR PICK', reason: 'Spread market missing for this game.', buckets: new Map() };
   }
   const eventTeams = { away: gameMeta.away || null, home: gameMeta.home || null };
   const { buckets, ambiguous } = bucketSpreadByTeam(markets, eventTeams);
@@ -289,12 +353,14 @@ export function analyzeSpread(markets, gameMeta = {}) {
           decision: 'WATCH',
           reason: `Spread candidate inversion for ${bestTeam} of ${bestInversion.delta}¢ downgraded: ambiguous market grouping (${ambiguous} spread market(s) could not be tied to a known team via ticker suffix or event abbrevs).`,
           evidence: { bestInversion, bestTeam, ambiguous },
+          buckets,
         };
       }
       return {
         decision: cls,
         reason: `Spread ladder inverted for ${bestTeam}: ${bestInversion.hi.label} (${bestInversion.hi.yesAsk}¢) priced above ${bestInversion.lo.label} (${bestInversion.lo.yesAsk}¢) by ${bestInversion.delta}¢ — fade YES on the higher strike or buy NO.`,
         evidence: { ...bestInversion, droppedStaleCount: bestDropped.length },
+        buckets,
       };
     }
   }
@@ -302,11 +368,13 @@ export function analyzeSpread(markets, gameMeta = {}) {
     return {
       decision: 'WATCH',
       reason: `Spread ladders monotone on stable-bucketed rungs but ${ambiguous} market(s) failed to bucket cleanly — ambiguous market grouping prevents claiming PASS.`,
+      buckets,
     };
   }
   return {
     decision: 'PASS',
     reason: 'Spread ladders monotone within noise on stable-bucketed, non-stale rungs; no market-internal edge.',
+    buckets,
   };
 }
 
@@ -589,6 +657,19 @@ export function analyzeGame(game) {
   const ksAwayAnalysis = analyzeKs(game.series.ks?.markets || [], game.away, gameMeta);
   const ksHomeAnalysis = analyzeKs(game.series.ks?.markets || [], game.home, gameMeta);
   const yfriAnalysis = analyzeYfri(game.series.rfi?.markets || []);
+
+  // Soft-LEAN promotion: if ML is PASS, check liquidity+spread confirmation.
+  // K/HR are intentionally NOT promoted — they require external context gates.
+  if (mlAnalysis.decision === 'PASS') {
+    const soft = softLeanMl(game.series.ml?.markets || [], spreadAnalysis.buckets, gameMeta);
+    if (soft) {
+      mlAnalysis.decision = 'LEAN';
+      mlAnalysis.reason = soft.reason;
+      mlAnalysis.tier = 'soft';
+      mlAnalysis.side = soft.side;
+      mlAnalysis.evidence = soft.evidence;
+    }
+  }
 
   const sectionDecisions = [mlAnalysis, spreadAnalysis, totalAnalysis, hrAnalysis, ksAwayAnalysis, ksHomeAnalysis, yfriAnalysis];
   const clearLeanItems = sectionDecisions.filter((s) => s.decision === 'CLEAR' || s.decision === 'LEAN');

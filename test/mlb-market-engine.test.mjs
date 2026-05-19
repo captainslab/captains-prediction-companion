@@ -297,3 +297,127 @@ test('analyzeGame: W01 Phillies 25¢ inversion shape no longer emits CLEAR', () 
   assert.notEqual(out.sections.spread.decision, 'LEAN');
   assert.notEqual(out.final.decision, 'CLEAR');
 });
+
+// ---- soft-LEAN tier tests (Phase A v2) -------------------------------------
+
+test('soft-LEAN: ML fair-band + 1.5x OI fav + confirming spread -1.5 → LEAN', () => {
+  const game = {
+    away: 'MIL', home: 'CHC',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-MIL', yes_ask_dollars: 0.33, no_ask_dollars: 0.69, open_interest_fp: 124000 },
+        { ticker: 'KXMLBGAME-X-CHC', yes_ask_dollars: 0.69, no_ask_dollars: 0.33, open_interest_fp: 432000 },
+      ]},
+      spread: { markets: [
+        { ticker: 'KXMLBSPREAD-X-CHC-15', yes_sub_title: 'Cubs wins by over 1.5 runs', yes_ask_dollars: 0.54, no_ask_dollars: 0.50 },
+        { ticker: 'KXMLBSPREAD-X-MIL-15', yes_sub_title: 'Brewers wins by over 1.5 runs', yes_ask_dollars: 0.30, no_ask_dollars: 0.75 },
+      ]},
+      total: { markets: [] }, hr: { markets: [] }, ks: { markets: [] }, rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.equal(out.sections.ml.decision, 'LEAN');
+  assert.equal(out.sections.ml.tier, 'soft');
+  assert.equal(out.sections.ml.side, 'CHC');
+  assert.match(out.sections.ml.reason, /Soft ML LEAN/);
+  assert.equal(out.final.decision, 'LEAN');
+});
+
+test('soft-LEAN: no forced pick — fair-band fav with weak OI ratio stays PASS', () => {
+  const game = {
+    away: 'A', home: 'B',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-A', yes_ask_dollars: 0.42, no_ask_dollars: 0.60, open_interest_fp: 50000 },
+        { ticker: 'KXMLBGAME-X-B', yes_ask_dollars: 0.59, no_ask_dollars: 0.43, open_interest_fp: 55000 }, // OI ratio ~1.1x
+      ]},
+      spread: { markets: [] },
+      total: { markets: [] }, hr: { markets: [] }, ks: { markets: [] }, rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.equal(out.sections.ml.decision, 'PASS');
+  assert.equal(out.final.decision, 'NO CLEAR PICK');
+});
+
+test('soft-LEAN: contradicting spread ladder blocks promotion', () => {
+  // Favorite by ML but their -1.5 trades very low → market disagrees, no LEAN.
+  const game = {
+    away: 'CWS', home: 'SEA',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-CWS', yes_ask_dollars: 0.41, no_ask_dollars: 0.60, open_interest_fp: 55000 },
+        { ticker: 'KXMLBGAME-X-SEA', yes_ask_dollars: 0.60, no_ask_dollars: 0.42, open_interest_fp: 200000 },
+      ]},
+      spread: { markets: [
+        // SEA -1.5 priced at 15¢ — ladder says fav unlikely to cover, contradicts
+        { ticker: 'KXMLBSPREAD-X-SEA-15', yes_sub_title: 'Mariners wins by over 1.5 runs', yes_ask_dollars: 0.15, no_ask_dollars: 0.88 },
+      ]},
+      total: { markets: [] }, hr: { markets: [] }, ks: { markets: [] }, rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.equal(out.sections.ml.decision, 'PASS');
+});
+
+test('soft-LEAN: K props remain WATCH without context even when soft-ML promotes', () => {
+  const game = {
+    away: 'MIL', home: 'CHC',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-MIL', yes_ask_dollars: 0.33, no_ask_dollars: 0.69, open_interest_fp: 124000 },
+        { ticker: 'KXMLBGAME-X-CHC', yes_ask_dollars: 0.69, no_ask_dollars: 0.33, open_interest_fp: 432000 },
+      ]},
+      spread: { markets: [
+        { ticker: 'KXMLBSPREAD-X-CHC-15', yes_sub_title: 'Cubs wins by over 1.5 runs', yes_ask_dollars: 0.54, no_ask_dollars: 0.50 },
+      ]},
+      total: { markets: [] }, hr: { markets: [] },
+      ks: { markets: [
+        { ticker: 'KXMLBKS-X-CHCIMANAGA-6', floor_strike: 5.5, yes_ask_dollars: 0.56, no_ask_dollars: 0.46 },
+        { ticker: 'KXMLBKS-X-CHCIMANAGA-7', floor_strike: 6.5, yes_ask_dollars: 0.44, no_ask_dollars: 0.58 },
+      ]},
+      rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.equal(out.sections.ks_home.decision, 'WATCH');
+  // Soft ML promotion should still fire alongside.
+  assert.equal(out.sections.ml.decision, 'LEAN');
+});
+
+test('soft-LEAN: stale ML quotes do not trigger promotion', () => {
+  // Fav has yes_ask but partner is null — null asks cannot dev-vig, ML is WATCH,
+  // soft-LEAN should not apply.
+  const game = {
+    away: 'A', home: 'B',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-A', yes_ask_dollars: 0.33, no_ask_dollars: 0.70, open_interest_fp: 100000 },
+        { ticker: 'KXMLBGAME-X-B', yes_ask_dollars: null, no_ask_dollars: null, open_interest_fp: 300000 },
+      ]},
+      spread: { markets: [] },
+      total: { markets: [] }, hr: { markets: [] }, ks: { markets: [] }, rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.notEqual(out.sections.ml.decision, 'LEAN');
+});
+
+test('soft-LEAN: final game rollup prefers soft-LEAN over blanket NO CLEAR PICK', () => {
+  const game = {
+    away: 'MIL', home: 'CHC',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-MIL', yes_ask_dollars: 0.33, no_ask_dollars: 0.69, open_interest_fp: 124000 },
+        { ticker: 'KXMLBGAME-X-CHC', yes_ask_dollars: 0.69, no_ask_dollars: 0.33, open_interest_fp: 432000 },
+      ]},
+      spread: { markets: [
+        { ticker: 'KXMLBSPREAD-X-CHC-15', yes_sub_title: 'Cubs wins by over 1.5 runs', yes_ask_dollars: 0.54, no_ask_dollars: 0.50 },
+      ]},
+      total: { markets: [] }, hr: { markets: [] }, ks: { markets: [] }, rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  assert.equal(out.final.decision, 'LEAN');
+  assert.match(out.final.best_angle, /Soft ML LEAN CHC/);
+});
