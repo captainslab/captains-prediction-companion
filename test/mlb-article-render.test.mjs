@@ -66,15 +66,53 @@ test('article: per-game article renders required sections', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  // New article-style sections
+  assert.ok(a.text.includes('Final Call'));
+  assert.ok(a.text.includes('Market Read'));
+  assert.ok(a.text.match(/Why This Side|Why No Pick/));
+  assert.ok(a.text.includes('Evidence Box'));
+  assert.ok(a.text.includes('Risk Notes'));
+  assert.ok(a.text.includes('Bottom Line'));
+  // Legacy anchors still present
   assert.ok(a.text.includes('Game info'));
   assert.ok(a.text.includes('Market overview'));
-  assert.ok(a.text.includes('Best angle'));
   assert.ok(a.text.includes('Pick summary'));
-  assert.ok(a.text.includes('Evidence'));
-  assert.ok(a.text.includes('Risk notes'));
-  assert.ok(a.text.includes('Final call'));
   assert.ok(a.text.includes(game.game_key));
   assert.ok(a.text.includes('KXMLBGAME-' + game.game_key));
+});
+
+function mainProse(text) {
+  // Lead prose = everything before "Evidence Box" (numeric/engine zone).
+  const idx = text.indexOf('Evidence Box');
+  return idx === -1 ? text : text.slice(0, idx);
+}
+
+test('article: main prose does not read like engine debug output', () => {
+  const game = makeGame();
+  const analysis = analyzeGame(game);
+  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const lead = mainProse(a.text);
+  const gapCount = (lead.match(/\bgap\b/gi) || []).length;
+  const oiCount = (lead.match(/OI ratio/gi) || []).length;
+  assert.ok(gapCount <= 1, `lead prose used "gap" ${gapCount} times`);
+  assert.ok(oiCount <= 1, `lead prose used "OI ratio" ${oiCount} times`);
+  assert.ok(!/soft-LEAN/i.test(lead), 'lead prose should not say soft-LEAN');
+  assert.ok(!/\bgate\b/i.test(lead), 'lead prose should not say gate');
+  assert.ok(!/market-internal/i.test(lead), 'lead prose should not say market-internal');
+});
+
+test('article: Evidence Box still contains numeric support', () => {
+  const game = makeGame();
+  const analysis = analyzeGame(game);
+  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const idx = a.text.indexOf('Evidence Box');
+  assert.ok(idx >= 0);
+  const evidence = a.text.slice(idx);
+  // numeric cents survive
+  assert.match(evidence, /\d+¢/);
+  // engine vocabulary is allowed (and expected) here
+  assert.match(evidence, /Engine reason:/);
+  assert.match(evidence, /ML:\s+(CLEAR|LEAN|WATCH|PASS)/);
 });
 
 test('article: W04-style soft-LEAN surfaces as LEAN headline + pick', () => {

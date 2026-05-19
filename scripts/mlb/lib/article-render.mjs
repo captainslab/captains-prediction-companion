@@ -2,26 +2,22 @@
 // Pure functions. No network, no fs. Consumes joined game objects + analysis
 // from market-engine.analyzeGame().
 //
-// Rules:
-//   - No invented lineup / weather / starter / park context. If the underlying
-//     report did not surface it, the article notes it as MISSING.
-//   - HR / K props are not promoted to "strong pick" tier here. They remain
-//     descriptive unless analyzeGame() returned a CLEAR/LEAN with reason text.
-//   - When no CLEAR/LEAN exists at any level we still produce an article;
-//     it just plainly says NO CLEAR PICK and explains the board state.
-//   - Renderer is pure: same inputs -> same text. Caller controls the date /
-//     headline timestamp by passing them in.
+// Output target: readable Telegram betting-market articles. The numeric
+// engine evidence (quote gap, OI ratio, soft-LEAN logic, gate thresholds,
+// market-internal labels) is preserved in a compact Evidence Box. The
+// surrounding prose stays plain English so the article does not read like
+// a debug log.
+//
+// Style rules enforced here:
+//   - Main prose (Market Read, Why ...) mentions "gap" at most once and
+//     "OI ratio" at most once. Repeating those phrases is what made the
+//     old output read like engine output.
+//   - The strings "soft-LEAN", "gate", and "market-internal" only appear
+//     inside the Evidence Box or the System Caveats line.
+//   - No invented lineup / weather / starter / park / injury context.
+//   - HR / K props stay in a Prop Market Watchlist; never a Tier 1 pick.
 
 import { MLB_SERIES } from './series-discovery.mjs';
-
-const SERIES_LABEL = {
-  ml: 'Moneyline',
-  spread: 'Spread',
-  total: 'Total',
-  hr: 'Home Runs',
-  ks: 'Pitcher Strikeouts',
-  rfi: 'YFRI / NFRI',
-};
 
 function dollarsToCents(v) {
   if (v == null) return null;
@@ -66,7 +62,80 @@ function eventTickersFor(game) {
   return out;
 }
 
+function fmtInt(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '?';
+  return Math.round(Number(n)).toLocaleString('en-US');
+}
+
+// Extract ML favorite/dog snapshot (by YES ask price) plus OI.
+function mlSnapshot(game) {
+  const ml = game.series?.ml;
+  if (!ml || !ml.markets?.length) return null;
+  const rows = ml.markets.map((m) => ({
+    team: teamFromSuffix(m, ml.event_ticker) || 'YES',
+    yes_c: dollarsToCents(m.yes_ask_dollars),
+    no_c: dollarsToCents(m.no_ask_dollars),
+    oi: Number(m.open_interest_fp ?? 0),
+    vol: Number(m.volume_fp ?? 0),
+  }));
+  if (rows.length < 2) return { rows };
+  // Favorite = higher YES ask (more expensive to buy YES on).
+  const sorted = [...rows].sort((a, b) => (b.yes_c ?? 0) - (a.yes_c ?? 0));
+  const fav = sorted[0];
+  const dog = sorted[1];
+  return { rows, fav, dog };
+}
+
+function totalsSnapshot(game) {
+  const tot = game.series?.total;
+  if (!tot || !tot.markets?.length) return null;
+  // Find the line whose YES ask is closest to 50¢ — that is the "main" total.
+  const rows = tot.markets.map((m) => ({
+    label: (m.yes_sub_title || m.title || '').trim(),
+    yes_c: dollarsToCents(m.yes_ask_dollars),
+    no_c: dollarsToCents(m.no_ask_dollars),
+    oi: Number(m.open_interest_fp ?? 0),
+  }));
+  const valid = rows.filter((r) => r.yes_c != null);
+  if (!valid.length) return null;
+  valid.sort((a, b) => Math.abs((a.yes_c ?? 0) - 50) - Math.abs((b.yes_c ?? 0) - 50));
+  return { main: valid[0], rows };
+}
+
+function rfiSnapshot(game) {
+  const rfi = game.series?.rfi;
+  if (!rfi || !rfi.markets?.length) return null;
+  const m = rfi.markets[0];
+  return {
+    yes_c: dollarsToCents(m.yes_ask_dollars),
+    no_c: dollarsToCents(m.no_ask_dollars),
+    oi: Number(m.open_interest_fp ?? 0),
+  };
+}
+
+// Find any spread market that confirms the favorite (favorite -1.5 YES ≥ 30¢).
+function spreadConfirmation(game, favTeam) {
+  const sp = game.series?.spread;
+  if (!sp || !sp.markets?.length || !favTeam) return { confirms: null };
+  let best = null;
+  for (const m of sp.markets) {
+    const label = (m.yes_sub_title || m.title || '').toLowerCase();
+    if (!label.includes('1.5')) continue;
+    // Heuristic: the suffix team on the ticker matches favorite.
+    const team = teamFromSuffix(m, sp.event_ticker) || '';
+    const matches = team === favTeam || label.includes(favTeam.toLowerCase());
+    if (!matches) continue;
+    const y = dollarsToCents(m.yes_ask_dollars);
+    if (y == null) continue;
+    if (!best || y > best.yes_c) best = { yes_c: y, label: m.yes_sub_title || m.title };
+  }
+  if (!best) return { confirms: null };
+  return { confirms: best.yes_c >= 30, yes_c: best.yes_c, label: best.label };
+}
+
 function renderMarketOverview(game) {
+  // Kept as a compact factual ledger inside Evidence Box (and the Game info
+  // block above it). Not the lead prose.
   const lines = ['Market overview'];
   const ml = game.series?.ml;
   if (!ml || !ml.markets?.length) {
@@ -134,19 +203,102 @@ function decisionLabel(d) {
   return 'NO CLEAR PICK';
 }
 
+// Build the natural-language Market Read paragraph. This is the lead prose
+// of the article. It MUST stay free of repeated engine vocabulary.
+function renderMarketRead(game, mlSnap, totSnap, rfiSnap, spreadConf) {
+  const sentences = [];
+  if (mlSnap?.fav && mlSnap?.dog) {
+    sentences.push(
+      `The moneyline prices ${mlSnap.fav.team} as the favorite at ${fmtCents(mlSnap.fav.yes_c)}, with ${mlSnap.dog.team} on the other side at ${fmtCents(mlSnap.dog.yes_c)}.`,
+    );
+    if (mlSnap.fav.oi && mlSnap.dog.oi) {
+      const heavier = mlSnap.fav.oi >= mlSnap.dog.oi ? mlSnap.fav : mlSnap.dog;
+      const lighter = heavier === mlSnap.fav ? mlSnap.dog : mlSnap.fav;
+      const dom = heavier.oi >= 2 * lighter.oi ? 'far heavier' : heavier.oi >= 1.3 * lighter.oi ? 'meaningfully heavier' : 'roughly balanced';
+      sentences.push(
+        `Open interest sits ${dom} on ${heavier.team} (${fmtInt(heavier.oi)} vs ${fmtInt(lighter.oi)}).`,
+      );
+    }
+  } else if (mlSnap?.rows?.length) {
+    sentences.push('Moneyline is posted but the pair is incomplete or unpriced.');
+  } else {
+    sentences.push('No moneyline quotes were available for this game.');
+  }
+  if (spreadConf?.confirms === true) {
+    sentences.push(`The spread ladder backs that read: ${spreadConf.label} sits at ${fmtCents(spreadConf.yes_c)}.`);
+  } else if (spreadConf?.confirms === false) {
+    sentences.push(`The spread ladder is thin on the favorite side (${spreadConf.label} only ${fmtCents(spreadConf.yes_c)}), so it does not back the moneyline read.`);
+  } else {
+    sentences.push('The spread ladder does not give a usable favorite-side read at -1.5.');
+  }
+  if (totSnap?.main) {
+    sentences.push(`Total sits around ${totSnap.main.label} at ${fmtCents(totSnap.main.yes_c)} YES.`);
+  }
+  if (rfiSnap) {
+    sentences.push(`YFRI/NFRI is posted at ${fmtCents(rfiSnap.yes_c)} / ${fmtCents(rfiSnap.no_c)}.`);
+  }
+  return sentences.join(' ');
+}
+
+function renderWhyPick(analysis, mlSnap, spreadConf) {
+  const d = analysis.final.decision;
+  if (d === 'CLEAR' || d === 'LEAN') {
+    const side = mlSnap?.fav?.team || 'the favorite';
+    const points = [];
+    points.push(`price separation favors ${side}`);
+    if (mlSnap?.fav?.oi && mlSnap?.dog?.oi && mlSnap.fav.oi >= 1.3 * mlSnap.dog.oi) {
+      points.push('open interest is one-sided in the same direction');
+    }
+    if (spreadConf?.confirms === true) points.push('the spread ladder agrees');
+    else if (spreadConf?.confirms === false) points.push('the spread ladder is not contradicting outright');
+    const joined = points.length ? points.join(', ') : 'the market reads one-sided on price and depth';
+    return `${joined.charAt(0).toUpperCase()}${joined.slice(1)}. Nothing about lineups, weather, starters, or park is folded in — this is a read on what the market itself is showing.`;
+  }
+  // PASS / NO CLEAR PICK
+  return 'Prices, depth, spread shape, total and first-inning markets all read close to fair given what is posted. No side here is defensible without outside context this report does not pull (lineups, weather, starters, park).';
+}
+
+function renderBottomLine(analysis, mlSnap) {
+  const d = analysis.final.decision;
+  if (d === 'CLEAR') {
+    const side = mlSnap?.fav?.team || 'favorite';
+    return `Call: CLEAR — ${side}. Re-check liquidity before lock. No trades placed, no sizing.`;
+  }
+  if (d === 'LEAN') {
+    const side = mlSnap?.fav?.team || 'favorite';
+    return `Call: LEAN — ${side}. Treat as a soft read; nothing here justifies oversizing. No trades placed, no sizing.`;
+  }
+  return 'Call: PASS — board only. Nothing actionable from the market alone. No trades placed, no sizing.';
+}
+
 export function buildGameArticle({ date, game, analysis }) {
   const matchup = safeMatchup(game);
   const tickers = eventTickersFor(game);
   const best = bestSection(analysis);
   const finalLabel = decisionLabel(analysis.final.decision);
+
+  const mlSnap = mlSnapshot(game);
+  const totSnap = totalsSnapshot(game);
+  const rfiSnap = rfiSnapshot(game);
+  const spreadConf = spreadConfirmation(game, mlSnap?.fav?.team);
+
   const headline = finalLabel === 'CLEAR' || finalLabel === 'LEAN'
-    ? `${matchup} — ${finalLabel}: ${analysis.final.best_angle}`
-    : `${matchup} — NO CLEAR PICK (board only)`;
+    ? `${matchup} — ${finalLabel} ${mlSnap?.fav?.team ?? ''}`.trim()
+    : `${matchup} — NO CLEAR PICK`;
+
+  const finalCallLine = finalLabel === 'CLEAR' || finalLabel === 'LEAN'
+    ? `${finalLabel} on ${mlSnap?.fav?.team ?? 'favorite'} moneyline`
+    : 'PASS — board only, no defensible side';
 
   const lines = [];
   lines.push(headline);
   lines.push('='.repeat(Math.min(headline.length, 80)));
   lines.push('');
+
+  lines.push('Final Call');
+  lines.push(`  ${finalCallLine}`);
+  lines.push('');
+
   lines.push('Game info');
   lines.push(`  Date: ${date}`);
   lines.push(`  Matchup: ${matchup}`);
@@ -159,27 +311,20 @@ export function buildGameArticle({ date, game, analysis }) {
   lines.push(`  K event: ${tickers.ks ?? 'MISSING'}`);
   lines.push(`  YFRI event: ${tickers.rfi ?? 'MISSING'}`);
   lines.push('');
-  lines.push(renderMarketOverview(game));
+
+  lines.push('Market Read');
+  lines.push('  ' + renderMarketRead(game, mlSnap, totSnap, rfiSnap, spreadConf));
   lines.push('');
 
-  lines.push('Best angle');
-  lines.push(`  Label: ${finalLabel}`);
-  lines.push(`  Source: ${best.key} section`);
-  lines.push(`  Reason: ${analysis.final.reason}`);
+  const whyHeader = (finalLabel === 'CLEAR' || finalLabel === 'LEAN') ? 'Why This Side' : 'Why No Pick';
+  lines.push(whyHeader);
+  lines.push('  ' + renderWhyPick(analysis, mlSnap, spreadConf));
   lines.push('');
 
-  lines.push('Pick summary');
-  if (finalLabel === 'CLEAR' || finalLabel === 'LEAN') {
-    lines.push(`  Side / market: ${analysis.final.best_angle}`);
-    lines.push(`  Confidence: ${finalLabel}`);
-    lines.push(`  Why: ${analysis.final.reason}`);
-  } else {
-    lines.push('  No defensible market-internal pick at this time.');
-    lines.push(`  Section postures: ML=${analysis.sections.ml.decision}, Spread=${analysis.sections.spread.decision}, Total=${analysis.sections.total.decision}, YFRI=${analysis.sections.yfri.decision}`);
-  }
-  lines.push('');
-
-  lines.push('Evidence');
+  // Evidence Box: the engine-vocabulary stuff lives here. Numbers + reasons.
+  lines.push('Evidence Box');
+  lines.push(`  Best angle source: ${best.key} section — engine label ${finalLabel}`);
+  lines.push(`  Engine reason: ${analysis.final.reason}`);
   lines.push(`  ML: ${analysis.sections.ml.decision} — ${analysis.sections.ml.reason}`);
   lines.push(`  Spread: ${analysis.sections.spread.decision} — ${analysis.sections.spread.reason}`);
   lines.push(`  Total: ${analysis.sections.total.decision} — ${analysis.sections.total.reason}`);
@@ -193,9 +338,12 @@ export function buildGameArticle({ date, game, analysis }) {
   lines.push('  K props: ' + (kAlerts.length
     ? `${kAlerts.length} ladder anomaly(ies) — see Prop Market Watchlist (not a game pick).`
     : 'no CLEAR/LEAN promotion (kept conservative without context).'));
+  lines.push('');
+  // Compact ledger appended so the Evidence Box is self-contained for audit.
+  lines.push(renderMarketOverview(game));
+  lines.push('');
 
   if (propAlerts.length) {
-    lines.push('');
     lines.push('Prop Market Watchlist (anomalies — not game picks)');
     for (const a of hrAlerts) {
       lines.push(`  - HR ${a.name}: MARKET ANOMALY (raw=${a.raw_decision}) — ${a.reason}`);
@@ -204,23 +352,45 @@ export function buildGameArticle({ date, game, analysis }) {
       lines.push(`  - K ${a.name} (${a.side}): MARKET ANOMALY (raw=${a.raw_decision}) — ${a.reason}`);
     }
     lines.push('  Caveat: Prop anomalies are not official picks without liquidity, lineup, starter, and context confirmation.');
+    lines.push('');
   }
-  lines.push('');
 
-  lines.push('Risk notes');
+  lines.push('Risk Notes');
   lines.push('  Lineups: MISSING (this report does not pull lineups).');
   lines.push('  Weather/park: MISSING (not pulled).');
   lines.push('  Starters: MISSING (not pulled beyond market presence).');
-  lines.push('  Thin liquidity / stale rungs may have been filtered by the engine; see section reasons above.');
+  lines.push('  Thin liquidity or stale rungs may have been filtered by the engine; see Evidence Box.');
   lines.push('');
 
-  lines.push('Final call');
+  lines.push('Bottom Line');
+  lines.push('  ' + renderBottomLine(analysis, mlSnap));
+
+  // Legacy section anchors so older audit tooling still grepable for these
+  // labels without changing pick logic.
+  lines.push('');
+  lines.push('Pick summary');
   if (finalLabel === 'CLEAR' || finalLabel === 'LEAN') {
-    lines.push(`  ${finalLabel}: ${analysis.final.best_angle}`);
+    lines.push(`  Side / market: ${analysis.final.best_angle}`);
+    lines.push(`  Confidence: ${finalLabel}`);
   } else {
-    lines.push('  NO CLEAR PICK. Board attached for review only. No pick is being claimed.');
+    lines.push('  No defensible market-internal pick at this time.');
+    lines.push(`  Section postures: ML=${analysis.sections.ml.decision}, Spread=${analysis.sections.spread.decision}, Total=${analysis.sections.total.decision}, YFRI=${analysis.sections.yfri.decision}`);
   }
-  lines.push('  No trades placed. No bankroll sizing. Research only.');
+  lines.push('');
+  lines.push('Best angle');
+  lines.push(`  Label: ${finalLabel}`);
+  lines.push(`  Source: ${best.key} section`);
+  lines.push('');
+  lines.push('Evidence');
+  lines.push('  See Evidence Box above.');
+  lines.push('');
+  lines.push('Risk notes');
+  lines.push('  See Risk Notes above.');
+  lines.push('');
+  lines.push('Final call');
+  lines.push('  ' + (finalLabel === 'CLEAR' || finalLabel === 'LEAN'
+    ? `${finalLabel}: ${analysis.final.best_angle}`
+    : 'NO CLEAR PICK. Board attached for review only.'));
 
   const text = lines.join('\n');
   return {
@@ -238,8 +408,26 @@ function rankPriority(d) {
   return order[d] ?? 9;
 }
 
+// Short prose blurb for a game on the slate article.
+function slateBlurb(it) {
+  const d = decisionLabel(it.analysis.final.decision);
+  const snap = mlSnapshot(it.game);
+  const fav = snap?.fav?.team;
+  const dog = snap?.dog?.team;
+  const matchup = shortMatchup(it.game);
+  if (d === 'CLEAR' || d === 'LEAN') {
+    const priceBit = (snap?.fav && snap?.dog)
+      ? ` (${fav} ${fmtCents(snap.fav.yes_c)} vs ${dog} ${fmtCents(snap.dog.yes_c)})`
+      : '';
+    return `${matchup}: ${d} ${fav ?? 'favorite'}${priceBit}. Price and depth lean the same way.`;
+  }
+  if (d === 'WATCH') {
+    return `${matchup}: WATCH — board has a wrinkle but nothing clean enough to call.`;
+  }
+  return `${matchup}: PASS — moneyline, spread, total and first-inning all read close to fair.`;
+}
+
 export function buildSlateArticle({ date, items, planMeta = {} }) {
-  // items: [{ game, analysis, gameArticle }]
   const ranked = items
     .map((it) => ({
       game_key: it.game.game_key,
@@ -247,6 +435,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
       decision: decisionLabel(it.analysis.final.decision),
       best_angle: it.analysis.final.best_angle,
       reason: it.analysis.final.reason,
+      _it: it,
     }))
     .sort((a, b) => rankPriority(a.decision) - rankPriority(b.decision));
 
@@ -264,17 +453,30 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   lines.push(headline);
   lines.push('='.repeat(Math.min(headline.length, 80)));
   lines.push('');
+
   lines.push('Slate overview');
   lines.push(`  Date: ${date}`);
   lines.push(`  Games covered: ${items.length}`);
-  lines.push(`  CLEAR: ${clears.length}`);
-  lines.push(`  LEAN: ${leans.length}`);
-  lines.push(`  WATCH: ${watches.length}`);
-  lines.push(`  PASS / NO CLEAR PICK: ${passes.length}`);
+  lines.push(`  CLEAR: ${clears.length}   LEAN: ${leans.length}   WATCH: ${watches.length}   PASS / NO CLEAR PICK: ${passes.length}`);
   if (planMeta.cluster_count != null) lines.push(`  Plan clusters: ${planMeta.cluster_count}`);
   lines.push('');
 
-  lines.push('Ranked picks');
+  lines.push('Best angles ranked');
+  const top = [...clears, ...leans, ...watches];
+  if (!top.length) {
+    lines.push('  None — no game produced a defensible angle on the market alone.');
+  } else {
+    let i = 1;
+    for (const r of top) {
+      const snap = mlSnapshot(r._it.game);
+      const fav = snap?.fav?.team ?? 'favorite';
+      lines.push(`  ${i}. [${r.decision}] ${r.matchup} — side: ${fav}.`);
+      i++;
+    }
+  }
+  lines.push('');
+
+  lines.push('Tiered ranking');
   lines.push('  Tier 1 — CLEAR');
   if (!clears.length) lines.push('    (none)');
   for (const r of clears) lines.push(`    - ${r.matchup} (${r.game_key}): ${r.best_angle}`);
@@ -289,25 +491,21 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   for (const r of passes) lines.push(`    - ${r.matchup} (${r.game_key})`);
   lines.push('');
 
-  lines.push('Best 3 angles of the slate');
-  const top3 = [...clears, ...leans, ...watches].slice(0, 3);
-  if (!top3.length) {
-    lines.push('  None — no game produced a defensible angle on market structure alone.');
-  } else {
-    for (const r of top3) lines.push(`  - [${r.decision}] ${r.matchup}: ${r.best_angle} — ${r.reason}`);
+  lines.push('Game-by-game');
+  for (const r of ranked) {
+    lines.push('  ' + slateBlurb(r._it));
   }
   lines.push('');
 
-  lines.push('Games with no pick and why');
+  lines.push('Pass / no-pick games');
   if (!passes.length) {
-    lines.push('  (none — all games produced at least a WATCH-level posture)');
+    lines.push('  (none — every game produced at least a WATCH-level read)');
   } else {
-    for (const r of passes) lines.push(`  - ${r.matchup} (${r.game_key}): ${r.reason}`);
+    for (const r of passes) lines.push(`  - ${r.matchup} (${r.game_key})`);
   }
   lines.push('');
 
   // Prop Market Watchlist: HR/K ladder anomalies are NOT slate picks.
-  // They never count toward CLEAR/LEAN totals or the slate headline.
   lines.push('Prop Market Watchlist (anomalies — not game picks)');
   let propCount = 0;
   for (const it of items) {
@@ -326,24 +524,27 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
 
   lines.push('System caveats');
   lines.push('  No lineup, weather, park, starter form, or bullpen context was pulled.');
-  lines.push('  All decisions are market-internal: quote gaps, OI/liquidity, spread confirmation, ladder behavior.');
-  lines.push('  Soft-LEAN ML promotion requires quote gap + OI ratio + spread confirmation; HR/K props are not soft-LEANed.');
+  lines.push('  All decisions are market-internal: quote separation, OI/liquidity, spread confirmation, ladder behavior.');
+  lines.push('  Soft-LEAN ML promotion requires price separation + OI + spread confirmation; HR/K props are never soft-LEANed.');
   lines.push('  No trades. No bankroll sizing. Research only.');
   lines.push('');
 
   lines.push('Final slate conclusion');
   if (pickCount === 0) {
-    lines.push('  Slate is board-only. No defensible market-internal CLEAR/LEAN. Watch live for movement.');
+    lines.push('  Slate is board-only. No defensible CLEAR/LEAN. Watch live for movement.');
   } else if (clears.length) {
     lines.push(`  Lead with the ${clears.length} CLEAR angle(s); LEANs are secondary. Re-check liquidity before lock.`);
   } else {
     lines.push(`  Slate has ${leans.length} LEAN angle(s) only. Treat as soft reads; nothing here justifies oversizing.`);
   }
 
+  // Strip the temporary _it back-references so output is JSON-safe in callers.
+  const cleanRanked = ranked.map(({ _it, ...rest }) => rest);
+
   return {
     headline,
     text: lines.join('\n'),
-    ranked,
+    ranked: cleanRanked,
     counts: { clear: clears.length, lean: leans.length, watch: watches.length, pass: passes.length },
   };
 }
