@@ -671,23 +671,51 @@ export function analyzeGame(game) {
     }
   }
 
-  const sectionDecisions = [mlAnalysis, spreadAnalysis, totalAnalysis, hrAnalysis, ksAwayAnalysis, ksHomeAnalysis, yfriAnalysis];
-  const clearLeanItems = sectionDecisions.filter((s) => s.decision === 'CLEAR' || s.decision === 'LEAN');
+  // Game-level sections drive the headline pick. HR/K ladder anomalies are
+  // *not* game picks — they require lineup/usage/handedness/park gates we do
+  // not pull, so they always land in prop_watchlist regardless of CLEAR/LEAN
+  // strength.
+  const gameLevelSections = [
+    { name: 'ML', sec: mlAnalysis },
+    { name: 'Spread', sec: spreadAnalysis },
+    { name: 'Total', sec: totalAnalysis },
+    { name: 'YFRI', sec: yfriAnalysis },
+  ];
+  const gameClearLean = gameLevelSections.filter((s) => s.sec.decision === 'CLEAR' || s.sec.decision === 'LEAN');
+  const gameClears = gameClearLean.filter((s) => s.sec.decision === 'CLEAR');
+  const gameLeans = gameClearLean.filter((s) => s.sec.decision === 'LEAN');
 
-  // Best overall angle = strongest CLEAR > strongest LEAN > otherwise NO CLEAR PICK.
   let finalDecision = 'NO CLEAR PICK';
-  let finalReason = 'No section produced a market-internal CLEAR or LEAN; modeled fair-value / lineup / weather / starter context required for further calls.';
+  let finalReason = 'No game-level section (ML / spread / total / YFRI) produced a market-internal CLEAR or LEAN; modeled fair-value / lineup / weather / starter context required for further calls.';
   let bestAngle = 'NO CLEAR PICK';
-  const clears = clearLeanItems.filter((x) => x.decision === 'CLEAR');
-  const leans = clearLeanItems.filter((x) => x.decision === 'LEAN');
-  if (clears.length) {
+  let bestSource = null;
+  if (gameClears.length) {
     finalDecision = 'CLEAR';
-    finalReason = clears[0].reason;
-    bestAngle = clears[0].reason;
-  } else if (leans.length) {
+    finalReason = gameClears[0].sec.reason;
+    bestAngle = gameClears[0].sec.reason;
+    bestSource = gameClears[0].name;
+  } else if (gameLeans.length) {
     finalDecision = 'LEAN';
-    finalReason = leans[0].reason;
-    bestAngle = leans[0].reason;
+    finalReason = gameLeans[0].sec.reason;
+    bestAngle = gameLeans[0].sec.reason;
+    bestSource = gameLeans[0].name;
+  }
+
+  // Prop watchlist: HR/K CLEAR/LEAN entries are demoted to WATCH-tier alerts.
+  // They never count toward game-level CLEAR/LEAN totals or the slate
+  // headline. They surface as "MARKET ANOMALY" reads requiring further gates.
+  const propAlerts = [];
+  for (const p of hrAnalysis.perPlayer || []) {
+    if (p.decision === 'CLEAR' || p.decision === 'LEAN') {
+      propAlerts.push({ kind: 'HR', name: p.name, raw_decision: p.decision, decision: 'WATCH', reason: p.reason });
+    }
+  }
+  for (const side of [{ side: 'away', a: ksAwayAnalysis }, { side: 'home', a: ksHomeAnalysis }]) {
+    for (const p of side.a.perPitcher || []) {
+      if (p.decision === 'CLEAR' || p.decision === 'LEAN') {
+        propAlerts.push({ kind: 'K', side: side.side, name: p.name, raw_decision: p.decision, decision: 'WATCH', reason: p.reason });
+      }
+    }
   }
 
   return {
@@ -701,8 +729,16 @@ export function analyzeGame(game) {
       ks_home: ksHomeAnalysis,
       yfri: yfriAnalysis,
     },
-    final: { decision: finalDecision, reason: finalReason, best_angle: bestAngle },
-    clear_lean_count: clearLeanItems.length,
+    final: {
+      decision: finalDecision,            // game-level only (back-compat)
+      reason: finalReason,
+      best_angle: bestAngle,
+      best_source: bestSource,
+      game_pick_decision: finalDecision,
+      prop_watchlist: propAlerts,
+    },
+    clear_lean_count: gameClearLean.length, // game-level only
+    prop_alert_count: propAlerts.length,
   };
 }
 

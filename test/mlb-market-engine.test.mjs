@@ -421,3 +421,36 @@ test('soft-LEAN: final game rollup prefers soft-LEAN over blanket NO CLEAR PICK'
   assert.equal(out.final.decision, 'LEAN');
   assert.match(out.final.best_angle, /Soft ML LEAN CHC/);
 });
+
+// ---- Game-pick vs prop-watchlist separation -------------------------------
+
+test('HR ladder inversion does NOT promote game-level CLEAR/LEAN; lands in prop_watchlist', () => {
+  // ML/spread/total give no signal; only HR has a "CLEAR"-shape inversion.
+  const game = {
+    away: 'NYY', home: 'BOS',
+    series: {
+      ml: { markets: [
+        { ticker: 'KXMLBGAME-X-NYY', yes_ask_dollars: 0.50, no_ask_dollars: 0.52 },
+        { ticker: 'KXMLBGAME-X-BOS', yes_ask_dollars: 0.50, no_ask_dollars: 0.52 },
+      ]},
+      spread: { markets: [] },
+      total: { markets: [] },
+      hr: { markets: [
+        // Inverted: 2+ priced ABOVE 1+ — anomaly.
+        { ticker: 'KXMLBHR-26MAY-NYYJUDGE-1', title: 'Aaron Judge: 1+ home runs?', floor_strike: 1, yes_ask_dollars: 0.20, no_ask_dollars: 0.82 },
+        { ticker: 'KXMLBHR-26MAY-NYYJUDGE-2', title: 'Aaron Judge: 2+ home runs?', floor_strike: 2, yes_ask_dollars: 0.40, no_ask_dollars: 0.62 },
+      ]},
+      ks: { markets: [] },
+      rfi: { markets: [] },
+    },
+  };
+  const out = analyzeGame(game);
+  // Game-level final must NOT be CLEAR/LEAN from HR.
+  assert.equal(out.final.decision, 'NO CLEAR PICK');
+  assert.equal(out.clear_lean_count, 0);
+  // But the HR anomaly should appear in the prop watchlist as WATCH (not CLEAR).
+  assert.ok(Array.isArray(out.final.prop_watchlist));
+  const hrAlerts = out.final.prop_watchlist.filter((a) => a.kind === 'HR');
+  assert.ok(hrAlerts.length >= 1, 'expected HR anomaly in prop_watchlist');
+  for (const a of hrAlerts) assert.equal(a.decision, 'WATCH');
+});

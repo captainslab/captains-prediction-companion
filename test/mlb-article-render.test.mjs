@@ -124,7 +124,9 @@ test('article: weak props do not dominate slate prop section', () => {
   const g = makeGame();
   const items = [{ game: g, analysis: analyzeGame(g) }];
   const slate = buildSlateArticle({ date: '2026-05-18', items, planMeta: { date: '2026-05-18' } });
-  assert.match(slate.text, /No prop promoted to CLEAR\/LEAN/);
+  assert.match(slate.text, /No prop ladder anomalies detected on the slate/);
+  assert.match(slate.text, /Prop Market Watchlist \(anomalies — not game picks\)/);
+  assert.match(slate.text, /not official picks without liquidity, lineup, starter, and context confirmation/);
 });
 
 // --- publisher integration: idempotency + dry-run plan ---

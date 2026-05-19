@@ -184,21 +184,26 @@ export function buildGameArticle({ date, game, analysis }) {
   lines.push(`  Spread: ${analysis.sections.spread.decision} — ${analysis.sections.spread.reason}`);
   lines.push(`  Total: ${analysis.sections.total.decision} — ${analysis.sections.total.reason}`);
   lines.push(`  YFRI: ${analysis.sections.yfri.decision} — ${analysis.sections.yfri.reason}`);
-  const hrLeans = (analysis.sections.hr?.perPlayer || []).filter((p) => p.decision === 'CLEAR' || p.decision === 'LEAN');
-  if (hrLeans.length) {
-    lines.push('  HR props (notable):');
-    for (const p of hrLeans) lines.push(`    - ${p.name}: ${p.decision} — ${p.reason}`);
-  } else {
-    lines.push('  HR props: no CLEAR/LEAN promotion (kept conservative without context).');
-  }
-  const kaLeans = (analysis.sections.ks_away?.perPitcher || []).filter((p) => p.decision === 'CLEAR' || p.decision === 'LEAN');
-  const khLeans = (analysis.sections.ks_home?.perPitcher || []).filter((p) => p.decision === 'CLEAR' || p.decision === 'LEAN');
-  if (kaLeans.length || khLeans.length) {
-    lines.push('  K props (notable):');
-    for (const p of kaLeans) lines.push(`    - (away) ${p.name}: ${p.decision} — ${p.reason}`);
-    for (const p of khLeans) lines.push(`    - (home) ${p.name}: ${p.decision} — ${p.reason}`);
-  } else {
-    lines.push('  K props: no CLEAR/LEAN promotion (kept conservative without context).');
+  const propAlerts = analysis.final.prop_watchlist || [];
+  const hrAlerts = propAlerts.filter((a) => a.kind === 'HR');
+  const kAlerts = propAlerts.filter((a) => a.kind === 'K');
+  lines.push('  HR props: ' + (hrAlerts.length
+    ? `${hrAlerts.length} ladder anomaly(ies) — see Prop Market Watchlist (not a game pick).`
+    : 'no CLEAR/LEAN promotion (kept conservative without context).'));
+  lines.push('  K props: ' + (kAlerts.length
+    ? `${kAlerts.length} ladder anomaly(ies) — see Prop Market Watchlist (not a game pick).`
+    : 'no CLEAR/LEAN promotion (kept conservative without context).'));
+
+  if (propAlerts.length) {
+    lines.push('');
+    lines.push('Prop Market Watchlist (anomalies — not game picks)');
+    for (const a of hrAlerts) {
+      lines.push(`  - HR ${a.name}: MARKET ANOMALY (raw=${a.raw_decision}) — ${a.reason}`);
+    }
+    for (const a of kAlerts) {
+      lines.push(`  - K ${a.name} (${a.side}): MARKET ANOMALY (raw=${a.raw_decision}) — ${a.reason}`);
+    }
+    lines.push('  Caveat: Prop anomalies are not official picks without liquidity, lineup, starter, and context confirmation.');
   }
   lines.push('');
 
@@ -301,20 +306,22 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   }
   lines.push('');
 
-  // Prop / watchlist section: surface any HR/K CLEAR/LEAN across the slate.
-  lines.push('Prop / watchlist');
+  // Prop Market Watchlist: HR/K ladder anomalies are NOT slate picks.
+  // They never count toward CLEAR/LEAN totals or the slate headline.
+  lines.push('Prop Market Watchlist (anomalies — not game picks)');
   let propCount = 0;
   for (const it of items) {
-    const hr = (it.analysis.sections.hr?.perPlayer || []).filter((p) => p.decision === 'CLEAR' || p.decision === 'LEAN');
-    const ka = (it.analysis.sections.ks_away?.perPitcher || []).filter((p) => p.decision === 'CLEAR' || p.decision === 'LEAN');
-    const kh = (it.analysis.sections.ks_home?.perPitcher || []).filter((p) => p.decision === 'CLEAR' || p.decision === 'LEAN');
-    if (!hr.length && !ka.length && !kh.length) continue;
+    const alerts = it.analysis.final.prop_watchlist || [];
+    if (!alerts.length) continue;
     lines.push(`  ${shortMatchup(it.game)} (${it.game.game_key}):`);
-    for (const p of hr) { lines.push(`    - HR ${p.name}: ${p.decision} — ${p.reason}`); propCount++; }
-    for (const p of ka) { lines.push(`    - K ${p.name} (away): ${p.decision} — ${p.reason}`); propCount++; }
-    for (const p of kh) { lines.push(`    - K ${p.name} (home): ${p.decision} — ${p.reason}`); propCount++; }
+    for (const a of alerts) {
+      const tag = a.kind === 'K' ? `K ${a.name} (${a.side})` : `HR ${a.name}`;
+      lines.push(`    - ${tag}: MARKET ANOMALY (raw=${a.raw_decision}) — ${a.reason}`);
+      propCount++;
+    }
   }
-  if (!propCount) lines.push('  No prop promoted to CLEAR/LEAN — props remain conservative without lineup/usage context.');
+  if (!propCount) lines.push('  No prop ladder anomalies detected on the slate.');
+  lines.push('  Caveat: Prop anomalies are not official picks without liquidity, lineup, starter, and context confirmation.');
   lines.push('');
 
   lines.push('System caveats');
