@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 
 import { buildGameArticle, buildSlateArticle } from '../scripts/mlb/lib/article-render.mjs';
 import { analyzeGame } from '../scripts/mlb/lib/market-engine.mjs';
-import { loadPlan, publish } from '../scripts/mlb/publish-article-reports.mjs';
+import { loadPlan, publish, resolveTelegramEnv } from '../scripts/mlb/publish-article-reports.mjs';
 
 // Build a minimal joined-game fixture in the shape analyzeGame expects.
 function makeGame({ away = 'TEX', home = 'COL', gameKey = '26MAY182040TEXCOL', mlGap = 'big', spreadConfirm = true, weakProps = true } = {}) {
@@ -155,4 +155,33 @@ test('publisher: dry-run writes per-game + slate + delivery summary, idempotency
   const loaded = loadPlan(tmp, date);
   assert.equal(loaded.plan.date, date);
   assert.equal(loaded.plan.games.length, 1);
+});
+
+// --- Telegram env fallback ---
+
+test('telegram env: TELEGRAM_CHAT_ID preferred when both set', () => {
+  const r = resolveTelegramEnv({ TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: '111', TELEGRAM_HOME_CHANNEL: '222' });
+  assert.equal(r.token, 't');
+  assert.equal(r.chat, '111');
+  assert.equal(r.chat_source, 'TELEGRAM_CHAT_ID');
+});
+
+test('telegram env: falls back to TELEGRAM_HOME_CHANNEL when CHAT_ID missing', () => {
+  const r = resolveTelegramEnv({ TELEGRAM_BOT_TOKEN: 't', TELEGRAM_HOME_CHANNEL: '222' });
+  assert.equal(r.chat, '222');
+  assert.equal(r.chat_source, 'TELEGRAM_HOME_CHANNEL');
+});
+
+test('telegram env: throws when neither chat target is set', () => {
+  assert.throws(
+    () => resolveTelegramEnv({ TELEGRAM_BOT_TOKEN: 't' }),
+    /TELEGRAM_BOT_TOKEN and \(TELEGRAM_CHAT_ID or TELEGRAM_HOME_CHANNEL\)/,
+  );
+});
+
+test('telegram env: throws when token missing', () => {
+  assert.throws(
+    () => resolveTelegramEnv({ TELEGRAM_CHAT_ID: '111' }),
+    /TELEGRAM_BOT_TOKEN/,
+  );
 });

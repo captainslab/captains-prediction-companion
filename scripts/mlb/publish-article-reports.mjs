@@ -15,8 +15,10 @@
 //
 // Delivery:
 //   --dry-run        Print delivery plan, do not send.
-//   --send-telegram  Send via Telegram bot API using TELEGRAM_BOT_TOKEN +
-//                    TELEGRAM_CHAT_ID env vars. Articles are sent as .txt
+//   --send-telegram  Send via Telegram bot API using TELEGRAM_BOT_TOKEN and
+//                    a chat target: TELEGRAM_CHAT_ID, or TELEGRAM_HOME_CHANNEL
+//                    as a fallback (so the daily cron can run without manually
+//                    sourcing .env). Articles are sent as .txt
 //                    attachments via sendDocument so we avoid 10-chunk spam.
 //   --force          Re-send articles even if delivery-summary.json marks them
 //                    as already sent for this idempotency key.
@@ -138,13 +140,24 @@ function writeArticleFiles(outDir, baseName, article, extraMeta = {}) {
 
 // --- Telegram delivery (best-effort, env-driven) ---
 
-function telegramEnv() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chat = process.env.TELEGRAM_CHAT_ID;
+// Pure resolver — exported so tests can exercise the fallback without I/O.
+export function resolveTelegramEnv(env = process.env) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  // chat target: prefer explicit TELEGRAM_CHAT_ID, fall back to the Hermes
+  // profile's TELEGRAM_HOME_CHANNEL so the daily cron can resolve a target
+  // without anyone having to source .env manually.
+  const chat = env.TELEGRAM_CHAT_ID || env.TELEGRAM_HOME_CHANNEL;
+  const source = env.TELEGRAM_CHAT_ID
+    ? 'TELEGRAM_CHAT_ID'
+    : (env.TELEGRAM_HOME_CHANNEL ? 'TELEGRAM_HOME_CHANNEL' : null);
   if (!token || !chat) {
-    throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set for --send-telegram.');
+    throw new Error('TELEGRAM_BOT_TOKEN and (TELEGRAM_CHAT_ID or TELEGRAM_HOME_CHANNEL) must be set for --send-telegram.');
   }
-  return { token, chat };
+  return { token, chat, chat_source: source };
+}
+
+function telegramEnv() {
+  return resolveTelegramEnv();
 }
 
 function httpsJson(urlStr, body) {
