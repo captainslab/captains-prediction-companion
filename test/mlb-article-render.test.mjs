@@ -223,3 +223,53 @@ test('telegram env: throws when token missing', () => {
     /TELEGRAM_BOT_TOKEN/,
   );
 });
+
+test('TLDR: per-game LEAN article has TLDR immediately after headline, no engine vocab', () => {
+  const game = makeGame();
+  const analysis = analyzeGame(game);
+  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const lines = a.text.split('\n');
+  // lines[0]=headline, lines[1]=====, lines[2]='', lines[3]='TLDR'
+  assert.strictEqual(lines[3], 'TLDR', 'TLDR must appear right after headline+rule+blank');
+  const tldrBlock = lines.slice(3, 9).join('\n');
+  assert.match(tldrBlock, /Call:/);
+  assert.match(tldrBlock, /Side \/ market:/);
+  assert.match(tldrBlock, /Why:/);
+  assert.match(tldrBlock, /Risk:/);
+  assert.match(tldrBlock, /market-only/i);
+  for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
+    assert.ok(!banned.test(tldrBlock), `TLDR must not contain ${banned}`);
+  }
+});
+
+test('TLDR: PASS / NO CLEAR PICK game shows pass language', () => {
+  const game = makeGame({ away: 'AAA', home: 'BBB', gameKey: '26MAY18FAKE', mlGap: 'small', spreadConfirm: false });
+  const analysis = analyzeGame(game);
+  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const lines = a.text.split('\n');
+  assert.strictEqual(lines[3], 'TLDR');
+  const tldrBlock = lines.slice(3, 9).join('\n');
+  assert.match(tldrBlock, /PASS/);
+  assert.match(tldrBlock, /NO CLEAR PICK/);
+  for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
+    assert.ok(!banned.test(tldrBlock), `TLDR must not contain ${banned}`);
+  }
+});
+
+test('TLDR: slate article has TLDR immediately after headline, no engine vocab', () => {
+  const g1 = makeGame({ away: 'TEX', home: 'COL', gameKey: 'GA' });
+  const g2 = makeGame({ away: 'AAA', home: 'BBB', gameKey: 'GB', mlGap: 'small', spreadConfirm: false });
+  const items = [g1, g2].map((game) => ({ game, analysis: analyzeGame(game) }));
+  const slate = buildSlateArticle({ date: '2026-05-18', items, planMeta: {} });
+  const lines = slate.text.split('\n');
+  assert.strictEqual(lines[3], 'TLDR');
+  // Find end of TLDR block (next blank-then-section). Look for 'Slate overview'.
+  const overviewIdx = lines.indexOf('Slate overview');
+  assert.ok(overviewIdx > 4, 'Slate overview must come after TLDR block');
+  const tldrBlock = lines.slice(3, overviewIdx).join('\n');
+  assert.match(tldrBlock, /Top picks/);
+  assert.match(tldrBlock, /Takeaway/);
+  for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
+    assert.ok(!banned.test(tldrBlock), `Slate TLDR must not contain ${banned}`);
+  }
+});

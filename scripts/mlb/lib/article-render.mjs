@@ -295,6 +295,21 @@ export function buildGameArticle({ date, game, analysis }) {
   lines.push('='.repeat(Math.min(headline.length, 80)));
   lines.push('');
 
+  // TLDR: plain-English top-of-article summary. No engine/debug vocabulary.
+  lines.push('TLDR');
+  if (finalLabel === 'CLEAR' || finalLabel === 'LEAN') {
+    const side = mlSnap?.fav?.team ?? 'favorite';
+    lines.push(`  Call: ${finalLabel} — ${side} moneyline.`);
+    lines.push(`  Side / market: ${side} ML`);
+    lines.push(`  Why: price and depth both lean ${side}; nothing on the board contradicts that side.`);
+  } else {
+    lines.push('  Call: PASS — NO CLEAR PICK.');
+    lines.push('  Side / market: none — no defensible side on the board.');
+    lines.push('  Why: prices and depth read close to fair; no side stands out cleanly.');
+  }
+  lines.push('  Risk: market-only read. No lineup, weather, starter, or park context was pulled.');
+  lines.push('');
+
   lines.push('Final Call');
   lines.push(`  ${finalCallLine}`);
   lines.push('');
@@ -452,6 +467,36 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   const lines = [];
   lines.push(headline);
   lines.push('='.repeat(Math.min(headline.length, 80)));
+  lines.push('');
+
+  // TLDR: top of slate article, plain English, no engine vocabulary.
+  lines.push('TLDR');
+  const tldrTop = [...clears, ...leans];
+  if (tldrTop.length) {
+    lines.push('  Top picks:');
+    let ti = 1;
+    for (const r of tldrTop) {
+      const snap = mlSnapshot(r._it.game);
+      const fav = snap?.fav?.team ?? 'favorite';
+      lines.push(`    ${ti}. ${r.matchup}: ${r.decision} ${fav}`);
+      ti++;
+    }
+  } else {
+    lines.push('  Top picks: none — board-only slate.');
+  }
+  if (passes.length) {
+    lines.push('  Pass / no-pick:');
+    for (const r of passes) lines.push(`    - ${r.matchup}`);
+  } else {
+    lines.push('  Pass / no-pick: none — every game produced at least a watch-level read.');
+  }
+  if (clears.length) {
+    lines.push(`  Takeaway: lead with the ${clears.length} top pick(s); the rest are softer reads.`);
+  } else if (leans.length) {
+    lines.push(`  Takeaway: ${leans.length} softer read(s) only — nothing on this slate justifies pressing.`);
+  } else {
+    lines.push('  Takeaway: board-only slate — wait for movement, no defensible side stands out.');
+  }
   lines.push('');
 
   lines.push('Slate overview');
