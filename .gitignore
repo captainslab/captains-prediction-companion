@@ -29,6 +29,9 @@ lib
 !scripts/mlb/lib/
 !scripts/mlb/lib/series-discovery.mjs
 !scripts/mlb/lib/report-render.mjs
+!scripts/politics/lib/
+!scripts/politics/lib/source-classifier.mjs
+!scripts/politics/lib/report-render.mjs
 .DS_store
 
 # Next.js

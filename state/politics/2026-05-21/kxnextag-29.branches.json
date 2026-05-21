@@ -1,0 +1,117 @@
+{
+  "market": {
+    "id": "KXNEXTAG-29",
+    "url": "https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29",
+    "title": "Trump's next Attorney General (Kalshi KXNEXTAG-29)",
+    "asOf": "2026-05-21T00:00:00Z"
+  },
+  "settlement": {
+    "rules": "Per Kalshi KXNEXTAG rules_primary: the market resolves YES for candidate X if X is the first NEW person to be Attorney General before Jan 20, 2029 15:00Z. Resolution covers the next confirmed AG after the current vacancy/acting period.",
+    "actingInterim": "Verbatim from KXNEXTAG rules_secondary: 'Acting and Interim holders of the office are not included in the Payout Criterion. Persons confirmed by the Senate to be that position, or appointed via a \"recess appointment\" are included, even if that recess appointment is later struck down as illegal.'",
+    "ambiguities": [
+      "'First new person' is undefined relative to the prior incumbent — unclear if re-nomination/re-confirmation of the same person would count as 'new'.",
+      "Recess appointments count even if later struck down as illegal, but rules don't specify trigger timing (immediately on appointment, or only after some period).",
+      "No explicit handling of a nominee who is confirmed but never sworn in, dies, or withdraws before assuming office.",
+      "Deadline is Jan 20, 2029 15:00Z; ambiguous what happens if a confirmation vote occurs but swearing-in slips past that timestamp.",
+      "Only listed candidates have YES markets — if a person not on the candidate roster becomes AG, none of the YES contracts resolve YES."
+    ]
+  },
+  "official": {
+    "facts": [
+      { "date": "2026-05-21", "claim": "DOJ Office of the Attorney General website lists Todd Blanche as Acting Attorney General; no Senate-confirmed AG currently in place.", "source": "https://www.justice.gov/ag", "verified": true },
+      { "date": "2026-04-02", "claim": "Trump announced on Truth Social that Pam Bondi is out as AG and Deputy AG Todd Blanche will serve as Acting Attorney General.", "source": "https://thehill.com/homenews/administration/5813184-trump-fires-attorney-general/", "verified": true },
+      { "date": "2026-04-02", "claim": "AP confirms Trump's announcement firing Bondi and naming Blanche acting AG via Truth Social post.", "source": "https://apnews.com/article/trump-bondi-attorney-general-blanche", "verified": true },
+      { "date": "2026-04-02", "claim": "CNN reports Trump fired Pam Bondi; Deputy AG Todd Blanche to serve as acting attorney general pending a permanent nominee.", "source": "https://www.cnn.com/2026/04/02/politics/pam-bondi-role-trump", "verified": true },
+      { "date": "2026-04-03", "claim": "Sen. Thom Tillis (R-NC, Judiciary): 'The threshold for somebody following Pam Bondi ends the moment I hear they said one thing that excused the events of January the 6th,' signaling he would block any AG nominee who excused Jan. 6.", "source": "https://www.foxnews.com/politics/pam-bondi-out-ag-here-contenders-who-could-replace-her", "verified": true },
+      { "date": "2026-04-03", "claim": "Names publicly floated as contenders include Acting AG Todd Blanche, EPA Administrator Lee Zeldin, Harmeet Dhillon, and Jeanine Pirro; the White House declined to discuss contenders beyond Trump's Truth Social post.", "source": "https://www.foxnews.com/politics/pam-bondi-out-ag-here-contenders-who-could-replace-her", "verified": true },
+      { "date": "2026-04-03", "claim": "Under the Federal Vacancies Reform Act, Blanche may serve as acting AG for up to 210 days from Bondi's departure (~late October 2026), creating deadline pressure on Trump's permanent nomination.", "source": "https://www.foxnews.com/politics/pam-bondi-out-ag-here-contenders-who-could-replace-her", "verified": true },
+      { "date": "2026-04-07", "claim": "Acting AG Todd Blanche, asked at a DOJ press conference about staying on permanently, said any decision was up to President Trump.", "source": "https://www.foxnews.com/politics/blanche-trump-love-bondi-replacement", "verified": true },
+      { "date": "2026-04-09", "claim": "Politico reports fierce internal competition is underway to be Trump's next AG nominee, with no permanent pick yet announced.", "source": "https://www.politico.com/news/2026/04/09/trump-next-attorney-general-battle", "verified": true },
+      { "date": "2026-05-01", "claim": "Politico: Sen. Thom Tillis would block any AG nominee on the Senate Judiciary Committee who excuses the Jan. 6 insurrection.", "source": "https://www.politico.com/news/2026/05/01/tillis-attorney-general-jan-6", "verified": true },
+      { "date": "2026-05-15", "claim": "As of mid-May 2026, no permanent AG nominee has been formally submitted by the White House to the Senate; Blanche continues in acting capacity and is widely described as auditioning for the permanent role.", "source": "https://slate.com/news-and-politics/2026/05/todd-blanche-trump-attorney-general-audition.html", "verified": false }
+    ]
+  },
+  "xSignal": {
+    "narratives": [
+      { "claim": "Todd Blanche is Acting AG and leading prediction-market favorite for permanent AG", "tier": "rumor", "repeated": true, "source": "https://x.com/SaipIntel/status/2052346251056664938" },
+      { "claim": "Pam Bondi was removed as AG ~April 2, 2026 over slow progress on Epstein files / political accountability", "tier": "rumor", "repeated": true, "source": "https://x.com/PMRreport/status/2056669793986457731" },
+      { "claim": "Sidney Powell is the frontrunner / Trump 'seriously considering' her for AG", "tier": "rumor", "repeated": true, "source": "https://x.com/AmericaPulseNew/status/2055701492854591862" },
+      { "claim": "Grassroots #SidneyPowellAG campaign urging Trump via Truth Social", "tier": "rumor", "repeated": true, "source": "https://x.com/i/status/2055701492854591862" },
+      { "claim": "Alina Habba floated as potential AG pick", "tier": "rumor", "repeated": false, "source": "https://x.com/ForgiatoBlow47/status/2046685649588072775" },
+      { "claim": "Ron DeSantis mentioned in passing as possible AG", "tier": "rumor", "repeated": false, "source": "https://x.com/bennyjohnson/status/2051367732474454423" },
+      { "claim": "Kalshi market 'no AG announced by June 30' rose to ~53%, signaling expected delay", "tier": "rumor", "repeated": false, "source": "https://x.com/SaipIntel/status/2052346251056664938" },
+      { "claim": "Trump publicly praised Blanche's performance as Acting AG", "tier": "rumor", "repeated": true, "source": "https://x.com/jacktronprime/status/2047702435926261844" },
+      { "claim": "Critics label Blanche too moderate / 'Obama-era holdover'", "tier": "rumor", "repeated": false, "source": "https://x.com/Impeach_47/status/2057249819895517519" },
+      { "claim": "Bondi transitioning to private sector post-removal", "tier": "rumor", "repeated": false, "source": "https://x.com/mahakhanpk9i/status/2057200132521947332" }
+    ]
+  },
+  "marketStructure": {
+    "board": [
+      { "candidate": "Todd Blanche", "yesCents": 44, "noCents": 56, "vol": null, "oi": 391736 },
+      { "candidate": "Lee Zeldin",   "yesCents": 28, "noCents": 72, "vol": null, "oi": 336311 },
+      { "candidate": "Jeanine Pirro", "yesCents": 4, "noCents": 96, "vol": null, "oi": 353914 }
+    ],
+    "movement": "Blanche slid sharply from ~54¢ to 44¢ (-10¢). Zeldin ticked up 25¢→28¢. Pirro nearly doubled 2.6¢→4.3¢. Longer-tail names weakened: DeSantis 3.7¢→2.1¢, Harmeet Dhillon 3.1¢→1.4¢. Ken Paxton popped 0.1¢→1¢ on small flow. Open interest heavy across the board (Blanche 392k, Pirro 354k, Zeldin 336k contracts), indicating an active, repricing market rather than a stale book.",
+    "limitations": "Long-dated, 22-way mutually exclusive winner-take-all market resolving by Jan 20, 2029, with no acting/interim holders counted. Prices reflect narrative shocks (rumors, Trump statements, Senate-confirmation signals) more than a frequentist forecast. Books are wide (Pirro 2.9/4.2, Ed Martin 0.6/2.3) so marks overstate edge; mid vs last can differ 1-2¢. Public feed returns no 24h volume — cannot distinguish a single large print from sustained flow. Favorite at 44¢ implies 56% chance someone else; dispersion across 5+ live names means small fundamental news can re-rank the board quickly."
+  },
+  "plausibility": {
+    "candidates": [
+      { "name": "Todd Blanche",  "strengths": ["(INFER) Deep personal loyalty to Trump as his lead criminal defense attorney", "(INFER) Already inside DOJ as Deputy AG → seamless succession optics", "(INFER) Former federal prosecutor (SDNY) provides traditional DOJ credibility", "(INFER) Already Senate-confirmed once (as DAG), reducing vetting friction"], "weaknesses": ["(INFER) Trump's personal-lawyer status raises independence/impartiality concerns", "(INFER) Lacks independent political base outside Trump orbit", "(INFER) MAGA populist wing may see him as too establishment", "(INFER) Democratic unified opposition likely citing recusal conflicts"], "obstacles": ["(INFER) Senate math: needs near-unanimous GOP with ~zero Dem votes", "(INFER) Recusal questions on any matter touching prior Trump representation", "(INFER) Optics of elevating Trump's personal defense lawyer to top law-enforcement post", "(INFER) Confirmation hearings would relitigate Trump prosecutions"] },
+      { "name": "Lee Zeldin",    "strengths": ["(INFER) Already Senate-confirmed (EPA) — proven confirmability", "(INFER) Strong Trump loyalty (2020 election defense, NY gov run)", "(INFER) Former House member with Hill relationships", "(INFER) Army JAG/lawyer background = minimum legal credential"], "weaknesses": ["(INFER) No DOJ or prosecutorial experience", "(INFER) Would require cabinet reshuffle and second confirmation fight at EPA", "(INFER) Not viewed as legal heavyweight by DOJ career ranks", "(INFER) Limited national security / criminal division depth"], "obstacles": ["(INFER) Double-confirmation burden (new AG + EPA successor) strains floor time", "(INFER) Democrats attack his 2020 election objection vote", "(INFER) Faction competition with lawyer-credentialed contenders", "(INFER) Optics of moving a non-lawyer-prosecutor into AG role"] },
+      { "name": "Jeanine Pirro", "strengths": ["(INFER) Extreme Trump loyalty + long media advocacy", "(INFER) Actual prosecutorial experience as former Westchester DA and judge", "(INFER) Currently interim US Attorney DC — present DOJ footing", "(INFER) Strong MAGA base enthusiasm and Fox-amplified support"], "weaknesses": ["(INFER) Long incendiary TV-commentary record creates confirmation landmines", "(INFER) Past 2020/Dominion claims invite litigation-style hearings", "(INFER) Limited federal DOJ management experience at scale", "(INFER) Polarizing even among Senate Republicans"], "obstacles": ["(INFER) Likely loses Collins, Murkowski on thin margin", "(INFER) Defamation-adjacent history weaponized in hearings", "(INFER) Fox-host → AG pipeline repeats Hegseth-style fight", "(INFER) Age and succession-planning questions"] },
+      { "name": "Mike Davis",    "strengths": ["(INFER) Maximal MAGA-base enthusiasm + Article III Project brand", "(INFER) Former Grassley chief counsel for nominations — knows Senate Judiciary cold", "(INFER) Total Trump loyalty signaled publicly and repeatedly", "(INFER) Would energize populist faction"], "weaknesses": ["(INFER) Provocative public statements alienate moderates", "(INFER) No prosecutorial or DOJ line experience", "(INFER) Never held Senate-confirmed executive post", "(INFER) Viewed by institutionalists as too combative for AG"], "obstacles": ["(INFER) Highly likely to lose multiple GOP senators on temperament grounds", "(INFER) Hearings would surface inflammatory social-media record", "(INFER) No natural Senate champion to whip votes", "(INFER) Competing against candidates with cleaner confirmation paths"] },
+      { "name": "John Ratcliffe", "strengths": ["(INFER) Already twice Senate-confirmed (DNI, CIA Director) — proven path", "(INFER) Former federal prosecutor (EDTX US Attorney) with real DOJ background", "(INFER) Trusted Trump loyalist across both terms", "(INFER) Strong standing with Senate Intel and Judiciary Republicans"], "weaknesses": ["(INFER) Would require vacating CIA, triggering another confirmation cycle", "(INFER) IC profile less natural fit than criminal-law leaders", "(INFER) Less visible MAGA-base passion than Pirro/Davis", "(INFER) May prefer to stay at CIA, limiting willingness"], "obstacles": ["(INFER) Cabinet reshuffle cost + CIA succession fight", "(INFER) Democrats revisit 2020 DNI declassification controversies", "(INFER) Competing internal candidates with stronger personal-lawyer ties to Trump", "(INFER) Timing/sequencing if vacancy is sudden"] }
+    ]
+  },
+  "skeptic": {
+    "favoriteWrongReason": "Blanche is already serving as Acting AG with no permanent nominee submitted 7 weeks after Bondi's firing — if Trump wanted him in the chair he would have been nominated already. The delay signals the WH is shopping alternatives, and Blanche's recusal/independence baggage plus the Tillis Jan-6 litmus test make Senate math harder than 44¢ implies.",
+    "underpricedReason": "Harmeet Dhillon at an implied low-single-digit price (publicly floated, MAGA-aligned, RNC legal background, no EPA-style double-confirm burden like Zeldin and fewer on-camera landmines than Pirro) is the cleanest compromise pick if Blanche stalls — her tail is materially thicker than a 22-way uniform would suggest.",
+    "settlementTraps": [
+      "Recess appointment that is later struck down by courts still resolves YES — traders pricing only Senate-confirmation paths underweight this.",
+      "Nominee confirmed by Senate but not sworn in before Jan 20, 2029 has undefined treatment.",
+      "Nominee dies or withdraws after confirmation vote but before taking office — undefined.",
+      "FVRA 210-day expiry (~late Oct 2026) could force a non-Blanche nominee suddenly, but market may not reprice until a name leaks.",
+      "Blanche being formally nominated does NOT resolve the market — only confirmation/recess appointment does, so a nomination bump is a fade trap.",
+      "'Acting' Blanche continuing past 210 days via statutory workaround does not count as resolution."
+    ],
+    "narrativeTraps": [
+      "X rumor-tier chatter for Blanche creating false confirmation bias — no hard reporting cited.",
+      "'Loyalty pick = inevitable' heuristic ignores Trump's pattern of late-stage surprise nominees.",
+      "Zeldin price rising read as signal, but he carries a double-confirm burden — the move may be noise.",
+      "Pirro's MAGA-base narrative obscures concrete Collins/Murkowski vote-count problem.",
+      "Anchoring on the 54¢→44¢ Blanche drop as 'oversold' rather than as information that insiders see the nomination slipping.",
+      "Assuming the 22-way book's tail names are uniformly dead — FVRA pressure plus Tillis litmus could elevate a dark horse not currently on the floated list."
+    ]
+  },
+  "judgment": {
+    "probabilityRange": "Blanche 0.30-0.45; Zeldin 0.15-0.25; field (Pirro/Dhillon/Ratcliffe/Davis/other) 0.35-0.50 — wide bands reflect zero formal nomination yet",
+    "confidence": "low",
+    "bestNonPriceReason": "FVRA 210-day acting clock on Blanche expires ~late October 2026, forcing a permanent nomination decision before then; Tillis Jan-6 litmus narrows the GOP-confirmable pool.",
+    "biggestUncertainty": "Whether Trump nominates Blanche himself or pivots to a compromise pick under FVRA pressure — no nominee submitted as of asOf date.",
+    "wouldChangeView": [
+      "Formal Senate Judiciary nomination filing for any candidate",
+      "On-record statement from Trump naming his pick",
+      "GOP Judiciary senator publicly opposing or endorsing a named contender",
+      "Bondi-era recusal or court ruling that constrains a Blanche path",
+      "Recess-appointment timing posture from the White House"
+    ],
+    "monitorNext": [
+      "WH nominations sent to Senate Judiciary calendar",
+      "FVRA 210-day countdown (~late October 2026)",
+      "Tillis / Collins / Murkowski / Grassley public statements",
+      "Kalshi KXNEXTAG board re-rankings on news drops",
+      "Trump Truth Social posts mentioning AG/DOJ"
+    ]
+  },
+  "meta": {
+    "xSearchAvailable": true,
+    "xSearchUsed": true,
+    "notChecked": [
+      "Direct WH press-secretary briefings transcripts",
+      "Non-public Senate Judiciary scheduling memos",
+      "Polymarket comparable contracts for cross-venue arb signal",
+      "Internal DOJ personnel filings",
+      "Reuters/Bloomberg paywalled tickers (blocked by bot detection during run)"
+    ]
+  }
+}
