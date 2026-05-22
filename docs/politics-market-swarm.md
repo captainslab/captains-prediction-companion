@@ -194,3 +194,24 @@ the prompt spec.
 - Judgment cannot introduce facts not already in merged JSON.
 - Forbidden-language scan runs on every rendered report; failure exits 5.
 
+
+## Phase 4: cross-branch integrity check
+
+`scripts/politics/lib/integrity-check.mjs` runs after schema validation and
+before render. It enforces invariants that schema validation alone cannot:
+
+Errors (exit 6):
+- `judgment.citations[*].branch` must name a real branch and that branch must
+  exist non-empty in the merged JSON. The judgment cannot cite a branch that
+  was never produced.
+
+Warnings (rendered into the report's Meta section under "Integrity warnings",
+also echoed to stderr; never block render):
+- `official.facts[*].source` that classifies as `X_SOCIAL` — surfaces X
+  chatter that snuck into the official branch instead of xSignal.
+- `official.facts[*]` with `verified: true` but `UNKNOWN`-tier source —
+  forces the operator to either verify with a tier-1 source or downgrade.
+
+Replay mode also rehydrates `settlement` + `marketStructure` from
+`cache/fetch.json` when present, so judgment citations to those branches
+remain valid across re-renders.

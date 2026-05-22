@@ -30,6 +30,7 @@ import { renderReport } from './lib/report-render.mjs';
 import { fetchEventMarkets, buildMarketBranches } from './lib/kalshi-fetch.mjs';
 import { buildEnvelopes, buildJudgmentEnvelope, loadBranchesDir, mergeBranches, BRANCHES } from './lib/branch-dispatch.mjs';
 import { validateBranches, scanForbiddenLanguage } from './lib/branch-contract.mjs';
+import { crossCheckBranches } from './lib/integrity-check.mjs';
 
 function parseArgs(argv) {
   const out = {};
@@ -88,6 +89,15 @@ export async function orchestrate(opts) {
       }
     }
     if (raw) auto = { ...auto, ...buildMarketBranches(raw, { eventTicker: market, eventUrl: url }) };
+  } else if (cacheDir) {
+    // Replay: hydrate settlement + marketStructure from prior fetch.json so the
+    // judgment branch can legitimately cite them. If no cache, replay still
+    // works against branchesDir/branchesJsonPath alone.
+    const cachePath = join(cacheDir, 'fetch.json');
+    if (existsSync(cachePath)) {
+      raw = JSON.parse(readFileSync(cachePath, 'utf8'));
+      auto = { ...auto, ...buildMarketBranches(raw, { eventTicker: market, eventUrl: url }) };
+    }
   }
 
   // --- branch envelopes (always written when cacheDir set) ---
@@ -131,6 +141,19 @@ export async function orchestrate(opts) {
       throw e;
     }
     merged = v2.repaired;
+  }
+
+  // --- cross-branch integrity (Phase 4) ---
+  const integrity = crossCheckBranches(merged);
+  if (!integrity.ok) {
+    const e = new Error(`Integrity check failed: ${integrity.errors.join('; ')}`);
+    e.code = 6;
+    throw e;
+  }
+  if (integrity.warnings.length) {
+    for (const w of integrity.warnings) console.error(`WARN: ${w}`);
+    merged.meta = merged.meta ?? {};
+    merged.meta.integrityWarnings = integrity.warnings;
   }
 
   // --- render ---

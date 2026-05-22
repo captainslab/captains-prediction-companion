@@ -4,7 +4,7 @@
 
 - Market: Attorney General (KXNEXTAG-29)
 - URL: https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29
-- As of: 2026-05-22T00:43:45.316Z
+- As of: 2026-05-22T00:52:21.357Z
 - Current market leader: Todd Blanche @ 44¢ YES
 - Strongest verified non-price signal: Per xSignal, Todd Blanche is reportedly currently serving as Acting AG after Bondi's early-April 2026 removal and has appeared before the Senate for confirmation to become permanent AG, with a public endorsement from Jeanine Pirro — making him the most-discussed named successor in the reporting captured in the merged JSON; this aligns with marketStructure showing him as the top contract at 44¢ YES.
 - Strongest counter-signal: Per skeptic, Blanche's profile as Trump's former personal criminal defense lawyer mirrors the conflict-of-interest dynamic that sank Gaetz; Sen. Tillis has signaled skepticism and a Collins/Murkowski/McConnell-style 3-vote GOP loss would block confirmation in a 53-seat majority, while a 'long acting' branch (Blanche indefinitely Acting under FVRA, no new confirmed AG before Jan 20 2029) resolves NO to every named candidate and is structurally unpriced.
@@ -261,3 +261,6 @@ Kalshi is thin on personnel markets; small fills move prices, public chatter can
 
 **Not checked / out of scope this run**
 (UNKNOWN — branch not run)
+
+**Integrity warnings**
+- official.facts[10]: source classifies as UNKNOWN ("https://www.flgov.com/") but is marked verified=true — verify or downgrade

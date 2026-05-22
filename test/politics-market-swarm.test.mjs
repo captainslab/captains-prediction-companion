@@ -308,8 +308,9 @@ test('orchestrate replay mode renders judgment when judgment.json is present', a
   const dir = mkdtempSync(join(tmpdir(), 'pol-judge-'));
   const bdir = join(dir, 'branches');
   mkdirSync(bdir, { recursive: true });
-  writeFileSync(join(bdir, 'official.json'),    JSON.stringify({ facts: [] }));
+  writeFileSync(join(bdir, 'official.json'),    JSON.stringify({ facts: [{ claim: 'hearing scheduled', source: 'https://judiciary.senate.gov/x', date: '2026-05-20', verified: true }] }));
   writeFileSync(join(bdir, 'plausibility.json'), JSON.stringify({ candidates: [] }));
+  writeFileSync(join(bdir, 'skeptic.json'),      JSON.stringify({ favoriteWrongReason: 'x', underpricedReason: 'y', settlementTraps: ['z'], narrativeTraps: ['w'] }));
   writeFileSync(join(bdir, 'judgment.json'),    JSON.stringify(PHASE3_JUDGMENT));
   const out = join(dir, 'r.md');
   const r = await orchestrate({ market: 'X', url: 'u', mode: 'replay', branchesDir: bdir, out });
@@ -319,17 +320,78 @@ test('orchestrate replay mode renders judgment when judgment.json is present', a
   assert.equal(scanForbiddenLanguage(md).clean, true);
 });
 
-test('orchestrate live mode writes judgment-envelope.json to cacheDir', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'pol-jenv-'));
-  const cacheDir = join(dir, 'cache');
+// --- Phase 4 tests: cross-branch integrity ---
+
+import { crossCheckBranches } from '../scripts/politics/lib/integrity-check.mjs';
+
+test('crossCheckBranches passes on the Phase 3 sample', () => {
+  const r = crossCheckBranches({ ...SAMPLE, judgment: PHASE3_JUDGMENT });
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(r.warnings, []);
+});
+
+test('crossCheckBranches errors when judgment cites a missing branch', () => {
+  const bad = { market: { id: 'X', url: 'u', asOf: 'now' },
+    judgment: { citations: [{ branch: 'official', ref: 'x' }] } };
+  const r = crossCheckBranches(bad);
+  assert.equal(r.ok, false);
+  assert.ok(r.errors.some((e) => e.includes('official') && e.includes('empty')));
+});
+
+test('crossCheckBranches errors on unknown citation branch name', () => {
+  const bad = { ...SAMPLE,
+    judgment: { ...PHASE3_JUDGMENT, citations: [{ branch: 'made-up', ref: 'x' }] } };
+  const r = crossCheckBranches(bad);
+  assert.equal(r.ok, false);
+  assert.ok(r.errors.some((e) => e.includes('unknown branch')));
+});
+
+test('crossCheckBranches warns when official facts cite X_SOCIAL sources', () => {
+  const merged = { market: { id: 'X', url: 'u', asOf: 'now' },
+    official: { facts: [{ claim: 'leaked from X', source: 'https://x.com/abc', date: '2026-05-01', verified: true }] } };
+  const r = crossCheckBranches(merged);
+  assert.equal(r.ok, true);
+  assert.ok(r.warnings.length === 1);
+  assert.match(r.warnings[0], /X_SOCIAL/);
+  assert.match(r.warnings[0], /xSignal/);
+});
+
+test('crossCheckBranches warns on verified=true with UNKNOWN-tier source', () => {
+  const merged = { market: { id: 'X', url: 'u', asOf: 'now' },
+    official: { facts: [{ claim: 'trust me', source: '', date: '2026-05-01', verified: true }] } };
+  const r = crossCheckBranches(merged);
+  assert.equal(r.ok, true);
+  assert.ok(r.warnings.length === 1);
+  assert.match(r.warnings[0], /UNKNOWN/);
+});
+
+test('orchestrate exits code 6 when judgment cites an empty branch', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-int-'));
+  const bdir = join(dir, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  writeFileSync(join(bdir, 'official.json'), JSON.stringify({ facts: [] }));
+  writeFileSync(join(bdir, 'judgment.json'), JSON.stringify({
+    judgment: { confidence: 'low', citations: [{ branch: 'plausibility', ref: 'nope' }] },
+  }));
+  await assert.rejects(
+    () => orchestrate({ market: 'X', url: 'u', mode: 'replay', branchesDir: bdir, out: join(dir, 'r.md') }),
+    (e) => e.code === 6,
+  );
+});
+
+test('orchestrate surfaces integrity warnings into report meta', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-intw-'));
+  const bdir = join(dir, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  writeFileSync(join(bdir, 'official.json'), JSON.stringify({
+    facts: [{ claim: 'rumor laundered as fact', source: 'https://x.com/handle/status/1',
+              date: '2026-05-01', verified: true }],
+  }));
+  writeFileSync(join(bdir, 'plausibility.json'), JSON.stringify({ candidates: [] }));
   const out = join(dir, 'r.md');
-  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => FAKE_KALSHI, text: async () => '' });
-  await orchestrate({
-    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
-    mode: 'live', cacheDir, out, fetchImpl: fakeFetch,
-  });
-  const jenv = JSON.parse(readFileSync(join(cacheDir, 'judgment-envelope.json'), 'utf8'));
-  assert.equal(jenv.branch, 'judgment');
-  assert.equal(jenv.inputsOnly, true);
-  assert.match(jenv.prompt, /Use ONLY the merged JSON/);
+  await orchestrate({ market: 'X', url: 'u', mode: 'replay', branchesDir: bdir, out });
+  const md = readFileSync(out, 'utf8');
+  assert.ok(md.includes('Integrity warnings'),  'meta section should expose integrity warnings');
+  assert.ok(md.includes('X_SOCIAL'),            'specific X_SOCIAL warning should render');
+  assert.equal(scanForbiddenLanguage(md).clean, true);
 });

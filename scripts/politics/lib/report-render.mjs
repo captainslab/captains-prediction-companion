@@ -161,6 +161,10 @@ function renderMeta(b) {
   out += bullet(`x_search used:      ${m.xSearchUsed ?? 'unknown'}`);
   out += '\n**Not checked / out of scope this run**\n';
   out += (arr(m.notChecked).map(s => bullet(s)).join('') || `${PLACEHOLDER}\n`);
+  if (Array.isArray(m.integrityWarnings) && m.integrityWarnings.length) {
+    out += '\n**Integrity warnings**\n';
+    out += m.integrityWarnings.map(w => bullet(w)).join('');
+  }
   return out;
 }
 
