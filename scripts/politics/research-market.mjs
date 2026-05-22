@@ -31,6 +31,7 @@ import { fetchEventMarkets, buildMarketBranches } from './lib/kalshi-fetch.mjs';
 import { buildEnvelopes, buildJudgmentEnvelope, loadBranchesDir, mergeBranches, BRANCHES } from './lib/branch-dispatch.mjs';
 import { validateBranches, scanForbiddenLanguage } from './lib/branch-contract.mjs';
 import { crossCheckBranches } from './lib/integrity-check.mjs';
+import { runBranches, cacheAdapter, cmdAdapter } from './lib/branch-runner.mjs';
 
 function parseArgs(argv) {
   const out = {};
@@ -64,6 +65,7 @@ export async function orchestrate(opts) {
     market, url, out, mode = 'live',
     branchesJsonPath, branchesDir, cacheDir,
     modelOverrides = {}, offline = false, fetchImpl,
+    executor = null, executorOpts = {},
   } = opts;
   if (!market) throw new Error('orchestrate: market required');
 
@@ -111,13 +113,59 @@ export async function orchestrate(opts) {
   }
   if (mode === 'envelopes-only') return { envelopes, autoBuilt: auto };
 
+  // --- execute mode (Phase 5): run all envelopes through a pluggable adapter,
+  // persist branches/*.json into cacheDir/branches/, then fall through to the
+  // normal merge → validate → render pipeline so Phase 1-4 guardrails apply.
+  let execution = null;
+  let effectiveBranchesDir = branchesDir;
+  if (mode === 'execute') {
+    if (!executor) {
+      const e = new Error('execute mode requires an adapter (executor)');
+      e.code = 2; throw e;
+    }
+    const writeDir = cacheDir ? join(cacheDir, 'branches') : null;
+    if (writeDir) mkdirSync(writeDir, { recursive: true });
+
+    const r = await runBranches({
+      envelopes,
+      adapter: executor,
+      judgmentEnvelopeBuilder: (partial) => {
+        const ok = BRANCHES.filter((b) => !b.autoBuilt && !b.aggregator)
+          .every((b) => partial[b.key] != null);
+        if (!ok) return null;
+        const partialMerged = mergeBranches(auto, partial, {});
+        return buildJudgmentEnvelope(partialMerged, { modelOverrides });
+      },
+      ...executorOpts,
+    });
+    execution = r.execution;
+
+    if (writeDir) {
+      for (const [k, v] of Object.entries(r.branches)) {
+        writeFileSync(join(writeDir, `${k}.json`), JSON.stringify(v, null, 2));
+      }
+    }
+    effectiveBranchesDir = writeDir ?? branchesDir;
+    for (const rec of execution) {
+      if (rec.status === 'failed' || rec.status === 'timeout') {
+        console.error(`WARN: branch ${rec.branch} ${rec.status}: ${rec.error ?? ''}`);
+      } else if (rec.status === 'fallback-routed') {
+        console.error(`WARN: branch ${rec.branch} fallback-routed (${rec.note})`);
+      }
+    }
+  }
+
   // --- gather LLM-produced branches ---
   let fromDir = {};
-  if (branchesDir) fromDir = loadBranchesDir(branchesDir);
+  if (effectiveBranchesDir) fromDir = loadBranchesDir(effectiveBranchesDir);
   let hand = {};
   if (branchesJsonPath) hand = JSON.parse(readFileSync(branchesJsonPath, 'utf8'));
 
   let merged = mergeBranches(auto, fromDir, hand);
+  if (execution) {
+    merged.meta = merged.meta ?? {};
+    merged.meta.branchExecution = execution;
+  }
 
   // --- judgment envelope (Phase 3): always written when cacheDir set so the
   // operator can dispatch it after research branches complete. If branchesDir
@@ -173,9 +221,9 @@ export async function orchestrate(opts) {
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, md);
     if (cacheDir) writeFileSync(join(cacheDir, 'branches.merged.json'), JSON.stringify(merged, null, 2));
-    return { path: abs, bytes: md.length, envelopes, scan };
+    return { path: abs, bytes: md.length, envelopes, scan, execution };
   }
-  return { path: null, bytes: md.length, md, envelopes, scan };
+  return { path: null, bytes: md.length, md, envelopes, scan, execution };
 }
 
 // Back-compat sync entry point used by existing tests.
@@ -201,6 +249,33 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (args['model-xsignal']) modelOverrides.xSignal = args['model-xsignal'];
   if (args['model-skeptic']) modelOverrides.skeptic = args['model-skeptic'];
 
+  let executor = null;
+  const executorOpts = {};
+  if ((args.mode || 'live') === 'execute') {
+    const kind = args.executor || 'cache';
+    if (kind === 'cache') {
+      const dir = args['executor-branches-dir']
+        || (args['cache-dir'] ? join(args['cache-dir'], 'branches') : null);
+      if (!dir) {
+        console.error('ERROR: --mode execute --executor cache needs --executor-branches-dir or --cache-dir');
+        process.exit(2);
+      }
+      executor = cacheAdapter(dir);
+    } else if (kind === 'cmd') {
+      if (!args['executor-cmd']) {
+        console.error('ERROR: --executor cmd needs --executor-cmd "<shell cmd reading prompt on stdin, JSON on stdout>"');
+        process.exit(2);
+      }
+      const canRoute = ['inherit', ...String(args['executor-can-route'] || '').split(',').filter(Boolean)];
+      executor = cmdAdapter(args['executor-cmd'], { canRoute });
+    } else {
+      console.error(`ERROR: unknown --executor ${kind}`);
+      process.exit(2);
+    }
+    if (args.concurrency) executorOpts.concurrency = Number(args.concurrency);
+    if (args['timeout-ms']) executorOpts.timeoutMs = Number(args['timeout-ms']);
+  }
+
   orchestrate({
     market: args.market,
     url:    args.url,
@@ -211,10 +286,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     cacheDir:         args['cache-dir'] || null,
     offline:          !!args.offline,
     modelOverrides,
+    executor, executorOpts,
   }).then((r) => {
     if (r.path) console.log(`wrote ${r.bytes} bytes → ${r.path}`);
     else if (r.md) process.stdout.write(r.md);
     if (r.envelopes?.length) console.error(`(${r.envelopes.length} envelopes built; model overrides: ${JSON.stringify(modelOverrides)})`);
+    if (r.execution?.length) {
+      const counts = r.execution.reduce((m, e) => (m[e.status] = (m[e.status] ?? 0) + 1, m), {});
+      console.error(`(execution: ${JSON.stringify(counts)})`);
+    }
   }).catch((e) => {
     console.error(`ERROR[${e.code ?? 1}]: ${e.message}`);
     process.exit(e.code ?? 1);

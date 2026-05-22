@@ -215,3 +215,79 @@ also echoed to stderr; never block render):
 Replay mode also rehydrates `settlement` + `marketStructure` from
 `cache/fetch.json` when present, so judgment citations to those branches
 remain valid across re-renders.
+
+
+## Phase 5: one-command branch executor
+
+`--mode execute` runs all branches end-to-end through a pluggable adapter.
+
+### Adapters
+
+`scripts/politics/lib/branch-runner.mjs` ships three adapters:
+
+- `fakeAdapter(handlers, { canRoute })` — in-process map; used by tests.
+- `cacheAdapter(branchesDir)` — reads pre-existing `branches/*.json` from disk.
+  Lets the executor replay an operator-dispatched run end-to-end with zero
+  network or LLM cost. Always returns `canRouteTo() === true`.
+- `cmdAdapter(cmd, { canRoute })` — shells out to `cmd` per branch. Prompt is
+  piped on stdin; the command must emit a JSON branch payload on stdout.
+  `POLITICS_BRANCH`, `POLITICS_MODEL`, and `POLITICS_INPUTS_ONLY` are set in env
+  so the wrapper can route to Hermes `delegate_task`, an OpenRouter call, or
+  any other LLM runtime without changing this file.
+
+### CLI
+
+    node scripts/politics/research-market.mjs \
+      --market KXNEXTAG-29 \
+      --url 'https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29' \
+      --mode execute \
+      --executor cache \
+      --executor-branches-dir state/politics/<date>/<mkt>.cache/branches \
+      --cache-dir state/politics/<date>/<mkt>.cache \
+      --offline \
+      --out state/politics/<date>/<mkt>.md
+
+For the `cmd` executor:
+
+    --executor cmd \
+    --executor-cmd 'path/to/my-hermes-bridge.sh' \
+    --executor-can-route grok \
+    --concurrency 4 --timeout-ms 90000
+
+### Status records
+
+Per-branch results land in `merged.meta.branchExecution[]`:
+
+    { branch, status, model, requestedModel, ms, error?, repairUsed?, note? }
+
+`status` is one of: `ok`, `repaired`, `failed`, `timeout`, `fallback-routed`.
+`fallback-routed` is recorded as an additional record alongside the actual
+ok/repaired record for that branch — the runner emits it first so the
+downgrade is visible in the meta even when the branch ultimately succeeds.
+
+### Ordering guarantee
+
+Research branches (`official`, `xSignal`, `plausibility`, `skeptic`) run in
+parallel up to `concurrency`. Judgment is only dispatched **after** all four
+research branches resolve with a non-null value — otherwise the judgment
+envelope is skipped, and Phase 4 integrity will catch any dangling citations.
+
+### Robustness
+
+Each branch output is parsed as JSON with one repair retry: triple-backtick
+fences are stripped, and the outermost `{...}`/`[...]` is salvaged. A repaired
+parse surfaces as `status: 'repaired'` (not silent).
+
+### Replay parity
+
+When `--cache-dir` is set, execute mode writes `branches/<key>.json` into
+`cacheDir/branches/`. A subsequent `--mode replay --branches-dir <that dir>`
+reproduces the report bit-for-bit (minus `asOf` timestamps), so an executed
+run is always re-runnable without re-dispatching the LLM.
+
+### Guardrails
+
+All Phase 1-4 guardrails remain active in execute mode: no trades, no sizing,
+no posting, X chatter is signal only, price alone is never a pick, cross-branch
+integrity check runs before render, and the forbidden-language scan runs on
+the rendered markdown.

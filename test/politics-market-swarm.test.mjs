@@ -395,3 +395,208 @@ test('orchestrate surfaces integrity warnings into report meta', async () => {
   assert.ok(md.includes('X_SOCIAL'),            'specific X_SOCIAL warning should render');
   assert.equal(scanForbiddenLanguage(md).clean, true);
 });
+
+
+// --- Phase 5 tests: pluggable branch executor ---
+
+import {
+  runBranches, fakeAdapter, cacheAdapter, parseBranchJson,
+} from '../scripts/politics/lib/branch-runner.mjs';
+
+function envsFromFakeKalshi(overrides = {}) {
+  const auto = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29', eventUrl: 'https://kalshi.com/x' });
+  return { auto, envs: buildEnvelopes(auto, { modelOverrides: overrides }) };
+}
+
+const FAKE_BRANCH_OUTPUTS = {
+  official:    { facts: [{ claim: 'Hearing scheduled', source: 'https://judiciary.senate.gov/h', date: '2026-05-20', verified: true }] },
+  xSignal:     { narratives: [{ claim: 'Buzz', tier: 'rumor', repeated: true, source: 'https://x.com/u/status/1' }] },
+  plausibility:{ candidates: [{ name: 'Todd Blanche', strengths: ['Trump trust'], weaknesses: ['Already SDAG'], obstacles: ['Senate math'] }] },
+  skeptic:     { favoriteWrong: ['Acting AG path'], secondUnderpriced: ['Zeldin'], settlementTraps: ['Acting exclusion'], narrativeTraps: ['X echo'] },
+  judgment:    {
+    strongestSignal: 'official.facts[0]',
+    strongestCounter: 'skeptic.settlementTraps[0]',
+    biggestSettlementAmbiguity: 'Acting AG resolution path',
+    biggestUncertainty: 'Confirmation before expiry',
+    confidence: 'medium',
+    watchlistTriggers: ['Judiciary vote scheduled'],
+    wouldChangeView:   ['Withdrawal'],
+    citations: [{ branch: 'official', ref: 'facts[0]' }, { branch: 'skeptic', ref: 'settlementTraps[0]' }],
+  },
+};
+
+test('Phase 5: fakeAdapter executes all research branches in parallel and produces values', async () => {
+  const { envs } = envsFromFakeKalshi();
+  const order = [];
+  const adapter = fakeAdapter({
+    official:     async () => { order.push('official:start');     await new Promise(r => setTimeout(r, 10)); order.push('official:end');     return FAKE_BRANCH_OUTPUTS.official; },
+    xSignal:      async () => { order.push('xSignal:start');      await new Promise(r => setTimeout(r, 10)); order.push('xSignal:end');      return FAKE_BRANCH_OUTPUTS.xSignal; },
+    plausibility: async () => { order.push('plausibility:start'); await new Promise(r => setTimeout(r, 10)); order.push('plausibility:end'); return FAKE_BRANCH_OUTPUTS.plausibility; },
+    skeptic:      async () => { order.push('skeptic:start');      await new Promise(r => setTimeout(r, 10)); order.push('skeptic:end');      return FAKE_BRANCH_OUTPUTS.skeptic; },
+  });
+  const r = await runBranches({ envelopes: envs, adapter, concurrency: 4 });
+  assert.equal(Object.keys(r.branches).sort().join(','), 'official,plausibility,skeptic,xSignal');
+  // Parallel proof: first 4 events must all be `:start` before any `:end`.
+  const firstFour = order.slice(0, 4);
+  assert.ok(firstFour.every((s) => s.endsWith(':start')), `expected 4 starts first, got ${JSON.stringify(order)}`);
+  assert.equal(r.execution.filter((e) => e.status === 'ok').length, 4);
+});
+
+test('Phase 5: judgment runs only AFTER research branches complete', async () => {
+  const { auto, envs } = envsFromFakeKalshi();
+  const seenAtJudgment = { official: false, xSignal: false, plausibility: false, skeptic: false };
+  let researchDoneCount = 0;
+  const adapter = fakeAdapter({
+    official:     async () => { researchDoneCount++; return FAKE_BRANCH_OUTPUTS.official; },
+    xSignal:      async () => { researchDoneCount++; return FAKE_BRANCH_OUTPUTS.xSignal; },
+    plausibility: async () => { researchDoneCount++; return FAKE_BRANCH_OUTPUTS.plausibility; },
+    skeptic:      async () => { researchDoneCount++; return FAKE_BRANCH_OUTPUTS.skeptic; },
+    judgment: async () => {
+      assert.equal(researchDoneCount, 4, 'judgment fired before all research branches completed');
+      return FAKE_BRANCH_OUTPUTS.judgment;
+    },
+  });
+  const r = await runBranches({
+    envelopes: envs, adapter, concurrency: 4,
+    judgmentEnvelopeBuilder: (partial) => {
+      for (const k of Object.keys(seenAtJudgment)) seenAtJudgment[k] = partial[k] != null;
+      return { branch: 'judgment', model: 'inherit', prompt: 'j', expectedOutputPath: 'judgment.json', inputsOnly: true };
+    },
+  });
+  assert.ok(r.branches.judgment, 'judgment should be populated');
+  assert.deepEqual(seenAtJudgment, { official: true, xSignal: true, plausibility: true, skeptic: true });
+});
+
+test('Phase 5: fallback-routed status when adapter cannot route requested model', async () => {
+  const { envs } = envsFromFakeKalshi({ xSignal: 'grok', skeptic: 'grok' });
+  const adapter = fakeAdapter({
+    official:     async () => FAKE_BRANCH_OUTPUTS.official,
+    xSignal:      async () => FAKE_BRANCH_OUTPUTS.xSignal,
+    plausibility: async () => FAKE_BRANCH_OUTPUTS.plausibility,
+    skeptic:      async () => FAKE_BRANCH_OUTPUTS.skeptic,
+  }, { canRoute: ['inherit'] });
+  const r = await runBranches({ envelopes: envs, adapter });
+  const fallbacks = r.execution.filter((e) => e.status === 'fallback-routed');
+  assert.equal(fallbacks.length, 2);
+  const branches = fallbacks.map((e) => e.branch).sort();
+  assert.deepEqual(branches, ['skeptic', 'xSignal']);
+  // The actual run record still completes ok.
+  assert.equal(r.execution.filter((e) => e.branch === 'xSignal' && e.status === 'ok').length, 1);
+});
+
+test('Phase 5: parseBranchJson succeeds with one repair retry for fenced JSON', () => {
+  const fenced = "```json\n{\"facts\":[]}\n```\n";
+  const r = parseBranchJson(fenced, { branchKey: 'official' });
+  assert.equal(r.repaired, true);
+  assert.deepEqual(r.value, { facts: [] });
+
+  const ok = parseBranchJson('{"facts":[]}', { branchKey: 'official' });
+  assert.equal(ok.repaired, false);
+
+  assert.throws(() => parseBranchJson('not json at all', { branchKey: 'official' }));
+});
+
+test('Phase 5: branch repair surfaces as "repaired" status, broken surfaces as "failed"', async () => {
+  const { envs } = envsFromFakeKalshi();
+  const adapter = fakeAdapter({
+    official:     async () => "```json\n" + JSON.stringify(FAKE_BRANCH_OUTPUTS.official) + "\n```",
+    xSignal:      async () => 'totally broken not-json',
+    plausibility: async () => FAKE_BRANCH_OUTPUTS.plausibility,
+    skeptic:      async () => FAKE_BRANCH_OUTPUTS.skeptic,
+  });
+  const r = await runBranches({ envelopes: envs, adapter });
+  const byBranch = Object.fromEntries(r.execution.filter((e) => e.status !== 'fallback-routed').map((e) => [e.branch, e]));
+  assert.equal(byBranch.official.status, 'repaired');
+  assert.equal(byBranch.official.repairUsed, true);
+  assert.equal(byBranch.xSignal.status, 'failed');
+  assert.match(byBranch.xSignal.error, /parse/);
+  assert.equal(r.branches.xSignal, undefined);
+});
+
+test('Phase 5: timeout surfaces as "timeout" status in execution[]', async () => {
+  const { envs } = envsFromFakeKalshi();
+  const adapter = fakeAdapter({
+    official:     async () => new Promise(() => {}),  // hangs forever
+    xSignal:      async () => FAKE_BRANCH_OUTPUTS.xSignal,
+    plausibility: async () => FAKE_BRANCH_OUTPUTS.plausibility,
+    skeptic:      async () => FAKE_BRANCH_OUTPUTS.skeptic,
+  });
+  const r = await runBranches({ envelopes: envs, adapter, timeoutMs: 30, concurrency: 4 });
+  const off = r.execution.find((e) => e.branch === 'official');
+  assert.equal(off.status, 'timeout');
+  assert.match(off.error, /timed out/);
+});
+
+test('Phase 5: execute mode produces a clean rendered report end-to-end', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-exec-'));
+  const cacheDir = join(dir, 'cache');
+  const out = join(dir, 'report.md');
+  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => FAKE_KALSHI, text: async () => '' });
+  const adapter = fakeAdapter({
+    official:     async () => FAKE_BRANCH_OUTPUTS.official,
+    xSignal:      async () => FAKE_BRANCH_OUTPUTS.xSignal,
+    plausibility: async () => FAKE_BRANCH_OUTPUTS.plausibility,
+    skeptic:      async () => FAKE_BRANCH_OUTPUTS.skeptic,
+    judgment:     async () => FAKE_BRANCH_OUTPUTS.judgment,
+  });
+  const r = await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'execute', cacheDir, out, fetchImpl: fakeFetch,
+    executor: adapter, executorOpts: { concurrency: 4, timeoutMs: 5000 },
+  });
+  assert.equal(r.path, out);
+  assert.ok(r.execution.length >= 5, 'should have 4 research + 1 judgment execution records');
+  const md = readFileSync(out, 'utf8');
+  assert.equal(scanForbiddenLanguage(md).clean, true);
+  assert.ok(md.includes('Todd Blanche'));
+  // branches/*.json must have been written for replay parity.
+  const writtenJudgment = JSON.parse(readFileSync(join(cacheDir, 'branches', 'judgment.json'), 'utf8'));
+  assert.equal(writtenJudgment.confidence, 'medium');
+  // meta.branchExecution must be embedded in merged.
+  const merged = JSON.parse(readFileSync(join(cacheDir, 'branches.merged.json'), 'utf8'));
+  assert.ok(Array.isArray(merged.meta.branchExecution));
+});
+
+test('Phase 5: cacheAdapter replays branches from disk', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-cache-'));
+  const bdir = join(dir, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  for (const [k, v] of Object.entries(FAKE_BRANCH_OUTPUTS)) {
+    writeFileSync(join(bdir, `${k}.json`), JSON.stringify(v));
+  }
+  const { envs } = envsFromFakeKalshi();
+  const r = await runBranches({
+    envelopes: envs,
+    adapter: cacheAdapter(bdir),
+    judgmentEnvelopeBuilder: () => ({ branch: 'judgment', model: 'inherit', prompt: 'j', expectedOutputPath: 'judgment.json', inputsOnly: true }),
+  });
+  assert.ok(r.branches.judgment);
+  assert.equal(r.execution.filter((e) => e.status === 'ok').length, 5);
+});
+
+test('Phase 5: existing replay/envelopes-only modes still work (regression)', async () => {
+  // envelopes-only
+  const dir1 = mkdtempSync(join(tmpdir(), 'pol-env-'));
+  const cacheDir1 = join(dir1, 'cache');
+  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => FAKE_KALSHI, text: async () => '' });
+  const r1 = await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'envelopes-only', cacheDir: cacheDir1, fetchImpl: fakeFetch,
+  });
+  assert.ok(r1.envelopes.length >= 4);
+  assert.equal(r1.path, undefined);
+
+  // replay
+  const dir2 = mkdtempSync(join(tmpdir(), 'pol-rp2-'));
+  const bdir = join(dir2, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  writeFileSync(join(bdir, 'official.json'),     JSON.stringify(FAKE_BRANCH_OUTPUTS.official));
+  writeFileSync(join(bdir, 'plausibility.json'), JSON.stringify(FAKE_BRANCH_OUTPUTS.plausibility));
+  const out = join(dir2, 'replay.md');
+  const r2 = await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'replay', branchesDir: bdir, out,
+  });
+  assert.equal(r2.path, out);
+  assert.equal(r2.execution, null, 'replay mode must not produce execution records');
+});
