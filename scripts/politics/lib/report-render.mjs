@@ -28,7 +28,9 @@ function renderTLDR(b) {
   out += bullet(`URL: ${safe(m.url)}`);
   out += bullet(`As of: ${safe(m.asOf)}`);
   out += bullet(`Current market leader: ${leader ? `${leader.candidate} @ ${leader.yesCents}¢ YES` : PLACEHOLDER}`);
-  out += bullet(`Best non-price reason: ${safe(j.bestNonPriceReason)}`);
+  out += bullet(`Strongest verified non-price signal: ${safe(j.strongestSignal ?? j.bestNonPriceReason)}`);
+  out += bullet(`Strongest counter-signal: ${safe(j.strongestCounter)}`);
+  out += bullet(`Biggest settlement ambiguity: ${safe(j.biggestSettlementAmbiguity)}`);
   out += bullet(`Biggest uncertainty: ${safe(j.biggestUncertainty)}`);
   out += bullet(`Confidence: ${safe(j.confidence)}`);
   out += '\n' + NO_TRADE + '\n\n';
@@ -134,12 +136,20 @@ function renderSkeptic(b) {
 function renderJudgment(b) {
   const j = b.judgment ?? {};
   let out = h(2, '9. Final Research Judgment');
-  out += bullet(`Probability range: ${j.probabilityRange ?? PLACEHOLDER}`);
   out += bullet(`Confidence: ${safe(j.confidence)}`);
-  out += '\n**What would change the view**\n';
+  out += bullet(`Strongest verified non-price signal: ${safe(j.strongestSignal ?? j.bestNonPriceReason)}`);
+  out += bullet(`Strongest counter-signal: ${safe(j.strongestCounter)}`);
+  out += bullet(`Biggest settlement ambiguity: ${safe(j.biggestSettlementAmbiguity)}`);
+  out += bullet(`Biggest uncertainty: ${safe(j.biggestUncertainty)}`);
+  out += '\n**Watchlist triggers (what to monitor next)**\n';
+  out += (arr(j.watchlistTriggers ?? j.monitorNext).map(s => bullet(s)).join('') || `${PLACEHOLDER}\n`) + '\n';
+  out += '**What would change the view**\n';
   out += (arr(j.wouldChangeView).map(s => bullet(s)).join('') || `${PLACEHOLDER}\n`) + '\n';
-  out += '**What to monitor next**\n';
-  out += (arr(j.monitorNext).map(s => bullet(s)).join('') || `${PLACEHOLDER}\n`) + '\n';
+  if (Array.isArray(j.citations) && j.citations.length) {
+    out += '**Citations (branches used)**\n';
+    out += j.citations.map(c => bullet(`${c.branch}${c.ref ? ' → ' + c.ref : ''}`)).join('') + '\n';
+  }
+  out += '> Research-only. No trade recommendation. No bankroll sizing. No candidate ranking as a pick.\n';
   out += NO_TRADE + '\n';
   return out;
 }

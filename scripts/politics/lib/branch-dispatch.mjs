@@ -30,6 +30,7 @@ export const BRANCHES = [
   { key: 'marketStructure',promptFile: 'market-structure.md',autoBuilt: true, defaultModel: 'inherit' },
   { key: 'plausibility',   promptFile: 'plausibility.md',   autoBuilt: false, defaultModel: 'inherit' },
   { key: 'skeptic',        promptFile: 'skeptic.md',        autoBuilt: false, defaultModel: 'grok' },
+  { key: 'judgment',       promptFile: 'judgment.md',       autoBuilt: false, defaultModel: 'inherit', aggregator: true },
 ];
 
 function loadPrompt(name) {
@@ -52,12 +53,32 @@ export function buildEnvelopes({ market, settlement, marketStructure }, { modelO
       .join('\n'),
   };
 
-  return BRANCHES.filter((b) => !b.autoBuilt).map((b) => ({
+  return BRANCHES.filter((b) => !b.autoBuilt && !b.aggregator).map((b) => ({
     branch: b.key,
     model:  modelOverrides[b.key] ?? b.defaultModel,
     prompt: interpolate(loadPrompt(b.promptFile), ctx),
     expectedOutputPath: `${b.key}.json`,
   }));
+}
+
+// Build the judgment envelope from already-merged branch JSON. The judgment
+// branch reads only merged JSON — it is forbidden from introducing new facts.
+export function buildJudgmentEnvelope(merged, { modelOverrides = {} } = {}) {
+  const spec = BRANCHES.find((b) => b.key === 'judgment');
+  const ctx = {
+    market_id:   merged.market?.id ?? '',
+    market_url:  merged.market?.url ?? '',
+    market_title:merged.market?.title ?? '',
+    asOf:        merged.market?.asOf ?? '',
+    mergedJson:  JSON.stringify(merged, null, 2),
+  };
+  return {
+    branch: 'judgment',
+    model:  modelOverrides.judgment ?? spec.defaultModel,
+    prompt: interpolate(loadPrompt(spec.promptFile), ctx),
+    expectedOutputPath: 'judgment.json',
+    inputsOnly: true,
+  };
 }
 
 function interpolate(tpl, ctx) {
@@ -71,11 +92,20 @@ export function loadBranchesDir(dir) {
   for (const f of readdirSync(dir)) {
     if (!f.endsWith('.json')) continue;
     const key = f.replace(/\.json$/, '');
+    let parsed;
     try {
-      out[key] = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+      parsed = JSON.parse(readFileSync(join(dir, f), 'utf8'));
     } catch (e) {
       throw new Error(`Failed to parse ${join(dir, f)}: ${e.message}`);
     }
+    // Auto-unwrap: branch outputs sometimes wrap their payload under a top-level
+    // key matching the branch name (e.g. judgment.json => { judgment: {...} }).
+    // Unwrap so merged[key] is the inner object the renderer expects.
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        && Object.keys(parsed).length === 1 && Object.prototype.hasOwnProperty.call(parsed, key)) {
+      parsed = parsed[key];
+    }
+    out[key] = parsed;
   }
   return out;
 }

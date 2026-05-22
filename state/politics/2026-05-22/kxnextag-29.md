@@ -4,11 +4,13 @@
 
 - Market: Attorney General (KXNEXTAG-29)
 - URL: https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29
-- As of: 2026-05-22T00:34:38.988Z
+- As of: 2026-05-22T00:43:45.316Z
 - Current market leader: Todd Blanche @ 44¢ YES
-- Best non-price reason: (UNKNOWN — branch not run)
-- Biggest uncertainty: (UNKNOWN — branch not run)
-- Confidence: (UNKNOWN — branch not run)
+- Strongest verified non-price signal: Per xSignal, Todd Blanche is reportedly currently serving as Acting AG after Bondi's early-April 2026 removal and has appeared before the Senate for confirmation to become permanent AG, with a public endorsement from Jeanine Pirro — making him the most-discussed named successor in the reporting captured in the merged JSON; this aligns with marketStructure showing him as the top contract at 44¢ YES.
+- Strongest counter-signal: Per skeptic, Blanche's profile as Trump's former personal criminal defense lawyer mirrors the conflict-of-interest dynamic that sank Gaetz; Sen. Tillis has signaled skepticism and a Collins/Murkowski/McConnell-style 3-vote GOP loss would block confirmation in a 53-seat majority, while a 'long acting' branch (Blanche indefinitely Acting under FVRA, no new confirmed AG before Jan 20 2029) resolves NO to every named candidate and is structurally unpriced.
+- Biggest settlement ambiguity: Per settlement and skeptic, the rules say recess appointments count 'even if struck down,' but the interaction with the 'first NEW person' language is exploitable: if Blanche (already Acting) were installed via a recess appointment, it is unclear whether Kalshi would treat him as the 'first new' AG or as a continuation, and intra-session adjournment-clause appointments (Noel Canning territory) sit in a gray zone the merged settlement branch does not explicitly disambiguate.
+- Biggest uncertainty: Whether a Senate-confirmed (or qualifying recess-appointed) successor to Bondi will actually be seated before Jan 20, 2029 at all — the merged JSON shows Bondi was reportedly removed in April 2026 and Blanche is Acting, but does not establish a confirmation outcome, leaving the 'long acting tenure, no NEW AG ever confirmed' tail materially open and not directly tickered on the board.
+- Confidence: medium
 
 > No trade recommendation. No bankroll sizing. Research-only.
 
@@ -212,15 +214,45 @@ Kalshi is thin on personnel markets; small fills move prices, public chatter can
 
 ## 9. Final Research Judgment
 
-- Probability range: (UNKNOWN — branch not run)
-- Confidence: (UNKNOWN — branch not run)
+- Confidence: medium
+- Strongest verified non-price signal: Per xSignal, Todd Blanche is reportedly currently serving as Acting AG after Bondi's early-April 2026 removal and has appeared before the Senate for confirmation to become permanent AG, with a public endorsement from Jeanine Pirro — making him the most-discussed named successor in the reporting captured in the merged JSON; this aligns with marketStructure showing him as the top contract at 44¢ YES.
+- Strongest counter-signal: Per skeptic, Blanche's profile as Trump's former personal criminal defense lawyer mirrors the conflict-of-interest dynamic that sank Gaetz; Sen. Tillis has signaled skepticism and a Collins/Murkowski/McConnell-style 3-vote GOP loss would block confirmation in a 53-seat majority, while a 'long acting' branch (Blanche indefinitely Acting under FVRA, no new confirmed AG before Jan 20 2029) resolves NO to every named candidate and is structurally unpriced.
+- Biggest settlement ambiguity: Per settlement and skeptic, the rules say recess appointments count 'even if struck down,' but the interaction with the 'first NEW person' language is exploitable: if Blanche (already Acting) were installed via a recess appointment, it is unclear whether Kalshi would treat him as the 'first new' AG or as a continuation, and intra-session adjournment-clause appointments (Noel Canning territory) sit in a gray zone the merged settlement branch does not explicitly disambiguate.
+- Biggest uncertainty: Whether a Senate-confirmed (or qualifying recess-appointed) successor to Bondi will actually be seated before Jan 20, 2029 at all — the merged JSON shows Bondi was reportedly removed in April 2026 and Blanche is Acting, but does not establish a confirmation outcome, leaving the 'long acting tenure, no NEW AG ever confirmed' tail materially open and not directly tickered on the board.
+
+**Watchlist triggers (what to monitor next)**
+- Senate Judiciary vote or floor vote scheduled on a Blanche AG nomination
+- Public 'no' commitment from Tillis, Collins, Murkowski, or McConnell on a named nominee
+- Withdrawal of Blanche's nomination and pivot to a clean Republican (Zeldin pattern)
+- Trump nominating someone not currently on the Kalshi board (dark horse)
+- Recess-appointment maneuver to install a permanent AG
+- Kalshi clarification on whether Acting Blanche counts as 'first NEW' if recess-appointed
+- Zeldin formally moved off EPA or a new EPA Administrator named
+- Pirro elevated from interim US Atty DC toward a DOJ leadership role
 
 **What would change the view**
-(UNKNOWN — branch not run)
+- Confirmed reporting that Blanche has been withdrawn or that Trump publicly pivoted to another named candidate
+- On-record GOP whip count showing Blanche has the votes (would weaken the skeptic counter)
+- Evidence that Bondi was not in fact removed and remains AG (would undercut the entire successor frame)
+- Kalshi adjudication note resolving the recess-appointment / 'first NEW' ambiguity
+- Independent reporting elevating a candidate currently priced near zero (e.g., Schmitt, Dhillon) to active consideration
+- Senate calendar evidence that no AG confirmation vote is feasible before Jan 20, 2029
 
-**What to monitor next**
-(UNKNOWN — branch not run)
+**Citations (branches used)**
+- marketStructure → Top contract Todd Blanche 44¢ YES; Zeldin 27¢; Pirro 3¢; 22 contracts on board.
+- official → Pam Bondi confirmed 54-46 as 87th AG (2025-02-04) and sworn in 2025-02-05; Trump reiterated support Nov 2025.
+- official → Blanche confirmed as Deputy AG; Zeldin confirmed as EPA Administrator; Dhillon confirmed as AAG Civil Rights.
+- official → Ed Martin's DC US Atty nomination withdrawn 2025-05-08; Pirro named interim US Atty for DC.
+- xSignal → Reports that Bondi was fired in early April 2026 and Blanche is Acting AG and 'auditioning' / appeared before Senate for permanent AG.
+- xSignal → Pirro publicly endorsed Blanche as 'great AG'; Zeldin May 21 2026 Oval Office lunch interpreted as job interview; Zeldin May 10 said EPA focus '100%'.
+- xSignal → Conservative shortlists also include Dhillon, Schmitt; DeSantis, Paxton, Habba listed only as long shots.
+- plausibility → Blanche strengths: shortest institutional path as sitting DAG, deepest loyalty signal, pre-built confirmation file; weaknesses: 'personal lawyer' frame risks Collins/Murkowski-type defections.
+- plausibility → Zeldin already Senate-confirmed once this Congress; weakness: no DOJ prosecutorial experience and EPA-continuity costs of moving him.
+- skeptic → Tillis publicly skeptical of Blanche; Gaetz-pattern withdrawal risk; 'long acting' branch resolves NO to all named candidates and is unpriced.
+- skeptic → Settlement traps: recess-appointment ambiguity vs 'first NEW person'; Noel Canning intra-session question; withdrawn-then-resubmitted identity issue.
+- settlement → Rules: first new person to be AG before Jan 20, 2029; Acting/Interim excluded; Senate-confirmed and recess appointments (even if struck down) included.
 
+> Research-only. No trade recommendation. No bankroll sizing. No candidate ranking as a pick.
 > No trade recommendation. No bankroll sizing. Research-only.
 ## Meta
 

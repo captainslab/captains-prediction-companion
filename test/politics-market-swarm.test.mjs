@@ -242,3 +242,94 @@ test('orchestrate fails fast (code 3) on un-repairable branch JSON', async () =>
     (e) => e.code === 3,
   );
 });
+
+// --- Phase 3 tests: Judgment / Aggregator branch ---
+
+import { buildJudgmentEnvelope } from '../scripts/politics/lib/branch-dispatch.mjs';
+
+const PHASE3_JUDGMENT = {
+  strongestSignal: 'Senate Judiciary hearing already on calendar (official.facts[0])',
+  strongestCounter: 'Acting AG exclusion creates real NO path (skeptic.settlementTraps[0])',
+  biggestSettlementAmbiguity: 'Whether an acting AG could resolve every contract NO',
+  biggestUncertainty: 'Whether confirmation occurs before market expiry',
+  confidence: 'medium',
+  watchlistTriggers: ['Senate Judiciary vote scheduled', 'On-record withdrawal by leader'],
+  wouldChangeView:   ['Withdrawal of nomination', 'Senate Republican defection cluster'],
+  citations: [
+    { branch: 'official', ref: 'facts[0] hearing scheduled' },
+    { branch: 'skeptic',  ref: 'settlementTraps[0] acting AG trap' },
+  ],
+};
+
+test('validateBranches accepts the Phase 3 judgment shape', () => {
+  const sample = { ...SAMPLE, judgment: PHASE3_JUDGMENT };
+  const v = validateBranches(sample);
+  assert.ok(v.ok, JSON.stringify(v.errors));
+});
+
+test('validateBranches rejects judgment with wrong-typed arrays', () => {
+  const bad = { ...SAMPLE, judgment: { ...PHASE3_JUDGMENT, watchlistTriggers: 'nope' } };
+  const v = validateBranches(bad);
+  assert.equal(v.ok, false);
+  assert.ok(v.errors.some((e) => e.includes('watchlistTriggers')));
+});
+
+test('renderReport surfaces Phase 3 judgment fields in TLDR and §9', () => {
+  const md = renderReport({ ...SAMPLE, judgment: PHASE3_JUDGMENT });
+  assert.ok(md.includes('Strongest verified non-price signal'), 'TLDR strongestSignal label');
+  assert.ok(md.includes('Strongest counter-signal'),            'TLDR counter-signal label');
+  assert.ok(md.includes('Biggest settlement ambiguity'),        'TLDR settlement ambiguity label');
+  assert.ok(md.includes('Watchlist triggers'),                  '§9 watchlist triggers label');
+  assert.ok(md.includes('Senate Judiciary hearing already on calendar'), 'judgment text rendered');
+  assert.ok(md.includes('Research-only.'), 'explicit no-trade research-only line');
+  // forbidden-language scan must stay clean on the rendered report
+  assert.equal(scanForbiddenLanguage(md).clean, true);
+});
+
+test('buildJudgmentEnvelope wraps merged JSON, marks inputsOnly, defaults inherit', () => {
+  const merged = { ...SAMPLE, judgment: undefined };
+  const env = buildJudgmentEnvelope(merged);
+  assert.equal(env.branch, 'judgment');
+  assert.equal(env.inputsOnly, true);
+  assert.equal(env.expectedOutputPath, 'judgment.json');
+  assert.equal(env.model, 'inherit');
+  assert.match(env.prompt, /Use ONLY the merged JSON/);
+  assert.match(env.prompt, /Todd Blanche/); // merged JSON injected
+});
+
+test('judgment prompt does not allow trade/sizing/pick language in output spec', () => {
+  const env = buildJudgmentEnvelope(SAMPLE);
+  // The prompt itself negates picks/sizing — it must not instruct prescriptive output.
+  assert.ok(!/\b(buy yes|buy no|place a trade|recommend(ed)? (a |to )?(trade|bet)|kelly fraction|stake \d)/i.test(env.prompt));
+  assert.match(env.prompt, /Do NOT produce a pick/);
+});
+
+test('orchestrate replay mode renders judgment when judgment.json is present', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-judge-'));
+  const bdir = join(dir, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  writeFileSync(join(bdir, 'official.json'),    JSON.stringify({ facts: [] }));
+  writeFileSync(join(bdir, 'plausibility.json'), JSON.stringify({ candidates: [] }));
+  writeFileSync(join(bdir, 'judgment.json'),    JSON.stringify(PHASE3_JUDGMENT));
+  const out = join(dir, 'r.md');
+  const r = await orchestrate({ market: 'X', url: 'u', mode: 'replay', branchesDir: bdir, out });
+  const md = readFileSync(r.path, 'utf8');
+  assert.ok(md.includes('Senate Judiciary hearing already on calendar'));
+  assert.ok(md.includes('Watchlist triggers'));
+  assert.equal(scanForbiddenLanguage(md).clean, true);
+});
+
+test('orchestrate live mode writes judgment-envelope.json to cacheDir', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-jenv-'));
+  const cacheDir = join(dir, 'cache');
+  const out = join(dir, 'r.md');
+  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => FAKE_KALSHI, text: async () => '' });
+  await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'live', cacheDir, out, fetchImpl: fakeFetch,
+  });
+  const jenv = JSON.parse(readFileSync(join(cacheDir, 'judgment-envelope.json'), 'utf8'));
+  assert.equal(jenv.branch, 'judgment');
+  assert.equal(jenv.inputsOnly, true);
+  assert.match(jenv.prompt, /Use ONLY the merged JSON/);
+});

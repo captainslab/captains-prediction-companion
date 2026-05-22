@@ -127,3 +127,70 @@ node scripts/politics/research-market.mjs --market KXNEXTAG-29 \
 
 The renderer is pure: same `branches.json` ⇒ same report bytes. Tested in
 `test/politics-market-swarm.test.mjs`.
+
+## Phase 3: Judgment branch + operator dispatch flow
+
+The orchestrator now writes a dedicated **judgment** envelope after merging the
+research branches. The judgment branch reads ONLY the merged JSON — it cannot
+introduce new facts, sources, prices, or candidates. It produces
+`judgment.json` with: `strongestSignal`, `strongestCounter`,
+`biggestSettlementAmbiguity`, `biggestUncertainty`, `confidence`,
+`watchlistTriggers`, `wouldChangeView`, `citations`. These populate TLDR
+and section 9 of the rendered report instead of `(UNKNOWN — branch not run)`.
+
+### Model routing (Phase 3 default)
+
+Main implementation/controller stays on the inherited Opus session. Only the
+**xSignal** and **skeptic** branches default to `grok` routing because they
+benefit from live X / contrarian search. If Grok routing is unavailable, the
+operator falls back to the inherited provider and the branch metadata records
+the fallback. Phase 3 does not block on Grok availability.
+
+### Operator command flow
+
+```
+# 1. Generate live fetch + auto branches + envelopes + judgment-envelope.
+DATE=$(date -u +%F)
+CACHE=state/politics/$DATE/kxnextag-29.cache
+node scripts/politics/research-market.mjs \
+  --market KXNEXTAG-29 \
+  --url    https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29 \
+  --cache-dir $CACHE \
+  --out       state/politics/$DATE/kxnextag-29.md
+
+# 2. Dispatch each research branch via Hermes delegate_task (or any operator/
+#    cron runner). Each subagent reads $CACHE/envelopes.json[i].prompt and
+#    writes its output JSON to $CACHE/branches/<branch>.json.
+#    The judgment branch reads $CACHE/judgment-envelope.json and writes
+#    $CACHE/branches/judgment.json AFTER the research branches complete.
+
+# 3. Replay/re-render the final report from the populated branch cache.
+node scripts/politics/research-market.mjs \
+  --market KXNEXTAG-29 \
+  --url    https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29 \
+  --branches-dir $CACHE/branches \
+  --cache-dir    $CACHE \
+  --out          state/politics/$DATE/kxnextag-29.md \
+  --offline
+```
+
+`loadBranchesDir` auto-unwraps top-level keys that match the branch name, so a
+judgment JSON of the form `{ "judgment": { ... } }` is accepted as written by
+the prompt spec.
+
+### Exit codes
+
+- 0 ok
+- 2 bad args
+- 3 schema failure (after one repair attempt)
+- 4 Kalshi blocker
+- 5 forbidden-language hit in the rendered report (prescriptive trade/sizing/
+  posting language)
+
+### Guardrails preserved
+
+- No trade recommendation, no sizing, no posting.
+- X chatter stays labeled as signal; never promoted to fact.
+- Judgment cannot introduce facts not already in merged JSON.
+- Forbidden-language scan runs on every rendered report; failure exits 5.
+

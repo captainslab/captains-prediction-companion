@@ -28,7 +28,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { renderReport } from './lib/report-render.mjs';
 import { fetchEventMarkets, buildMarketBranches } from './lib/kalshi-fetch.mjs';
-import { buildEnvelopes, loadBranchesDir, mergeBranches, BRANCHES } from './lib/branch-dispatch.mjs';
+import { buildEnvelopes, buildJudgmentEnvelope, loadBranchesDir, mergeBranches, BRANCHES } from './lib/branch-dispatch.mjs';
 import { validateBranches, scanForbiddenLanguage } from './lib/branch-contract.mjs';
 
 function parseArgs(argv) {
@@ -108,6 +108,18 @@ export async function orchestrate(opts) {
   if (branchesJsonPath) hand = JSON.parse(readFileSync(branchesJsonPath, 'utf8'));
 
   let merged = mergeBranches(auto, fromDir, hand);
+
+  // --- judgment envelope (Phase 3): always written when cacheDir set so the
+  // operator can dispatch it after research branches complete. If branchesDir
+  // already includes judgment.json it will flow through via loadBranchesDir
+  // above and be rendered into the report.
+  if (cacheDir) {
+    const jEnv = buildJudgmentEnvelope(merged, { modelOverrides });
+    writeFileSync(join(cacheDir, 'judgment-envelope.json'), JSON.stringify(jEnv, null, 2));
+  }
+  if (mode === 'judgment-envelope-only') {
+    return { judgmentEnvelope: buildJudgmentEnvelope(merged, { modelOverrides }), merged };
+  }
 
   // --- validate (one repair attempt, then fail) ---
   let v = validateBranches(merged);

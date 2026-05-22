@@ -77,6 +77,18 @@ function checkSkeptic(s, errs, { repair }) {
   }
 }
 
+function checkJudgment(j, errs, { repair }) {
+  if (j === undefined) return;
+  if (!isObj(j))             { errs.push('judgment: must be object'); return; }
+  for (const k of ['strongestSignal', 'strongestCounter', 'biggestSettlementAmbiguity', 'biggestUncertainty', 'confidence']) {
+    if (j[k] !== undefined && typeof j[k] !== 'string') errs.push(`judgment.${k}: must be string`);
+  }
+  for (const k of ['watchlistTriggers', 'wouldChangeView', 'citations']) {
+    if (j[k] === undefined && repair) j[k] = [];
+    else if (j[k] !== undefined && !Array.isArray(j[k])) errs.push(`judgment.${k}: must be array`);
+  }
+}
+
 export function validateBranches(input, { repair = false } = {}) {
   const errs = [];
   if (!isObj(input))         return { ok: false, errors: ['root: must be object'], repaired: null };
@@ -93,6 +105,7 @@ export function validateBranches(input, { repair = false } = {}) {
   checkMarketStructure(out.marketStructure, errs, { repair });
   checkPlausibility(out.plausibility, errs, { repair });
   checkSkeptic(out.skeptic, errs, { repair });
+  checkJudgment(out.judgment, errs, { repair });
 
   return { ok: errs.length === 0, errors: errs, repaired: repair ? out : null };
 }
