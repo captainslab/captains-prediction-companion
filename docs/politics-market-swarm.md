@@ -6,21 +6,56 @@ a structured proof-based report. Does **not** size, trade, post, or recommend.
 Test market for the first run:
 `https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29`
 
-## Entry point
+## Entry point (Phase 2 — end-to-end)
 
 ```
 node scripts/politics/research-market.mjs \
   --market KXNEXTAG-29 \
   --url    https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29 \
   --out    state/politics/<YYYY-MM-DD>/<market>.md \
-  [--branches-json path/to/branches.json]
+  --cache-dir       state/politics/<YYYY-MM-DD>/<market>.cache \
+  --branches-dir    state/politics/<YYYY-MM-DD>/<market>.cache/branches \
+  --mode            live          # live | replay | envelopes-only
+  --model-xsignal   grok          # optional: route X-Signal branch via Grok/xAI
+  --model-skeptic   grok          # optional: route Skeptic branch via Grok/xAI
+  [--offline]                     # reuse cache/fetch.json instead of network
 ```
 
-`--branches-json` supplies the merged subagent outputs (the contract is
-described below). When omitted, the script renders a scaffold report with
-TODO placeholders so an operator can fill the branches in by hand or via a
-follow-up subagent fan-out — the renderer is the same in either path, which
-is what the tests pin.
+What the orchestrator does:
+
+1. Fetches `https://api.elections.kalshi.com/trade-api/v2/markets?event_ticker=<id>`
+   and caches the raw payload to `<cache>/fetch.json`.
+2. Auto-builds `market`, `settlement` (with acting/interim language), and
+   `marketStructure` (board, OI, 24h vol) from the live response.
+3. Writes `<cache>/envelopes.json` — one prompt envelope per non-auto-built
+   branch (official, xSignal, plausibility, skeptic) with `model:` annotation
+   so an operator/cron can dispatch them through the chosen provider.
+4. Loads any branch JSON files present in `--branches-dir`
+   (`official.json`, `xSignal.json`, `plausibility.json`, `skeptic.json`,
+   optionally `judgment.json`) and merges them with the auto-built sections.
+5. Validates the merged structure against `branch-contract.mjs`. One repair
+   attempt is made; if it still fails, the orchestrator exits with code 3 and
+   the report is NOT written.
+6. Renders the report via the same pure renderer as Phase 1.
+7. Runs a forbidden-language scan against the rendered markdown
+   (`buy YES`, `place a trade`, `recommend buy/sell`, prescriptive bankroll
+   sizing, X/Telegram posting). Disclaimer language is allowed. Exits code 5 on hit.
+8. Writes the report and `<cache>/branches.merged.json` (for replay).
+
+Exit codes: 0 ok, 2 bad args, 3 schema failure, 4 Kalshi blocker, 5 forbidden-language hit.
+
+## Replay mode
+
+```
+node scripts/politics/research-market.mjs --market KXNEXTAG-29 \
+  --mode replay --branches-dir <cache>/branches --out <out>.md
+```
+
+No network. Regenerates the report from cached branch JSONs and the previously
+fetched market — useful for iterating on prompts or re-rendering after a fix
+to `report-render.mjs` without burning API calls.
+
+`--branches-json` (legacy single-file path) is still supported for back-compat.
 
 ## Branch JSON contract
 

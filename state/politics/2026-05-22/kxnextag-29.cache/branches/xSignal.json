@@ -1,0 +1,76 @@
+{
+  "narratives": [
+    {
+      "claim": "Todd Blanche is currently Acting Attorney General after Bondi was removed in early April 2026 and is widely viewed as the frontrunner for the permanent role; some accounts say he is 'auditioning' via aggressive DOJ activity.",
+      "tier": "reported",
+      "repeated": true,
+      "source": "https://x.com/kyledcheney/status/2039755260449735165"
+    },
+    {
+      "claim": "Blanche recently appeared before the Senate for confirmation to become permanent AG; Jeanine Pirro publicly endorsed him saying he 'will be a great AG.'",
+      "tier": "reported",
+      "repeated": true,
+      "source": "https://x.com/USAttyPirro/status/2056857757408477376"
+    },
+    {
+      "claim": "Critics highlight Blanche conflict-of-interest concerns due to his prior role as Trump's personal defense lawyer.",
+      "tier": "reported",
+      "repeated": true,
+      "source": "https://x.com/grok/status/2057309317544444363"
+    },
+    {
+      "claim": "Lee Zeldin remains a leading speculated AG pick; renewed buzz on May 21, 2026 after a prominent Oval Office appearance with Trump and a closed-door lunch interpreted as a 'job interview.'",
+      "tier": "rumor",
+      "repeated": true,
+      "source": "https://x.com/bernardbulletin/status/2057576625990971640"
+    },
+    {
+      "claim": "Zeldin himself deflected AG questions ~May 10, saying his 'focus 100%' is being the best EPA Administrator.",
+      "tier": "verified",
+      "repeated": false,
+      "source": "https://x.com/RichSementa/status/2053278406528098701"
+    },
+    {
+      "claim": "Pam Bondi was fired (not resigned) by Trump in early April 2026, reportedly tied to Epstein files handling and a congressional subpoena.",
+      "tier": "reported",
+      "repeated": true,
+      "source": "https://x.com/BulwarkOnline/status/2039752248113143996"
+    },
+    {
+      "claim": "Jeanine Pirro was reportedly 'gunning for the AG job' but was instead appointed US Attorney for DC; supporters still occasionally call for her to get the top role.",
+      "tier": "reported",
+      "repeated": false,
+      "source": "https://x.com/bterris/status/2040753162991091717"
+    },
+    {
+      "claim": "Ed Martin was NEVER Trump's AG pick — his DC US Attorney nomination was blocked by Sen. Tillis over Jan 6 / pardon comments; he was redirected to Pardon Attorney and later removed. Speculative AG chatter around him is fringe.",
+      "tier": "reported",
+      "repeated": true,
+      "source": "https://x.com/ReenRy14/status/2049870680582128116"
+    },
+    {
+      "claim": "Harmeet Dhillon (currently AAG for Civil Rights) is floated by base conservatives as a strong AG candidate or for promotion to Associate AG; viewed as base-friendly.",
+      "tier": "rumor",
+      "repeated": true,
+      "source": "https://x.com/Cernovich/status/2039767805785174354"
+    },
+    {
+      "claim": "Ron DeSantis and Ken Paxton appear only as 'long shot' names in commentator lists of possible AG picks; no reporting of actual consideration.",
+      "tier": "rumor",
+      "repeated": false,
+      "source": "https://x.com/DameScorpio/status/2041193104439468494"
+    },
+    {
+      "claim": "Conservative shortlists for AG most commonly include Dhillon, Zeldin, Pirro, and Sen. Eric Schmitt; Alina Habba, DeSantis, Paxton mentioned as long shots.",
+      "tier": "reported",
+      "repeated": true,
+      "source": "https://x.com/Cernovich/status/2039767805785174354"
+    },
+    {
+      "claim": "Trump publicly praised Blanche, reportedly saying he 'kept me out of jail for years' — narrative reinforcing Blanche as the loyalty-driven pick.",
+      "tier": "rumor",
+      "repeated": false,
+      "source": "https://x.com/andweknow/status/2039757512870924644"
+    }
+  ]
+}

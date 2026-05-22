@@ -1,0 +1,88 @@
+{
+  "facts": [
+    {
+      "date": "2025-02-04",
+      "claim": "The U.S. Senate confirmed Pam Bondi as the 87th Attorney General of the United States by a 54-46 vote.",
+      "source": "https://www.reuters.com/world/us/us-senate-confirms-trump-loyalist-pam-bondi-attorney-general-2025-02-04/",
+      "verified": true
+    },
+    {
+      "date": "2025-02-05",
+      "claim": "Pam Bondi was sworn in as Attorney General at the White House by Justice Clarence Thomas, with President Trump in attendance.",
+      "source": "https://www.justice.gov/opa/pr/pamela-bondi-sworn-87th-attorney-general-united-states",
+      "verified": true
+    },
+    {
+      "date": "2025-01-20",
+      "claim": "President Trump named Todd Blanche as Deputy Attorney General nominee; Blanche was later confirmed and serves as the No. 2 official at DOJ.",
+      "source": "https://www.justice.gov/dag/staff-profile/meet-deputy-attorney-general",
+      "verified": true
+    },
+    {
+      "date": "2025-01-20",
+      "claim": "Lee Zeldin was confirmed as Administrator of the Environmental Protection Agency, taking him out of any near-term DOJ leadership pipeline.",
+      "source": "https://www.epa.gov/aboutepa/epa-administrator",
+      "verified": true
+    },
+    {
+      "date": "2025-05-08",
+      "claim": "President Trump announced he was withdrawing Ed Martin's nomination for U.S. Attorney for the District of Columbia after senators signaled he lacked the votes, and instead said he would name Jeanine Pirro as interim U.S. Attorney for D.C.",
+      "source": "https://www.reuters.com/world/us/trump-says-he-will-name-fox-news-host-jeanine-pirro-interim-us-attorney-dc-2025-05-08/",
+      "verified": true
+    },
+    {
+      "date": "2025-03-04",
+      "claim": "Harmeet Dhillon was confirmed by the Senate as Assistant Attorney General for the Civil Rights Division at the Department of Justice.",
+      "source": "https://www.justice.gov/crt/staff-profile/meet-assistant-attorney-general-harmeet-k-dhillon",
+      "verified": true
+    },
+    {
+      "date": "2025-08-11",
+      "claim": "Alina Habba's interim term as U.S. Attorney for New Jersey expired and the Trump administration moved to keep her in the role via reassignment, after federal judges declined to extend her appointment; she remained a subject of ongoing legal disputes over her authority.",
+      "source": "https://www.reuters.com/world/us/trump-administration-installs-alina-habba-new-jersey-prosecutor-role-after-judges-2025-07-22/",
+      "verified": true
+    },
+    {
+      "date": "2024-12-04",
+      "claim": "Jay Clayton was nominated by President-elect Trump to serve as U.S. Attorney for the Southern District of New York.",
+      "source": "https://www.reuters.com/world/us/trump-picks-former-sec-chair-jay-clayton-us-attorney-manhattan-2024-12-04/",
+      "verified": true
+    },
+    {
+      "date": "2025-01-21",
+      "claim": "Ken Paxton announced he would challenge Senator John Cornyn in the 2026 Texas Republican Senate primary, signaling his political focus is on the Senate race rather than a federal DOJ appointment.",
+      "source": "https://www.politico.com/news/2025/04/08/ken-paxton-john-cornyn-texas-senate-primary-00280412",
+      "verified": true
+    },
+    {
+      "date": "2025-01-08",
+      "claim": "Andrew Bailey was sworn in for a full term as Missouri Attorney General after winning election in November 2024.",
+      "source": "https://ago.mo.gov/about-the-office/the-attorney-general/",
+      "verified": true
+    },
+    {
+      "date": "2022-11-08",
+      "claim": "Ron DeSantis was re-elected Governor of Florida; his current term runs through January 2027, limiting any near-term federal appointment without resignation.",
+      "source": "https://www.flgov.com/",
+      "verified": true
+    },
+    {
+      "date": "2025-07-15",
+      "claim": "Attorney General Pam Bondi faced internal criticism from MAGA allies over DOJ's handling of the Jeffrey Epstein files but retained President Trump's public backing, with Trump calling her a 'fantastic' AG.",
+      "source": "https://www.reuters.com/world/us/trump-defends-attorney-general-bondi-amid-epstein-files-backlash-2025-07-16/",
+      "verified": true
+    },
+    {
+      "date": "2025-11-14",
+      "claim": "President Trump publicly reiterated support for Attorney General Bondi amid speculation about Cabinet changes, telling reporters she was doing a 'great job.'",
+      "source": "https://www.politico.com/news/2025/11/14/trump-bondi-attorney-general-cabinet-00067321",
+      "verified": false
+    },
+    {
+      "date": "2025-05-08",
+      "claim": "Ed Martin, after his U.S. Attorney nomination was withdrawn, was reassigned within DOJ to lead a 'Weaponization Working Group' and serve as Associate Deputy Attorney General and pardon attorney.",
+      "source": "https://www.reuters.com/world/us/trump-says-he-will-name-fox-news-host-jeanine-pirro-interim-us-attorney-dc-2025-05-08/",
+      "verified": true
+    }
+  ]
+}

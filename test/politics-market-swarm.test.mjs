@@ -6,7 +6,11 @@ import { join } from 'node:path';
 
 import { renderReport, __NO_TRADE__ } from '../scripts/politics/lib/report-render.mjs';
 import { classifySource, sortBySourceTier, TIERS } from '../scripts/politics/lib/source-classifier.mjs';
-import { runResearch, buildBranches } from '../scripts/politics/research-market.mjs';
+import { runResearch, buildBranches, orchestrate } from '../scripts/politics/research-market.mjs';
+import { validateBranches, scanForbiddenLanguage } from '../scripts/politics/lib/branch-contract.mjs';
+import { buildMarketBranches, normalizeMarket } from '../scripts/politics/lib/kalshi-fetch.mjs';
+import { buildEnvelopes, mergeBranches, loadBranchesDir, BRANCHES } from '../scripts/politics/lib/branch-dispatch.mjs';
+import { mkdirSync } from 'node:fs';
 
 const SAMPLE = {
   market: { id: 'KXNEXTAG-29', url: 'https://kalshi.com/m', title: 'Next AG', asOf: '2026-05-21T00:00:00Z' },
@@ -109,4 +113,132 @@ test('buildBranches preserves provided market metadata', () => {
   const b = buildBranches({ market: 'KXNEXTAG-29', url: 'https://k/m' });
   assert.equal(b.market.id,  'KXNEXTAG-29');
   assert.equal(b.market.url, 'https://k/m');
+});
+
+// --- Phase 2 tests ---
+
+const FAKE_KALSHI = {
+  markets: [
+    { ticker: 'KXNEXTAG-29-TBLA', yes_sub_title: 'Todd Blanche', yes_bid_dollars: 0.43, yes_ask_dollars: 0.44,
+      no_bid_dollars: 0.56, no_ask_dollars: 0.57, open_interest_fp: 391875, volume_24h_fp: 32712,
+      rules_primary: 'If the first new person to be Attorney General is Todd Blanche before Jan 20, 2029, then the market resolves to Yes.',
+      rules_secondary: 'Acting and Interim holders of the office are not included in the Payout Criterion.' },
+    { ticker: 'KXNEXTAG-29-LZEL', yes_sub_title: 'Lee Zeldin', yes_bid_dollars: 0.27, yes_ask_dollars: 0.29,
+      no_bid_dollars: 0.71, no_ask_dollars: 0.73, open_interest_fp: 336175, volume_24h_fp: 23644 },
+  ],
+};
+
+test('validateBranches accepts a complete sample', () => {
+  const v = validateBranches(SAMPLE);
+  assert.ok(v.ok, JSON.stringify(v.errors));
+});
+
+test('validateBranches rejects missing market.id and root-non-object', () => {
+  assert.equal(validateBranches({}).ok, false);
+  assert.equal(validateBranches('nope').ok, false);
+  assert.equal(validateBranches({ market: { url: 'x', asOf: 'now' } }).ok, false);
+});
+
+test('validateBranches repair fills missing branch arrays', () => {
+  const v = validateBranches({ market: { id: 'X', url: 'u', asOf: 'now' }, official: {} }, { repair: true });
+  assert.ok(v.ok, JSON.stringify(v.errors));
+  assert.deepEqual(v.repaired.official.facts, []);
+});
+
+test('scanForbiddenLanguage allows disclaimer, flags prescription', () => {
+  assert.equal(scanForbiddenLanguage('No bankroll sizing. Research only.').clean, true);
+  assert.equal(scanForbiddenLanguage('I recommend buy YES at 43c').clean, false);
+  assert.equal(scanForbiddenLanguage('place a trade at the open').clean, false);
+});
+
+test('kalshi normalizeMarket converts dollars to cents', () => {
+  const n = normalizeMarket(FAKE_KALSHI.markets[0]);
+  assert.equal(n.yesBidCents, 43);
+  assert.equal(n.yesAskCents, 44);
+  assert.equal(n.candidate, 'Todd Blanche');
+});
+
+test('buildMarketBranches produces market/settlement/marketStructure', () => {
+  const b = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29', eventUrl: 'https://kalshi.com/x' });
+  assert.equal(b.market.id, 'KXNEXTAG-29');
+  assert.match(b.settlement.rules, /<CANDIDATE>/);
+  assert.match(b.settlement.actingInterim, /excluded/);
+  assert.equal(b.marketStructure.board[0].candidate, 'Todd Blanche');
+  assert.equal(b.marketStructure.board[0].yesCents, 43);
+  assert.equal(b.marketStructure.contractCount, 2);
+});
+
+test('buildEnvelopes emits one prompt per non-auto-built branch with overrides', () => {
+  const auto = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29' });
+  const envs = buildEnvelopes(auto, { modelOverrides: { xSignal: 'grok', skeptic: 'grok' } });
+  const keys = envs.map((e) => e.branch);
+  assert.deepEqual(keys.sort(), ['official', 'plausibility', 'skeptic', 'xSignal'].sort());
+  const xs = envs.find((e) => e.branch === 'xSignal');
+  assert.equal(xs.model, 'grok');
+  assert.match(xs.prompt, /Todd Blanche: 43¢ YES/);
+});
+
+test('loadBranchesDir + mergeBranches: auto-built market wins on asOf', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-bdir-'));
+  writeFileSync(join(dir, 'official.json'), JSON.stringify({ facts: [{ claim: 'x', source: 'https://doj.gov/x', date: '2026-05-20', verified: true }] }));
+  writeFileSync(join(dir, 'xSignal.json'),  JSON.stringify({ narratives: [{ claim: 'y', tier: 'rumor', repeated: false, source: 'https://x.com/z' }] }));
+  const fromDir = loadBranchesDir(dir);
+  const auto = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29' });
+  const merged = mergeBranches(auto, fromDir);
+  assert.equal(merged.official.facts.length, 1);
+  assert.equal(merged.xSignal.narratives.length, 1);
+  assert.equal(merged.market.id, 'KXNEXTAG-29');
+  assert.ok(merged.marketStructure.board.length >= 2);
+});
+
+test('orchestrate live mode with injected fetchImpl writes report + envelopes + cache', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-orch-'));
+  const cacheDir = join(dir, 'cache');
+  const out      = join(dir, 'report.md');
+  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => FAKE_KALSHI, text: async () => '' });
+  const r = await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'live', cacheDir, out, fetchImpl: fakeFetch,
+    modelOverrides: { xSignal: 'grok' },
+  });
+  assert.equal(r.path, out);
+  assert.ok(r.envelopes.length >= 4);
+  assert.ok(readFileSync(join(cacheDir, 'fetch.json'), 'utf8').includes('Todd Blanche'));
+  assert.ok(readFileSync(join(cacheDir, 'envelopes.json'), 'utf8').includes('xSignal'));
+  const md = readFileSync(out, 'utf8');
+  assert.ok(md.includes('Todd Blanche'));
+  assert.ok(md.includes('Acting and Interim') || md.includes('actingInterim') || md.includes('excluded'));
+  assert.equal(scanForbiddenLanguage(md).clean, true);
+});
+
+test('orchestrate replay mode reads cached branches without network', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-replay-'));
+  const cacheDir = join(dir, 'cache');
+  mkdirSync(cacheDir, { recursive: true });
+  // Pre-seed a branches-dir with minimal LLM outputs.
+  const bdir = join(dir, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  writeFileSync(join(bdir, 'official.json'), JSON.stringify({ facts: [] }));
+  writeFileSync(join(bdir, 'plausibility.json'), JSON.stringify({ candidates: [] }));
+  const out = join(dir, 'replay.md');
+  const r = await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'replay', branchesDir: bdir, out,
+    fetchImpl: () => { throw new Error('NETWORK FORBIDDEN IN REPLAY'); },
+  });
+  assert.equal(r.path, out);
+  const md = readFileSync(out, 'utf8');
+  assert.ok(md.startsWith('# Politics-Market Research Report'));
+});
+
+test('orchestrate fails fast (code 3) on un-repairable branch JSON', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-bad-'));
+  const bdir = join(dir, 'branches');
+  mkdirSync(bdir, { recursive: true });
+  // official.facts is a string, not an array — repair leaves it broken.
+  writeFileSync(join(bdir, 'official.json'), JSON.stringify({ facts: 'oops' }));
+  await assert.rejects(
+    () => orchestrate({ market: 'X', url: 'u', mode: 'replay', branchesDir: bdir, out: join(dir, 'r.md') }),
+    (e) => e.code === 3,
+  );
 });

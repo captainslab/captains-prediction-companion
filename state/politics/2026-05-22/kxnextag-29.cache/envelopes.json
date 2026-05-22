@@ -1,0 +1,26 @@
+[
+  {
+    "branch": "official",
+    "model": "inherit",
+    "prompt": "# Official Evidence Researcher — KXNEXTAG-29 (as of 2026-05-22T00:34:38.988Z)\n\nMarket: Attorney General — https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29\n\nTask: gather official/on-record/high-quality reporting evidence about candidates likely to be named. Allowed sources (Tier 2-4):\n- .gov (whitehouse, doj, senate, congress, judiciary.senate.gov)\n- direct quoted statements from named principals\n- Reuters, AP, NYT, WSJ, WaPo, Bloomberg, Politico, Axios, Reuters\n\nDisallowed: X posts, unsourced rumor, opinion blogs, pundits speculating.\n\nReturn JSON to `official.json`:\n```json\n{\n  \"facts\": [\n    { \"date\": \"YYYY-MM-DD\", \"claim\": \"<short>\", \"source\": \"<url>\", \"verified\": true }\n  ]\n}\n```\nMark `verified: false` if reporting is single-sourced or anonymous. Do not pad. No trade/sizing language.\n",
+    "expectedOutputPath": "official.json"
+  },
+  {
+    "branch": "xSignal",
+    "model": "grok",
+    "prompt": "# X Signal Analyst — KXNEXTAG-29\n\nUse x_search (Grok routing preferred). Map the live X discussion about who will be the next AG. Output is SIGNAL, not truth.\n\nFor each narrative, classify tier: `verified | reported | rumor | shitpost`.\nMark `repeated: true` if 3+ independent accounts echo it.\n\nTop contracts to focus on (from live market):\nTodd Blanche: 44¢ YES, OI 391948\nLee Zeldin: 27¢ YES, OI 336175\nJeanine Pirro: 3¢ YES, OI 353915\nRon DeSantis: 2¢ YES, OI 309484\nHarmeet Dhillon: 2¢ YES, OI 269153\nAlina Habba: 1¢ YES, OI 215217\nEric Schmitt: 1¢ YES, OI 162200\nJay Clayton: 1¢ YES, OI 161605\nEd Martin: 1¢ YES, OI 197668\nKen Paxton: 1¢ YES, OI 310408\n\nReturn JSON to `xSignal.json`:\n```json\n{\n  \"narratives\": [\n    { \"claim\": \"<one-sentence>\", \"tier\": \"rumor\", \"repeated\": true, \"source\": \"<x url or handle>\" }\n  ]\n}\n```\nHard rule: do NOT promote rumor to fact. No trade language. No sizing.\n",
+    "expectedOutputPath": "xSignal.json"
+  },
+  {
+    "branch": "plausibility",
+    "model": "inherit",
+    "prompt": "# Political Plausibility Analyst — KXNEXTAG-29\n\nFor each top contract, evaluate political/process plausibility. Label every claim as INFERENCE.\n\nTop contracts:\nTodd Blanche: 44¢ YES, OI 391948\nLee Zeldin: 27¢ YES, OI 336175\nJeanine Pirro: 3¢ YES, OI 353915\nRon DeSantis: 2¢ YES, OI 309484\nHarmeet Dhillon: 2¢ YES, OI 269153\nAlina Habba: 1¢ YES, OI 215217\nEric Schmitt: 1¢ YES, OI 162200\nJay Clayton: 1¢ YES, OI 161605\nEd Martin: 1¢ YES, OI 197668\nKen Paxton: 1¢ YES, OI 310408\n\nReturn JSON to `plausibility.json`:\n```json\n{\n  \"candidates\": [\n    {\n      \"name\": \"Todd Blanche\",\n      \"strengths\":  [\"<inference>\"],\n      \"weaknesses\": [\"<inference>\"],\n      \"processObstacles\": [\"<inference>\"]\n    }\n  ]\n}\n```\nDo not pretend inference is fact. Do not invoke X chatter as evidence here.\n",
+    "expectedOutputPath": "plausibility.json"
+  },
+  {
+    "branch": "skeptic",
+    "model": "grok",
+    "prompt": "# Skeptic / Red Team — KXNEXTAG-29\n\nAttack the leading conclusion. Grok routing preferred.\n\nTop contracts:\nTodd Blanche: 44¢ YES, OI 391948\nLee Zeldin: 27¢ YES, OI 336175\nJeanine Pirro: 3¢ YES, OI 353915\nRon DeSantis: 2¢ YES, OI 309484\nHarmeet Dhillon: 2¢ YES, OI 269153\nAlina Habba: 1¢ YES, OI 215217\nEric Schmitt: 1¢ YES, OI 162200\nJay Clayton: 1¢ YES, OI 161605\nEd Martin: 1¢ YES, OI 197668\nKen Paxton: 1¢ YES, OI 310408\n\nReturn JSON to `skeptic.json`:\n```json\n{\n  \"favoriteWrong\":     [\"<reason favorite may be wrong>\"],\n  \"secondUnderpriced\": [\"<reason second-place may be underpriced>\"],\n  \"settlementTraps\":   [\"<rule edge case that flips outcome>\"],\n  \"narrativeTraps\":    [\"<consensus narrative that may be wrong>\"]\n}\n```\nFind failure modes. Not alternative fan fiction. No trade/sizing language.\n",
+    "expectedOutputPath": "skeptic.json"
+  }
+]

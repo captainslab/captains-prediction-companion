@@ -1,0 +1,33 @@
+{
+  "favoriteWrong": [
+    "Blanche's conflict-of-interest baggage (former personal defense attorney for Trump in the Jack Smith cases) is exactly the profile that drew Republican defections on Gaetz; Sen. Thom Tillis has already publicly signaled skepticism, and Collins/Murkowski/McConnell make a 3-vote loss plausible — with a 53-seat GOP majority that kills confirmation absent a recess maneuver.",
+    "Blanche is performing the AG job right now as Acting AG with 'full authority.' That removes Trump's urgency to spend political capital on a bruising confirmation fight when he can simply leave Blanche in place under FVRA / DAG-succession logic. 'Status quo acting' is the single most underpriced outcome and it directly subtracts from Blanche's confirmation probability.",
+    "The 43¢ price assumes Trump actually nominates Blanche. Trump has a documented pattern (Gaetz → Bondi) of pulling controversial picks and pivoting to a 'safer' confirmable Republican. If the whip count looks ugly, Blanche gets withdrawn and someone else (Zeldin, a sitting senator, a red-state AG) becomes the NEW confirmed AG — Blanche himself never clears the bar.",
+    "Market is anchoring on 'who is running DOJ today' rather than 'who will be the next NEW Senate-confirmed AG.' These are different questions. Acting service does not count under the rules, so every additional month Blanche stays acting actually erodes, not strengthens, his confirmation odds (Senate calendar compression, midterm posture, donor fatigue).",
+    "Echo-chamber effect: the X discourse describing Blanche as 'frontrunner' is largely sourced to Trump allies lobbying publicly — that is advocacy, not signal. Real frontrunner pricing for a confirmable nominee should be in the 25–35¢ range, not 43¢.",
+    "Base rate check: high-conflict loyalist AG nominees in modern history (Meese, Gonzales, Sessions-recusal aftermath, Gaetz) face confirmation drag or withdrawal. Pricing Blanche above Zeldin by 16 points implies a confirmation-probability gap that the underlying Senate math does not support."
+  ],
+  "secondUnderpriced": [
+    "Zeldin is the canonical 'Trump pulls Blanche, pivots to a clean Republican' fallback: already Senate-confirmed once (EPA), no criminal-defense baggage, House Judiciary alum, lawyer, and pre-vetted by the same GOP caucus that would have to confirm him. 27¢ understates the conditional probability given a Blanche withdrawal.",
+    "Zeldin is fungible — he can be moved out of EPA without a cabinet-level fight, unlike pulling a sitting senator (which costs a Senate seat) or a sitting governor. That makes him the path of least resistance for a White House that wants a confirmation win.",
+    "If the market correctly prices P(Blanche withdrawn or defeated) at 40–55%, and Zeldin captures even 35–45% of that conditional space, fair value is closer to 30–38¢, not 27¢.",
+    "Zeldin has been named in multiple independent reporting cycles (not just X allies) as 'being eyed,' which is a stronger signal than Blanche's allies-lobbying-on-X pattern.",
+    "Zeldin's downside is capped: even if he is not picked, the same logic (pre-confirmed, low-baggage Republican) makes him a structural hedge against the entire 'Blanche fails' branch, so the 27¢ should carry a liquidity premium it currently lacks."
+  ],
+  "settlementTraps": [
+    "No-confirmation tail: Bondi already departed, Blanche serves as Acting AG indefinitely under FVRA + DAG-succession, no permanent nominee ever clears the Senate before Jan 20 2029 → market resolves NO to every named candidate. This 'long acting' branch is materially nonzero and gets zero direct ticker on Kalshi; it has to be inferred from the residual.",
+    "Recess appointment ambiguity: rules say recess appointments count 'even if struck down.' But what about an intra-session adjournment-clause appointment that the Senate never recognizes as a recess (NLRB v. Noel Canning territory)? Could resolve YES on a technicality that markets are not modeling, or NO if Kalshi interprets 'recess' strictly.",
+    "Tie-vote / VP-breaking: a 50-50 confirmation with VP Vance breaking the tie counts as a normal confirmation, but if a senator is absent / hospitalized / dies, a 49-49 or 50-49 vote could leave the nominee in limbo for weeks. Settlement timing matters if competing nominations are stacked.",
+    "Withdrawn-then-resubmitted same person: if Blanche is nominated, withdrawn, then re-nominated and confirmed, he is still the 'first NEW' AG. Markets sometimes mis-handle the identity-vs-process distinction.",
+    "Definition of 'NEW': Blanche is currently Acting AG. If Trump uses a recess appointment to install Blanche himself, does Kalshi count that as the 'first NEW AG' or treat Blanche as not-new because he was already running DOJ? Rule text says recess appointments are included, which implies YES on Blanche-via-recess, but the 'NEW person' phrasing is exploitable.",
+    "Cross-market contamination: if there are separate Kalshi tickers for 'Blanche confirmed by [date]' vs 'next AG is Blanche,' arbitrage flow can distort this market's prints without reflecting fundamentals."
+  ],
+  "narrativeTraps": [
+    "Trump-allies-on-X effect: loud public endorsements of Blanche (JonHollis-type accounts, MAGA influencers) get scraped by prediction-market traders as 'signal' when they are actually a coordinated lobbying campaign aimed at Trump himself — i.e., the noise IS the strategy.",
+    "Recency illusion: Blanche is running DOJ today, so traders mentally collapse 'current AG' into 'next confirmed AG.' The market is pricing presence, not Senate math.",
+    "Media speculation laundering: cable hits and Politico/Axios 'sources say' pieces recycle the same 2-3 names (Blanche, Zeldin, maybe a sitting senator), creating an illusion of a narrow field when the true distribution includes dark-horse state AGs, federal judges, and sitting US Attorneys.",
+    "Gaetz-amnesia: traders who lived through the Gaetz withdrawal in late 2024 are now under-weighting the same dynamic for Blanche despite a near-identical conflict profile.",
+    "Survivorship bias in the X timeline: posts predicting Blanche's confirmation get amplified; posts noting Tillis/Collins skepticism get buried. Sentiment-scraping bots feed this asymmetry back into the order book.",
+    "False binary framing: discourse treats it as 'Blanche vs Zeldin' when the rule-relevant outcome space includes (a) neither — long acting tenure to 2029, (b) a surprise pick, (c) recess-appointment gambit that may or may not settle YES depending on Kalshi adjudication."
+  ]
+}

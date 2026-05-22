@@ -1,0 +1,88 @@
+{
+  "candidates": [
+    {
+      "name": "Todd Blanche",
+      "strengths": [
+        "INFERENCE: As current Deputy AG, Blanche has the shortest institutional path to the AG chair - he already runs day-to-day DOJ operations and would be the default succession choice if Bondi departs, minimizing transition friction.",
+        "INFERENCE: His prior role as Trump's personal criminal defense lawyer establishes the deepest possible personal loyalty signal, which is the single strongest predictor of Trump AG picks in the second term.",
+        "INFERENCE: Already cleared a Senate confirmation vote for DAG in 2025, meaning his FBI background check, financial disclosures, and vote-whipping coalition are pre-built and recent - a re-confirmation for AG faces lower marginal vetting risk than any outside pick.",
+        "INFERENCE: No competing executive portfolio to unwind (unlike Zeldin at EPA or DeSantis as governor), so elevation creates no secondary vacancy fight inside the administration."
+      ],
+      "weaknesses": [
+        "INFERENCE: Perception as 'Trump's personal lawyer' could activate the same Democratic bloc opposition and one or two GOP institutionalist defections (Collins/Murkowski profile) that nearly sank prior loyalist nominees, narrowing the floor margin.",
+        "INFERENCE: His value to Trump may actually be higher as DAG-as-enforcer than as AG-as-public-face, creating an internal logic against promotion even if Bondi exits.",
+        "INFERENCE: Lacks the prosecutorial-management or elected-official profile that gives cover to wavering senators looking for a 'qualifications' rationale to vote yes."
+      ],
+      "processObstacles": [
+        "INFERENCE: Promotion is conditional on a Bondi vacancy actually opening before Jan 20 2029 - absent that triggering event, Blanche cannot be confirmed as AG regardless of preference.",
+        "INFERENCE: Senate floor time for a contested AG re-confirmation competes with judicial nominations and appropriations; a late-term vacancy (2028) could run out of calendar before a confirmed successor is seated, pushing resolution past the market deadline."
+      ]
+    },
+    {
+      "name": "Lee Zeldin",
+      "strengths": [
+        "INFERENCE: Already Senate-confirmed once this Congress (as EPA Administrator), demonstrating he can clear the 50-vote threshold with the current GOP coalition intact.",
+        "INFERENCE: Law degree plus House Armed Services/Foreign Affairs record gives him a 'qualified former member' frame that eases votes from institutionalist Republicans who balked at less conventional picks.",
+        "INFERENCE: Strong MAGA-aligned voting record and 2022 NY gubernatorial run preserved loyalty credentials without the personal-lawyer baggage that constrains Blanche."
+      ],
+      "weaknesses": [
+        "INFERENCE: Has no federal prosecutorial or DOJ-management experience, which becomes a harder sell for AG than for EPA and invites 'wrong job' criticism even from friendly senators.",
+        "INFERENCE: His confirmed-and-serving status at EPA is a revealed preference by Trump that Zeldin's highest-and-best use is environmental deregulation, not DOJ - lateral moves of confirmed cabinet officers to AG are historically rare.",
+        "INFERENCE: Lower prior-probability signal: at 27¢ versus Blanche's 43¢ he is the market's clear backup, not the base case, implying he only wins in scenarios where Blanche is also ruled out."
+      ],
+      "processObstacles": [
+        "INFERENCE: Moving Zeldin requires sequencing two confirmations - a new EPA Administrator plus Zeldin-as-AG - doubling Senate floor demand and creating two simultaneous vetting tracks.",
+        "INFERENCE: Vacating EPA mid-deregulatory-agenda creates policy-continuity costs that the White House would weigh against the AG benefit, raising the bar for the swap to actually happen."
+      ]
+    },
+    {
+      "name": "Jeanine Pirro",
+      "strengths": [
+        "INFERENCE: Genuine prosecutorial background (former Westchester DA) plus current service as interim US Attorney for DC gives her the only resume on this list that combines elected-prosecutor experience with active DOJ line authority.",
+        "INFERENCE: Extremely high personal-loyalty and public-defense quotient with Trump from years of Fox programming, placing her in the inner trust circle that drives second-term picks."
+      ],
+      "weaknesses": [
+        "INFERENCE: Her interim US Atty DC appointment was itself a workaround that suggested the White House judged a full Senate confirmation difficult - that same vote-count problem scales up, not down, for AG.",
+        "INFERENCE: Long record of partisan television commentary gives Democrats a ready-made hostile-witness package and gives moderate Republicans a 'temperament' justification to defect.",
+        "INFERENCE: Age and the absence of any prior federal Senate-confirmation makes her a higher-variance pick than candidates with recent successful confirmations on the books."
+      ],
+      "processObstacles": [
+        "INFERENCE: Interim US Attorney status is itself process-fragile (court-appointment and 120-day clock dynamics); her bandwidth and political capital may be consumed defending that role rather than ascending.",
+        "INFERENCE: A Pirro AG nomination would likely require a near-unanimous GOP whip operation; a single high-profile GOP 'no' (Collins/Murkowski/McConnell-aligned) sinks it and the White House knows this ex ante, depressing the probability the nomination is even sent."
+      ]
+    },
+    {
+      "name": "Ron DeSantis",
+      "strengths": [
+        "INFERENCE: Yale/Harvard Law plus Navy JAG plus US Attorney's office experience plus two-term governor of a major state gives him the strongest pure-credentials profile of any candidate on the board.",
+        "INFERENCE: As a sitting governor he commands an independent political base, which paradoxically makes Senate Republicans less willing to vote against him for fear of cross-pressure from their own state parties."
+      ],
+      "weaknesses": [
+        "INFERENCE: The 2024 primary rivalry created lasting personal friction with Trump that cuts directly against the loyalty heuristic driving every other pick in this market - this is the dominant reason he trades at 2¢.",
+        "INFERENCE: DeSantis has shown no public interest in a cabinet subordinate role and has post-governorship presidential ambitions of his own that are better served outside the administration than inside it.",
+        "INFERENCE: Accepting AG would require subordinating to a Trump White House on prosecutorial decisions, a posture inconsistent with his established executive-principal brand."
+      ],
+      "processObstacles": [
+        "INFERENCE: Florida governor term runs into Jan 2027; mid-term resignation creates a succession event (Lt Gov ascends) with its own Florida political costs that DeSantis would have to absorb.",
+        "INFERENCE: Even if offered and accepted, the nomination-confirmation-resignation choreography is unusually heavy and unlikely to be initiated unless a Bondi vacancy aligns precisely with DeSantis's own exit calendar."
+      ]
+    },
+    {
+      "name": "Harmeet Dhillon",
+      "strengths": [
+        "INFERENCE: Already Senate-confirmed in 2025 as Assistant AG for Civil Rights, so the confirmation machinery, vetting file, and recent whip count exist - the marginal lift to elevate her is lower than for an outside pick.",
+        "INFERENCE: Long-standing MAGA-legal-movement credentials (RNC committeewoman, election-litigation portfolio) lock in the loyalty signal Trump prioritizes.",
+        "INFERENCE: Sitting inside DOJ Main Justice already gives her institutional knowledge and a credible 'continuity' frame if Bondi exits abruptly."
+      ],
+      "weaknesses": [
+        "INFERENCE: Civil Rights AAG is a substantial jump below AG in the DOJ hierarchy - skipping past the Deputy AG (Blanche) would require an explicit Trump preference reversal that markets have no reason to forecast.",
+        "INFERENCE: Her 2025 AAG confirmation was close and drew GOP defections; an AG vote would face the same or worse coalition, with less margin for error than Blanche or Zeldin.",
+        "INFERENCE: Public profile as a movement litigator rather than a manager raises 'can she run a 115,000-person department' objections that wavering senators can hide behind."
+      ],
+      "processObstacles": [
+        "INFERENCE: Promotion requires both a Bondi vacancy AND Blanche being passed over or also departing - a compound conditional that depresses base-rate probability sharply.",
+        "INFERENCE: Elevating Dhillon vacates the Civil Rights AAG slot at a politically sensitive moment, forcing a parallel confirmation fight that competes for Senate floor time inside the same window."
+      ]
+    }
+  ]
+}
