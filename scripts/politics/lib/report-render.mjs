@@ -2,6 +2,7 @@
 // Same input ⇒ same bytes (pinned by test/politics-market-swarm.test.mjs).
 
 import { classifySource, sortBySourceTier } from './source-classifier.mjs';
+import { evaluateDecisionProcess, renderDecisionProcess } from '../../shared/decision-process.mjs';
 
 const PLACEHOLDER = '(UNKNOWN — branch not run)';
 const NO_TRADE = '> No trade recommendation. No bankroll sizing. Research-only.';
@@ -15,6 +16,71 @@ function safe(v, fb = PLACEHOLDER) {
 }
 function arr(v) { return Array.isArray(v) ? v : []; }
 
+function hasText(v) {
+  return typeof v === 'string' && v.trim() && !v.includes('UNKNOWN');
+}
+
+function renderLeader(board) {
+  if (!board.length) return null;
+  const leader = [...board].sort((a, b) => (b.yesCents ?? 0) - (a.yesCents ?? 0))[0];
+  return leader ? `${leader.candidate} @ ${leader.yesCents}¢ YES` : null;
+}
+
+function buildPoliticsProcess(b) {
+  const market = b.market ?? {};
+  const settlement = b.settlement ?? {};
+  const facts = arr(b.official?.facts);
+  const verifiedFacts = facts.filter((f) => f.verified);
+  const reportingFacts = facts.filter((f) => !f.verified);
+  const board = arr(b.marketStructure?.board);
+  const candidates = arr(b.plausibility?.candidates);
+  const skeptic = b.skeptic ?? {};
+  const judgment = b.judgment ?? {};
+  const hasSkeptic = Boolean(
+    hasText(skeptic.favoriteWrongReason)
+    || hasText(skeptic.underpricedReason)
+    || arr(skeptic.settlementTraps).length
+    || arr(skeptic.narrativeTraps).length
+  );
+  const hasJudgment = hasText(judgment.strongestSignal) || hasText(judgment.bestNonPriceReason);
+  const leader = renderLeader(board);
+  return evaluateDecisionProcess({
+    marketType: undefined,
+    id: market.id,
+    title: market.title,
+    rawDecision: hasJudgment ? 'LEAN' : 'WATCH',
+    hasMarketSignal: Boolean(board.length && hasJudgment),
+    checked: {
+      settlement_rule_fit: hasText(settlement.rules),
+      official_evidence: verifiedFacts.length > 0,
+      credible_reporting: reportingFacts.length > 0 || verifiedFacts.length > 0,
+      institutional_procedural_path: candidates.some((c) => arr(c.obstacles).length) || facts.length > 0,
+      political_plausibility: candidates.length > 0,
+      skeptic_case: hasSkeptic,
+      x_chatter_separated: true,
+      market_board_context: board.length > 0,
+    },
+    topEvidence: [
+      judgment.strongestSignal ?? judgment.bestNonPriceReason,
+      verifiedFacts[0]?.claim,
+      leader ? `Market leader: ${leader}` : null,
+    ].filter(Boolean),
+    settlementRules: settlement.rules || 'MISSING: settlement rules not available.',
+    verifiedFacts: verifiedFacts.length ? verifiedFacts.map((f) => f.claim) : 'MISSING: no verified official facts supplied.',
+    marketSignalText: leader ? `Board leader is ${leader}; price alone is not treated as a pick.` : 'No board signal.',
+    socialChatter: 'Separated in X Signal section; never rendered as verified fact.',
+    inference: candidates.length ? 'Political plausibility is labeled as inference, not fact.' : 'MISSING: no plausibility branch.',
+    skepticReview: hasSkeptic ? 'Skeptic branch present.' : 'MISSING: no skeptic branch.',
+    finalJudgment: hasJudgment ? (judgment.strongestSignal ?? judgment.bestNonPriceReason) : 'WATCH only; no judgment branch.',
+    sourceQuality: verifiedFacts.length && hasSkeptic ? 'official/reporting/skeptic layers present' : 'incomplete; downgrade required',
+    strongEvidence: judgment.confidence === 'high',
+    skepticReviewPassed: hasSkeptic && Boolean(judgment.strongestCounter),
+    wouldChangeView: arr(judgment.wouldChangeView).length
+      ? judgment.wouldChangeView
+      : ['On-record official action contradicts the current branch evidence.'],
+  });
+}
+
 function renderTLDR(b) {
   const m = b.market ?? {};
   const j = b.judgment ?? {};
@@ -22,11 +88,14 @@ function renderTLDR(b) {
   const board = arr(ms.board);
   const leader = board.length
     ? [...board].sort((a, b) => (b.yesCents ?? 0) - (a.yesCents ?? 0))[0]
-    : null;
+	    : null;
+  const process = buildPoliticsProcess(b);
   let out = h(2, '1. TLDR');
   out += bullet(`Market: ${safe(m.title)} (${safe(m.id)})`);
   out += bullet(`URL: ${safe(m.url)}`);
   out += bullet(`As of: ${safe(m.asOf)}`);
+  out += bullet(`Market type: ${process.marketType}`);
+  out += bullet(`Decision status: ${process.decisionStatus}`);
   out += bullet(`Current market leader: ${leader ? `${leader.candidate} @ ${leader.yesCents}¢ YES` : PLACEHOLDER}`);
   out += bullet(`Strongest verified non-price signal: ${safe(j.strongestSignal ?? j.bestNonPriceReason)}`);
   out += bullet(`Strongest counter-signal: ${safe(j.strongestCounter)}`);
@@ -35,6 +104,10 @@ function renderTLDR(b) {
   out += bullet(`Confidence: ${safe(j.confidence)}`);
   out += '\n' + NO_TRADE + '\n\n';
   return out;
+}
+
+function renderProcess(b) {
+  return h(2, 'Decision Process') + renderDecisionProcess(buildPoliticsProcess(b), { heading: 'Research Completeness' }) + '\n\n';
 }
 
 function renderSettlement(b) {
@@ -171,9 +244,10 @@ function renderMeta(b) {
 export function renderReport(branches = {}) {
   const m = branches.market ?? {};
   const head = h(1, `Politics-Market Research Report — ${safe(m.title, m.id ?? 'unknown market')}`);
-  return head +
-    renderTLDR(branches) +
-    renderSettlement(branches) +
+	  return head +
+	    renderTLDR(branches) +
+    renderProcess(branches) +
+	    renderSettlement(branches) +
     renderBoard(branches) +
     renderOfficial(branches) +
     renderXSignal(branches) +

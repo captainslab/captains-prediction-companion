@@ -29,8 +29,42 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 
 const PACKET_TYPE = 'mlb-daily';
+
+function buildMlbPacketProcess({ event = null, marketCount = 0, artifacts = [] }) {
+  const hasParticipants = Boolean(event?.title || event?.sub_title || marketCount > 0);
+  return evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: 'WATCH',
+    forceWatch: true,
+    checked: {
+      projected_participants: hasParticipants,
+      lineup_injury_news: false,
+      venue_context: false,
+      recent_form_matchup: false,
+      market_board_context: marketCount > 0,
+      evidence_supported_side: false,
+    },
+    topEvidence: [
+      marketCount > 0 ? `Kalshi MLB board captured with ${marketCount} market(s).` : null,
+      artifacts.length ? `${artifacts.length} local MLB artifact(s) available.` : null,
+    ].filter(Boolean),
+    settlementRules: 'MLB market settlement criteria not independently pulled by this packet.',
+    verifiedFacts: hasParticipants ? 'Game/event identity captured; lineup, starter, weather, and matchup context still required.' : 'No game identity verified.',
+    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    socialChatter: 'Not used as verified fact.',
+    inference: 'MLB inference blocked until starters, lineups/news, venue/weather, and matchup context are complete.',
+    skepticReview: 'MISSING: no skeptic review in packet generator.',
+    finalJudgment: 'WATCH only; no evidence lean from market board alone.',
+    wouldChangeView: [
+      'Probable/confirmed starters and lineups are available.',
+      'Weather/park and recent matchup context support the same side as a board signal.',
+      'A starter scratch, lineup surprise, or weather change invalidates the setup.',
+    ],
+  });
+}
 
 export function primeMlbResearch(date, options = {}) {
   const runner = options.runner;
@@ -110,6 +144,7 @@ export function extractGames(paths = []) {
 function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
+  const process = buildMlbPacketProcess({ event, marketCount: block.marketCount, artifacts });
   const header = packetHeader({
     title: 'Captain MLB — Daily Pre-Final-Lineup Packet',
     date,
@@ -117,6 +152,13 @@ function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSu
     sources: [sourcePath, KALSHI_SOURCES.mlb.page_url, ...artifacts],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: market board only; no evidence lean without starters, lineups/news, venue/weather, and matchup context.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push('research_prime:');
   if (primeAttempts.length) {
     for (const attempt of primeAttempts) {
@@ -180,6 +222,18 @@ function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSu
 }
 
 function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
+  const process = evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: 'NO CLEAR PICK',
+    checked: {},
+    settlementRules: 'MISSING: no MLB event packet.',
+    verifiedFacts: 'MISSING: no matching MLB events discovered.',
+    marketSignalText: 'No market board captured.',
+    socialChatter: 'Not used.',
+    inference: 'No inference.',
+    skepticReview: 'MISSING.',
+    finalJudgment: 'NO CLEAR PICK.',
+  });
   const header = packetHeader({
     title: 'Captain MLB — Daily Pre-Final-Lineup Packet',
     date,
@@ -187,6 +241,13 @@ function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
     sources: [KALSHI_SOURCES.mlb.api_url, KALSHI_SOURCES.mlb.page_url, ...artifacts],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: no MLB events found; no pick or lean.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push('research_prime:');
   if (primeAttempts.length) {
     for (const attempt of primeAttempts) {

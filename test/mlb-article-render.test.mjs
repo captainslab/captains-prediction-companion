@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 
 import { buildGameArticle, buildSlateArticle } from '../scripts/mlb/lib/article-render.mjs';
 import { analyzeGame } from '../scripts/mlb/lib/market-engine.mjs';
+import { buildReportText } from '../scripts/mlb/pre-lock-report.mjs';
 import { loadPlan, publish, resolveTelegramEnv } from '../scripts/mlb/publish-article-reports.mjs';
 
 // Build a minimal joined-game fixture in the shape analyzeGame expects.
@@ -115,13 +116,15 @@ test('article: Evidence Box still contains numeric support', () => {
   assert.match(evidence, /ML:\s+(CLEAR|LEAN|WATCH|PASS)/);
 });
 
-test('article: W04-style soft-LEAN surfaces as LEAN headline + pick', () => {
+test('article: W04-style soft-LEAN is downgraded to MARKET-ONLY LEAN without context', () => {
   const game = makeGame({ away: 'TEX', home: 'COL', gameKey: '26MAY182040TEXCOL' });
   const analysis = analyzeGame(game);
   assert.equal(analysis.final.decision, 'LEAN', 'engine should soft-LEAN this fixture');
+  assert.equal(analysis.final.decision_status, 'MARKET-ONLY LEAN');
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
-  assert.match(a.headline, /LEAN/);
-  assert.match(a.text, /Confidence: LEAN/);
+  assert.match(a.headline, /MARKET-ONLY LEAN/);
+  assert.match(a.text, /Confidence: MARKET-ONLY LEAN/);
+  assert.match(a.text, /not an evidence pick/i);
 });
 
 test('article: BOARD_ONLY game still renders useful article', () => {
@@ -129,7 +132,7 @@ test('article: BOARD_ONLY game still renders useful article', () => {
   const analysis = analyzeGame(game);
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
   assert.match(a.headline, /NO CLEAR PICK/);
-  assert.match(a.text, /No defensible market-internal pick/);
+  assert.match(a.text, /No defensible evidence-based pick/);
   assert.match(a.text, /Market overview/);
 });
 
@@ -141,20 +144,19 @@ test('article: weak HR/K do NOT appear as notable promotions', () => {
   assert.match(a.text, /K props: no CLEAR\/LEAN promotion/);
 });
 
-test('article: slate article ranks CLEAR/LEAN/WATCH/PASS correctly', () => {
-  const g1 = makeGame({ away: 'TEX', home: 'COL', gameKey: 'G1' }); // LEAN
+test('article: slate article ranks decision statuses correctly', () => {
+  const g1 = makeGame({ away: 'TEX', home: 'COL', gameKey: 'G1' }); // raw LEAN -> MARKET-ONLY LEAN
   const g2 = makeGame({ away: 'AAA', home: 'BBB', gameKey: 'G2', mlGap: 'small', spreadConfirm: false }); // NO PICK
   const items = [g1, g2].map((game) => ({ game, analysis: analyzeGame(game) }));
   const slate = buildSlateArticle({ date: '2026-05-18', items, planMeta: { date: '2026-05-18', cluster_count: 1 } });
-  assert.match(slate.text, /Tier 1 — CLEAR/);
-  assert.match(slate.text, /Tier 2 — LEAN/);
-  assert.match(slate.text, /Tier 3 — WATCH/);
-  assert.match(slate.text, /Tier 4 — PASS \/ NO CLEAR PICK/);
-  assert.ok(slate.counts.lean >= 1);
-  assert.ok(slate.counts.pass >= 1);
-  // ranked order: CLEAR first then LEAN then WATCH then PASS
-  const idxLean = slate.ranked.findIndex((r) => r.decision === 'LEAN');
-  const idxPass = slate.ranked.findIndex((r) => r.decision === 'NO CLEAR PICK' || r.decision === 'PASS');
+  assert.match(slate.text, /Tier 1 — STRONG EVIDENCE LEAN/);
+  assert.match(slate.text, /Tier 2 — EVIDENCE LEAN/);
+  assert.match(slate.text, /Tier 3 — MARKET-ONLY LEAN/);
+  assert.match(slate.text, /Tier 5 — NO CLEAR PICK/);
+  assert.ok(slate.counts.market_only_lean >= 1);
+  assert.ok(slate.counts.no_clear_pick >= 1);
+  const idxLean = slate.ranked.findIndex((r) => r.decision === 'MARKET-ONLY LEAN');
+  const idxPass = slate.ranked.findIndex((r) => r.decision === 'NO CLEAR PICK');
   assert.ok(idxLean < idxPass);
 });
 
@@ -267,9 +269,56 @@ test('TLDR: slate article has TLDR immediately after headline, no engine vocab',
   const overviewIdx = lines.indexOf('Slate overview');
   assert.ok(overviewIdx > 4, 'Slate overview must come after TLDR block');
   const tldrBlock = lines.slice(3, overviewIdx).join('\n');
-  assert.match(tldrBlock, /Top picks/);
+  assert.match(tldrBlock, /Evidence leans/);
+  assert.match(tldrBlock, /Market-only leans/);
   assert.match(tldrBlock, /Takeaway/);
   for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
     assert.ok(!banned.test(tldrBlock), `Slate TLDR must not contain ${banned}`);
   }
+});
+
+test('cron pre-lock report downgrades incomplete raw LEAN to MARKET-ONLY LEAN', () => {
+  const game = makeGame({ away: 'TEX', home: 'COL', gameKey: 'GCRON' });
+  const built = buildReportText({
+    plan: { date: '2026-05-18' },
+    window: {
+      cluster_id: 'W99',
+      report_at_ct: '12:00 CT',
+      lead_first_pitch_ct: '13:00 CT',
+      game_keys: ['GCRON'],
+      idempotency_key: 'mlb:2026-05-18:W99',
+    },
+    games: [game],
+  });
+  assert.equal(built.hasPicks, false);
+  assert.equal(built.clearLeanCount, 0);
+  assert.equal(built.marketOnlyLeanCount, 1);
+  assert.match(built.text, /MARKET-ONLY LEAN REPORT/);
+  assert.match(built.text, /NOT REAL PICKS/);
+  assert.match(built.text, /Price, open interest, spread shape, movement, and liquidity cannot create a real pick by themselves/);
+});
+
+test('cron pre-lock report downgrades raw player-prop CLEAR to MARKET-ONLY LEAN', () => {
+  const game = makeGame({ away: 'TEX', home: 'COL', gameKey: 'GPROP' });
+  game.series.hr.markets = [
+    { ticker: 'KXMLBHR-GPROP-TEXSMITH-1', title: 'John Smith: 1+ home runs?', yes_ask_dollars: 0.04, no_ask_dollars: 0.97, yes_bid_dollars: 0.03, no_bid_dollars: 0.96, floor_strike: 1, open_interest_fp: 200, volume_fp: 20 },
+    { ticker: 'KXMLBHR-GPROP-TEXSMITH-2', title: 'John Smith: 2+ home runs?', yes_ask_dollars: 0.10, no_ask_dollars: 0.91, yes_bid_dollars: 0.09, no_bid_dollars: 0.90, floor_strike: 2, open_interest_fp: 200, volume_fp: 20 },
+  ];
+  game.series.hr.market_count = game.series.hr.markets.length;
+  const built = buildReportText({
+    plan: { date: '2026-05-18' },
+    window: {
+      cluster_id: 'W98',
+      report_at_ct: '12:00 CT',
+      lead_first_pitch_ct: '13:00 CT',
+      game_keys: ['GPROP'],
+      idempotency_key: 'mlb:2026-05-18:W98',
+    },
+    games: [game],
+  });
+  assert.doesNotMatch(built.text, /- Decision: CLEAR\b/);
+  assert.match(built.text, /Player Prop Research Completeness/);
+  assert.match(built.text, /Raw ladder decision: CLEAR/);
+  assert.match(built.text, /Decision status: MARKET-ONLY LEAN/);
+  assert.match(built.text, /not a player-prop pick without domain evidence/i);
 });

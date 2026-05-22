@@ -33,6 +33,7 @@
 //      count as ladder evidence — illiquid asks fabricate inversions.
 
 import { parseMarketTickerTeam, MLB_TEAM_BY_ABBREV } from '../../packets/lib/mlb-teams.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES } from '../../shared/decision-process.mjs';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -718,6 +719,47 @@ export function analyzeGame(game) {
     }
   }
 
+  const hasMarketBoard = Object.values(game.series || {}).some((series) => Array.isArray(series?.markets) && series.markets.length > 0);
+  const hasLineupNews = Boolean(game.lineups || game.lineup_notes || game.injuries || game.injury_notes || game.news_context);
+  const hasVenueContext = Boolean(game.weather || game.venue || game.park_context || game.weather_context);
+  const hasRecentMatchup = Boolean(game.recent_form || game.matchup_context || game.bullpen_context || game.history_context);
+  const process = evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: finalDecision,
+    checked: {
+      projected_participants: Boolean(game.away && game.home),
+      lineup_injury_news: hasLineupNews,
+      venue_context: hasVenueContext,
+      recent_form_matchup: hasRecentMatchup,
+      market_board_context: hasMarketBoard,
+      evidence_supported_side: hasLineupNews && hasVenueContext && hasRecentMatchup && gameClearLean.length > 0,
+    },
+    hasMarketSignal: gameClearLean.length > 0,
+    topEvidence: gameClearLean.length ? [finalReason] : [],
+    marketSignalText: gameClearLean.length ? finalReason : 'No game-level CLEAR/LEAN from board structure.',
+    verifiedFacts: [
+      game.away && game.home ? `${game.away} at ${game.home}` : null,
+      hasLineupNews ? 'Lineup/news context supplied.' : null,
+      hasVenueContext ? 'Venue/weather/park context supplied.' : null,
+      hasRecentMatchup ? 'Recent form/matchup context supplied.' : null,
+    ].filter(Boolean),
+    settlementRules: 'MLB game settlement rules not independently pulled by this report.',
+    inference: (finalDecision === 'CLEAR' || finalDecision === 'LEAN')
+      ? 'Board signal only unless lineup, starter, venue, and matchup context are all checked.'
+      : 'No board signal strong enough to elevate.',
+    skepticReview: hasLineupNews && hasVenueContext && hasRecentMatchup
+      ? 'Context inputs present; still requires skeptic review before publication.'
+      : 'MISSING: report does not pull lineup, starter, venue/weather, or recent form context.',
+    finalJudgment: (finalDecision === 'CLEAR' || finalDecision === 'LEAN')
+      ? 'Downgrade raw CLEAR/LEAN to MARKET-ONLY LEAN until real-world MLB context supports the same side.'
+      : 'NO CLEAR PICK.',
+    wouldChangeView: [
+      'Confirmed lineups and starters support the same side.',
+      'Weather/park and recent matchup context support the same side.',
+      'Board signal disappears or contradicts updated domain context.',
+    ],
+  });
+
   return {
     sections: {
       ml: mlAnalysis,
@@ -731,6 +773,8 @@ export function analyzeGame(game) {
     },
     final: {
       decision: finalDecision,            // game-level only (back-compat)
+      decision_status: process.decisionStatus,
+      decision_process: process,
       reason: finalReason,
       best_angle: bestAngle,
       best_source: bestSource,

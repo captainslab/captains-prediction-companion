@@ -3,7 +3,7 @@
     "id": "KXNEXTAG-29",
     "url": "https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29",
     "title": "Attorney General",
-    "asOf": "2026-05-22T00:43:45.316Z"
+    "asOf": "2026-05-22T19:44:29.353Z"
   },
   "settlement": {
     "rules": "If the first new person to be Attorney General is <CANDIDATE> before Jan 20, 2029, then the market resolves to Yes.",
@@ -479,6 +479,11 @@
         "repeated": false,
         "source": "https://x.com/andweknow/status/2039757512870924644"
       }
+    ]
+  },
+  "meta": {
+    "integrityWarnings": [
+      "official.facts[10]: source classifies as UNKNOWN (\"https://www.flgov.com/\") but is marked verified=true — verify or downgrade"
     ]
   }
 }

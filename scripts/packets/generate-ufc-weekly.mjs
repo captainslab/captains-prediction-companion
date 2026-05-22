@@ -22,9 +22,43 @@ import {
   renderMarketBlocks,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 
 const PACKET_TYPE = 'ufc-weekly';
 const WEEKEND_DAYS = 2; // Fri + Sat + Sun -> windowDays=2
+
+function buildUfcProcess({ event = null, legacy = null, marketCount = 0 }) {
+  const hasParticipants = marketCount > 0 || Boolean(legacy?.fights?.length || legacy?.card?.length);
+  return evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: 'WATCH',
+    forceWatch: true,
+    checked: {
+      projected_participants: hasParticipants,
+      lineup_injury_news: Boolean(legacy?.injuries || legacy?.status_notes),
+      venue_context: Boolean(legacy?.venue || event?.venue),
+      recent_form_matchup: Boolean(legacy?.fighter_form || legacy?.matchup_notes),
+      market_board_context: marketCount > 0,
+      evidence_supported_side: false,
+    },
+    topEvidence: [
+      marketCount > 0 ? `Kalshi fight board captured with ${marketCount} market(s).` : null,
+      legacy?.venue ? `Venue supplied: ${legacy.venue}.` : null,
+    ].filter(Boolean),
+    settlementRules: 'UFC market settlement criteria not independently pulled by this packet.',
+    verifiedFacts: hasParticipants ? 'Participants/market contracts captured; fighter status context still required.' : 'No participants verified.',
+    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    socialChatter: 'Not used as verified fact.',
+    inference: 'Fight inference blocked until fighter status, matchup, recent form, and card-change checks are complete.',
+    skepticReview: 'MISSING: no skeptic review in packet generator.',
+    finalJudgment: 'WATCH only; no evidence lean from fight board alone.',
+    wouldChangeView: [
+      'Official card and fighter status are confirmed.',
+      'Recent form and style matchup support the same side as any board signal.',
+      'Late scratch, weight miss, or opponent change.',
+    ],
+  });
+}
 
 function weekendDates(fridayIso) {
   const d = new Date(`${fridayIso}T00:00:00Z`);
@@ -69,6 +103,7 @@ function locateUfcArtifacts(stateRoot, dates) {
 function buildKalshiEventPacket({ event, dates, sourcePath }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
+  const process = buildUfcProcess({ event, marketCount: block.marketCount });
   const eventDate = (s.close && s.close.slice(0, 10)) || dates[0];
   const header = packetHeader({
     title: `Captain UFC — Weekend Event Packet: ${s.title}`,
@@ -77,6 +112,13 @@ function buildKalshiEventPacket({ event, dates, sourcePath }) {
     sources: [sourcePath, KALSHI_SOURCES.ufc.page_url],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: fight board only; no evidence lean without fighter status and matchup context.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push(`event_ticker: ${s.ticker}`);
   lines.push(`event_title: ${s.title}`);
   lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
@@ -101,6 +143,7 @@ function buildKalshiEventPacket({ event, dates, sourcePath }) {
 
 function buildLegacyEventPacket({ weekendDates: wd, event }) {
   const data = readJsonIfExists(event.file) || {};
+  const process = buildUfcProcess({ legacy: data, marketCount: 0 });
   const eventName = data.event_name || data.name || event.file.split('/').pop().replace(/\.json$/, '');
   const fights = data.fights || data.card || [];
   const header = packetHeader({
@@ -110,6 +153,13 @@ function buildLegacyEventPacket({ weekendDates: wd, event }) {
     sources: [event.file],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: legacy fight packet; no evidence lean without complete fight context.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push(`event_name: ${eventName}`);
   lines.push(`event_date_utc: ${event.date}`);
   lines.push(`weekend_window_utc: ${wd.join(' .. ')}`);
@@ -132,6 +182,18 @@ function buildLegacyEventPacket({ weekendDates: wd, event }) {
 }
 
 function buildEmptyPacket(date, dates, discovery) {
+  const process = evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: 'NO CLEAR PICK',
+    checked: {},
+    settlementRules: 'MISSING: no UFC event packet.',
+    verifiedFacts: 'MISSING: no UFC events discovered.',
+    marketSignalText: 'No market board captured.',
+    socialChatter: 'Not used.',
+    inference: 'No inference.',
+    skepticReview: 'MISSING.',
+    finalJudgment: 'NO CLEAR PICK.',
+  });
   return (
     packetHeader({
       title: 'Captain UFC — Weekend Event Packet',
@@ -140,6 +202,13 @@ function buildEmptyPacket(date, dates, discovery) {
       sources: [KALSHI_SOURCES.ufc.api_url, KALSHI_SOURCES.ufc.page_url],
     }) +
     [
+      'TLDR:',
+      `  market_type: ${process.marketType}`,
+      `  decision_status: ${process.decisionStatus}`,
+      '  note: no UFC events found; no pick or lean.',
+      '',
+      renderDecisionProcess(process, { heading: 'Research Completeness' }),
+      '',
       'kalshi_discovery:',
       `  source_page: ${KALSHI_SOURCES.ufc.page_url}`,
       `  source_api: ${KALSHI_SOURCES.ufc.api_url}`,

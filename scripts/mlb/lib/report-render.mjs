@@ -6,6 +6,11 @@
 
 import { MLB_SERIES } from './series-discovery.mjs';
 import { analyzeGame } from './market-engine.mjs';
+import {
+  evaluateDecisionProcess,
+  MARKET_TYPES,
+  renderDecisionProcess,
+} from '../../shared/decision-process.mjs';
 
 function dollarsToCents(v) {
   if (v == null) return null;
@@ -97,6 +102,50 @@ function playerNameFromMarket(m) {
   return null;
 }
 
+function propHasLean(decision) {
+  return decision === 'CLEAR' || decision === 'LEAN';
+}
+
+function playerPropProcess(rawDecision = 'NO CLEAR PICK', reason = '') {
+  return evaluateDecisionProcess({
+    marketType: MARKET_TYPES.PLAYER_PROP,
+    rawDecision,
+    checked: { line_ladder_comparison: true },
+    forceWatch: rawDecision === 'WATCH',
+    topEvidence: propHasLean(rawDecision) ? [`Line/ladder signal: ${reason}`] : [],
+    marketSignalText: propHasLean(rawDecision)
+      ? reason
+      : 'No player-prop signal beyond posted ladder/line shape.',
+    settlementRules: 'Player-prop settlement rules not independently pulled by this report.',
+    verifiedFacts: 'Player-specific role, usage, opponent matchup, recent form, and injury/status context not pulled by this report.',
+    inference: propHasLean(rawDecision)
+      ? 'Ladder signal only; no player-projection inference is claimed.'
+      : 'No prop inference claimed.',
+    skepticReview: 'MISSING: report does not pull player role/usage, opponent matchup, recent form, or injury/status news.',
+    finalJudgment: propHasLean(rawDecision)
+      ? 'MARKET-ONLY LEAN only; not a player-prop pick without domain evidence.'
+      : rawDecision,
+    wouldChangeView: [
+      'Confirmed player role/usage and status support the same prop side.',
+      'Opponent matchup and recent performance support the same prop side.',
+      'Line/ladder signal disappears or contradicts updated domain context.',
+    ],
+  });
+}
+
+function renderPropDecision(lines, d, level = 2) {
+  const process = playerPropProcess(d.decision, d.reason);
+  const pad = indent(level);
+  if (propHasLean(d.decision)) {
+    lines.push(`${pad}- Raw ladder decision: ${d.decision}`);
+    lines.push(`${pad}- Decision status: ${process.decisionStatus}`);
+    lines.push(`${pad}- Why not a real prop pick: required player role, matchup, recent form, and status evidence is incomplete.`);
+  } else {
+    lines.push(`${pad}- Decision status: ${process.decisionStatus}`);
+  }
+  lines.push(`${pad}- Reasoning: ${d.reason}`);
+}
+
 function renderHrSection(game, analysis) {
   const s = game.series.hr;
   const lines = ['- Home runs:'];
@@ -118,8 +167,7 @@ function renderHrSection(game, analysis) {
       lines.push(`    - ${thresh}: ${bestQuote(m)}`);
     }
     const d = decByName.get(name) || { decision: 'NO CLEAR PICK', reason: 'No analysis for this player.' };
-    lines.push(`    - Decision: ${d.decision}`);
-    lines.push(`    - Reasoning: ${d.reason}`);
+    renderPropDecision(lines, d, 2);
   }
   return lines;
 }
@@ -160,8 +208,7 @@ function renderKsSection(game, side /* 'away' | 'home' */, analysis) {
     lines.push(`  - Pitcher: ${name}`);
     lines.push(`  - Ceiling: ${ladder}`);
     const d = decByName.get(name) || { decision: 'WATCH', reason: 'No analysis for this pitcher.' };
-    lines.push(`  - Decision: ${d.decision}`);
-    lines.push(`  - Reasoning: ${d.reason}`);
+    renderPropDecision(lines, d, 1);
   }
   return lines;
 }
@@ -202,6 +249,8 @@ export function renderGameSection(game) {
     lines.push(`  - ${MLB_SERIES[sid].label}: ${tag}`);
   }
   lines.push('');
+  lines.push(renderDecisionProcess(analysis.final.decision_process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push('Main pick review:');
   for (const l of renderMlBlock(game)) lines.push(l);
   for (const l of renderSpreadBlock(game)) lines.push(l);
@@ -216,7 +265,8 @@ export function renderGameSection(game) {
   const mainCandidates = [analysis.sections.ml, analysis.sections.spread, analysis.sections.total];
   const mainBest = pickBest(mainCandidates);
   lines.push(`- Best side: ${mainBest.decision === 'CLEAR' || mainBest.decision === 'LEAN' ? mainBest.reason : 'NO CLEAR PICK'}`);
-  lines.push(`- Decision: ${mainBest.decision}`);
+  lines.push(`- Raw market decision: ${mainBest.decision}`);
+  lines.push(`- Decision status: ${analysis.final.decision_status}`);
   lines.push(`- Reasoning: ${mainBest.reason}`);
   lines.push('');
   lines.push('Game total ceiling:');
@@ -225,6 +275,18 @@ export function renderGameSection(game) {
   lines.push(`- Reasoning: ${analysis.sections.ceiling.reason}`);
   lines.push('');
   lines.push('Props:');
+  const propRawDecisions = [
+    ...(analysis.sections.hr.perPlayer || []).map((p) => p.decision),
+    ...(analysis.sections.ks_away.perPitcher || []).map((p) => p.decision),
+    ...(analysis.sections.ks_home.perPitcher || []).map((p) => p.decision),
+  ];
+  const propRawDecision = propRawDecisions.some(propHasLean)
+    ? 'LEAN'
+    : propRawDecisions.includes('WATCH')
+      ? 'WATCH'
+      : 'NO CLEAR PICK';
+  lines.push(renderDecisionProcess(playerPropProcess(propRawDecision), { heading: 'Player Prop Research Completeness' }));
+  lines.push('');
   for (const l of renderHrSection(game, analysis)) lines.push(l);
   for (const l of renderKsSection(game, 'away', analysis)) lines.push(l);
   for (const l of renderKsSection(game, 'home', analysis)) lines.push(l);
@@ -240,10 +302,15 @@ export function renderGameSection(game) {
   lines.push('');
   lines.push('Final game call:');
   lines.push(`- Best available angle: ${analysis.final.best_angle}`);
-  lines.push(`- Confidence: ${analysis.final.decision}`);
-  if (analysis.final.decision === 'NO CLEAR PICK') {
+  lines.push(`- Raw confidence: ${analysis.final.decision}`);
+  lines.push(`- Confidence: ${analysis.final.decision_status}`);
+  lines.push(`- Decision status: ${analysis.final.decision_status}`);
+  if (analysis.final.decision_status === 'NO CLEAR PICK') {
     lines.push('- If no clear pick exists, say: NO CLEAR PICK and explain exactly why.');
     lines.push(`- Why no pick: ${analysis.final.reason}`);
+  } else if (analysis.final.decision_status === 'MARKET-ONLY LEAN') {
+    lines.push('- Why not a real pick: required MLB evidence is incomplete; price/board structure cannot create an evidence lean.');
+    lines.push(`- Board-only reason: ${analysis.final.reason}`);
   } else {
     lines.push(`- Reasoning: ${analysis.final.reason}`);
   }

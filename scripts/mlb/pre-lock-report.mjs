@@ -66,20 +66,30 @@ async function gatherWindowGames(date, gameKeys, options = {}) {
 
 export function buildReportText({ plan, window: win, games }) {
   const sections = games.map((g) => ({ game: g, ...renderGameSection(g) }));
-  const clearLeanItems = [];
+  const evidenceLeanItems = [];
+  const marketOnlyItems = [];
   for (const s of sections) {
-    if (s.analysis.clear_lean_count > 0) {
-      clearLeanItems.push({
+    const status = s.analysis.final.decision_status;
+    if (status === 'EVIDENCE LEAN' || status === 'STRONG EVIDENCE LEAN') {
+      evidenceLeanItems.push({
+        matchup: `${s.game.away_full || s.game.away} at ${s.game.home_full || s.game.home}`,
+        final: s.analysis.final,
+        sections: s.analysis.sections,
+      });
+    } else if (status === 'MARKET-ONLY LEAN') {
+      marketOnlyItems.push({
         matchup: `${s.game.away_full || s.game.away} at ${s.game.home_full || s.game.home}`,
         final: s.analysis.final,
         sections: s.analysis.sections,
       });
     }
   }
-  const hasPicks = clearLeanItems.length > 0;
+  const hasPicks = evidenceLeanItems.length > 0;
   const title = hasPicks
-    ? '=== Captain MLB — Pre-Lock Pick Report ==='
-    : '=== Captain MLB — NO CLEAR PICK REPORT — board only ===';
+    ? '=== Captain MLB — Pre-Lock Evidence-Lean Report ==='
+    : marketOnlyItems.length
+      ? '=== Captain MLB — MARKET-ONLY LEAN REPORT — evidence incomplete ==='
+      : '=== Captain MLB — NO CLEAR PICK REPORT ===';
   const lines = [];
   lines.push(title);
   lines.push(`date: ${plan.date}`);
@@ -89,19 +99,33 @@ export function buildReportText({ plan, window: win, games }) {
   lines.push(`games_in_window: ${games.length}`);
   lines.push(`game_keys: ${win.game_keys.join(', ')}`);
   lines.push(`idempotency_key: ${win.idempotency_key}`);
-  lines.push(`mode: ${hasPicks ? 'PICK_REPORT' : 'BOARD_ONLY'}`);
-  lines.push(`clear_lean_count: ${clearLeanItems.reduce((n, x) => n + (x.final.decision === 'CLEAR' || x.final.decision === 'LEAN' ? 1 : 0), 0)}`);
+  lines.push(`mode: ${hasPicks ? 'EVIDENCE_LEAN_REPORT' : marketOnlyItems.length ? 'MARKET_ONLY_LEAN_REPORT' : 'NO_CLEAR_PICK_REPORT'}`);
+  lines.push(`evidence_lean_count: ${evidenceLeanItems.length}`);
+  lines.push(`market_only_lean_count: ${marketOnlyItems.length}`);
   lines.push(`generated_utc: ${new Date().toISOString()}`);
   lines.push('');
+  lines.push('TLDR');
+  lines.push(`- Evidence leans: ${evidenceLeanItems.length}`);
+  lines.push(`- Market-only leans downgraded for incomplete context: ${marketOnlyItems.length}`);
+  lines.push('- Price, open interest, spread shape, movement, and liquidity cannot create a real pick by themselves.');
+  lines.push('');
   if (hasPicks) {
-    lines.push('--- CLEAR / LEAN SUMMARY ---');
-    for (const it of clearLeanItems) {
-      lines.push(`- [${it.final.decision}] ${it.matchup}`);
+    lines.push('--- EVIDENCE LEAN SUMMARY ---');
+    for (const it of evidenceLeanItems) {
+      lines.push(`- [${it.final.decision_status}] ${it.matchup}`);
       lines.push(`    ${it.final.reason}`);
     }
     lines.push('');
+  } else if (marketOnlyItems.length) {
+    lines.push('--- MARKET-ONLY LEAN SUMMARY (NOT REAL PICKS) ---');
+    for (const it of marketOnlyItems) {
+      lines.push(`- [${it.final.decision_status}] ${it.matchup}`);
+      lines.push(`    Missing evidence: ${it.final.decision_process.missingEvidence.join('; ')}`);
+      lines.push(`    Board signal: ${it.final.reason}`);
+    }
+    lines.push('');
   } else {
-    lines.push('No section across any game produced a market-internal CLEAR or LEAN.');
+    lines.push('No section across any game produced an evidence-supported lean.');
     lines.push('Board attached for review only — no pick is being claimed.');
     lines.push('');
   }
@@ -113,7 +137,7 @@ export function buildReportText({ plan, window: win, games }) {
   }
   lines.push('No trades placed. No bankroll sizing. Research only.');
   lines.push('Markets covered per game: ML (KXMLBGAME), Spread (KXMLBSPREAD), Total (KXMLBTOTAL), HR (KXMLBHR), K props (KXMLBKS), YFRI/NFRI (KXMLBRFI).');
-  return { text: lines.join('\n'), hasPicks, clearLeanCount: clearLeanItems.length };
+  return { text: lines.join('\n'), hasPicks, clearLeanCount: evidenceLeanItems.length, marketOnlyLeanCount: marketOnlyItems.length };
 }
 
 async function main() {
@@ -150,10 +174,11 @@ async function main() {
     lead_first_pitch_utc: win.lead_first_pitch_utc,
     game_count: games.length,
     game_keys: win.game_keys,
-    char_count: text.length,
-    has_picks: built.hasPicks,
-    clear_lean_count: built.clearLeanCount,
-    mode: built.hasPicks ? 'PICK_REPORT' : 'BOARD_ONLY',
+	    char_count: text.length,
+	    has_picks: built.hasPicks,
+	    evidence_lean_count: built.clearLeanCount,
+	    market_only_lean_count: built.marketOnlyLeanCount,
+	    mode: built.hasPicks ? 'EVIDENCE_LEAN_REPORT' : (built.marketOnlyLeanCount ? 'MARKET_ONLY_LEAN_REPORT' : 'NO_CLEAR_PICK_REPORT'),
     dry_run: true,
     generated_utc: new Date().toISOString(),
   }, null, 2), 'utf8');

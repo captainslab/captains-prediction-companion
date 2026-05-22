@@ -26,9 +26,43 @@ import {
   renderMarketBlocks,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 
 const PACKET_TYPE = 'nascar-sunday';
 const SUPPORTED_LANES = ['win', 'top3', 'top5', 'top10', 'top20', 'fastest_lap'];
+
+function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, artifacts = [] }) {
+  return evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: 'WATCH',
+    forceWatch: true,
+    checked: {
+      projected_participants: marketCount > 0,
+      lineup_injury_news: false,
+      venue_context: Boolean(event?.product_metadata?.competition),
+      recent_form_matchup: Boolean(ceiling?.board?.length),
+      market_board_context: marketCount > 0,
+      evidence_supported_side: false,
+    },
+    topEvidence: [
+      marketCount > 0 ? `Kalshi NASCAR board captured with ${marketCount} market(s).` : null,
+      ceiling?.board?.length ? `Ceiling board captured from ${ceiling.source}.` : null,
+      artifacts.length ? `${artifacts.length} local artifact(s) available.` : null,
+    ].filter(Boolean),
+    settlementRules: 'NASCAR market settlement criteria not independently pulled by this packet.',
+    verifiedFacts: ceiling?.board?.length ? 'Ceiling board present; qualifying/practice and entry status still required.' : 'No verified race-context facts supplied by packet generator.',
+    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    socialChatter: 'Not used as verified fact.',
+    inference: 'Race inference blocked until official entry/status, practice/qualifying, track, and recent performance context are complete.',
+    skepticReview: 'MISSING: no skeptic review in packet generator.',
+    finalJudgment: 'WATCH only; no evidence lean from race board or ceiling board alone.',
+    wouldChangeView: [
+      'Official entry list and race status are confirmed.',
+      'Practice/qualifying and track-form context support a side.',
+      'Inspection/driver change/news invalidates the setup.',
+    ],
+  });
+}
 
 function locateNascarArtifacts(stateRoot, date) {
   const root = resolve(stateRoot, 'nascar');
@@ -98,7 +132,15 @@ function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult }
     sources: [sourcePath, KALSHI_SOURCES.nascar.page_url, ...artifacts],
   });
   const ceiling = pickCeilingBoard(artifacts);
+  const process = buildNascarProcess({ event, marketCount: block.marketCount, ceiling, artifacts });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: race board only; no evidence lean without entry, track, practice, and qualifying context.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push(`event_ticker: ${s.ticker}`);
   lines.push(`event_title: ${s.title}`);
   lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
@@ -134,6 +176,18 @@ function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult }
 }
 
 function buildEmptyPacket({ date, artifacts, workspaceResult, discovery, matchedCount }) {
+  const process = evaluateDecisionProcess({
+    marketType: MARKET_TYPES.SPORTS_GAME,
+    rawDecision: 'NO CLEAR PICK',
+    checked: {},
+    settlementRules: 'MISSING: no NASCAR Cup event packet.',
+    verifiedFacts: 'MISSING: no matching NASCAR Cup events discovered.',
+    marketSignalText: 'No market board captured.',
+    socialChatter: 'Not used.',
+    inference: 'No inference.',
+    skepticReview: 'MISSING.',
+    finalJudgment: 'NO CLEAR PICK.',
+  });
   const header = packetHeader({
     title: 'Captain NASCAR — Sunday Morning Race-Market Packet',
     date,
@@ -141,6 +195,13 @@ function buildEmptyPacket({ date, artifacts, workspaceResult, discovery, matched
     sources: [KALSHI_SOURCES.nascar.api_url, KALSHI_SOURCES.nascar.page_url, ...artifacts],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: no NASCAR Cup event found; no pick or lean.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push('kalshi_discovery:');
   lines.push(`  source_page: ${KALSHI_SOURCES.nascar.page_url}`);
   lines.push(`  source_api: ${KALSHI_SOURCES.nascar.api_url}`);

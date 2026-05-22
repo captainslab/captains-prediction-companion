@@ -32,10 +32,58 @@ import {
   renderMarketBlocks,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 const DEFAULT_WINDOW_DAYS = 7; // forward-looking week
 const PACKET_LIMIT = 60;       // safety cap on packets emitted per run
+
+function firstMarketRules(event) {
+  const markets = Array.isArray(event?.markets) ? event.markets : [];
+  const m = markets.find((x) => x?.rules_primary || x?.rules_secondary);
+  return {
+    primary: m?.rules_primary || null,
+    secondary: m?.rules_secondary || null,
+  };
+}
+
+function buildMentionProcess({ event, hasLocalEvidence = false, legacy = null }) {
+  const rules = legacy
+    ? { primary: legacy.resolution || legacy.resolution_mechanics || null, secondary: null }
+    : firstMarketRules(event);
+  const marketCount = Array.isArray(event?.markets) ? event.markets.length : 0;
+  return evaluateDecisionProcess({
+    marketType: MARKET_TYPES.MENTION_MARKET,
+    rawDecision: 'WATCH',
+    forceWatch: true,
+    checked: {
+      exact_settlement_wording: Boolean(rules.primary || rules.secondary),
+      likely_event_source: Boolean(legacy?.event_context || legacy?.context),
+      word_matching_rules_aliases: Boolean(rules.primary || rules.secondary),
+      recent_public_statements: hasLocalEvidence,
+      official_schedule_event: Boolean(legacy?.official_schedule || legacy?.schedule),
+      x_chatter_separated: true,
+      market_board_context: marketCount > 0 || Boolean(legacy),
+    },
+    topEvidence: [
+      marketCount > 0 ? `Kalshi board captured with ${marketCount} market(s).` : null,
+      rules.primary ? 'Settlement wording present in source packet.' : null,
+      hasLocalEvidence ? 'Legacy source evidence present.' : null,
+    ].filter(Boolean),
+    settlementRules: rules.primary || rules.secondary || 'MISSING: exact settlement wording not present in packet.',
+    verifiedFacts: hasLocalEvidence ? 'Legacy source evidence present; requires research review.' : 'No verified transcript/event facts supplied by packet generator.',
+    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    socialChatter: 'Separated: packet generator does not promote X chatter to fact.',
+    inference: 'Mention-market inference blocked until exact source, transcript path, and word-match rules are checked.',
+    skepticReview: 'MISSING: no skeptic review in packet generator.',
+    finalJudgment: 'WATCH only; no pick without exact wording, source/event path, and public statement/schedule evidence.',
+    wouldChangeView: [
+      'Official event or transcript source is identified.',
+      'Exact word-match/alias rules are confirmed.',
+      'Recent official/public statement context supports one side.',
+    ],
+  });
+}
 
 export function discoverMentionEvents(stateRoot, date) {
   const roots = [
@@ -64,6 +112,7 @@ export function discoverMentionEvents(stateRoot, date) {
 function buildKalshiEventPacket({ date, event, sourceUrl }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: PACKET_LIMIT });
+  const process = buildMentionProcess({ event });
   const header = packetHeader({
     title: 'Captain Mentions — Daily Event Packet',
     date,
@@ -71,6 +120,13 @@ function buildKalshiEventPacket({ date, event, sourceUrl }) {
     sources: [sourceUrl, KALSHI_SOURCES.mentions.page_url],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: no pick without exact wording, source/event path, and transcript/public-statement evidence.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push(`event_ticker: ${s.ticker}`);
   lines.push(`event_title: ${s.title}`);
   lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
@@ -86,7 +142,8 @@ function buildKalshiEventPacket({ date, event, sourceUrl }) {
   lines.push('  Verify exact-string mention criteria before publishing.');
   lines.push('');
   lines.push('verified_vs_inference: MISSING (research-only packet; verification required by mentions-researcher)');
-  lines.push('posture: PASS (insufficient verified evidence)  // WATCH / LEAN / PASS only');
+  lines.push(`decision_status: ${process.decisionStatus}`);
+  lines.push('posture: WATCH (insufficient verified evidence; not a real pick)');
   return {
     text: header + lines.join('\n') + packetFooter(),
     marketCount: block.marketCount,
@@ -97,6 +154,7 @@ function buildKalshiEventPacket({ date, event, sourceUrl }) {
 
 function buildLegacyEventPacket({ date, event }) {
   const p = event.parsed || {};
+  const process = buildMentionProcess({ event: null, hasLocalEvidence: Boolean((p.evidence || p.sources || []).length), legacy: p });
   const header = packetHeader({
     title: 'Captain Mentions — Daily Event Packet (legacy artifact)',
     date,
@@ -104,6 +162,13 @@ function buildLegacyEventPacket({ date, event }) {
     sources: [event.file],
   });
   const lines = [];
+  lines.push('TLDR:');
+  lines.push(`  market_type: ${process.marketType}`);
+  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push('  note: legacy artifact requires settlement/source review before any lean.');
+  lines.push('');
+  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('');
   lines.push(`event_id: ${p.event_id || p.id || 'MISSING'}`);
   lines.push(`target_phrase: ${p.target_phrase || p.phrase || 'MISSING'}`);
   lines.push(`speaker_or_company: ${p.speaker || p.company || p.entity || 'MISSING'}`);
@@ -121,11 +186,24 @@ function buildLegacyEventPacket({ date, event }) {
   }
   lines.push('');
   lines.push(`verified_vs_inference: ${p.verified_vs_inference || 'MISSING'}`);
-  lines.push(`posture: ${p.posture || 'PASS (insufficient verified evidence)'}  // WATCH / LEAN / PASS only`);
+  lines.push(`decision_status: ${process.decisionStatus}`);
+  lines.push(`posture: ${p.posture || 'WATCH (insufficient verified evidence; not a real pick)'}`);
   return header + lines.join('\n') + packetFooter();
 }
 
 function buildEmptyDayPacket(date, primeAttempts = [], discovery = null) {
+  const process = evaluateDecisionProcess({
+    marketType: MARKET_TYPES.MENTION_MARKET,
+    rawDecision: 'NO CLEAR PICK',
+    checked: { x_chatter_separated: true },
+    settlementRules: 'MISSING: no market/event packet.',
+    verifiedFacts: 'MISSING: no events discovered.',
+    marketSignalText: 'No market board captured.',
+    socialChatter: 'Not used.',
+    inference: 'No inference.',
+    skepticReview: 'MISSING.',
+    finalJudgment: 'NO CLEAR PICK.',
+  });
   return (
     packetHeader({
       title: 'Captain Mentions — Daily Event Packet',
@@ -134,6 +212,13 @@ function buildEmptyDayPacket(date, primeAttempts = [], discovery = null) {
       sources: discovery?.source ? [discovery.source.api_url, discovery.source.page_url] : [],
     }) +
     [
+      'TLDR:',
+      `  market_type: ${process.marketType}`,
+      `  decision_status: ${process.decisionStatus}`,
+      '  note: no events found; no pick or lean.',
+      '',
+      renderDecisionProcess(process, { heading: 'Research Completeness' }),
+      '',
       'research_prime:',
       ...(primeAttempts.length
         ? primeAttempts.flatMap(attempt => [

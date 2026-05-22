@@ -4,7 +4,9 @@
 
 - Market: Attorney General (KXNEXTAG-29)
 - URL: https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29
-- As of: 2026-05-22T00:52:21.357Z
+- As of: 2026-05-22T19:44:29.353Z
+- Market type: politics_personnel
+- Decision status: STRONG EVIDENCE LEAN
 - Current market leader: Todd Blanche @ 44¢ YES
 - Strongest verified non-price signal: Per xSignal, Todd Blanche is reportedly currently serving as Acting AG after Bondi's early-April 2026 removal and has appeared before the Senate for confirmation to become permanent AG, with a public endorsement from Jeanine Pirro — making him the most-discussed named successor in the reporting captured in the merged JSON; this aligns with marketStructure showing him as the top contract at 44¢ YES.
 - Strongest counter-signal: Per skeptic, Blanche's profile as Trump's former personal criminal defense lawyer mirrors the conflict-of-interest dynamic that sank Gaetz; Sen. Tillis has signaled skepticism and a Collins/Murkowski/McConnell-style 3-vote GOP loss would block confirmation in a 53-seat majority, while a 'long acting' branch (Blanche indefinitely Acting under FVRA, no new confirmed AG before Jan 20 2029) resolves NO to every named candidate and is structurally unpriced.
@@ -13,6 +15,34 @@
 - Confidence: medium
 
 > No trade recommendation. No bankroll sizing. Research-only.
+
+## Decision Process
+
+Research Completeness
+- Market type: politics_personnel
+- Decision status: STRONG EVIDENCE LEAN
+- Required checklist:
+  - [x] Settlement-rule fit
+  - [x] Official evidence
+  - [x] Credible reporting
+  - [x] Institutional/procedural path
+  - [x] Political plausibility
+  - [x] Skeptic case
+  - [x] X chatter separated as signal only
+  - [x] Market board context
+- Checked items: Settlement-rule fit; Official evidence; Credible reporting; Institutional/procedural path; Political plausibility; Skeptic case; X chatter separated as signal only; Market board context
+- Missing evidence: none
+- Source quality: official/reporting/skeptic layers present
+- Top evidence: Per xSignal, Todd Blanche is reportedly currently serving as Acting AG after Bondi's early-April 2026 removal and has appeared before the Senate for confirmation to become permanent AG, with a public endorsement from Jeanine Pirro — making him the most-discussed named successor in the reporting captured in the merged JSON; this aligns with marketStructure showing him as the top contract at 44¢ YES.; The U.S. Senate confirmed Pam Bondi as the 87th Attorney General of the United States by a 54-46 vote.; Market leader: Todd Blanche @ 44¢ YES
+- Why it is not price-only: Market signal is cross-checked against required real-world and settlement evidence.
+- What would change the view: Confirmed reporting that Blanche has been withdrawn or that Trump publicly pivoted to another named candidate; On-record GOP whip count showing Blanche has the votes (would weaken the skeptic counter); Evidence that Bondi was not in fact removed and remains AG (would undercut the entire successor frame); Kalshi adjudication note resolving the recess-appointment / 'first NEW' ambiguity; Independent reporting elevating a candidate currently priced near zero (e.g., Schmitt, Dhillon) to active consideration; Senate calendar evidence that no AG confirmation vote is feasible before Jan 20, 2029
+- Settlement rules: If the first new person to be Attorney General is <CANDIDATE> before Jan 20, 2029, then the market resolves to Yes.
+- Verified facts: The U.S. Senate confirmed Pam Bondi as the 87th Attorney General of the United States by a 54-46 vote.; Pam Bondi was sworn in as Attorney General at the White House by Justice Clarence Thomas, with President Trump in attendance.; President Trump named Todd Blanche as Deputy Attorney General nominee; Blanche was later confirmed and serves as the No. 2 official at DOJ.; Lee Zeldin was confirmed as Administrator of the Environmental Protection Agency, taking him out of any near-term DOJ leadership pipeline.; President Trump announced he was withdrawing Ed Martin's nomination for U.S. Attorney for the District of Columbia after senators signaled he lacked the votes, and instead said he would name Jeanine Pirro as interim U.S. Attorney for D.C.; Harmeet Dhillon was confirmed by the Senate as Assistant Attorney General for the Civil Rights Division at the Department of Justice.; Alina Habba's interim term as U.S. Attorney for New Jersey expired and the Trump administration moved to keep her in the role via reassignment, after federal judges declined to extend her appointment; she remained a subject of ongoing legal disputes over her authority.; Jay Clayton was nominated by President-elect Trump to serve as U.S. Attorney for the Southern District of New York.; Ken Paxton announced he would challenge Senator John Cornyn in the 2026 Texas Republican Senate primary, signaling his political focus is on the Senate race rather than a federal DOJ appointment.; Andrew Bailey was sworn in for a full term as Missouri Attorney General after winning election in November 2024.; Ron DeSantis was re-elected Governor of Florida; his current term runs through January 2027, limiting any near-term federal appointment without resignation.; Attorney General Pam Bondi faced internal criticism from MAGA allies over DOJ's handling of the Jeffrey Epstein files but retained President Trump's public backing, with Trump calling her a 'fantastic' AG.; Ed Martin, after his U.S. Attorney nomination was withdrawn, was reassigned within DOJ to lead a 'Weaponization Working Group' and serve as Associate Deputy Attorney General and pardon attorney.
+- Market signal: Board leader is Todd Blanche @ 44¢ YES; price alone is not treated as a pick.
+- X/social chatter: Separated in X Signal section; never rendered as verified fact.
+- Inference: Political plausibility is labeled as inference, not fact.
+- Skeptic review: Skeptic branch present.
+- Final judgment: Per xSignal, Todd Blanche is reportedly currently serving as Acting AG after Bondi's early-April 2026 removal and has appeared before the Senate for confirmation to become permanent AG, with a public endorsement from Jeanine Pirro — making him the most-discussed named successor in the reporting captured in the merged JSON; this aligns with marketStructure showing him as the top contract at 44¢ YES.
 
 ## 2. Settlement Rules
 
