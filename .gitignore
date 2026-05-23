@@ -24,6 +24,11 @@ data_2
 lib
 !scripts/nascar/lib/
 !scripts/nascar/lib/router.mjs
+!scripts/nascar/lib/storyline-modifier.mjs
+!scripts/nascar/lib/storyline-fixtures.mjs
+!scripts/nascar/lib/coca-cola-600-packet.mjs
+!scripts/nascar/lib/source-adapters/
+!scripts/nascar/lib/source-adapters/practice-qualifying-coca-cola-600-fixture.mjs
 !scripts/packets/lib/
 !scripts/packets/lib/common.mjs
 !scripts/mlb/lib/
