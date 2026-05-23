@@ -600,3 +600,101 @@ test('Phase 5: existing replay/envelopes-only modes still work (regression)', as
   assert.equal(r2.path, out);
   assert.equal(r2.execution, null, 'replay mode must not produce execution records');
 });
+
+
+// --- Phase 6 tests: hermes-bridge.sh via cmdAdapter ---
+
+import { cmdAdapter } from '../scripts/politics/lib/branch-runner.mjs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve as pathResolve } from 'node:path';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BRIDGE = pathResolve(HERE, '..', 'scripts', 'politics', 'bin', 'hermes-bridge.sh');
+
+function bridgeEnvCmd(extra = '') {
+  // Pass env via the shell prefix so cmdAdapter's child env merge applies cleanly.
+  return `${extra} ${BRIDGE}`;
+}
+
+test('Phase 6: dry-run bridge emits branch-valid JSON for every branch', async () => {
+  const adapter = cmdAdapter(`POLITICS_BRIDGE_MODE=dry-run ${BRIDGE}`);
+  const branches = ['official', 'xSignal', 'plausibility', 'skeptic', 'judgment'];
+  const merged = { market: { id: 'KXNEXTAG-29', url: 'https://kalshi.com/x', asOf: 'now' } };
+  for (const b of branches) {
+    const env = { branch: b, model: 'inherit', prompt: 'p', inputsOnly: b === 'judgment' };
+    const raw = await adapter.execute(env, {});
+    const obj = JSON.parse(raw);
+    merged[b] = obj;
+  }
+  const v = validateBranches(merged);
+  assert.ok(v.ok, `validate errors: ${JSON.stringify(v.errors)}`);
+});
+
+test('Phase 6: bridge stderr noise does NOT corrupt stdout JSON', async () => {
+  const adapter = cmdAdapter(`POLITICS_BRIDGE_MODE=dry-run ${BRIDGE}`);
+  const raw = await adapter.execute(
+    { branch: 'official', model: 'inherit', prompt: 'hello world bytes', inputsOnly: false }, {},
+  );
+  // Pure JSON, no stray "[hermes-bridge]" log lines mixed in
+  assert.doesNotMatch(raw, /\[hermes-bridge\]/);
+  assert.deepEqual(typeof JSON.parse(raw), 'object');
+});
+
+test('Phase 6: bridge non-zero exit surfaces as cmdAdapter "failed"', async () => {
+  // Force the inherit route, which is a stub that exits 2 by design.
+  const adapter = cmdAdapter(`POLITICS_BRIDGE_MODE=inherit ${BRIDGE}`);
+  const auto = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29' });
+  const envs = buildEnvelopes(auto).slice(0, 1); // one branch is enough
+  const r = await runBranches({ envelopes: envs, adapter, concurrency: 1, timeoutMs: 5000 });
+  const rec = r.execution.find((e) => e.status !== 'fallback-routed');
+  assert.equal(rec.status, 'failed');
+  assert.match(rec.error, /exit 2|exit code|cmdAdapter/i);
+});
+
+test('Phase 6: bridge timeout surfaces as cmdAdapter "timeout"', async () => {
+  // sleep 5 then echo — runner timeout at 50ms should kill it.
+  const slow = `bash -c "sleep 5; echo '{}'"`;
+  const adapter = cmdAdapter(slow);
+  const auto = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29' });
+  const envs = buildEnvelopes(auto).slice(0, 1);
+  const r = await runBranches({ envelopes: envs, adapter, concurrency: 1, timeoutMs: 50 });
+  const rec = r.execution.find((e) => e.status !== 'fallback-routed');
+  assert.equal(rec.status, 'timeout');
+});
+
+test('Phase 6: execute mode + cmdAdapter + dry-run bridge produces clean rendered report', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pol-bridge-'));
+  const cacheDir = join(dir, 'cache');
+  const out = join(dir, 'report.md');
+  const fakeFetch = async () => ({ ok: true, status: 200, json: async () => FAKE_KALSHI, text: async () => '' });
+  const adapter = cmdAdapter(`POLITICS_BRIDGE_MODE=dry-run ${BRIDGE}`);
+  const r = await orchestrate({
+    market: 'KXNEXTAG-29', url: 'https://kalshi.com/x',
+    mode: 'execute', cacheDir, out, fetchImpl: fakeFetch,
+    executor: adapter, executorOpts: { concurrency: 4, timeoutMs: 10_000 },
+  });
+  assert.equal(r.path, out);
+  assert.equal(r.execution.filter((e) => e.status === 'ok').length, 5);
+  const md = readFileSync(out, 'utf8');
+  assert.equal(scanForbiddenLanguage(md).clean, true);
+  assert.ok(md.includes('Todd Blanche'));
+  // Replay parity: branches/*.json written for every branch.
+  for (const b of ['official', 'xSignal', 'plausibility', 'skeptic', 'judgment']) {
+    JSON.parse(readFileSync(join(cacheDir, 'branches', `${b}.json`), 'utf8'));
+  }
+});
+
+test('Phase 6: fallback-routed triggers when cmdAdapter does not declare grok', async () => {
+  // canRoute defaults to ['inherit']; xSignal/skeptic request grok → fallback.
+  const adapter = cmdAdapter(`POLITICS_BRIDGE_MODE=dry-run ${BRIDGE}`);
+  const auto = buildMarketBranches(FAKE_KALSHI, { eventTicker: 'KXNEXTAG-29' });
+  const envs = buildEnvelopes(auto, { modelOverrides: { xSignal: 'grok', skeptic: 'grok' } });
+  const r = await runBranches({ envelopes: envs, adapter, concurrency: 4, timeoutMs: 10_000 });
+  const fb = r.execution.filter((e) => e.status === 'fallback-routed').map((e) => e.branch).sort();
+  assert.deepEqual(fb, ['skeptic', 'xSignal']);
+  // And they still complete ok after fallback (dry-run succeeds on inherit).
+  for (const b of ['xSignal', 'skeptic']) {
+    const ok = r.execution.find((e) => e.branch === b && e.status === 'ok');
+    assert.ok(ok, `${b} should complete ok after fallback`);
+  }
+});

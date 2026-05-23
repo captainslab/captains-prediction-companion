@@ -291,3 +291,48 @@ All Phase 1-4 guardrails remain active in execute mode: no trades, no sizing,
 no posting, X chatter is signal only, price alone is never a pick, cross-branch
 integrity check runs before render, and the forbidden-language scan runs on
 the rendered markdown.
+
+
+## Phase 6: real Hermes/Grok bridge
+
+`scripts/politics/bin/hermes-bridge.sh` is the thin, dependency-free bridge
+that `cmdAdapter` shells out to. It honors the cmdAdapter contract exactly:
+stdin = prompt envelope, stdout = exactly one JSON object, stderr = logs,
+non-zero exit = `status: 'failed'` in `meta.branchExecution[]`.
+
+### Modes
+
+Set `POLITICS_BRIDGE_MODE`:
+
+- `dry-run` (default) — deterministic, branch-contract-valid stub JSON for
+  every branch. No network. No LLM. No credentials touched. This is the
+  proof path used by tests and CI.
+- `inherit` — routes to a local Hermes `delegate` CLI subcommand if present.
+  Phase 6 ships this stubbed; if invoked it fails loudly with a non-zero
+  exit instead of inventing data.
+- `grok` — routes to xAI/Grok if `XAI_API_KEY` / `GROK_API_KEY` /
+  `HERMES_XAI_KEY` is set. Credential is detected by presence only and is
+  **never read or transmitted** in Phase 6 — the route fails loudly so
+  cmdAdapter records `failed`.
+- `auto` — picks `grok` when `POLITICS_MODEL=grok`, else `inherit`.
+
+### One-command execute via bridge (dry-run)
+
+    node scripts/politics/research-market.mjs \
+      --market KXNEXTAG-29 \
+      --url 'https://kalshi.com/markets/kxnextag/next-ag/KXNEXTAG-29' \
+      --mode execute \
+      --executor cmd \
+      --executor-cmd "POLITICS_BRIDGE_MODE=dry-run scripts/politics/bin/hermes-bridge.sh" \
+      --cache-dir state/politics/<date>/<mkt>.cache \
+      --offline \
+      --out state/politics/<date>/<mkt>.md
+
+### Guardrails preserved
+
+All Phase 1-5 guardrails stay live in bridge runs: integrity check,
+forbidden-language scan, source-tier separation, replay parity (the runner
+still writes `branches/*.json` into `cacheDir/branches/`), and full
+`meta.branchExecution[]` per-branch status reporting.
+
+See `scripts/politics/bin/README.md` for env vars and operator details.
