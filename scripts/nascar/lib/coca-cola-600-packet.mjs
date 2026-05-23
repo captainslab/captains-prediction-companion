@@ -26,6 +26,8 @@ import { fixtureCocaCola600PracticeEnvelope } from './source-adapters/practice-q
 import { fixtureNascarOfficialEnvelope } from './source-adapters/nascar-official-fixture.mjs';
 import { fixtureKalshiRaceEnvelope } from './source-adapters/kalshi-race-fixture.mjs';
 import { fixtureLiquidityEnvelope } from './source-adapters/liquidity-fixture.mjs';
+import { fixtureFundamentalsEnvelope } from './source-adapters/fundamentals-fixture.mjs';
+import { composeBaseFundamentals, fundamentalsForStoryline } from './base-fundamentals.mjs';
 
 const RUN_DATE = '2026-05-25';
 const FROZEN_DEFAULT = '2026-05-24T18:00:00.000Z';
@@ -85,6 +87,7 @@ function renderPacket({
   manifest,
   discovery,
   practiceEnvelope,
+  fundamentals,
   beneficiary,
   modifier,
 }) {
@@ -104,18 +107,39 @@ function renderPacket({
   const practiceStatus = practiceEnvelope.status;
   const degraded = practiceStatus === 'degraded';
   const downMark = 'DOWNGRADED:UNAVAILABLE';
+  const partialMark = 'PARTIAL:PLACEHOLDER';
   const upMark = 'AVAILABLE';
+
+  const layerStatus = fundamentals.layer_status ?? {};
+  function layerMark(layer) {
+    const s = layerStatus[layer];
+    if (s === 'ok') return upMark;
+    if (s === 'degraded') return partialMark;
+    return downMark;
+  }
+  function layerNote(layer) {
+    const notes = fundamentals.layer_source_notes?.[layer] ?? [];
+    return notes[0] ?? 'no source note available.';
+  }
+
   lines.push('## Base Fundamentals');
   lines.push('');
-  lines.push(`- Driver skill: ${downMark} — no individual driver-skill projection emitted; discovery is fixture-only.`);
-  lines.push(`- Team / equipment quality: ${downMark} — no organization-level equipment grade available in fixture mode.`);
+  lines.push(`- Driver skill: ${layerMark('driver_skill')} — ${layerNote('driver_skill')}`);
+  lines.push(`- Team / equipment quality: ${layerMark('team_equipment')} — ${layerNote('team_equipment')}`);
+  lines.push(`- Pit crew / crew chief: ${layerMark('pit_crew')} — ${layerNote('pit_crew')}`);
+  lines.push(`- Strategy risk: ${layerMark('strategy_risk')} — ${layerNote('strategy_risk')}`);
   lines.push(`- Track history: ${downMark} — track_history_signal is "unknown" on placeholder driver records.`);
   lines.push(`- Recent speed: ${downMark} — no recent race-pace samples available.`);
   lines.push(`- Qualifying position: ${downMark} — practice/qualifying envelope is ${practiceStatus}; no starting grid published yet.`);
   lines.push(`- Practice speed: ${downMark} — practice/qualifying envelope is ${practiceStatus}; no session results published yet.`);
-  lines.push(`- Pit crew / crew chief: ${downMark} — no crew performance signal in fixture mode.`);
-  lines.push(`- Strategy risk: ${downMark} — no fuel/tire strategy model wired in for this dry run.`);
   lines.push(`- Race format / track type: ${upMark} — ${ctx.race_name ?? 'race'} at ${ctx.track ?? 'unknown'}, ${ctx.track_type ?? 'unknown'} track, event_format=${manifest.event_format ?? 'points'}.`);
+  lines.push('');
+  lines.push(`Overall fundamentals data quality: ${fundamentals.overall_data_quality}`);
+  lines.push(`Allowed max posture from fundamentals alone: ${fundamentals.allowed_max_posture}`);
+  if (Array.isArray(fundamentals.downgrade_reasons) && fundamentals.downgrade_reasons.length > 0) {
+    lines.push('Fundamentals downgrade reasons:');
+    for (const r of fundamentals.downgrade_reasons) lines.push(`  - ${r}`);
+  }
   if (degraded && Array.isArray(practiceEnvelope.degraded_reasons)) {
     lines.push('');
     lines.push('Practice/qualifying degraded_reasons:');
@@ -145,7 +169,7 @@ function renderPacket({
 
   lines.push('## Market Context');
   lines.push('');
-  lines.push('Market lanes are listed here as REFERENCE ONLY and are explicitly separated from the edge basis below.');
+  lines.push('Market lanes are listed here as REFERENCE ONLY and are explicitly separated from the edge basis below. Price, volume, OI, and line movement are Market Context only and never create edge.');
   lines.push('');
   for (const lane of discovery.supported_market_lanes ?? []) {
     lines.push(`- ${lane.market_lane} (${lane.lane_type}) — source_available=${lane.source_available} — ${lane.description}`);
@@ -154,14 +178,14 @@ function renderPacket({
 
   lines.push('## Edge Basis');
   lines.push('');
-  lines.push('The Kyle Busch / RCR No. 8 / Austin Hill tribute is layered strictly as a MODIFIER. Base fundamentals are DEGRADED (no practice or qualifying data published at packet time, placeholder driver records only). Under these conditions no PICK and no EVIDENCE_LEAN may be emitted. The allowed posture is WATCH or MARKET_REPRICING_ALERT. Storyline does not create speed.');
+  lines.push(`Base fundamentals overall data quality is "${fundamentals.overall_data_quality}". The Kyle Busch / RCR No. 8 / Austin Hill tribute is layered strictly as a MODIFIER. Under these conditions no PICK and no EVIDENCE_LEAN may be emitted. The allowed maximum posture is ${fundamentals.allowed_max_posture}. Storyline does not create speed.`);
   lines.push('');
 
   lines.push('## Safety');
   lines.push('');
   lines.push('- No trades placed by this workflow.');
   lines.push('- Fixtures-only run; no live network and no credentials touched.');
-  lines.push('- Downgrade applied: practice/qualifying envelope is DEGRADED — driver speeds were NOT fabricated.');
+  lines.push('- Downgrade applied: any unavailable fundamentals layer is marked DOWNGRADED:UNAVAILABLE — no fabricated ratings.');
   lines.push('- Storyline fields are fixture placeholders; replace with sourced packet before publication.');
   lines.push('');
   return lines.join('\n');
@@ -246,7 +270,56 @@ export async function composeCocaCola600Packet({
   };
   const detection = detectBeneficiary(storyline, austinHillFixtureDriver, teamGraph);
 
-  const baseFundamentals = buildBaseFundamentalsForDriver(topActive, envelopes.practice_qualifying);
+  const baseFundamentalsLegacy = buildBaseFundamentalsForDriver(topActive, envelopes.practice_qualifying);
+
+  // 3b. Load the 4 explicit fundamentals layers (driver skill, team/equipment,
+  // pit crew, strategy risk) via fixture adapters. Status='degraded' so the
+  // packet shows placeholder ratings under PARTIAL:PLACEHOLDER markers and
+  // gates cannot pass on placeholder data alone.
+  const fundamentalsEnvelopes = {
+    driver_skill: fixtureFundamentalsEnvelope({
+      layer: 'driver_skill',
+      status: 'degraded',
+      checked_at_utc: checkedAtUtc,
+      outputDir: `${absOutputDir}/fundamentals`,
+    }),
+    team_equipment: fixtureFundamentalsEnvelope({
+      layer: 'team_equipment',
+      status: 'degraded',
+      checked_at_utc: checkedAtUtc,
+      outputDir: `${absOutputDir}/fundamentals`,
+    }),
+    pit_crew: fixtureFundamentalsEnvelope({
+      layer: 'pit_crew',
+      status: 'unavailable',
+      checked_at_utc: checkedAtUtc,
+      outputDir: `${absOutputDir}/fundamentals`,
+    }),
+    strategy_risk: fixtureFundamentalsEnvelope({
+      layer: 'strategy_risk',
+      status: 'unavailable',
+      checked_at_utc: checkedAtUtc,
+      outputDir: `${absOutputDir}/fundamentals`,
+    }),
+  };
+  const fundamentals = composeBaseFundamentals({ envelopes: fundamentalsEnvelopes });
+
+  // Pick the fundamentals entry whose car matches the active candidate
+  // (fallback: first entry). Convert to storyline-gate input.
+  const driverEntry = fundamentals.by_driver.find(d => d.car_number === topActive?.car_number)
+    ?? fundamentals.by_driver[0]
+    ?? null;
+  const storylineBaseFundamentals = fundamentalsForStoryline(driverEntry);
+  // Preserve the legacy placeholder fields the existing test suite cares
+  // about (overpricing_penalty, etc.) but let real fundamentals override
+  // equipment_quality and driver_ability_to_convert when present.
+  const baseFundamentals = {
+    ...baseFundamentalsLegacy,
+    equipment_quality: storylineBaseFundamentals.equipment_quality,
+    driver_ability_to_convert: storylineBaseFundamentals.driver_ability_to_convert,
+    fundamentals_data_quality: fundamentals.overall_data_quality,
+  };
+
   const modifier = composeStorylineModifier({
     storyline,
     baseFundamentals,
@@ -271,11 +344,15 @@ export async function composeCocaCola600Packet({
     fixture_safety_notes: storyline.safety_notes,
   });
 
+  const fundamentalsPath = `${absOutputDir}/base_fundamentals.json`;
+  writeJsonAtomic(fundamentalsPath, fundamentals);
+
   const packetMd = renderPacket({
     runDate: RUN_DATE,
     manifest,
     discovery,
     practiceEnvelope: envelopes.practice_qualifying,
+    fundamentals,
     beneficiary,
     modifier,
   });
@@ -285,9 +362,10 @@ export async function composeCocaCola600Packet({
   return {
     runDate: RUN_DATE,
     outputDir: absOutputDir,
-    files: [...baseline.files, modifierPath, packetPath],
+    files: [...baseline.files, fundamentalsPath, modifierPath, packetPath],
     manifest,
     discovery,
+    fundamentals,
     modifier,
     beneficiary,
     practice_envelope_status: envelopes.practice_qualifying.status,
