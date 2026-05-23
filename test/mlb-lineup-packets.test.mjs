@@ -329,6 +329,15 @@ test('renderBlockPacket: includes all games', () => {
   assert.match(blockText, /MIL/);
 });
 
+test('packetTextPayload: preserves string block packet renderer output', async () => {
+  const { packetTextPayload } = await import('../scripts/mlb/generate-lineup-packets.mjs');
+  const pkt = renderPerGamePacket(fakeGame, { lineupStatus: LINEUP_STATUS.PENDING });
+  const blockText = renderBlockPacket(makeBlock(), [pkt]);
+
+  assert.equal(packetTextPayload(blockText), blockText);
+  assert.ok(packetTextPayload(blockText).length > 0, 'block packet write payload must not be empty');
+});
+
 test('renderBlockPacket: NO CLEAR PICK games appear in brief section', () => {
   // Both games have empty series — analyzeGame returns NO CLEAR PICK for each.
   const pkt1 = renderPerGamePacket(fakeGame,  { lineupStatus: LINEUP_STATUS.PENDING });

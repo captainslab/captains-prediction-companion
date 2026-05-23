@@ -210,6 +210,12 @@ export function buildPacketMeta({
   };
 }
 
+export function packetTextPayload(packet) {
+  if (typeof packet === 'string') return packet;
+  if (packet && typeof packet.text === 'string') return packet.text;
+  return '';
+}
+
 // ---------------------------------------------------------------------------
 // Schedule record → lineup notes + starters helper
 // ---------------------------------------------------------------------------
@@ -441,7 +447,7 @@ async function main() {
 
     // Block packet.
     const blockTxtPath = resolve(outDir, `${base}-block.txt`);
-    writeFileSync(blockTxtPath, blockPacket.text || '', 'utf8');
+    writeFileSync(blockTxtPath, packetTextPayload(blockPacket), 'utf8');
 
     // Meta.
     const metaPath = resolve(outDir, `${base}.meta.json`);
