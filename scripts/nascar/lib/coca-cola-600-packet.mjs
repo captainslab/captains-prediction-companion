@@ -31,6 +31,7 @@ import { fixtureFundamentalsEnvelope } from './source-adapters/fundamentals-fixt
 import { wikipediaTeamEquipmentEnvelope } from './source-adapters/wikipedia-team-equipment.mjs';
 import { nascardataStrategyRiskEnvelope } from './source-adapters/nascardata-strategy.mjs';
 import { derivedDriverSkillEnvelope } from './source-adapters/derived-driver-skill.mjs';
+import { cupPointsTop20Envelope } from './source-adapters/cup-points-top-20.mjs';
 import { composeBaseFundamentals, fundamentalsForStoryline } from './base-fundamentals.mjs';
 import { composeMultiLaneCeilingBoard, MULTI_LANE_LANES } from './multi-lane-ceiling.mjs';
 
@@ -185,7 +186,15 @@ function renderPacket({
   lines.push('## Ceiling Board (Top 20 candidate pool)');
   lines.push('');
   lines.push(`- candidate_pool_size: ${multiLaneBoard.candidate_pool_size}`);
+  lines.push(`- candidate_pool_basis: ${multiLaneBoard.candidate_pool_basis}`);
+  if (Array.isArray(multiLaneBoard.candidate_pool_source_urls) && multiLaneBoard.candidate_pool_source_urls.length > 0) {
+    lines.push(`- candidate_pool_source_urls: ${multiLaneBoard.candidate_pool_source_urls.join(' | ')}`);
+  }
   lines.push(`- pool_selection_basis: ${multiLaneBoard.pool_selection_basis}`);
+  if (Array.isArray(multiLaneBoard.candidate_pool_join_warnings) && multiLaneBoard.candidate_pool_join_warnings.length > 0) {
+    lines.push(`- candidate_pool_join_warnings (${multiLaneBoard.candidate_pool_join_warnings.length}):`);
+    for (const w of multiLaneBoard.candidate_pool_join_warnings) lines.push(`    - ${w}`);
+  }
   if (multiLaneBoard.pool_short_reason) {
     lines.push(`- pool_short_reason: ${multiLaneBoard.pool_short_reason}`);
   }
@@ -370,6 +379,24 @@ export async function composeCocaCola600Packet({
 
   // 3c. Multi-lane ceiling board — top-20 candidate pool with 4 lanes
   //     (win, top_5, top_10, top_20) per driver.
+  //
+  // Pool basis is CUP POINTS top-20 (current Drivers' championship standings),
+  // NOT fundamentals composite. Drivers without a fundamentals join stay in
+  // the pool with NO CLEAR PICK lanes — they are not dropped or replaced.
+  const cupPointsEnv = cupPointsTop20Envelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/discovery`,
+    poolSize: 20,
+  });
+  const candidatePool = cupPointsEnv.records.map(r => ({
+    driver_name: r.driver_name,
+    car_number: r.car_number,
+    team: r.team,
+    manufacturer: r.manufacturer,
+    points_position: r.points_position,
+    season_points: r.season_points,
+  }));
+
   const multiLaneBoard = composeMultiLaneCeilingBoard({
     fundamentals,
     supportedMarketLanes: discovery.supported_market_lanes,
@@ -380,6 +407,9 @@ export async function composeCocaCola600Packet({
       connection_type: 'current_team',
     },
     poolSize: 20,
+    candidatePool,
+    candidatePoolBasis: 'cup_points_top_20',
+    candidatePoolSourceUrls: cupPointsEnv.source_urls,
   });
 
   // Pick the fundamentals entry whose car matches the active candidate

@@ -80,7 +80,9 @@ function driverStrengthScore(d) {
   ];
   let num = 0, den = 0;
   for (const p of parts) {
-    if (Number.isFinite(Number(p.v))) { num += Number(p.v) * p.w; den += p.w; }
+    if (p.v === null || p.v === undefined) continue;
+    const n = Number(p.v);
+    if (Number.isFinite(n)) { num += n * p.w; den += p.w; }
   }
   if (den === 0) return null;
   // Re-normalize over present weights so missing layers don't punish the score
@@ -153,22 +155,113 @@ function rankUniverse(byDriver) {
     });
 }
 
+function normalizeJoinName(name) {
+  return String(name ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// Empty fundamentals stub for a pool entry that has no fundamentals join.
+// All rating fields are null so driverStrengthScore returns null → status
+// becomes 'NO CLEAR PICK' (no fabricated ratings). The driver stays in the
+// pool because the pool basis is points, not fundamentals.
+function emptyFundamentalsStub(poolEntry, reason) {
+  return {
+    driver_name: poolEntry.driver_name ?? null,
+    car_number: poolEntry.car_number ?? null,
+    team: poolEntry.team ?? null,
+    manufacturer: poolEntry.manufacturer ?? null,
+    driver_skill_rating: null,
+    driver_ability_to_convert: null,
+    team_equipment_quality: null,
+    pit_crew_crew_chief_grade: null,
+    strategy_risk_rating: null,
+    data_quality: 'unavailable',
+    downgrade_reasons: [reason],
+  };
+}
+
 export function composeMultiLaneCeilingBoard({
   fundamentals,
   supportedMarketLanes = [],
   eventContext = null,
   storylineBeneficiary = null,
   poolSize = 20,
+  candidatePool = null,
+  candidatePoolBasis = null,
+  candidatePoolSourceUrls = [],
 } = {}) {
   if (!fundamentals || !Array.isArray(fundamentals.by_driver)) {
     throw new Error('composeMultiLaneCeilingBoard requires { fundamentals.by_driver }');
   }
 
-  const universe = rankUniverse(fundamentals.by_driver);
-  const top = universe.slice(0, poolSize);
-  const poolShortReason = universe.length < poolSize
-    ? `driver_universe has only ${universe.length} drivers (< ${poolSize}); pool padded short — no fabricated drivers added.`
-    : null;
+  // Pool selection:
+  //   - If `candidatePool` is provided, the pool order is FIXED by that list
+  //     (e.g. cup-points top-20). Drivers stay in the pool even when their
+  //     fundamentals are missing — they get a NO CLEAR PICK lane instead of
+  //     being silently dropped or replaced. This is the only path that
+  //     guarantees the pool basis is what the caller asked for.
+  //   - Otherwise, fall back to the legacy fundamentals-composite ranking.
+  let top;
+  let poolBasisLabel;
+  let poolSelectionBasis;
+  let poolSourceUrls = candidatePoolSourceUrls;
+  let poolShortReason = null;
+  const poolJoinWarnings = [];
+
+  if (Array.isArray(candidatePool) && candidatePool.length > 0) {
+    poolBasisLabel = candidatePoolBasis ?? 'externally_supplied_pool';
+    poolSelectionBasis =
+      `Pool order is fixed by the supplied candidatePool (${poolBasisLabel}); ` +
+      'drivers without fundamentals stay in the pool with NO CLEAR PICK lanes — they are NOT dropped or replaced. ' +
+      'No re-ranking by composite score is applied.';
+    const fundByName = new Map();
+    const fundByCar = new Map();
+    for (const d of fundamentals.by_driver) {
+      if (d.driver_name) fundByName.set(normalizeJoinName(d.driver_name), d);
+      if (Number.isFinite(Number(d.car_number))) fundByCar.set(Number(d.car_number), d);
+    }
+    top = candidatePool.slice(0, poolSize).map((entry, i) => {
+      const norm = normalizeJoinName(entry.driver_name);
+      const carNum = Number.isFinite(Number(entry.car_number)) ? Number(entry.car_number) : null;
+      const matched =
+        (norm && fundByName.get(norm)) ||
+        (carNum !== null && fundByCar.get(carNum)) ||
+        null;
+      if (!matched) {
+        poolJoinWarnings.push(
+          `pool_rank=${i + 1} driver="${entry.driver_name ?? 'unknown'}" car=${entry.car_number ?? 'unknown'} has no fundamentals join; lanes will be NO CLEAR PICK.`,
+        );
+        return emptyFundamentalsStub(entry, 'no_fundamentals_join');
+      }
+      // Prefer the pool entry's identity fields (canonical) when set,
+      // otherwise keep the fundamentals values.
+      return {
+        ...matched,
+        driver_name: entry.driver_name ?? matched.driver_name,
+        car_number: entry.car_number ?? matched.car_number,
+        team: entry.team ?? matched.team,
+        manufacturer: entry.manufacturer ?? matched.manufacturer,
+      };
+    });
+    if (candidatePool.length < poolSize) {
+      poolShortReason = `candidatePool has only ${candidatePool.length} entries (< ${poolSize}); pool is short — no fabricated drivers added.`;
+    }
+  } else {
+    poolBasisLabel = 'fundamentals_composite_top_20';
+    poolSelectionBasis =
+      'top-20 by fundamentals composite score (0.30 driver_skill + 0.20 ability_to_convert + 0.30 team_equipment + 0.10 pit_crew + 0.10 strategy_risk); ' +
+      'missing layers re-weight present components; ties broken by driver_skill_rating desc then car_number asc.';
+    const universe = rankUniverse(fundamentals.by_driver);
+    top = universe.slice(0, poolSize);
+    poolShortReason = universe.length < poolSize
+      ? `driver_universe has only ${universe.length} drivers (< ${poolSize}); pool padded short — no fabricated drivers added.`
+      : null;
+  }
 
   // Map kalshi lane availability.
   const laneAvail = new Map();
@@ -229,7 +322,10 @@ export function composeMultiLaneCeilingBoard({
     schema_version: 'nascar_multi_lane_ceiling_board_v1',
     mode: 'fixtures-first',
     event_context: eventContext,
-    pool_selection_basis: 'top-20 by fundamentals composite score (0.30 driver_skill + 0.20 ability_to_convert + 0.30 team_equipment + 0.10 pit_crew + 0.10 strategy_risk); missing layers re-weight present components; ties broken by driver_skill_rating desc then car_number asc.',
+    pool_selection_basis: poolSelectionBasis,
+    candidate_pool_basis: poolBasisLabel,
+    candidate_pool_source_urls: poolSourceUrls,
+    candidate_pool_join_warnings: poolJoinWarnings,
     candidate_pool_size: candidates.length,
     pool_short_reason: poolShortReason,
     lanes: [...LANES],

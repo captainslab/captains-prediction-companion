@@ -1,0 +1,35 @@
+{
+  "snapshot_id": "wikipedia_2026_cup_points_pre_coca_cola_600",
+  "snapshot_source_url": "https://en.wikipedia.org/wiki/2026_NASCAR_Cup_Series",
+  "snapshot_section": "Drivers' championship",
+  "snapshot_date": "2026-05-25",
+  "as_of_event_label": "After All-Star race; before 2026 Coca-Cola 600",
+  "license": "CC-BY-SA-4.0",
+  "attribution": "Wikipedia contributors, '2026 NASCAR Cup Series', Wikipedia, The Free Encyclopedia. Used under CC-BY-SA 4.0. Manually transcribed top-20 driver standings (position, name, season points) from the Drivers' championship table.",
+  "transcription_notes": [
+    "Top 20 by season points, in finishing order from the Wikipedia standings table.",
+    "Name diacritics preserved as published (e.g. Daniel Suárez)."
+  ],
+  "standings": [
+    {"pos": 1, "driver": "Tyler Reddick", "points": 567},
+    {"pos": 2, "driver": "Denny Hamlin", "points": 438},
+    {"pos": 3, "driver": "Chase Elliott", "points": 422},
+    {"pos": 4, "driver": "Ryan Blaney", "points": 405},
+    {"pos": 5, "driver": "Chris Buescher", "points": 375},
+    {"pos": 6, "driver": "Ty Gibbs", "points": 372},
+    {"pos": 7, "driver": "Carson Hocevar", "points": 342},
+    {"pos": 8, "driver": "Kyle Larson", "points": 332},
+    {"pos": 9, "driver": "Brad Keselowski", "points": 318},
+    {"pos": 10, "driver": "Bubba Wallace", "points": 313},
+    {"pos": 11, "driver": "Christopher Bell", "points": 311},
+    {"pos": 12, "driver": "William Byron", "points": 309},
+    {"pos": 13, "driver": "Ryan Preece", "points": 296},
+    {"pos": 14, "driver": "Daniel Suárez", "points": 295},
+    {"pos": 15, "driver": "Austin Cindric", "points": 287},
+    {"pos": 16, "driver": "Shane van Gisbergen", "points": 283},
+    {"pos": 17, "driver": "Chase Briscoe", "points": 277},
+    {"pos": 18, "driver": "Joey Logano", "points": 245},
+    {"pos": 19, "driver": "Ross Chastain", "points": 236},
+    {"pos": 20, "driver": "A. J. Allmendinger", "points": 235}
+  ]
+}
