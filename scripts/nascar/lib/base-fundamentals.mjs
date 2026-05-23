@@ -64,12 +64,29 @@ function layerStatusOf(envelope) {
   return envelope.source_status ?? envelope.status ?? 'unavailable';
 }
 
+// Layer criticality: pit_crew is low-weight, non-critical (no clean public
+// source exists). The other three layers are critical because they directly
+// feed the composite ceiling score and the storyline gate.
+//   - driver_skill:    critical (derived/degraded counts as "present")
+//   - team_equipment:  critical (Wikipedia season snapshot is OK)
+//   - strategy_risk:   critical (nascaR.data proxy counts as "present")
+//   - pit_crew:        non-critical (unavailable does NOT force degraded)
+const CRITICAL_LAYERS = Object.freeze(['driver_skill', 'team_equipment', 'strategy_risk']);
+const NON_CRITICAL_LAYERS = Object.freeze(['pit_crew']);
+
 function resolveDataQuality(layerStatus) {
-  const vals = Object.values(layerStatus);
-  if (vals.every(s => s === 'ok')) return 'ok';
-  if (vals.every(s => s === 'unavailable')) return 'unavailable';
-  if (vals.some(s => s === 'unavailable')) return 'degraded';
-  if (vals.some(s => s === 'degraded')) return 'partial';
+  const critStatuses = CRITICAL_LAYERS.map(l => layerStatus[l] ?? 'unavailable');
+  const nonCritStatuses = NON_CRITICAL_LAYERS.map(l => layerStatus[l] ?? 'unavailable');
+  // Hard floor: if every layer is unavailable, overall is unavailable.
+  if ([...critStatuses, ...nonCritStatuses].every(s => s === 'unavailable')) return 'unavailable';
+  // Any critical layer unavailable -> degraded (the board must cap at WATCH).
+  if (critStatuses.some(s => s === 'unavailable')) return 'degraded';
+  // All critical layers OK and all non-critical OK -> fully ok.
+  if (critStatuses.every(s => s === 'ok') && nonCritStatuses.every(s => s === 'ok')) return 'ok';
+  // All critical layers at least "present" (ok or degraded); non-critical
+  // may be unavailable/degraded -> partial. This unblocks LEAN/EVIDENCE_LEAN
+  // when pit_crew is the only missing layer or when derived/proxy sources
+  // surface critical layers as 'degraded'.
   return 'partial';
 }
 
@@ -77,8 +94,8 @@ function resolveDataQuality(layerStatus) {
 // AND storyline_score >= 60. If fundamentals are anything less than 'ok'
 // the packet must cap posture at WATCH (storyline modifier remains 0).
 function allowedMaxPosture(overallDataQuality) {
-  if (overallDataQuality === 'ok') return 'EVIDENCE_LEAN';
-  if (overallDataQuality === 'partial') return 'MARKET_ONLY_LEAN';
+  if (overallDataQuality === 'ok') return 'PICK';
+  if (overallDataQuality === 'partial') return 'EVIDENCE_LEAN';
   if (overallDataQuality === 'degraded') return 'WATCH';
   return 'NO_CLEAR_PICK';
 }

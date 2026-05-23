@@ -31,7 +31,7 @@ test('all 4 fundamentals layers normalize correctly when ok', () => {
   }
   const fundamentals = composeBaseFundamentals({ envelopes });
   assert.equal(fundamentals.overall_data_quality, 'ok');
-  assert.equal(fundamentals.allowed_max_posture, 'EVIDENCE_LEAN');
+  assert.equal(fundamentals.allowed_max_posture, 'PICK');
   assert.ok(fundamentals.by_driver.length > 0);
   for (const d of fundamentals.by_driver) {
     assert.equal(typeof d.driver_skill_rating, 'number');

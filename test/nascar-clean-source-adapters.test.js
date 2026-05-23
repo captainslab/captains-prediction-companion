@@ -53,8 +53,9 @@ test('clean adapters compose with pit_crew=unavailable → overall_data_quality=
   const fundamentals = composeBaseFundamentals({
     envelopes: { driver_skill: skill, team_equipment: team, pit_crew: pit, strategy_risk: strat },
   });
-  assert.equal(fundamentals.overall_data_quality, 'degraded');
-  assert.equal(fundamentals.allowed_max_posture, 'WATCH');
+  assert.equal(fundamentals.overall_data_quality, 'partial',
+    'pit_crew is non-critical; alone-unavailable yields partial, not degraded');
+  assert.equal(fundamentals.allowed_max_posture, 'EVIDENCE_LEAN');
   // Real driver records should now flow through with non-null skill/equipment.
   const larson = fundamentals.by_driver.find(d => d.driver_name === 'Kyle Larson');
   assert.ok(larson, 'Larson should appear in by_driver');

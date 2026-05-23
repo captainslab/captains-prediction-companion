@@ -222,7 +222,26 @@ function renderPacket({
 
   lines.push('## Edge Basis');
   lines.push('');
-  lines.push(`Base fundamentals overall data quality is "${fundamentals.overall_data_quality}". The Kyle Busch / RCR No. 8 / Austin Hill tribute is layered strictly as a MODIFIER. Under these conditions no PICK and no EVIDENCE_LEAN may be emitted. The allowed maximum posture is ${fundamentals.allowed_max_posture}. Storyline does not create speed.`);
+  const dq = fundamentals.overall_data_quality;
+  const cap = fundamentals.allowed_max_posture;
+  const layerLine = Object.entries(fundamentals.layer_status ?? {})
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
+  let capRationale;
+  if (dq === 'ok') {
+    capRationale = 'All critical layers (driver_skill, team_equipment, strategy_risk) and pit_crew are OK. PICK is eligible where a lane score clears the PICK threshold and the market lane is available.';
+  } else if (dq === 'partial') {
+    capRationale = 'All critical layers (driver_skill, team_equipment, strategy_risk) are present (sourced or derived/proxy); pit_crew is non-critical and may be unavailable. PICK is blocked; lanes may reach EVIDENCE_LEAN, LEAN, or WATCH based on per-driver score and market availability.';
+  } else if (dq === 'degraded') {
+    capRationale = 'At least one critical layer (driver_skill, team_equipment, or strategy_risk) is unavailable. All lanes cap at WATCH regardless of score.';
+  } else {
+    capRationale = 'No fundamentals layers are available. All lanes cap at NO CLEAR PICK.';
+  }
+  lines.push(`Layer status: ${layerLine}.`);
+  lines.push(`Overall fundamentals data quality: ${dq}. Allowed maximum posture: ${cap}.`);
+  lines.push(capRationale);
+  lines.push('The Kyle Busch / RCR No. 8 / Austin Hill tribute is layered strictly as a MODIFIER and never creates LEAN, EVIDENCE_LEAN, or PICK on its own. Storyline does not create speed.');
+  lines.push('Market context (price/OI/volume/line movement) is reference only and never contributes to Edge Basis.');
   lines.push('');
 
   lines.push('## Safety');
