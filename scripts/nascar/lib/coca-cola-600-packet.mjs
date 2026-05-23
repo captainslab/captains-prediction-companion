@@ -23,6 +23,7 @@ import {
   teamGraphFixture,
 } from './storyline-fixtures.mjs';
 import { fixtureCocaCola600PracticeEnvelope } from './source-adapters/practice-qualifying-coca-cola-600-fixture.mjs';
+import { sourcedCocaCola600PracticeEnvelope } from './source-adapters/practice-qualifying-coca-cola-600-sourced.mjs';
 import { fixtureNascarOfficialEnvelope } from './source-adapters/nascar-official-fixture.mjs';
 import { fixtureKalshiRaceEnvelope } from './source-adapters/kalshi-race-fixture.mjs';
 import { fixtureLiquidityEnvelope } from './source-adapters/liquidity-fixture.mjs';
@@ -135,8 +136,17 @@ function renderPacket({
   lines.push(`- Strategy risk: ${layerMark('strategy_risk')} — ${layerNote('strategy_risk')}`);
   lines.push(`- Track history: ${downMark} — track_history_signal is "unknown" on placeholder driver records.`);
   lines.push(`- Recent speed: ${downMark} — no recent race-pace samples available.`);
-  lines.push(`- Qualifying position: ${downMark} — practice/qualifying envelope is ${practiceStatus}; no starting grid published yet.`);
-  lines.push(`- Practice speed: ${downMark} — practice/qualifying envelope is ${practiceStatus}; no session results published yet.`);
+  const pqRecords = Array.isArray(practiceEnvelope?.records) ? practiceEnvelope.records : [];
+  const gridCount = pqRecords.filter(r => Number.isFinite(r?.starting_position)).length;
+  const practiceCount = pqRecords.filter(r => Number.isFinite(r?.practice_rank)).length;
+  const pqSrc = (practiceEnvelope?.source_urls && practiceEnvelope.source_urls[0]) || 'unknown source';
+  if (practiceStatus === 'ok' && gridCount > 0) {
+    lines.push(`- Qualifying position: ${upMark} — starting grid published (${gridCount} entries) from ${pqSrc}. Format note: ${practiceEnvelope.snapshot?.qualifying_format_note ?? 'n/a'}. Pole: ${practiceEnvelope.snapshot?.pole_position_driver ?? 'n/a'} (#${practiceEnvelope.snapshot?.pole_position_car ?? '?'}).`);
+    lines.push(`- Practice speed: ${practiceCount > 0 ? partialMark : downMark} — official practice results published (top ${practiceCount} only); remaining drivers practice_rank=null (not fabricated). Source: ${pqSrc}.`);
+  } else {
+    lines.push(`- Qualifying position: ${downMark} — practice/qualifying envelope is ${practiceStatus}; no starting grid published yet.`);
+    lines.push(`- Practice speed: ${downMark} — practice/qualifying envelope is ${practiceStatus}; no session results published yet.`);
+  }
   lines.push(`- Race format / track type: ${upMark} — ${ctx.race_name ?? 'race'} at ${ctx.track ?? 'unknown'}, ${ctx.track_type ?? 'unknown'} track, event_format=${manifest.event_format ?? 'points'}.`);
   lines.push('');
   lines.push(`Overall fundamentals data quality: ${fundamentals.overall_data_quality}`);
@@ -253,7 +263,7 @@ export async function composeCocaCola600Packet({
       checked_at_utc: checkedAtUtc,
       outputDir: `${absOutputDir}/discovery`,
     }),
-    practice_qualifying: fixtureCocaCola600PracticeEnvelope({
+    practice_qualifying: sourcedCocaCola600PracticeEnvelope({
       checked_at_utc: checkedAtUtc,
       outputDir: `${absOutputDir}/discovery`,
     }),

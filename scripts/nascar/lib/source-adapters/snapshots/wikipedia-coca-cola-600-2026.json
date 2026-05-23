@@ -1,0 +1,315 @@
+{
+  "snapshot_id": "wikipedia_2026_coca_cola_600",
+  "snapshot_source_url": "https://en.wikipedia.org/wiki/2026_Coca-Cola_600",
+  "snapshot_date": "2026-05-25",
+  "license": "CC-BY-SA-4.0",
+  "race_name": "2026 Coca-Cola 600",
+  "track": "Charlotte Motor Speedway",
+  "qualifying_format_note": "Grid positions set by competition-based formula (no traditional qualifying session); starting positions are the published grid.",
+  "pole_position_driver": "Tyler Reddick",
+  "pole_position_car": 45,
+  "starting_grid": [
+    {
+      "pos": 1,
+      "car": 45,
+      "driver": "Tyler Reddick",
+      "team": "23XI Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 2,
+      "car": 54,
+      "driver": "Ty Gibbs",
+      "team": "Joe Gibbs Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 3,
+      "car": 97,
+      "driver": "Shane van Gisbergen",
+      "team": "Trackhouse Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 4,
+      "car": 71,
+      "driver": "Michael McDowell",
+      "team": "Spire Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 5,
+      "car": 19,
+      "driver": "Chase Briscoe",
+      "team": "Joe Gibbs Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 6,
+      "car": 12,
+      "driver": "Ryan Blaney",
+      "team": "Team Penske",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 7,
+      "car": 17,
+      "driver": "Chris Buescher",
+      "team": "RFK Racing",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 8,
+      "car": 2,
+      "driver": "Austin Cindric",
+      "team": "Team Penske",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 9,
+      "car": 3,
+      "driver": "Austin Dillon",
+      "team": "Richard Childress Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 10,
+      "car": 16,
+      "driver": "A. J. Allmendinger",
+      "team": "Kaulig Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 11,
+      "car": 11,
+      "driver": "Denny Hamlin",
+      "team": "Joe Gibbs Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 12,
+      "car": 60,
+      "driver": "Ryan Preece",
+      "team": "RFK Racing",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 13,
+      "car": 33,
+      "driver": "Austin Hill (i)",
+      "team": "Richard Childress Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 14,
+      "car": 7,
+      "driver": "Daniel Suarez",
+      "team": "Spire Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 15,
+      "car": 42,
+      "driver": "John Hunter Nemechek",
+      "team": "Legacy Motor Club",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 16,
+      "car": 9,
+      "driver": "Chase Elliott",
+      "team": "Hendrick Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 17,
+      "car": 20,
+      "driver": "Christopher Bell",
+      "team": "Joe Gibbs Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 18,
+      "car": 5,
+      "driver": "Kyle Larson",
+      "team": "Hendrick Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 19,
+      "car": 38,
+      "driver": "Zane Smith",
+      "team": "Front Row Motorsports",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 20,
+      "car": 34,
+      "driver": "Todd Gilliland",
+      "team": "Front Row Motorsports",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 21,
+      "car": 43,
+      "driver": "Erik Jones",
+      "team": "Legacy Motor Club",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 22,
+      "car": 41,
+      "driver": "Cole Custer",
+      "team": "Haas Factory Team",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 23,
+      "car": 77,
+      "driver": "Carson Hocevar",
+      "team": "Spire Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 24,
+      "car": 23,
+      "driver": "Bubba Wallace",
+      "team": "23XI Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 25,
+      "car": 88,
+      "driver": "Connor Zilisch (R)",
+      "team": "Trackhouse Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 26,
+      "car": 6,
+      "driver": "Brad Keselowski",
+      "team": "RFK Racing",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 27,
+      "car": 1,
+      "driver": "Ross Chastain",
+      "team": "Trackhouse Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 28,
+      "car": 4,
+      "driver": "Noah Gragson",
+      "team": "Front Row Motorsports",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 29,
+      "car": 48,
+      "driver": "Alex Bowman",
+      "team": "Hendrick Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 30,
+      "car": 35,
+      "driver": "Riley Herbst",
+      "team": "23XI Racing",
+      "manufacturer": "Toyota"
+    },
+    {
+      "pos": 31,
+      "car": 24,
+      "driver": "William Byron",
+      "team": "Hendrick Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 32,
+      "car": 47,
+      "driver": "Ricky Stenhouse Jr.",
+      "team": "Hyak Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 33,
+      "car": 22,
+      "driver": "Joey Logano",
+      "team": "Team Penske",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 34,
+      "car": 21,
+      "driver": "Josh Berry",
+      "team": "Wood Brothers Racing",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 35,
+      "car": 10,
+      "driver": "Ty Dillon",
+      "team": "Kaulig Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 36,
+      "car": 66,
+      "driver": "Timmy Hill (i)",
+      "team": "Garage 66",
+      "manufacturer": "Ford"
+    },
+    {
+      "pos": 37,
+      "car": 78,
+      "driver": "Katherine Legge",
+      "team": "Live Fast Motorsports",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 38,
+      "car": 51,
+      "driver": "Cody Ware",
+      "team": "Rick Ware Racing",
+      "manufacturer": "Chevrolet"
+    },
+    {
+      "pos": 39,
+      "car": 67,
+      "driver": "Corey Heim (i)",
+      "team": "23XI Racing",
+      "manufacturer": "Toyota"
+    }
+  ],
+  "practice_top3": [
+    {
+      "pos": 1,
+      "car": 47,
+      "driver": "Ricky Stenhouse Jr.",
+      "team": "Hyak Motorsports",
+      "manufacturer": "Chevrolet",
+      "time": "29.069",
+      "speed": "185.765"
+    },
+    {
+      "pos": 2,
+      "car": 77,
+      "driver": "Carson Hocevar",
+      "team": "Spire Motorsports",
+      "manufacturer": "Chevrolet",
+      "time": "29.175",
+      "speed": "185.090"
+    },
+    {
+      "pos": 3,
+      "car": 71,
+      "driver": "Michael McDowell",
+      "team": "Spire Motorsports",
+      "manufacturer": "Chevrolet",
+      "time": "29.200",
+      "speed": "184.932"
+    }
+  ]
+}

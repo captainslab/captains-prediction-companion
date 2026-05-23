@@ -38,11 +38,13 @@ test('Coca-Cola 600 packet: writes packet.md with six section headings, downgrad
   assert.ok(md.includes('Storyline does not create speed.'), 'missing storyline disclaimer');
   assert.ok(md.includes('DOWNGRADED'), 'missing DOWNGRADED marker');
 
-  // Practice + qualifying lines specifically must carry the downgrade marker.
+  // Practice + qualifying lines now use sourced data (Wikipedia 2026 Coca-Cola 600);
+  // qualifying must be AVAILABLE and practice PARTIAL (top-3 only published).
   const practiceLine = md.split('\n').find(l => l.toLowerCase().includes('practice speed'));
   const qualLine = md.split('\n').find(l => l.toLowerCase().includes('qualifying position'));
-  assert.ok(practiceLine && practiceLine.includes('DOWNGRADED'), 'practice speed line missing DOWNGRADED');
-  assert.ok(qualLine && qualLine.includes('DOWNGRADED'), 'qualifying position line missing DOWNGRADED');
+  assert.ok(qualLine && qualLine.includes('AVAILABLE'), 'qualifying position line must be AVAILABLE (sourced grid)');
+  assert.ok(practiceLine && (practiceLine.includes('PARTIAL') || practiceLine.includes('AVAILABLE')),
+    'practice speed line must reflect sourced (PARTIAL/AVAILABLE), not DOWNGRADED');
 
   // Section ordering: Base Fundamentals -> Storyline Modifier -> Market Context
   const idxBase = md.indexOf('## Base Fundamentals');
