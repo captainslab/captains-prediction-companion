@@ -108,58 +108,72 @@ function renderStartersSection(starters) {
   return lines;
 }
 
-function renderMarketLanesSection(analysis, downgrade, lineupStatus) {
+// ---- fundamentals-based decision helper --------------------------------------
+
+/**
+ * Derive a fundamentals-based decision for a lane.
+ *
+ * Rules:
+ *   - If the market engine returned 'NO CLEAR PICK' (market missing/unquoted),
+ *     the fundamentals decision is also 'NO CLEAR PICK'.
+ *   - Otherwise, fundamentals are incomplete at packet time → 'WATCH'.
+ *
+ * The result is the raw decision BEFORE downgrade is applied.
+ *
+ * @param {string} marketEngineDecision  — raw decision from analyzeGame()
+ * @returns {'WATCH'|'NO CLEAR PICK'}
+ */
+function fundamentalsDecision(marketEngineDecision) {
+  if (marketEngineDecision === 'NO CLEAR PICK') return 'NO CLEAR PICK';
+  return 'WATCH';
+}
+
+// ---- edge basis section (replaces old market lanes section) ------------------
+
+function renderEdgeBasisSection(analysis, downgrade, lineupStatus) {
   const { sections } = analysis;
   const lines = [];
-  lines.push('--- Market Lanes ---');
-  lines.push('Anti-price proof: All decisions below derive from market-internal structure (ladder inversions,');
-  lines.push('cross-side arbitrage, OI-ratio confirmation). Price favoritism alone is MARKET-ONLY or NO CLEAR PICK.');
+  lines.push('--- Edge Basis ---');
+  lines.push('Decisions require confirmed fundamentals. Board signals are in Market Context below.');
+  lines.push('Price, board volume, spread movement, and quote structure do not create a PICK or LEAN here.');
 
   // Winner (ML)
   {
-    const { lines: lns } = renderLaneEntry(
-      'Winner (ML)',
-      sections.ml.decision,
-      sections.ml.reason,
-      downgrade,
-      'winner',
-    );
+    const raw = fundamentalsDecision(sections.ml.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for this lane.'
+      : 'Fundamentals required: confirmed starters, confirmed lineups, pitcher ERA/K profile, lineup offense rank, bullpen rest, park/weather.';
+    const { lines: lns } = renderLaneEntry('Winner (ML)', raw, reason, downgrade, 'winner');
     for (const l of lns) lines.push(l);
   }
 
   // Spread / run line
   {
-    const { lines: lns } = renderLaneEntry(
-      'Spread/Run line',
-      sections.spread.decision,
-      sections.spread.reason,
-      downgrade,
-      'spread',
-    );
+    const raw = fundamentalsDecision(sections.spread.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for this lane.'
+      : 'Fundamentals required: same as winner, plus lineup depth and bullpen depth for run environment.';
+    const { lines: lns } = renderLaneEntry('Spread/Run line', raw, reason, downgrade, 'spread');
     for (const l of lns) lines.push(l);
   }
 
   // Total
   {
-    const { lines: lns } = renderLaneEntry(
-      'Total',
-      sections.total.decision,
-      sections.total.reason,
-      downgrade,
-      'total',
-    );
+    const raw = fundamentalsDecision(sections.total.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for this lane.'
+      : 'Fundamentals required: confirmed starters, bullpen context, park HR factor, wind direction/speed, lineup quality.';
+    const { lines: lns } = renderLaneEntry('Total', raw, reason, downgrade, 'total');
     for (const l of lns) lines.push(l);
   }
 
   // NFRI/YFRI
   {
-    const { lines: lns } = renderLaneEntry(
-      'NFRI/YFRI',
-      sections.yfri.decision,
-      sections.yfri.reason,
-      downgrade,
-      'yfri',
-    );
+    const raw = fundamentalsDecision(sections.yfri.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for this lane.'
+      : 'Fundamentals required: top-3 lineup slots confirmed, starter first-inning profile, park first-inning factor.';
+    const { lines: lns } = renderLaneEntry('NFRI/YFRI', raw, reason, downgrade, 'yfri');
     for (const l of lns) lines.push(l);
   }
 
@@ -167,20 +181,28 @@ function renderMarketLanesSection(analysis, downgrade, lineupStatus) {
   lines.push('  HR props:');
   if (sections.hr.perPlayer && sections.hr.perPlayer.length > 0) {
     for (const p of sections.hr.perPlayer) {
-      const { decision: finalDecision, downgradeReason } = applyDowngrade('hr', p.decision, downgrade);
+      const raw = fundamentalsDecision(p.decision);
+      const reason = raw === 'NO CLEAR PICK'
+        ? 'Market not available for HR props.'
+        : 'Fundamentals required: batter slot confirmed, recent HR rate, pitcher HR/9 and handedness, park HR factor.';
+      const { decision: finalDecision, downgradeReason } = applyDowngrade('hr', raw, downgrade);
       const label = decisionLabel(finalDecision);
       lines.push(`    ${p.name}: ${label}`);
-      lines.push(`      Reason: ${p.reason}`);
+      lines.push(`      Reason: ${reason}`);
       if (downgradeReason) {
         lines.push(`      Downgrade: ${downgradeReason}`);
       }
     }
   } else {
     // Aggregate HR entry — no per-player data.
-    const { decision: finalDecision, downgradeReason } = applyDowngrade('hr', sections.hr.decision, downgrade);
+    const raw = fundamentalsDecision(sections.hr.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for HR props.'
+      : 'Fundamentals required: batter slot confirmed, recent HR rate, pitcher HR/9 and handedness, park HR factor.';
+    const { decision: finalDecision, downgradeReason } = applyDowngrade('hr', raw, downgrade);
     const label = decisionLabel(finalDecision);
     lines.push(`    Aggregate: ${label}`);
-    lines.push(`      Reason: ${sections.hr.reason}`);
+    lines.push(`      Reason: ${reason}`);
     if (downgradeReason) {
       lines.push(`      Downgrade: ${downgradeReason}`);
     }
@@ -190,19 +212,27 @@ function renderMarketLanesSection(analysis, downgrade, lineupStatus) {
   lines.push('  K props (away starter):');
   if (sections.ks_away.perPitcher && sections.ks_away.perPitcher.length > 0) {
     for (const p of sections.ks_away.perPitcher) {
-      const { decision: finalDecision, downgradeReason } = applyDowngrade('k', p.decision, downgrade);
+      const raw = fundamentalsDecision(p.decision);
+      const reason = raw === 'NO CLEAR PICK'
+        ? 'Market not available for K props.'
+        : 'Fundamentals required: confirmed starter identity, K/9 profile, opponent K-rate vs. handedness, projected IP (5+ required).';
+      const { decision: finalDecision, downgradeReason } = applyDowngrade('k', raw, downgrade);
       const label = decisionLabel(finalDecision);
       lines.push(`    ${p.name}: ${label}`);
-      lines.push(`      Reason: ${p.reason}`);
+      lines.push(`      Reason: ${reason}`);
       if (downgradeReason) {
         lines.push(`      Downgrade: ${downgradeReason}`);
       }
     }
   } else {
-    const { decision: finalDecision, downgradeReason } = applyDowngrade('k', sections.ks_away.decision, downgrade);
+    const raw = fundamentalsDecision(sections.ks_away.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for K props.'
+      : 'Fundamentals required: confirmed starter identity, K/9 profile, opponent K-rate vs. handedness, projected IP (5+ required).';
+    const { decision: finalDecision, downgradeReason } = applyDowngrade('k', raw, downgrade);
     const label = decisionLabel(finalDecision);
     lines.push(`    (starter): ${label}`);
-    lines.push(`      Reason: ${sections.ks_away.reason}`);
+    lines.push(`      Reason: ${reason}`);
     if (downgradeReason) {
       lines.push(`      Downgrade: ${downgradeReason}`);
     }
@@ -212,23 +242,50 @@ function renderMarketLanesSection(analysis, downgrade, lineupStatus) {
   lines.push('  K props (home starter):');
   if (sections.ks_home.perPitcher && sections.ks_home.perPitcher.length > 0) {
     for (const p of sections.ks_home.perPitcher) {
-      const { decision: finalDecision, downgradeReason } = applyDowngrade('k', p.decision, downgrade);
+      const raw = fundamentalsDecision(p.decision);
+      const reason = raw === 'NO CLEAR PICK'
+        ? 'Market not available for K props.'
+        : 'Fundamentals required: confirmed starter identity, K/9 profile, opponent K-rate vs. handedness, projected IP (5+ required).';
+      const { decision: finalDecision, downgradeReason } = applyDowngrade('k', raw, downgrade);
       const label = decisionLabel(finalDecision);
       lines.push(`    ${p.name}: ${label}`);
-      lines.push(`      Reason: ${p.reason}`);
+      lines.push(`      Reason: ${reason}`);
       if (downgradeReason) {
         lines.push(`      Downgrade: ${downgradeReason}`);
       }
     }
   } else {
-    const { decision: finalDecision, downgradeReason } = applyDowngrade('k', sections.ks_home.decision, downgrade);
+    const raw = fundamentalsDecision(sections.ks_home.decision);
+    const reason = raw === 'NO CLEAR PICK'
+      ? 'Market not available for K props.'
+      : 'Fundamentals required: confirmed starter identity, K/9 profile, opponent K-rate vs. handedness, projected IP (5+ required).';
+    const { decision: finalDecision, downgradeReason } = applyDowngrade('k', raw, downgrade);
     const label = decisionLabel(finalDecision);
     lines.push(`    (starter): ${label}`);
-    lines.push(`      Reason: ${sections.ks_home.reason}`);
+    lines.push(`      Reason: ${reason}`);
     if (downgradeReason) {
       lines.push(`      Downgrade: ${downgradeReason}`);
     }
   }
+
+  return lines;
+}
+
+// ---- market context section --------------------------------------------------
+
+function renderMarketContextSection(analysis) {
+  const { sections } = analysis;
+  const lines = [];
+  lines.push('--- Market Context ---');
+  lines.push('Board signals shown for reference only. Board structure alone cannot create a PICK or LEAN.');
+
+  lines.push(`Board Winner (ML): ${sections.ml.decision} — ${sections.ml.reason}`);
+  lines.push(`Board Spread: ${sections.spread.decision} — ${sections.spread.reason}`);
+  lines.push(`Board Total: ${sections.total.decision} — ${sections.total.reason}`);
+  lines.push(`Board NFRI/YFRI: ${sections.yfri.decision} — ${sections.yfri.reason}`);
+  lines.push(`Board HR: ${sections.hr.decision} — ${sections.hr.reason}`);
+  lines.push(`Board K (away): ${sections.ks_away.decision} — ${sections.ks_away.reason}`);
+  lines.push(`Board K (home): ${sections.ks_home.decision} — ${sections.ks_home.reason}`);
 
   return lines;
 }
@@ -257,12 +314,28 @@ function renderResearchCompleteness(starters, lineupStatus) {
   return lines;
 }
 
-function renderOverallDecision(final) {
+function renderOverallDecision(final, starters, lineupStatus) {
   const lines = [];
   lines.push('--- Overall Decision ---');
   lines.push(`Decision status: ${final.decision_status}`);
   lines.push(`Best angle: ${final.best_angle}`);
-  lines.push(`Reasoning: ${final.reason}`);
+
+  // Fundamentals-based reasoning — do not surface board-signal language here.
+  const startersOk = starters && (
+    (typeof starters.away === 'string' ? starters.away : starters.away?.name) ||
+    (typeof starters.home === 'string' ? starters.home : starters.home?.name)
+  );
+  const lineupPartial = lineupStatus === LINEUP_STATUS.BOTH_CONFIRMED
+    || lineupStatus === LINEUP_STATUS.ONE_CONFIRMED;
+
+  let fundamentalsReasoning;
+  if (startersOk || lineupPartial) {
+    fundamentalsReasoning = 'Partial fundamentals available. Full confirmation required before edge claim.';
+  } else {
+    fundamentalsReasoning = 'Fundamentals required before any edge claim. See Market Context for board signals.';
+  }
+
+  lines.push(`Reasoning: ${fundamentalsReasoning}`);
   return lines;
 }
 
@@ -270,16 +343,29 @@ function renderOverallDecision(final) {
 
 function resolveBestLane(analysis, downgrade) {
   const candidates = [
-    { lane: 'winner', raw: analysis.sections.ml.decision,     reason: analysis.sections.ml.reason },
-    { lane: 'spread', raw: analysis.sections.spread.decision, reason: analysis.sections.spread.reason },
-    { lane: 'total',  raw: analysis.sections.total.decision,  reason: analysis.sections.total.reason },
-    { lane: 'yfri',   raw: analysis.sections.yfri.decision,   reason: analysis.sections.yfri.reason },
+    { lane: 'winner', engineDecision: analysis.sections.ml.decision },
+    { lane: 'spread', engineDecision: analysis.sections.spread.decision },
+    { lane: 'total',  engineDecision: analysis.sections.total.decision },
+    { lane: 'yfri',   engineDecision: analysis.sections.yfri.decision },
   ];
   const ranked = candidates
     .map((c) => {
-      const { decision: final } = applyDowngrade(c.lane, c.raw, downgrade);
+      const raw = fundamentalsDecision(c.engineDecision);
+      const { decision: final } = applyDowngrade(c.lane, raw, downgrade);
       const label = decisionLabel(final);
-      return { ...c, finalDecision: final, label, order: DECISION_ORDER[label] ?? 99 };
+      // Derive a fundamentals-based reason for the best lane summary.
+      const reason = raw === 'NO CLEAR PICK'
+        ? 'Market not available for this lane.'
+        : (() => {
+            switch (c.lane) {
+              case 'winner': return 'Fundamentals required: confirmed starters, confirmed lineups, pitcher ERA/K profile, lineup offense rank, bullpen rest, park/weather.';
+              case 'spread': return 'Fundamentals required: same as winner, plus lineup depth and bullpen depth for run environment.';
+              case 'total':  return 'Fundamentals required: confirmed starters, bullpen context, park HR factor, wind direction/speed, lineup quality.';
+              case 'yfri':   return 'Fundamentals required: top-3 lineup slots confirmed, starter first-inning profile, park first-inning factor.';
+              default:       return 'Fundamentals required.';
+            }
+          })();
+      return { ...c, finalDecision: final, label, order: DECISION_ORDER[label] ?? 99, reason };
     })
     .sort((a, b) => a.order - b.order);
   const best = ranked[0];
@@ -329,11 +415,13 @@ export function renderPerGamePacket(game, options = {}) {
     '',
     ...renderStartersSection(starters),
     '',
-    ...renderMarketLanesSection(analysis, downgrade, lineupStatus),
+    ...renderEdgeBasisSection(analysis, downgrade, lineupStatus),
     '',
     ...renderResearchCompleteness(starters, lineupStatus),
     '',
-    ...renderOverallDecision(analysis.final),
+    ...renderMarketContextSection(analysis),
+    '',
+    ...renderOverallDecision(analysis.final, starters, lineupStatus),
     '',
     'No trades placed. No bankroll sizing. Research only.',
   ];
@@ -388,8 +476,8 @@ export function renderBlockPacket(block, perGamePackets) {
 
   const rankSection = [
     '--- Ranked Fundamentals Summary ---',
-    'Signals below derive from market-internal structure only (ladder inversions, cross-side arb, OI confirmation).',
-    'No price-only picks. No external context modeled.',
+    'Decisions require confirmed fundamentals (starters, lineups, pitcher stats, batter/power, bullpen, park/weather).',
+    'Board context shown in each per-game packet. No price-only picks.',
     '',
   ];
 
@@ -415,8 +503,7 @@ export function renderBlockPacket(block, perGamePackets) {
   } else {
     for (const p of noPickGames) {
       const matchup = `${p.awayAbbrev ?? '?'}@${p.homeAbbrev ?? '?'}`;
-      const reason = p.analysis?.final?.reason ?? 'No market-internal signal above noise.';
-      noPickSection.push(`${matchup}: NO CLEAR PICK — ${truncate(reason, 120)}`);
+      noPickSection.push(`${matchup}: NO CLEAR PICK — No fundamentals available to support an edge claim.`);
     }
   }
 

@@ -262,7 +262,7 @@ test('renderPerGamePacket: includes all required sections', () => {
   // The text body contains the section headers and key phrases.
   assert.match(text, /Lineup Status/i);
   assert.match(text, /Starters/i);
-  assert.match(text, /Market Lanes/i);
+  assert.match(text, /Edge Basis/i);
   assert.match(text, /Research Completeness/i);
   assert.match(text, /Overall Decision/i);
   assert.match(text, /No trades placed/i);
@@ -286,11 +286,11 @@ test('renderPerGamePacket: HR shows NO CLEAR PICK when one lineup confirmed', ()
   assert.match(hrSection, /NO CLEAR PICK/i);
 });
 
-test('renderPerGamePacket: anti-price proof statement present', () => {
+test('renderPerGamePacket: Edge Basis section states fundamentals requirement', () => {
   const { text } = renderPerGamePacket(fakeGame, { lineupStatus: LINEUP_STATUS.PENDING });
   assert.ok(
-    /market-internal/i.test(text) || /anti-price/i.test(text) || /price-only/i.test(text),
-    'expected anti-price proof statement in packet text',
+    /fundamentals/i.test(text) || /Edge Basis/i.test(text),
+    'expected fundamentals-first statement in packet text',
   );
 });
 
@@ -403,4 +403,133 @@ test('polling starts before hard cutoff', () => {
       `polling_starts_utc should be before hard_cutoff_utc for first pitch ${fp}`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// Fundamentals-first renderer guardrails
+// ---------------------------------------------------------------------------
+
+test('renderPerGamePacket: Edge Basis section exists and contains no market-structure terms', () => {
+  const game = { game_key: 'TEST', away: 'CHC', home: 'STL', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals',
+    start_utc: '2026-06-01T23:05:00Z', start_ct: '2026-06-01 18:05 CT', series: {} };
+  const pkt = renderPerGamePacket(game, { lineupStatus: 'pending' });
+  assert.ok(pkt.text.includes('--- Edge Basis ---'), 'Edge Basis section must be present');
+  const edgeBasisStart = pkt.text.indexOf('--- Edge Basis ---');
+  const marketContextStart = pkt.text.indexOf('--- Market Context ---');
+  const edgeBasisText = pkt.text.slice(edgeBasisStart, marketContextStart > -1 ? marketContextStart : undefined);
+  const forbidden = ['ladder inversion', 'cross-side arb', 'OI', 'open interest', 'market-internal', 'price favoritism', ' arb', 'spread ladder'];
+  for (const term of forbidden) {
+    assert.ok(!edgeBasisText.toLowerCase().includes(term.toLowerCase()), `Edge Basis must not contain "${term}"`);
+  }
+});
+
+test('renderPerGamePacket: Market Context section exists as separate section', () => {
+  const game = { game_key: 'TEST', away: 'CHC', home: 'STL', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals',
+    start_utc: '2026-06-01T23:05:00Z', start_ct: '2026-06-01 18:05 CT', series: {} };
+  const pkt = renderPerGamePacket(game, { lineupStatus: 'pending' });
+  assert.ok(pkt.text.includes('--- Market Context ---'), 'Market Context section must be present');
+});
+
+test('renderPerGamePacket: board-only signals cannot produce PICK or LEAN in Edge Basis', () => {
+  // Game with priced ML markets that would produce CLEAR in the board engine
+  const game = {
+    game_key: 'TEST', away: 'CHC', home: 'STL', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals',
+    start_utc: '2026-06-01T23:05:00Z', start_ct: '2026-06-01 18:05 CT',
+    series: {
+      ml: {
+        event_ticker: 'KXMLBGAME-TEST', markets: [
+          { ticker: 'KXMLBGAME-TEST-CHC', yes_ask_dollars: 0.40, no_ask_dollars: 0.62,
+            yes_bid_dollars: 0.38, no_bid_dollars: 0.60, open_interest_fp: 200 },
+          { ticker: 'KXMLBGAME-TEST-STL', yes_ask_dollars: 0.50, no_ask_dollars: 0.52,
+            yes_bid_dollars: 0.48, no_bid_dollars: 0.50, open_interest_fp: 120 },
+        ],
+        priced: true, market_count: 2,
+      },
+    },
+  };
+  // No fundamentals — starters and lineups not provided
+  const pkt = renderPerGamePacket(game, { lineupStatus: 'pending' });
+  // Even with a priced ML market, bestLaneDecision must not be PICK or LEAN
+  assert.notEqual(pkt.bestLaneDecision, 'CLEAR', 'board CLEAR must not become edge PICK');
+  assert.notEqual(pkt.bestLaneDecisionLabel, 'PICK', 'board CLEAR must not become edge PICK');
+  assert.notEqual(pkt.bestLaneDecision, 'LEAN', 'board LEAN must not become edge LEAN');
+  // Edge Basis section must not say PICK or LEAN for winner
+  const edgeBasisStart = pkt.text.indexOf('--- Edge Basis ---');
+  const marketContextStart = pkt.text.indexOf('--- Market Context ---');
+  const edgeBasisText = pkt.text.slice(edgeBasisStart, marketContextStart > -1 ? marketContextStart : undefined);
+  assert.ok(!edgeBasisText.includes(': PICK'), 'Edge Basis must not contain PICK');
+  assert.ok(!edgeBasisText.includes(': LEAN'), 'Edge Basis must not contain LEAN');
+});
+
+test('renderPerGamePacket: missing fundamentals produce WATCH not PICK even with board CLEAR', () => {
+  const game = {
+    game_key: 'TEST2', away: 'NYM', home: 'LAD',
+    away_full: 'New York Mets', home_full: 'Los Angeles Dodgers',
+    start_utc: '2026-06-01T23:10:00Z', start_ct: '2026-06-01 18:10 CT',
+    series: {
+      ml: {
+        event_ticker: 'KXMLBGAME-TEST2', priced: true, market_count: 2, markets: [
+          { ticker: 'KXMLBGAME-TEST2-NYM', yes_ask_dollars: 0.38, no_ask_dollars: 0.64, open_interest_fp: 500 },
+          { ticker: 'KXMLBGAME-TEST2-LAD', yes_ask_dollars: 0.55, no_ask_dollars: 0.47, open_interest_fp: 300 },
+        ],
+      },
+    },
+  };
+  const pkt = renderPerGamePacket(game, { lineupStatus: 'pending', starters: null });
+  assert.ok(
+    pkt.bestLaneDecisionLabel === 'WATCH' || pkt.bestLaneDecisionLabel === 'NO CLEAR PICK',
+    `bestLaneDecisionLabel should be WATCH or NO CLEAR PICK, got ${pkt.bestLaneDecisionLabel}`,
+  );
+});
+
+test('renderBlockPacket: ranked summary section does not contain market-structure terms', () => {
+  const game = { game_key: 'BLK1', away: 'CHC', home: 'STL', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals',
+    start_utc: '2026-06-01T23:05:00Z', start_ct: '2026-06-01 18:05 CT', series: {} };
+  const pkt = renderPerGamePacket(game, { lineupStatus: 'pending' });
+  const block = {
+    block_id: 'LB01',
+    lead_first_pitch_ct: '2026-06-01 18:05 CT',
+    hard_cutoff_ct: '2026-06-01 17:20 CT',
+    lineup_status: 'pending',
+    game_keys: ['BLK1'],
+  };
+  const blockText = renderBlockPacket(block, [pkt]);
+  // Find the ranked summary section
+  const summaryStart = blockText.indexOf('--- Ranked Fundamentals Summary ---');
+  const perGameStart = blockText.indexOf('--- Per-Game Packets ---');
+  const summarySection = blockText.slice(summaryStart, perGameStart > -1 ? perGameStart : undefined);
+  const forbidden = ['ladder inversion', 'cross-side arb', 'market-internal', 'OI confirmation'];
+  for (const term of forbidden) {
+    assert.ok(!summarySection.toLowerCase().includes(term.toLowerCase()), `Block summary must not contain "${term}"`);
+  }
+});
+
+test('buildPacketMeta: has_picks is false when all lanes are WATCH/NO CLEAR PICK', async () => {
+  const { buildPacketMeta } = await import('../scripts/mlb/generate-lineup-packets.mjs');
+  const game = { game_key: 'NOPICK', away: 'CHC', home: 'STL', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals',
+    start_utc: '2026-06-01T23:05:00Z', start_ct: '2026-06-01 18:05 CT', series: {} };
+  const pkt = renderPerGamePacket(game, { lineupStatus: 'pending' });
+  const meta = buildPacketMeta({
+    date: '2026-06-01', blockId: 'LB01', lineupStatus: 'pending', downgrade: 'full',
+    games: [game], perGamePackets: [pkt], blockTxtPath: '/tmp/block.txt', dryRun: true,
+  });
+  assert.equal(meta.has_picks, false, 'has_picks must be false when fundamentals missing');
+});
+
+test('buildLineupBlockSchedule: creates valid schedule with correct schema', async () => {
+  const { buildLineupBlockSchedule } = await import('../scripts/mlb/schedule-daily-slate.mjs');
+  const schedule = await buildLineupBlockSchedule({
+    date: '2026-06-15',
+    games: [],  // dry-run: no games
+    groupingWindowMinutes: 30,
+    pollingLeadMinutes: 180,
+    hardCutoffMinutes: 45,
+  });
+  assert.equal(schedule.schema, 'mlb-lineup-block-schedule/v1');
+  assert.equal(schedule.date, '2026-06-15');
+  assert.equal(schedule.grouping_window_minutes, 30);
+  assert.equal(schedule.polling_lead_minutes, 180);
+  assert.equal(schedule.hard_cutoff_minutes, 45);
+  assert.ok(Array.isArray(schedule.blocks));
+  assert.equal(schedule.blocks.length, 0);
 });
