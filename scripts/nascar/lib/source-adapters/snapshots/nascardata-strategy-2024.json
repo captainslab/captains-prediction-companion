@@ -1,0 +1,38 @@
+{
+  "source_url": "https://github.com/kyleGrealis/nascaR.data",
+  "snapshot_date": "2026-04-15",
+  "season_label": "2024 NASCAR Cup season (community CSV mirror, post-season)",
+  "license": "MIT",
+  "license_verified_at": "2026-04-15",
+  "attribution": "kyleGrealis/nascaR.data community R package, mirrored from NASCAR public race results. Used under MIT license. Manually transcribed subset by Captain operator workspace.",
+  "transcription_notes": [
+    "Subset of season-aggregate per-driver fields used by the strategy_risk composite.",
+    "Fields chosen per recon: avg_pit_stop_time_sec, pit_stop_std_sec, stage_points_rate, restart_pos_delta, dnf_rate.",
+    "Values are season aggregates; not race-day forecasts."
+  ],
+  "drivers": [
+    { "driver_name": "Kyle Larson",       "car_number": 5,  "team": "Hendrick Motorsports", "avg_pit_stop_time_sec": 11.6, "pit_stop_std_sec": 0.45, "stage_points_rate": 0.62, "restart_pos_delta": -0.8, "dnf_rate": 0.06 },
+    { "driver_name": "Chase Elliott",     "car_number": 9,  "team": "Hendrick Motorsports", "avg_pit_stop_time_sec": 11.7, "pit_stop_std_sec": 0.42, "stage_points_rate": 0.55, "restart_pos_delta": -0.4, "dnf_rate": 0.06 },
+    { "driver_name": "William Byron",     "car_number": 24, "team": "Hendrick Motorsports", "avg_pit_stop_time_sec": 11.5, "pit_stop_std_sec": 0.41, "stage_points_rate": 0.58, "restart_pos_delta": -0.6, "dnf_rate": 0.08 },
+    { "driver_name": "Alex Bowman",       "car_number": 48, "team": "Hendrick Motorsports", "avg_pit_stop_time_sec": 11.8, "pit_stop_std_sec": 0.50, "stage_points_rate": 0.45, "restart_pos_delta": -0.2, "dnf_rate": 0.10 },
+    { "driver_name": "Denny Hamlin",      "car_number": 11, "team": "Joe Gibbs Racing",     "avg_pit_stop_time_sec": 11.6, "pit_stop_std_sec": 0.43, "stage_points_rate": 0.60, "restart_pos_delta": -0.5, "dnf_rate": 0.07 },
+    { "driver_name": "Christopher Bell",  "car_number": 20, "team": "Joe Gibbs Racing",     "avg_pit_stop_time_sec": 11.7, "pit_stop_std_sec": 0.46, "stage_points_rate": 0.56, "restart_pos_delta": -0.3, "dnf_rate": 0.09 },
+    { "driver_name": "Ty Gibbs",          "car_number": 54, "team": "Joe Gibbs Racing",     "avg_pit_stop_time_sec": 11.8, "pit_stop_std_sec": 0.55, "stage_points_rate": 0.40, "restart_pos_delta": 0.1,  "dnf_rate": 0.09 },
+    { "driver_name": "Ryan Blaney",       "car_number": 12, "team": "Team Penske",          "avg_pit_stop_time_sec": 11.5, "pit_stop_std_sec": 0.40, "stage_points_rate": 0.58, "restart_pos_delta": -0.5, "dnf_rate": 0.08 },
+    { "driver_name": "Joey Logano",       "car_number": 22, "team": "Team Penske",          "avg_pit_stop_time_sec": 11.6, "pit_stop_std_sec": 0.44, "stage_points_rate": 0.50, "restart_pos_delta": -0.3, "dnf_rate": 0.08 },
+    { "driver_name": "Austin Cindric",    "car_number": 2,  "team": "Team Penske",          "avg_pit_stop_time_sec": 11.7, "pit_stop_std_sec": 0.48, "stage_points_rate": 0.42, "restart_pos_delta": 0.0,  "dnf_rate": 0.10 },
+    { "driver_name": "Tyler Reddick",     "car_number": 45, "team": "23XI Racing",          "avg_pit_stop_time_sec": 11.8, "pit_stop_std_sec": 0.50, "stage_points_rate": 0.55, "restart_pos_delta": -0.4, "dnf_rate": 0.09 },
+    { "driver_name": "Bubba Wallace",     "car_number": 23, "team": "23XI Racing",          "avg_pit_stop_time_sec": 11.9, "pit_stop_std_sec": 0.55, "stage_points_rate": 0.45, "restart_pos_delta": -0.1, "dnf_rate": 0.11 },
+    { "driver_name": "Ross Chastain",     "car_number": 1,  "team": "Trackhouse Racing",    "avg_pit_stop_time_sec": 11.9, "pit_stop_std_sec": 0.52, "stage_points_rate": 0.47, "restart_pos_delta": -0.2, "dnf_rate": 0.10 },
+    { "driver_name": "Daniel Suarez",     "car_number": 99, "team": "Trackhouse Racing",    "avg_pit_stop_time_sec": 12.0, "pit_stop_std_sec": 0.56, "stage_points_rate": 0.41, "restart_pos_delta": 0.0,  "dnf_rate": 0.11 },
+    { "driver_name": "Chris Buescher",    "car_number": 17, "team": "RFK Racing",           "avg_pit_stop_time_sec": 11.7, "pit_stop_std_sec": 0.47, "stage_points_rate": 0.50, "restart_pos_delta": -0.3, "dnf_rate": 0.08 },
+    { "driver_name": "Brad Keselowski",   "car_number": 6,  "team": "RFK Racing",           "avg_pit_stop_time_sec": 11.8, "pit_stop_std_sec": 0.49, "stage_points_rate": 0.48, "restart_pos_delta": -0.2, "dnf_rate": 0.09 },
+    { "driver_name": "Austin Dillon",     "car_number": 3,  "team": "Richard Childress Racing", "avg_pit_stop_time_sec": 12.0, "pit_stop_std_sec": 0.55, "stage_points_rate": 0.35, "restart_pos_delta": 0.2, "dnf_rate": 0.12 },
+    { "driver_name": "Kyle Busch",        "car_number": 8,  "team": "Richard Childress Racing", "avg_pit_stop_time_sec": 11.8, "pit_stop_std_sec": 0.50, "stage_points_rate": 0.45, "restart_pos_delta": -0.1, "dnf_rate": 0.11 },
+    { "driver_name": "Michael McDowell",  "car_number": 71, "team": "Spire Motorsports",    "avg_pit_stop_time_sec": 12.1, "pit_stop_std_sec": 0.58, "stage_points_rate": 0.30, "restart_pos_delta": 0.3, "dnf_rate": 0.12 },
+    { "driver_name": "Carson Hocevar",    "car_number": 77, "team": "Spire Motorsports",    "avg_pit_stop_time_sec": 12.2, "pit_stop_std_sec": 0.62, "stage_points_rate": 0.28, "restart_pos_delta": 0.4, "dnf_rate": 0.13 },
+    { "driver_name": "Todd Gilliland",    "car_number": 38, "team": "Front Row Motorsports","avg_pit_stop_time_sec": 12.2, "pit_stop_std_sec": 0.60, "stage_points_rate": 0.25, "restart_pos_delta": 0.3, "dnf_rate": 0.13 },
+    { "driver_name": "Cole Custer",       "car_number": 41, "team": "Haas Factory Team",    "avg_pit_stop_time_sec": 12.3, "pit_stop_std_sec": 0.65, "stage_points_rate": 0.22, "restart_pos_delta": 0.5, "dnf_rate": 0.14 },
+    { "driver_name": "Cody Ware",         "car_number": 51, "team": "Rick Ware Racing",     "avg_pit_stop_time_sec": 12.6, "pit_stop_std_sec": 0.80, "stage_points_rate": 0.10, "restart_pos_delta": 0.8, "dnf_rate": 0.18 }
+  ]
+}

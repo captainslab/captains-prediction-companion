@@ -27,6 +27,9 @@ import { fixtureNascarOfficialEnvelope } from './source-adapters/nascar-official
 import { fixtureKalshiRaceEnvelope } from './source-adapters/kalshi-race-fixture.mjs';
 import { fixtureLiquidityEnvelope } from './source-adapters/liquidity-fixture.mjs';
 import { fixtureFundamentalsEnvelope } from './source-adapters/fundamentals-fixture.mjs';
+import { wikipediaTeamEquipmentEnvelope } from './source-adapters/wikipedia-team-equipment.mjs';
+import { nascardataStrategyRiskEnvelope } from './source-adapters/nascardata-strategy.mjs';
+import { derivedDriverSkillEnvelope } from './source-adapters/derived-driver-skill.mjs';
 import { composeBaseFundamentals, fundamentalsForStoryline } from './base-fundamentals.mjs';
 
 const RUN_DATE = '2026-05-25';
@@ -272,35 +275,36 @@ export async function composeCocaCola600Packet({
 
   const baseFundamentalsLegacy = buildBaseFundamentalsForDriver(topActive, envelopes.practice_qualifying);
 
-  // 3b. Load the 4 explicit fundamentals layers (driver skill, team/equipment,
-  // pit crew, strategy risk) via fixture adapters. Status='degraded' so the
-  // packet shows placeholder ratings under PARTIAL:PLACEHOLDER markers and
-  // gates cannot pass on placeholder data alone.
+  // 3b. Load the 4 explicit fundamentals layers. Clean adapters where a
+  // public, non-blocked source exists; fixture/unavailable otherwise.
+  //   - team_equipment: Wikipedia 2025 Cup season aggregates (clean).
+  //   - strategy_risk:  nascaR.data 2024 CSV mirror (DEGRADED proxy).
+  //   - driver_skill:   derived from strategy + team (DEGRADED proxy;
+  //                     live sources blocked by anti-bot under recon).
+  //   - pit_crew:       UNAVAILABLE — no clean public structured source.
+  const strategyEnv = nascardataStrategyRiskEnvelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/fundamentals`,
+  });
+  const teamEnv = wikipediaTeamEquipmentEnvelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/fundamentals`,
+  });
   const fundamentalsEnvelopes = {
-    driver_skill: fixtureFundamentalsEnvelope({
-      layer: 'driver_skill',
-      status: 'degraded',
+    driver_skill: derivedDriverSkillEnvelope({
       checked_at_utc: checkedAtUtc,
       outputDir: `${absOutputDir}/fundamentals`,
+      strategyEnvelope: strategyEnv,
+      teamEnvelope: teamEnv,
     }),
-    team_equipment: fixtureFundamentalsEnvelope({
-      layer: 'team_equipment',
-      status: 'degraded',
-      checked_at_utc: checkedAtUtc,
-      outputDir: `${absOutputDir}/fundamentals`,
-    }),
+    team_equipment: teamEnv,
     pit_crew: fixtureFundamentalsEnvelope({
       layer: 'pit_crew',
       status: 'unavailable',
       checked_at_utc: checkedAtUtc,
       outputDir: `${absOutputDir}/fundamentals`,
     }),
-    strategy_risk: fixtureFundamentalsEnvelope({
-      layer: 'strategy_risk',
-      status: 'unavailable',
-      checked_at_utc: checkedAtUtc,
-      outputDir: `${absOutputDir}/fundamentals`,
-    }),
+    strategy_risk: strategyEnv,
   };
   const fundamentals = composeBaseFundamentals({ envelopes: fundamentalsEnvelopes });
 
