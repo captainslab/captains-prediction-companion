@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// UFC weekly packet generator. Fridays. One packet per Kalshi UFC event.
+// UFC weekly packet generator. Saturdays. One packet per Kalshi UFC event.
 // Events = the card. Markets = each fighter's win contract. No trades.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -24,10 +24,10 @@ import {
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 
-const PACKET_TYPE = 'ufc-weekly';
-const WEEKEND_DAYS = 2; // Fri + Sat + Sun -> windowDays=2
+export const PACKET_TYPE = 'ufc-weekly';
+const WEEKEND_DAYS = 1; // Sat + Sun -> windowDays=1
 
-function buildUfcProcess({ event = null, legacy = null, marketCount = 0 }) {
+export function buildUfcProcess({ event = null, legacy = null, marketCount = 0 }) {
   const hasParticipants = marketCount > 0 || Boolean(legacy?.fights?.length || legacy?.card?.length);
   return evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
@@ -52,6 +52,7 @@ function buildUfcProcess({ event = null, legacy = null, marketCount = 0 }) {
     inference: 'Fight inference blocked until fighter status, matchup, recent form, and card-change checks are complete.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
     finalJudgment: 'WATCH only; no evidence lean from fight board alone.',
+    whyNotPriceOnly: 'Market-board data is reference-only; no final pick is claimed without fighter-status, matchup, and card-change evidence.',
     wouldChangeView: [
       'Official card and fighter status are confirmed.',
       'Recent form and style matchup support the same side as any board signal.',
@@ -60,10 +61,10 @@ function buildUfcProcess({ event = null, legacy = null, marketCount = 0 }) {
   });
 }
 
-function weekendDates(fridayIso) {
-  const d = new Date(`${fridayIso}T00:00:00Z`);
+export function weekendDates(startIso) {
+  const d = new Date(`${startIso}T00:00:00Z`);
   const fmt = (dt) => dt.toISOString().slice(0, 10);
-  return [0, 1, 2].map((off) => {
+  return [0, 1].map((off) => {
     const nd = new Date(d);
     nd.setUTCDate(d.getUTCDate() + off);
     return fmt(nd);
@@ -100,7 +101,26 @@ function locateUfcArtifacts(stateRoot, dates) {
   return hits;
 }
 
-function buildKalshiEventPacket({ event, dates, sourcePath }) {
+function addNoPickSummary(lines, { sourcesChecked, missingInputs, noPickReason }) {
+  lines.push(`  sources_checked: ${sourcesChecked}`);
+  lines.push(`  missing_inputs: ${missingInputs}`);
+  lines.push('  anti_price_statement: market-board data is reference-only and cannot support a pick by itself.');
+  lines.push(`  no_pick_reason: ${noPickReason}`);
+  lines.push('  telegram_send: disabled');
+}
+
+function addEdgeBasisSection(lines) {
+  lines.push('--- Edge Basis ---');
+  lines.push('- No evidence edge basis available. Fighter status, recent form, matchup context, and card-change checks are incomplete.');
+}
+
+function addMarketContextHeader(lines) {
+  lines.push('--- Market Context ---');
+  lines.push('anti_price_statement: price, volume, open interest, and line movement are market context only; they are not edge basis.');
+  lines.push('line_movement: MISSING (not fetched by this packet).');
+}
+
+export function buildKalshiEventPacket({ event, dates, sourcePath }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
   const process = buildUfcProcess({ event, marketCount: block.marketCount });
@@ -116,9 +136,17 @@ function buildKalshiEventPacket({ event, dates, sourcePath }) {
   lines.push(`  market_type: ${process.marketType}`);
   lines.push(`  decision_status: ${process.decisionStatus}`);
   lines.push('  note: fight board only; no evidence lean without fighter status and matchup context.');
+  addNoPickSummary(lines, {
+    sourcesChecked: 'Kalshi UFC event/market board; persisted source JSON when available.',
+    missingInputs: 'fighter status, recent form, matchup context, card-change checks, settlement criteria.',
+    noPickReason: 'fighter evidence is incomplete; no side is evidence-supported beyond market data.',
+  });
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');
+  addEdgeBasisSection(lines);
+  lines.push('');
+  addMarketContextHeader(lines);
   lines.push(`event_ticker: ${s.ticker}`);
   lines.push(`event_title: ${s.title}`);
   lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
@@ -141,7 +169,7 @@ function buildKalshiEventPacket({ event, dates, sourcePath }) {
   };
 }
 
-function buildLegacyEventPacket({ weekendDates: wd, event }) {
+export function buildLegacyEventPacket({ weekendDates: wd, event }) {
   const data = readJsonIfExists(event.file) || {};
   const process = buildUfcProcess({ legacy: data, marketCount: 0 });
   const eventName = data.event_name || data.name || event.file.split('/').pop().replace(/\.json$/, '');
@@ -157,9 +185,17 @@ function buildLegacyEventPacket({ weekendDates: wd, event }) {
   lines.push(`  market_type: ${process.marketType}`);
   lines.push(`  decision_status: ${process.decisionStatus}`);
   lines.push('  note: legacy fight packet; no evidence lean without complete fight context.');
+  addNoPickSummary(lines, {
+    sourcesChecked: 'local UFC event JSON.',
+    missingInputs: 'Kalshi market board, fighter status, recent form, matchup context, card-change checks, settlement criteria.',
+    noPickReason: 'complete fight context is unavailable; no side is evidence-supported beyond supplied event data.',
+  });
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');
+  addEdgeBasisSection(lines);
+  lines.push('');
+  addMarketContextHeader(lines);
   lines.push(`event_name: ${eventName}`);
   lines.push(`event_date_utc: ${event.date}`);
   lines.push(`weekend_window_utc: ${wd.join(' .. ')}`);
@@ -181,7 +217,7 @@ function buildLegacyEventPacket({ weekendDates: wd, event }) {
   return header + lines.join('\n') + packetFooter();
 }
 
-function buildEmptyPacket(date, dates, discovery) {
+export function buildEmptyPacket(date, dates, discovery) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
     rawDecision: 'NO CLEAR PICK',
@@ -193,6 +229,7 @@ function buildEmptyPacket(date, dates, discovery) {
     inference: 'No inference.',
     skepticReview: 'MISSING.',
     finalJudgment: 'NO CLEAR PICK.',
+    whyNotPriceOnly: 'No final pick is claimed without verified UFC event and fighter evidence.',
   });
   return (
     packetHeader({
@@ -206,8 +243,20 @@ function buildEmptyPacket(date, dates, discovery) {
       `  market_type: ${process.marketType}`,
       `  decision_status: ${process.decisionStatus}`,
       '  note: no UFC events found; no pick or lean.',
+      '  sources_checked: Kalshi UFC API and calendar page.',
+      '  missing_inputs: UFC event, fighter status, recent form, matchup context, card-change checks, settlement criteria.',
+      '  anti_price_statement: market-board data is reference-only and cannot support a pick by itself.',
+      '  no_pick_reason: no UFC event data was discovered inside the weekend window.',
+      '  telegram_send: disabled',
       '',
       renderDecisionProcess(process, { heading: 'Research Completeness' }),
+      '',
+      '--- Edge Basis ---',
+      '- No evidence edge basis available. UFC event and fighter evidence are incomplete.',
+      '',
+      '--- Market Context ---',
+      'anti_price_statement: price, volume, open interest, and line movement are market context only; they are not edge basis.',
+      'line_movement: MISSING (no market board captured).',
       '',
       'kalshi_discovery:',
       `  source_page: ${KALSHI_SOURCES.ufc.page_url}`,
