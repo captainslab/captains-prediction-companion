@@ -31,6 +31,7 @@ import { wikipediaTeamEquipmentEnvelope } from './source-adapters/wikipedia-team
 import { nascardataStrategyRiskEnvelope } from './source-adapters/nascardata-strategy.mjs';
 import { derivedDriverSkillEnvelope } from './source-adapters/derived-driver-skill.mjs';
 import { composeBaseFundamentals, fundamentalsForStoryline } from './base-fundamentals.mjs';
+import { composeMultiLaneCeilingBoard, MULTI_LANE_LANES } from './multi-lane-ceiling.mjs';
 
 const RUN_DATE = '2026-05-25';
 const FROZEN_DEFAULT = '2026-05-24T18:00:00.000Z';
@@ -91,6 +92,7 @@ function renderPacket({
   discovery,
   practiceEnvelope,
   fundamentals,
+  multiLaneBoard,
   beneficiary,
   modifier,
 }) {
@@ -170,9 +172,38 @@ function renderPacket({
   lines.push(`- Disclaimer: "${modifier.disclaimer}"`);
   lines.push('');
 
+  lines.push('## Ceiling Board (Top 20 candidate pool)');
+  lines.push('');
+  lines.push(`- candidate_pool_size: ${multiLaneBoard.candidate_pool_size}`);
+  lines.push(`- pool_selection_basis: ${multiLaneBoard.pool_selection_basis}`);
+  if (multiLaneBoard.pool_short_reason) {
+    lines.push(`- pool_short_reason: ${multiLaneBoard.pool_short_reason}`);
+  }
+  lines.push(`- fundamentals_data_quality: ${multiLaneBoard.fundamentals_data_quality}`);
+  lines.push(`- lanes: ${multiLaneBoard.lanes.join(', ')}`);
+  lines.push(`- statuses allowed: ${multiLaneBoard.statuses.join(' | ')}`);
+  lines.push('');
+  lines.push('Rank  Car  Driver                       Score  Win            Top5           Top10          Top20');
+  for (const c of multiLaneBoard.candidates) {
+    const name = String(c.driver_name ?? '').padEnd(28).slice(0, 28);
+    const car = String(c.car_number ?? '').padStart(3);
+    const rank = String(c.pool_rank).padStart(4);
+    const sc = String(c.composite_score ?? 'n/a').padStart(5);
+    const w = String(c.lanes.win.status).padEnd(14);
+    const t5 = String(c.lanes.top_5.status).padEnd(14);
+    const t10 = String(c.lanes.top_10.status).padEnd(14);
+    const t20 = String(c.lanes.top_20.status).padEnd(14);
+    const bene = c.storyline_beneficiary ? '  * storyline beneficiary' : '';
+    lines.push(`${rank}  ${car}  ${name} ${sc}  ${w} ${t5} ${t10} ${t20}${bene}`);
+  }
+  lines.push('');
+  lines.push('Lane gating notes:');
+  for (const note of multiLaneBoard.safety_notes) lines.push(`- ${note}`);
+  lines.push('');
+
   lines.push('## Market Context');
   lines.push('');
-  lines.push('Market lanes are listed here as REFERENCE ONLY and are explicitly separated from the edge basis below. Price, volume, OI, and line movement are Market Context only and never create edge.');
+  lines.push('Market lanes are listed here as REFERENCE ONLY and are explicitly separated from the Edge Basis below. Price, volume, OI, and line movement are Market Context only and never create edge.');
   lines.push('');
   for (const lane of discovery.supported_market_lanes ?? []) {
     lines.push(`- ${lane.market_lane} (${lane.lane_type}) — source_available=${lane.source_available} — ${lane.description}`);
@@ -308,6 +339,20 @@ export async function composeCocaCola600Packet({
   };
   const fundamentals = composeBaseFundamentals({ envelopes: fundamentalsEnvelopes });
 
+  // 3c. Multi-lane ceiling board — top-20 candidate pool with 4 lanes
+  //     (win, top_5, top_10, top_20) per driver.
+  const multiLaneBoard = composeMultiLaneCeilingBoard({
+    fundamentals,
+    supportedMarketLanes: discovery.supported_market_lanes,
+    eventContext: discovery.event_context,
+    storylineBeneficiary: {
+      driver_name: 'Austin Hill',
+      car_number: 33,
+      connection_type: 'current_team',
+    },
+    poolSize: 20,
+  });
+
   // Pick the fundamentals entry whose car matches the active candidate
   // (fallback: first entry). Convert to storyline-gate input.
   const driverEntry = fundamentals.by_driver.find(d => d.car_number === topActive?.car_number)
@@ -351,12 +396,16 @@ export async function composeCocaCola600Packet({
   const fundamentalsPath = `${absOutputDir}/base_fundamentals.json`;
   writeJsonAtomic(fundamentalsPath, fundamentals);
 
+  const ceilingBoardPath = `${absOutputDir}/ceiling_board.json`;
+  writeJsonAtomic(ceilingBoardPath, multiLaneBoard);
+
   const packetMd = renderPacket({
     runDate: RUN_DATE,
     manifest,
     discovery,
     practiceEnvelope: envelopes.practice_qualifying,
     fundamentals,
+    multiLaneBoard,
     beneficiary,
     modifier,
   });
@@ -366,10 +415,11 @@ export async function composeCocaCola600Packet({
   return {
     runDate: RUN_DATE,
     outputDir: absOutputDir,
-    files: [...baseline.files, fundamentalsPath, modifierPath, packetPath],
+    files: [...baseline.files, fundamentalsPath, ceilingBoardPath, modifierPath, packetPath],
     manifest,
     discovery,
     fundamentals,
+    multiLaneBoard,
     modifier,
     beneficiary,
     practice_envelope_status: envelopes.practice_qualifying.status,
