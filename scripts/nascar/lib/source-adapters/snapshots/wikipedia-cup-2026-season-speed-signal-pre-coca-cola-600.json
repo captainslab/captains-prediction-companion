@@ -1,0 +1,138 @@
+{
+  "snapshot_id": "wikipedia_2026_cup_season_speed_signal_pre_coca_cola_600",
+  "snapshot_url": "https://en.wikipedia.org/wiki/2026_NASCAR_Cup_Series",
+  "snapshot_date": "2026-05-24",
+  "era_filter": "Next Gen / Gen 7 (2022 Daytona 500 onward)",
+  "all_star_excluded": true,
+  "license": "CC BY-SA 4.0",
+  "notes": [
+    "Stage points sourced from the \"Stages\" column of the Drivers' championship standings table on the 2026 NASCAR Cup Series Wikipedia page.",
+    "Legend on the page defines the marker convention: \"* – Most laps led.\" (Bold/Italics indicate pole position type; superscript F = fastest lap; superscript 1/2/3 = stage winner.) Only the \"*\" marker is counted for most_laps_led_races.",
+    "most_laps_led_races is the count of \"*\" markers in result cells for points-paying races 1-12 (DAY, ATL, COA, PHO, LVS, DAR, MAR, BRI, KAN, TAL, TEX, GLN), i.e. through Go Bowling at The Glen, pre-All-Star and pre-Coca-Cola 600.",
+    "All-Star Race excluded (non-points; not part of the standings grid on Wikipedia).",
+    "races_counted is the number of those 12 races with a populated result cell for the driver.",
+    "Christopher Bell and William Byron are listed under disambiguated titles \"Christopher Bell (racing driver)\" and \"William Byron (racing driver)\" on Wikipedia; matched by alias."
+  ],
+  "drivers": [
+    {
+      "driver_name": "Tyler Reddick",
+      "stage_points": 96,
+      "most_laps_led_races": 2,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Denny Hamlin",
+      "stage_points": 91,
+      "most_laps_led_races": 3,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Chase Elliott",
+      "stage_points": 61,
+      "most_laps_led_races": 1,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Ryan Blaney",
+      "stage_points": 95,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Chris Buescher",
+      "stage_points": 67,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Ty Gibbs",
+      "stage_points": 74,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Carson Hocevar",
+      "stage_points": 53,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Kyle Larson",
+      "stage_points": 91,
+      "most_laps_led_races": 1,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Brad Keselowski",
+      "stage_points": 50,
+      "most_laps_led_races": 1,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Bubba Wallace",
+      "stage_points": 72,
+      "most_laps_led_races": 1,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Christopher Bell",
+      "stage_points": 77,
+      "most_laps_led_races": 2,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "William Byron",
+      "stage_points": 57,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Ryan Preece",
+      "stage_points": 43,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Daniel Suárez",
+      "stage_points": 31,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Austin Cindric",
+      "stage_points": 61,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Shane van Gisbergen",
+      "stage_points": 37,
+      "most_laps_led_races": 1,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Chase Briscoe",
+      "stage_points": 40,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Joey Logano",
+      "stage_points": 63,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "Ross Chastain",
+      "stage_points": 32,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    },
+    {
+      "driver_name": "A. J. Allmendinger",
+      "stage_points": 25,
+      "most_laps_led_races": 0,
+      "races_counted": 12
+    }
+  ]
+}

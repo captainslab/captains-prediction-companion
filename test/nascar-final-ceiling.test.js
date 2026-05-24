@@ -1,5 +1,5 @@
 // Tests for the single-final-ceiling refactor of the Coca-Cola 600 board.
-// Verifies: every points-pool driver gets ONE final ceiling, a 6-row evidence
+// Verifies: every points-pool driver gets ONE final ceiling, a 7-row evidence
 // ledger, invalidators, and the required sources are wired up.
 
 import test from 'node:test';
@@ -40,7 +40,7 @@ test('the three new source-backed adapters cover all 20 pool drivers', () => {
   }
 });
 
-test('composeFinalCeilingForDriver assigns one ceiling and builds a 6-row evidence ledger', () => {
+test('composeFinalCeilingForDriver assigns one ceiling and builds a 7-row evidence ledger', () => {
   const r = composeFinalCeilingForDriver({
     driver: {
       driver_name: 'Test Driver', car_number: 99,
@@ -58,11 +58,12 @@ test('composeFinalCeilingForDriver assigns one ceiling and builds a 6-row eviden
     practiceQualifyingRecord: { driver_name: 'Test Driver', starting_position: 5, practice_rank: null },
   });
 
-  assert.equal(r.evidence_ledger.length, 6, 'ledger must have one row per category');
+  assert.equal(r.evidence_ledger.length, 7, 'ledger must have one row per category');
   const categories = r.evidence_ledger.map(row => row.category);
   assert.deepEqual(categories, [
-    'baseline_fundamentals', 'season_form_2026', 'charlotte_oval_history',
-    'intermediate_15mi_oval', 'practice_qualifying', 'long_run_race_type_fit',
+    'baseline_fundamentals', 'season_form_2026', 'season_speed_signal_2026',
+    'charlotte_oval_history', 'intermediate_15mi_oval',
+    'practice_qualifying', 'long_run_race_type_fit',
   ]);
   assert.ok(FINAL_CEILINGS.includes(r.final_ceiling));
   assert.ok(typeof r.composite_score === 'number');
@@ -106,7 +107,7 @@ test('Coca-Cola 600 packet: every pool driver has exactly one final_ceiling and 
   for (const c of board.candidates) {
     assert.ok(FINAL_CEILINGS.includes(c.final_ceiling),
       `${c.driver_name} has invalid final_ceiling=${c.final_ceiling}`);
-    assert.ok(Array.isArray(c.final_evidence_ledger) && c.final_evidence_ledger.length === 6,
+    assert.ok(Array.isArray(c.final_evidence_ledger) && c.final_evidence_ledger.length === 7,
       `${c.driver_name} ledger length must be 6`);
     assert.ok(typeof c.final_reasoning_summary === 'string' && c.final_reasoning_summary.length > 0);
     assert.ok(Array.isArray(c.final_invalidators));

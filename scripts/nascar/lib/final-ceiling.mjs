@@ -8,11 +8,12 @@
 //
 //   Layer                             Weight  Source
 //   1. baseline_fundamentals          0.15    base-fundamentals.mjs composite (driver_skill + team + pit + strategy)
-//   2. season_form_2026               0.25    Wikipedia 2026 NCS race-by-race (All-Star excluded)
-//   3. charlotte_oval_history         0.20    Wikipedia 2022-2025 Coca-Cola 600s (oval only; Roval excluded)
-//   4. intermediate_15mi_oval         0.20    Wikipedia 2022-2025 1.5-mi-oval Cup races (Atlanta excluded)
-//   5. practice_qualifying            0.15    Wikipedia 2026 Coca-Cola 600 grid + practice
-//   6. long_run_race_type_fit         0.05    typically MISSING — no clean public long-run source
+//   2. season_form_2026               0.20    Wikipedia 2026 NCS race-by-race (All-Star excluded)
+//   3. season_speed_signal_2026       0.10    Wikipedia 2026 stage points + "most laps led" race count
+//   4. charlotte_oval_history         0.20    Wikipedia 2022-2025 Coca-Cola 600s (oval only; Roval excluded)
+//   5. intermediate_15mi_oval         0.20    Wikipedia 2022-2025 1.5-mi-oval Cup races (Atlanta excluded)
+//   6. practice_qualifying            0.15    Wikipedia 2026 Coca-Cola 600 grid + practice
+//   7. long_run_race_type_fit         0.00    UNAVAILABLE — no free static source (kept for transparency)
 //
 // Ceiling assignment on composite score, then capped by data coverage:
 //   composite >= 80 and ≥4 layers present AND at least one of (charlotte_oval, intermediate_15mi) present
@@ -32,12 +33,13 @@ export const FINAL_CEILINGS = Object.freeze([
 ]);
 
 const LAYER_DEFS = Object.freeze([
-  { key: 'baseline_fundamentals', weight: 0.15, label: 'Baseline driver/team fundamentals' },
-  { key: 'season_form_2026',      weight: 0.25, label: '2026 season form so far' },
-  { key: 'charlotte_oval_history',weight: 0.20, label: 'Charlotte Motor Speedway OVAL history (Gen 7)' },
-  { key: 'intermediate_15mi_oval',weight: 0.20, label: '1.5-mile intermediate OVAL form (Gen 7)' },
-  { key: 'practice_qualifying',   weight: 0.15, label: 'Coca-Cola 600 practice + qualifying' },
-  { key: 'long_run_race_type_fit',weight: 0.05, label: 'Long-run / race-type fit' },
+  { key: 'baseline_fundamentals',    weight: 0.15, label: 'Baseline driver/team fundamentals' },
+  { key: 'season_form_2026',         weight: 0.20, label: '2026 season form so far' },
+  { key: 'season_speed_signal_2026', weight: 0.10, label: '2026 in-race speed signal (stage points + led-most-laps)' },
+  { key: 'charlotte_oval_history',   weight: 0.20, label: 'Charlotte Motor Speedway OVAL history (Gen 7)' },
+  { key: 'intermediate_15mi_oval',   weight: 0.20, label: '1.5-mile intermediate OVAL form (Gen 7)' },
+  { key: 'practice_qualifying',      weight: 0.15, label: 'Coca-Cola 600 practice + qualifying' },
+  { key: 'long_run_race_type_fit',   weight: 0.00, label: 'Long-run / race-type fit (UNAVAILABLE — no free static source)' },
 ]);
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -90,6 +92,25 @@ function evalBaselineFundamentals(d) {
     basis: 'base-fundamentals composite (re-weighted over present sub-layers)',
     missing_note: missing.length > 0 ? `partial: missing ${missing.join(', ')}` : null,
     used_fields: used,
+  };
+}
+
+// 2b) season_speed_signal_2026 from adapter records
+function evalSeasonSpeedSignal(rec) {
+  if (!rec || rec.present !== true || rec.score === null) {
+    return { present: false, score: null, grade: 'n/a',
+      basis: 'Wikipedia 2026 NCS — season stage points + most-laps-led race count',
+      missing_note: rec?.missing_reason ?? 'no 2026 stage-points/most-laps-led row for this driver',
+      detail: null };
+  }
+  return {
+    present: true,
+    score: rec.score,
+    grade: gradeLabel(rec.score),
+    basis: rec.source_basis,
+    sample_quality: rec.sample_quality,
+    detail: `${rec.stage_points} stage pts, MLL in ${rec.most_laps_led_races} of ${rec.races_counted} races`,
+    missing_note: rec.sample_quality === 'thin' ? `thin sample (${rec.races_counted} races)` : null,
   };
 }
 
@@ -267,18 +288,20 @@ function buildInvalidators(layerOutputs, rec2026, recOval, recInter, recPQ) {
 export function composeFinalCeilingForDriver({
   driver,                  // pool entry with fundamentals-merged fields
   seasonFormRecord = null,
+  seasonSpeedSignalRecord = null,
   charlotteOvalRecord = null,
   intermediateRecord = null,
   practiceQualifyingRecord = null,
   practiceQualifyingStatus = null,
 } = {}) {
   const layers = {
-    baseline_fundamentals: evalBaselineFundamentals(driver),
-    season_form_2026:      evalSeasonForm(seasonFormRecord),
-    charlotte_oval_history:evalCharlotteOval(charlotteOvalRecord),
-    intermediate_15mi_oval:evalIntermediate(intermediateRecord),
-    practice_qualifying:   evalPracticeQualifying(practiceQualifyingRecord, practiceQualifyingStatus),
-    long_run_race_type_fit:evalLongRunFit(),
+    baseline_fundamentals:    evalBaselineFundamentals(driver),
+    season_form_2026:         evalSeasonForm(seasonFormRecord),
+    season_speed_signal_2026: evalSeasonSpeedSignal(seasonSpeedSignalRecord),
+    charlotte_oval_history:   evalCharlotteOval(charlotteOvalRecord),
+    intermediate_15mi_oval:   evalIntermediate(intermediateRecord),
+    practice_qualifying:      evalPracticeQualifying(practiceQualifyingRecord, practiceQualifyingStatus),
+    long_run_race_type_fit:   evalLongRunFit(),
   };
 
   // Composite over present layers (re-normalized).
@@ -353,6 +376,7 @@ export function composeFinalCeilingForDriver({
 export function composeFinalCeilingBoardOverlay({
   candidates,                        // list of driver records (post-merge)
   seasonFormEnvelope = null,
+  seasonSpeedSignalEnvelope = null,
   charlotteOvalEnvelope = null,
   intermediateEnvelope = null,
   practiceQualifyingEnvelope = null,
@@ -364,6 +388,7 @@ export function composeFinalCeilingBoardOverlay({
     return m;
   }
   const seasonIdx = indexByName(seasonFormEnvelope);
+  const speedIdx = indexByName(seasonSpeedSignalEnvelope);
   const ovalIdx = indexByName(charlotteOvalEnvelope);
   const interIdx = indexByName(intermediateEnvelope);
   const pqRecords = practiceQualifyingEnvelope?.records ?? [];
@@ -376,6 +401,7 @@ export function composeFinalCeilingBoardOverlay({
     const r = composeFinalCeilingForDriver({
       driver: c,
       seasonFormRecord: seasonIdx.get(key) ?? null,
+      seasonSpeedSignalRecord: speedIdx.get(key) ?? null,
       charlotteOvalRecord: ovalIdx.get(key) ?? null,
       intermediateRecord: interIdx.get(key) ?? null,
       practiceQualifyingRecord: pqByName.get(key) ?? null,

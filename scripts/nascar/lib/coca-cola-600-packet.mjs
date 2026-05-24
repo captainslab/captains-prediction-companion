@@ -33,6 +33,7 @@ import { nascardataStrategyRiskEnvelope } from './source-adapters/nascardata-str
 import { derivedDriverSkillEnvelope } from './source-adapters/derived-driver-skill.mjs';
 import { cupPointsTop20Envelope } from './source-adapters/cup-points-top-20.mjs';
 import { seasonForm2026Envelope } from './source-adapters/season-form-2026.mjs';
+import { seasonSpeedSignal2026Envelope } from './source-adapters/season-speed-signal-2026.mjs';
 import { charlotteOvalHistoryEnvelope } from './source-adapters/charlotte-oval-history.mjs';
 import { intermediate15miOvalHistoryEnvelope } from './source-adapters/intermediate-15mi-oval-history.mjs';
 import { composeBaseFundamentals, fundamentalsForStoryline } from './base-fundamentals.mjs';
@@ -513,6 +514,10 @@ export async function composeCocaCola600Packet({
     checked_at_utc: checkedAtUtc,
     outputDir: `${absOutputDir}/fundamentals`,
   });
+  const seasonSpeedSignalEnv = seasonSpeedSignal2026Envelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/fundamentals`,
+  });
   const charlotteOvalEnv = charlotteOvalHistoryEnvelope({
     checked_at_utc: checkedAtUtc,
     outputDir: `${absOutputDir}/fundamentals`,
@@ -525,6 +530,7 @@ export async function composeCocaCola600Packet({
   const finalCeilingOverlay = composeFinalCeilingBoardOverlay({
     candidates: multiLaneBoard.candidates,
     seasonFormEnvelope: seasonFormEnv,
+    seasonSpeedSignalEnvelope: seasonSpeedSignalEnv,
     charlotteOvalEnvelope: charlotteOvalEnv,
     intermediateEnvelope: intermediateEnv,
     practiceQualifyingEnvelope: envelopes.practice_qualifying,
@@ -547,6 +553,7 @@ export async function composeCocaCola600Packet({
     layer_categories: [
       'baseline_fundamentals',
       'season_form_2026',
+      'season_speed_signal_2026',
       'charlotte_oval_history',
       'intermediate_15mi_oval',
       'practice_qualifying',
@@ -554,6 +561,7 @@ export async function composeCocaCola600Packet({
     ],
     sources: {
       season_form_2026: seasonFormEnv.source_urls,
+      season_speed_signal_2026: seasonSpeedSignalEnv.source_urls,
       charlotte_oval_history: charlotteOvalEnv.source_urls,
       intermediate_15mi_oval: intermediateEnv.source_urls,
       practice_qualifying: envelopes.practice_qualifying.source_urls,
