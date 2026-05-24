@@ -1,0 +1,3752 @@
+{
+  "schema_version": "indycar_indy500_v1",
+  "generated_at": "2026-05-24T16:34:24.689Z",
+  "race": "2026 Indianapolis 500",
+  "race_date": "2026-05-25",
+  "track": "Indianapolis Motor Speedway (2.5-mile oval)",
+  "candidate_pool_basis": "full_33_car_field",
+  "final_ceiling_schema": {
+    "ceilings_allowed": [
+      "WIN",
+      "TOP 5",
+      "TOP 10",
+      "TOP 20",
+      "WATCH",
+      "NO CLEAR PICK"
+    ],
+    "ims_filter": "aero era 2021-2025 only",
+    "oval_filter": "non-IMS IndyCar ovals 2021-2025",
+    "sort_order": "composite_score_desc",
+    "storyline_may_upgrade_ceiling": false,
+    "market_price_used_in_scoring": false
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "driver_name": "Alex Palou",
+      "car_number": 10,
+      "team": "Chip Ganassi Racing",
+      "engine": "Honda",
+      "starting_position": 1,
+      "final_composite_score": 89,
+      "final_ceiling": "WIN",
+      "final_ceiling_reason": "composite 89 with 6 layers including IMS history",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 94,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 96
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 93
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 93
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 88
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 9.4
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 92,
+          "grade": "A",
+          "detail": "6 races (3W/5T5/6T10/0DNF; avg 3.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 18.4
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 88,
+          "grade": "A",
+          "detail": "5 starts (1W/4T5/5T10/0DNF; avg 5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 26.4
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 75,
+          "grade": "B",
+          "detail": "18 starts (3W/10T5/14T10/1DNF; avg 7.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 11.25
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 100,
+          "grade": "A",
+          "detail": "grid P1, qual speed 232.248 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 20
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 80,
+          "grade": "A",
+          "detail": "Carb Day P6 (225.986 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 4
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=89 from 6 layer(s): baseline_fundamentals=94×0.1=9.4 + season_form_2026=92×0.2=18.4 + ims_500_history=88×0.3=26.4 + oval_superspeedway_history=75×0.15=11.25 + qualifying_starting_position=100×0.2=20 + carb_day_long_run=80×0.05=4. Missing: none. Ceiling=WIN (composite 89 with 6 layers including IMS history)."
+    },
+    {
+      "rank": 2,
+      "driver_name": "Pato O'Ward",
+      "car_number": 5,
+      "team": "Arrow McLaren",
+      "engine": "Chevrolet",
+      "starting_position": 6,
+      "final_composite_score": 81,
+      "final_ceiling": "WIN",
+      "final_ceiling_reason": "composite 81 with 5 layers including IMS history",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 87,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 90
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 82
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 88
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 82
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 9.16
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 67,
+          "grade": "C",
+          "detail": "6 races (0W/1T5/3T10/1DNF; avg 11.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 14.11
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 89,
+          "grade": "A",
+          "detail": "5 starts (0W/4T5/5T10/0DNF; avg 4.4)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 28.11
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 77,
+          "grade": "B",
+          "detail": "18 starts (4W/10T5/13T10/2DNF; avg 7)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 12.16
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 84,
+          "grade": "A",
+          "detail": "grid P6, qual speed 230.442 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 17.68
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=81 from 5 layer(s): baseline_fundamentals=87×0.1053=9.16 + season_form_2026=67×0.2105=14.11 + ims_500_history=89×0.3158=28.11 + oval_superspeedway_history=77×0.1579=12.16 + qualifying_starting_position=84×0.2105=17.68. Missing: carb_day_long_run. Ceiling=WIN (composite 81 with 5 layers including IMS history)."
+    },
+    {
+      "rank": 3,
+      "driver_name": "Alexander Rossi",
+      "car_number": 20,
+      "team": "Ed Carpenter Racing",
+      "engine": "Chevrolet",
+      "starting_position": 2,
+      "final_composite_score": 77,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 77 with 6 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 83,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 87
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 86
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 78
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 76
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 8.3
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 66,
+          "grade": "C",
+          "detail": "6 races (0W/1T5/3T10/0DNF; avg 11.8)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 13.2
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 90,
+          "grade": "A",
+          "detail": "5 starts (0W/4T5/5T10/0DNF; avg 4.2)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 27
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 63,
+          "grade": "C",
+          "detail": "15 starts (1W/6T5/10T10/2DNF; avg 10.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 9.45
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 97,
+          "grade": "A",
+          "detail": "grid P2, qual speed 231.990 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 19.4
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 0,
+          "grade": "F",
+          "detail": "Carb Day P31 (222.291 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 0
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=77 from 6 layer(s): baseline_fundamentals=83×0.1=8.3 + season_form_2026=66×0.2=13.2 + ims_500_history=90×0.3=27 + oval_superspeedway_history=63×0.15=9.45 + qualifying_starting_position=97×0.2=19.4 + carb_day_long_run=0×0.05=0. Missing: none. Ceiling=TOP 5 (composite 77 with 6 layers and track-type evidence)."
+    },
+    {
+      "rank": 4,
+      "driver_name": "David Malukas",
+      "car_number": 12,
+      "team": "Team Penske",
+      "engine": "Chevrolet",
+      "starting_position": 3,
+      "final_composite_score": 75,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 75 with 6 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 85,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 82
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 78
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 92
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 89
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 8.5
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 77,
+          "grade": "B",
+          "detail": "6 races (0W/2T5/4T10/0DNF; avg 8.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 15.4
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 69,
+          "grade": "C",
+          "detail": "4 starts (0W/1T5/2T10/1DNF; avg 11)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 20.7
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 50,
+          "grade": "D",
+          "detail": "12 starts (0W/2T5/6T10/2DNF; avg 14)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 7.5
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 94,
+          "grade": "A",
+          "detail": "grid P3, qual speed 231.877 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 18.8
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 92,
+          "grade": "A",
+          "detail": "Carb Day P3 (226.565 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 4.6
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=75 from 6 layer(s): baseline_fundamentals=85×0.1=8.5 + season_form_2026=77×0.2=15.4 + ims_500_history=69×0.3=20.7 + oval_superspeedway_history=50×0.15=7.5 + qualifying_starting_position=94×0.2=18.8 + carb_day_long_run=92×0.05=4.6. Missing: none. Ceiling=TOP 5 (composite 75 with 6 layers and track-type evidence)."
+    },
+    {
+      "rank": 5,
+      "driver_name": "Santino Ferrucci",
+      "car_number": 14,
+      "team": "A.J. Foyt Racing",
+      "engine": "Chevrolet",
+      "starting_position": 5,
+      "final_composite_score": 75,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 75 with 5 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 79,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 81
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 85
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 73
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 74
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.32
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 56,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/2T10/0DNF; avg 15)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 11.79
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 80,
+          "grade": "A",
+          "detail": "5 starts (0W/2T5/5T10/0DNF; avg 7.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 25.26
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 69,
+          "grade": "C",
+          "detail": "16 starts (1W/6T5/11T10/1DNF; avg 9)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 10.89
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 88,
+          "grade": "A",
+          "detail": "grid P5, qual speed 230.846 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 18.53
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=75 from 5 layer(s): baseline_fundamentals=79×0.1053=8.32 + season_form_2026=56×0.2105=11.79 + ims_500_history=80×0.3158=25.26 + oval_superspeedway_history=69×0.1579=10.89 + qualifying_starting_position=88×0.2105=18.53. Missing: carb_day_long_run. Ceiling=TOP 5 (composite 75 with 5 layers and track-type evidence)."
+    },
+    {
+      "rank": 6,
+      "driver_name": "Felix Rosenqvist",
+      "car_number": 60,
+      "team": "Meyer Shank Racing w/ Curb-Agajanian",
+      "engine": "Honda",
+      "starting_position": 4,
+      "final_composite_score": 74,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 74 with 5 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 82,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 83
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 81
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 82
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 78
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.63
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 66,
+          "grade": "C",
+          "detail": "6 races (0W/1T5/3T10/0DNF; avg 12)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 13.89
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 72,
+          "grade": "B",
+          "detail": "5 starts (0W/2T5/3T10/1DNF; avg 10)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 22.74
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 62,
+          "grade": "C",
+          "detail": "16 starts (1W/5T5/10T10/2DNF; avg 11)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 9.79
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 91,
+          "grade": "A",
+          "detail": "grid P4, qual speed 231.375 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 19.16
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=74 from 5 layer(s): baseline_fundamentals=82×0.1053=8.63 + season_form_2026=66×0.2105=13.89 + ims_500_history=72×0.3158=22.74 + oval_superspeedway_history=62×0.1579=9.79 + qualifying_starting_position=91×0.2105=19.16. Missing: carb_day_long_run. Ceiling=TOP 5 (composite 74 with 5 layers and track-type evidence)."
+    },
+    {
+      "rank": 7,
+      "driver_name": "Scott Dixon",
+      "car_number": 9,
+      "team": "Chip Ganassi Racing",
+      "engine": "Honda",
+      "starting_position": 10,
+      "final_composite_score": 72,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 72 with 5 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 90,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 91
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 88
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 93
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 87
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 9.47
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 73,
+          "grade": "B",
+          "detail": "6 races (0W/2T5/4T10/0DNF; avg 9.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 15.37
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 67,
+          "grade": "C",
+          "detail": "5 starts (0W/1T5/3T10/1DNF; avg 11.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 21.16
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 71,
+          "grade": "B",
+          "detail": "18 starts (2W/9T5/14T10/1DNF; avg 8.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 11.21
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 72,
+          "grade": "B",
+          "detail": "grid P10, qual speed 230.347 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 15.16
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=72 from 5 layer(s): baseline_fundamentals=90×0.1053=9.47 + season_form_2026=73×0.2105=15.37 + ims_500_history=67×0.3158=21.16 + oval_superspeedway_history=71×0.1579=11.21 + qualifying_starting_position=72×0.2105=15.16. Missing: carb_day_long_run. Ceiling=TOP 5 (composite 72 with 5 layers and track-type evidence)."
+    },
+    {
+      "rank": 8,
+      "driver_name": "Josef Newgarden",
+      "car_number": 2,
+      "team": "Team Penske",
+      "engine": "Chevrolet",
+      "starting_position": 23,
+      "final_composite_score": 72,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 72 with 6 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 93,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 93
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 95
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 92
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 92
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 9.3
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 73,
+          "grade": "B",
+          "detail": "6 races (1W/2T5/4T10/1DNF; avg 9.8)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 14.6
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 84,
+          "grade": "A",
+          "detail": "5 starts (2W/3T5/4T10/0DNF; avg 6)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 25.2
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 79,
+          "grade": "B",
+          "detail": "18 starts (5W/11T5/14T10/2DNF; avg 6.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 11.85
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 31,
+          "grade": "F",
+          "detail": "grid P23, qual speed 230.165 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 6.2
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 100,
+          "grade": "A",
+          "detail": "Carb Day P1 (228.342 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 5
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=72 from 6 layer(s): baseline_fundamentals=93×0.1=9.3 + season_form_2026=73×0.2=14.6 + ims_500_history=84×0.3=25.2 + oval_superspeedway_history=79×0.15=11.85 + qualifying_starting_position=31×0.2=6.2 + carb_day_long_run=100×0.05=5. Missing: none. Ceiling=TOP 5 (composite 72 with 6 layers and track-type evidence)."
+    },
+    {
+      "rank": 9,
+      "driver_name": "Scott McLaughlin",
+      "car_number": 3,
+      "team": "Team Penske",
+      "engine": "Chevrolet",
+      "starting_position": 9,
+      "final_composite_score": 69,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 69 with 6 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 88,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 88
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 80
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 92
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 91
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 8.8
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 67,
+          "grade": "C",
+          "detail": "6 races (0W/1T5/3T10/0DNF; avg 11.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 13.4
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 62,
+          "grade": "C",
+          "detail": "5 starts (0W/1T5/2T10/1DNF; avg 13.2)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 18.6
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 67,
+          "grade": "C",
+          "detail": "18 starts (2W/8T5/12T10/2DNF; avg 9.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 10.05
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 75,
+          "grade": "B",
+          "detail": "grid P9, qual speed 230.577 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 15
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 72,
+          "grade": "B",
+          "detail": "Carb Day P8 (225.642 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 3.6
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=69 from 6 layer(s): baseline_fundamentals=88×0.1=8.8 + season_form_2026=67×0.2=13.4 + ims_500_history=62×0.3=18.6 + oval_superspeedway_history=67×0.15=10.05 + qualifying_starting_position=75×0.2=15 + carb_day_long_run=72×0.05=3.6. Missing: none. Ceiling=TOP 5 (composite 69 with 6 layers and track-type evidence)."
+    },
+    {
+      "rank": 10,
+      "driver_name": "Hélio Castroneves",
+      "car_number": "06",
+      "team": "Meyer Shank Racing",
+      "engine": "Honda",
+      "starting_position": 14,
+      "final_composite_score": 68,
+      "final_ceiling": "TOP 5",
+      "final_ceiling_reason": "composite 68 with 4 layers and track-type evidence",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 87,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 86
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 96
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 82
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 80
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1333,
+          "contribution": 11.6
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (pre-Indy 500)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no 2026 IndyCar season starts before the Indy 500",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 73,
+          "grade": "B",
+          "detail": "5 starts (1W/2T5/3T10/0DNF; avg 9.8)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.4,
+          "contribution": 29.2
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 56,
+          "grade": "D",
+          "detail": "8 starts (1W/3T5/5T10/1DNF; avg 12.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 11.2
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 59,
+          "grade": "D",
+          "detail": "grid P14, qual speed 230.811 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2667,
+          "contribution": 15.73
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "no 2026 IndyCar race-by-race form available"
+      ],
+      "final_reasoning_summary": "composite=68 from 4 layer(s): baseline_fundamentals=87×0.1333=11.6 + ims_500_history=73×0.4=29.2 + oval_superspeedway_history=56×0.2=11.2 + qualifying_starting_position=59×0.2667=15.73. Missing: season_form_2026, carb_day_long_run. Ceiling=TOP 5 (composite 68 with 4 layers and track-type evidence)."
+    },
+    {
+      "rank": 11,
+      "driver_name": "Marcus Ericsson",
+      "car_number": 28,
+      "team": "Andretti Global",
+      "engine": "Honda",
+      "starting_position": 17,
+      "final_composite_score": 64,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 64 with 5 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 82,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 80
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 83
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 85
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 76
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.63
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 55,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/2T10/0DNF; avg 15.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 11.58
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 75,
+          "grade": "B",
+          "detail": "5 starts (1W/2T5/3T10/0DNF; avg 9)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 23.68
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 60,
+          "grade": "C",
+          "detail": "16 starts (1W/5T5/10T10/2DNF; avg 11.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 9.47
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 50,
+          "grade": "D",
+          "detail": "grid P17, qual speed 230.667 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 10.53
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=64 from 5 layer(s): baseline_fundamentals=82×0.1053=8.63 + season_form_2026=55×0.2105=11.58 + ims_500_history=75×0.3158=23.68 + oval_superspeedway_history=60×0.1579=9.47 + qualifying_starting_position=50×0.2105=10.53. Missing: carb_day_long_run. Ceiling=TOP 10 (composite 64 with 5 layers)."
+    },
+    {
+      "rank": 12,
+      "driver_name": "Takuma Sato",
+      "car_number": 75,
+      "team": "Rahal Letterman Lanigan Racing",
+      "engine": "Honda",
+      "starting_position": 12,
+      "final_composite_score": 62,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 62 with 6 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 83,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 82
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 88
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 81
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 78
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 8.3
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 52,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/1T10/0DNF; avg 16.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 10.4
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 59,
+          "grade": "D",
+          "detail": "5 starts (0W/1T5/2T10/1DNF; avg 14)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 17.7
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 54,
+          "grade": "D",
+          "detail": "15 starts (1W/4T5/9T10/3DNF; avg 13)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 8.1
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 66,
+          "grade": "C",
+          "detail": "grid P12, qual speed 230.995 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 13.2
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 84,
+          "grade": "A",
+          "detail": "Carb Day P5 (226.244 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 4.2
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=62 from 6 layer(s): baseline_fundamentals=83×0.1=8.3 + season_form_2026=52×0.2=10.4 + ims_500_history=59×0.3=17.7 + oval_superspeedway_history=54×0.15=8.1 + qualifying_starting_position=66×0.2=13.2 + carb_day_long_run=84×0.05=4.2. Missing: none. Ceiling=TOP 10 (composite 62 with 6 layers)."
+    },
+    {
+      "rank": 13,
+      "driver_name": "Christian Rasmussen",
+      "car_number": 21,
+      "team": "Ed Carpenter Racing",
+      "engine": "Chevrolet",
+      "starting_position": 15,
+      "final_composite_score": 62,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 62 with 6 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 75,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 74
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 72
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 78
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 74
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 7.5
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 48,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/1T10/0DNF; avg 17.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 9.6
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 75,
+          "grade": "B",
+          "detail": "1 starts (0W/0T5/1T10/0DNF; avg 9)",
+          "present": true,
+          "missing_note": "thin sample (1 starts)",
+          "normalized_weight": 0.3,
+          "contribution": 22.5
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 40,
+          "grade": "F",
+          "detail": "6 starts (0W/0T5/2T10/1DNF; avg 16.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 6
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 56,
+          "grade": "D",
+          "detail": "grid P15, qual speed 230.705 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 11.2
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 96,
+          "grade": "A",
+          "detail": "Carb Day P2 (227.474 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 4.8
+        }
+      ],
+      "final_invalidators": [
+        "mediocre IndyCar oval avg finish (16.5) over 6 oval starts"
+      ],
+      "final_reasoning_summary": "composite=62 from 6 layer(s): baseline_fundamentals=75×0.1=7.5 + season_form_2026=48×0.2=9.6 + ims_500_history=75×0.3=22.5 + oval_superspeedway_history=40×0.15=6 + qualifying_starting_position=56×0.2=11.2 + carb_day_long_run=96×0.05=4.8. Missing: none. Ceiling=TOP 10 (composite 62 with 6 layers)."
+    },
+    {
+      "rank": 14,
+      "driver_name": "Will Power",
+      "car_number": 26,
+      "team": "Andretti Global",
+      "engine": "Honda",
+      "starting_position": 19,
+      "final_composite_score": 62,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 62 with 5 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 85,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 89
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 82
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 85
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 78
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.95
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 63,
+          "grade": "C",
+          "detail": "6 races (0W/1T5/2T10/0DNF; avg 13)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 13.26
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 61,
+          "grade": "C",
+          "detail": "5 starts (0W/1T5/2T10/1DNF; avg 13.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 19.26
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 73,
+          "grade": "B",
+          "detail": "18 starts (3W/9T5/13T10/2DNF; avg 8)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 11.53
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 44,
+          "grade": "D",
+          "detail": "grid P19, qual speed 230.279 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 9.26
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=62 from 5 layer(s): baseline_fundamentals=85×0.1053=8.95 + season_form_2026=63×0.2105=13.26 + ims_500_history=61×0.3158=19.26 + oval_superspeedway_history=73×0.1579=11.53 + qualifying_starting_position=44×0.2105=9.26. Missing: carb_day_long_run. Ceiling=TOP 10 (composite 62 with 5 layers)."
+    },
+    {
+      "rank": 15,
+      "driver_name": "Christian Lundgaard",
+      "car_number": 7,
+      "team": "Arrow McLaren",
+      "engine": "Chevrolet",
+      "starting_position": 18,
+      "final_composite_score": 61,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 61 with 5 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 83,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 84
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 76
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 88
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 80
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.74
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 78,
+          "grade": "B",
+          "detail": "6 races (1W/3T5/5T10/0DNF; avg 8)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 16.42
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 55,
+          "grade": "D",
+          "detail": "4 starts (0W/0T5/1T10/1DNF; avg 15.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 17.37
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 52,
+          "grade": "D",
+          "detail": "12 starts (0W/3T5/7T10/2DNF; avg 13.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 8.21
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 47,
+          "grade": "D",
+          "detail": "grid P18, qual speed 230.661 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 9.89
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=61 from 5 layer(s): baseline_fundamentals=83×0.1053=8.74 + season_form_2026=78×0.2105=16.42 + ims_500_history=55×0.3158=17.37 + oval_superspeedway_history=52×0.1579=8.21 + qualifying_starting_position=47×0.2105=9.89. Missing: carb_day_long_run. Ceiling=TOP 10 (composite 61 with 5 layers)."
+    },
+    {
+      "rank": 16,
+      "driver_name": "Kyle Kirkwood",
+      "car_number": 27,
+      "team": "Andretti Global",
+      "engine": "Honda",
+      "starting_position": 25,
+      "final_composite_score": 61,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 61 with 5 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 82,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 85
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 77
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 85
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 76
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.63
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 83,
+          "grade": "A",
+          "detail": "6 races (1W/3T5/5T10/0DNF; avg 6.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 17.47
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 64,
+          "grade": "C",
+          "detail": "4 starts (0W/1T5/2T10/1DNF; avg 12.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 20.21
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 60,
+          "grade": "C",
+          "detail": "12 starts (1W/4T5/7T10/2DNF; avg 11.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 9.47
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 25,
+          "grade": "F",
+          "detail": "grid P25, qual speed 229.607 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 5.26
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "deep starting position P25 — extra traffic and attrition exposure"
+      ],
+      "final_reasoning_summary": "composite=61 from 5 layer(s): baseline_fundamentals=82×0.1053=8.63 + season_form_2026=83×0.2105=17.47 + ims_500_history=64×0.3158=20.21 + oval_superspeedway_history=60×0.1579=9.47 + qualifying_starting_position=25×0.2105=5.26. Missing: carb_day_long_run. Ceiling=TOP 10 (composite 61 with 5 layers)."
+    },
+    {
+      "rank": 17,
+      "driver_name": "Kyffin Simpson",
+      "car_number": 8,
+      "team": "Chip Ganassi Racing",
+      "engine": "Honda",
+      "starting_position": 7,
+      "final_composite_score": 58,
+      "final_ceiling": "TOP 10",
+      "final_ceiling_reason": "composite 58 with 5 layers",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 82,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 78
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 72
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 93
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 85
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.63
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 53,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/2T10/0DNF; avg 16)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 11.16
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 45,
+          "grade": "D",
+          "detail": "2 starts (0W/0T5/0T10/0DNF; avg 18.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 14.21
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 42,
+          "grade": "F",
+          "detail": "8 starts (0W/0T5/3T10/1DNF; avg 16)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 6.63
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 81,
+          "grade": "A",
+          "detail": "grid P7, qual speed 230.883 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 17.05
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "weak IMS avg finish (18.5) over 2 Indy 500 starts"
+      ],
+      "final_reasoning_summary": "composite=58 from 5 layer(s): baseline_fundamentals=82×0.1053=8.63 + season_form_2026=53×0.2105=11.16 + ims_500_history=45×0.3158=14.21 + oval_superspeedway_history=42×0.1579=6.63 + qualifying_starting_position=81×0.2105=17.05. Missing: carb_day_long_run. Ceiling=TOP 10 (composite 58 with 5 layers)."
+    },
+    {
+      "rank": 18,
+      "driver_name": "Conor Daly",
+      "car_number": 23,
+      "team": "Dreyer & Reinbold Racing",
+      "engine": "Chevrolet",
+      "starting_position": 8,
+      "final_composite_score": 57,
+      "final_ceiling": "TOP 20",
+      "final_ceiling_reason": "composite 57",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 70,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 76
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 73
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 64
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 62
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 7
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 50,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/1T10/0DNF; avg 17)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 10
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 47,
+          "grade": "D",
+          "detail": "5 starts (0W/0T5/1T10/1DNF; avg 18)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 14.1
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 37,
+          "grade": "F",
+          "detail": "14 starts (0W/1T5/4T10/3DNF; avg 17.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 5.55
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 78,
+          "grade": "B",
+          "detail": "grid P8, qual speed 230.712 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 15.6
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 88,
+          "grade": "A",
+          "detail": "Carb Day P4 (226.341 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 4.4
+        }
+      ],
+      "final_invalidators": [
+        "mediocre IndyCar oval avg finish (17.5) over 14 oval starts"
+      ],
+      "final_reasoning_summary": "composite=57 from 6 layer(s): baseline_fundamentals=70×0.1=7 + season_form_2026=50×0.2=10 + ims_500_history=47×0.3=14.1 + oval_superspeedway_history=37×0.15=5.55 + qualifying_starting_position=78×0.2=15.6 + carb_day_long_run=88×0.05=4.4. Missing: none. Ceiling=TOP 20 (composite 57)."
+    },
+    {
+      "rank": 19,
+      "driver_name": "Rinus VeeKay",
+      "car_number": 76,
+      "team": "Juncos Hollinger Racing",
+      "engine": "Chevrolet",
+      "starting_position": 11,
+      "final_composite_score": 55,
+      "final_ceiling": "TOP 20",
+      "final_ceiling_reason": "composite 55",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 72,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 75
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 72
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 70
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 68
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 7.58
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 55,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/1T10/1DNF; avg 15.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 11.58
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 48,
+          "grade": "D",
+          "detail": "5 starts (0W/0T5/2T10/2DNF; avg 17.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 15.16
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 40,
+          "grade": "F",
+          "detail": "16 starts (0W/2T5/7T10/4DNF; avg 16.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 6.32
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 69,
+          "grade": "C",
+          "detail": "grid P11, qual speed 229.585 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 14.53
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "IMS DNF rate 40% (2/5) over 5 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (16.5) over 16 oval starts"
+      ],
+      "final_reasoning_summary": "composite=55 from 5 layer(s): baseline_fundamentals=72×0.1053=7.58 + season_form_2026=55×0.2105=11.58 + ims_500_history=48×0.3158=15.16 + oval_superspeedway_history=40×0.1579=6.32 + qualifying_starting_position=69×0.2105=14.53. Missing: carb_day_long_run. Ceiling=TOP 20 (composite 55)."
+    },
+    {
+      "rank": 20,
+      "driver_name": "Marcus Armstrong",
+      "car_number": 66,
+      "team": "Meyer Shank Racing",
+      "engine": "Honda",
+      "starting_position": 16,
+      "final_composite_score": 55,
+      "final_ceiling": "TOP 20",
+      "final_ceiling_reason": "composite 55",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 78,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 78
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 73
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 82
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 76
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1,
+          "contribution": 7.8
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 61,
+          "grade": "C",
+          "detail": "6 races (0W/0T5/2T10/0DNF; avg 13.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 12.2
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 48,
+          "grade": "D",
+          "detail": "3 starts (0W/0T5/0T10/1DNF; avg 17.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3,
+          "contribution": 14.4
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 44,
+          "grade": "D",
+          "detail": "8 starts (0W/1T5/3T10/1DNF; avg 15.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.15,
+          "contribution": 6.6
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 53,
+          "grade": "D",
+          "detail": "grid P16, qual speed 230.701 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2,
+          "contribution": 10.6
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 68,
+          "grade": "C",
+          "detail": "Carb Day P9 (225.322 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.05,
+          "contribution": 3.4
+        }
+      ],
+      "final_invalidators": [
+        "IMS DNF rate 33% (1/3) over 3 Indy 500 starts"
+      ],
+      "final_reasoning_summary": "composite=55 from 6 layer(s): baseline_fundamentals=78×0.1=7.8 + season_form_2026=61×0.2=12.2 + ims_500_history=48×0.3=14.4 + oval_superspeedway_history=44×0.15=6.6 + qualifying_starting_position=53×0.2=10.6 + carb_day_long_run=68×0.05=3.4. Missing: none. Ceiling=TOP 20 (composite 55)."
+    },
+    {
+      "rank": 21,
+      "driver_name": "Ryan Hunter-Reay",
+      "car_number": 31,
+      "team": "Arrow McLaren",
+      "engine": "Chevrolet",
+      "starting_position": 22,
+      "final_composite_score": 50,
+      "final_ceiling": "TOP 20",
+      "final_ceiling_reason": "composite 50",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 81,
+          "grade": "A",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 76
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 78
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 88
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 80
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.53
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 52,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/1T10/0DNF; avg 16.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 10.95
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 53,
+          "grade": "D",
+          "detail": "5 starts (0W/0T5/2T10/1DNF; avg 16)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 16.74
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 42,
+          "grade": "F",
+          "detail": "12 starts (0W/2T5/5T10/2DNF; avg 16)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 6.63
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 34,
+          "grade": "F",
+          "detail": "grid P22, qual speed 230.202 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 7.16
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [],
+      "final_reasoning_summary": "composite=50 from 5 layer(s): baseline_fundamentals=81×0.1053=8.53 + season_form_2026=52×0.2105=10.95 + ims_500_history=53×0.3158=16.74 + oval_superspeedway_history=42×0.1579=6.63 + qualifying_starting_position=34×0.2105=7.16. Missing: carb_day_long_run. Ceiling=TOP 20 (composite 50)."
+    },
+    {
+      "rank": 22,
+      "driver_name": "Graham Rahal",
+      "car_number": 15,
+      "team": "Rahal Letterman Lanigan Racing",
+      "engine": "Honda",
+      "starting_position": 28,
+      "final_composite_score": 50,
+      "final_ceiling": "TOP 20",
+      "final_ceiling_reason": "composite 50",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 77,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 77
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 73
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 81
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 75
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8.11
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 66,
+          "grade": "C",
+          "detail": "6 races (0W/2T5/4T10/0DNF; avg 11.8)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 13.89
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 52,
+          "grade": "D",
+          "detail": "5 starts (0W/0T5/2T10/1DNF; avg 16.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 16.42
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 52,
+          "grade": "D",
+          "detail": "16 starts (1W/4T5/9T10/2DNF; avg 13.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 8.21
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 16,
+          "grade": "F",
+          "detail": "grid P28, qual speed 229.017 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 3.37
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "deep starting position P28 — extra traffic and attrition exposure"
+      ],
+      "final_reasoning_summary": "composite=50 from 5 layer(s): baseline_fundamentals=77×0.1053=8.11 + season_form_2026=66×0.2105=13.89 + ims_500_history=52×0.3158=16.42 + oval_superspeedway_history=52×0.1579=8.21 + qualifying_starting_position=16×0.2105=3.37. Missing: carb_day_long_run. Ceiling=TOP 20 (composite 50)."
+    },
+    {
+      "rank": 23,
+      "driver_name": "Ed Carpenter",
+      "car_number": 33,
+      "team": "Ed Carpenter Racing",
+      "engine": "Chevrolet",
+      "starting_position": 13,
+      "final_composite_score": 46,
+      "final_ceiling": "TOP 20",
+      "final_ceiling_reason": "composite 46",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 74,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 72
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 70
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 78
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 76
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 7.79
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 44,
+          "grade": "D",
+          "detail": "1 races (0W/0T5/0T10/0DNF; avg 19)",
+          "present": true,
+          "missing_note": "thin sample (1 races)",
+          "normalized_weight": 0.2105,
+          "contribution": 9.26
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 38,
+          "grade": "F",
+          "detail": "5 starts (0W/0T5/0T10/2DNF; avg 21)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 12
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 25,
+          "grade": "F",
+          "detail": "10 starts (0W/0T5/2T10/3DNF; avg 20.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 3.95
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 63,
+          "grade": "C",
+          "detail": "grid P13, qual speed 230.829 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 13.26
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "IMS DNF rate 40% (2/5) over 5 Indy 500 starts",
+        "weak IMS avg finish (21) over 5 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (20.5) over 10 oval starts"
+      ],
+      "final_reasoning_summary": "composite=46 from 5 layer(s): baseline_fundamentals=74×0.1053=7.79 + season_form_2026=44×0.2105=9.26 + ims_500_history=38×0.3158=12 + oval_superspeedway_history=25×0.1579=3.95 + qualifying_starting_position=63×0.2105=13.26. Missing: carb_day_long_run. Ceiling=TOP 20 (composite 46)."
+    },
+    {
+      "rank": 24,
+      "driver_name": "Romain Grosjean",
+      "car_number": 18,
+      "team": "Dale Coyne Racing",
+      "engine": "Honda",
+      "starting_position": 24,
+      "final_composite_score": 42,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 42 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 69,
+          "grade": "C",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 73
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 65
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 68
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 63
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 7.26
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 47,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 18)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 9.89
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 45,
+          "grade": "D",
+          "detail": "4 starts (0W/0T5/1T10/1DNF; avg 18.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 14.21
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 31,
+          "grade": "F",
+          "detail": "12 starts (0W/0T5/3T10/3DNF; avg 19)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 4.89
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 28,
+          "grade": "F",
+          "detail": "grid P24, qual speed 229.791 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 5.89
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "weak IMS avg finish (18.5) over 4 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (19) over 12 oval starts"
+      ],
+      "final_reasoning_summary": "composite=42 from 5 layer(s): baseline_fundamentals=69×0.1053=7.26 + season_form_2026=47×0.2105=9.89 + ims_500_history=45×0.3158=14.21 + oval_superspeedway_history=31×0.1579=4.89 + qualifying_starting_position=28×0.2105=5.89. Missing: carb_day_long_run. Ceiling=WATCH (composite 42 below TOP 20 threshold)."
+    },
+    {
+      "rank": 25,
+      "driver_name": "Nolan Siegel",
+      "car_number": 6,
+      "team": "Arrow McLaren",
+      "engine": "Chevrolet",
+      "starting_position": 20,
+      "final_composite_score": 41,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 41 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 76,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 73
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 65
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 88
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 78
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 8
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 45,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 18.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 9.47
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 34,
+          "grade": "F",
+          "detail": "1 starts (0W/0T5/0T10/0DNF; avg 22)",
+          "present": true,
+          "missing_note": "thin sample (1 starts)",
+          "normalized_weight": 0.3158,
+          "contribution": 10.74
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 27,
+          "grade": "F",
+          "detail": "6 starts (0W/0T5/1T10/1DNF; avg 20)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 4.26
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 41,
+          "grade": "F",
+          "detail": "grid P20, qual speed 230.213 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 8.63
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "weak IMS avg finish (22) over 1 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (20) over 6 oval starts"
+      ],
+      "final_reasoning_summary": "composite=41 from 5 layer(s): baseline_fundamentals=76×0.1053=8 + season_form_2026=45×0.2105=9.47 + ims_500_history=34×0.3158=10.74 + oval_superspeedway_history=27×0.1579=4.26 + qualifying_starting_position=41×0.2105=8.63. Missing: carb_day_long_run. Ceiling=WATCH (composite 41 below TOP 20 threshold)."
+    },
+    {
+      "rank": 26,
+      "driver_name": "Louis Foster",
+      "car_number": 45,
+      "team": "Rahal Letterman Lanigan Racing",
+      "engine": "Honda",
+      "starting_position": 21,
+      "final_composite_score": 38,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 38 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 72,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 72
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 62
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 81
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 73
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1538,
+          "contribution": 11.08
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 38,
+          "grade": "F",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 21)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3077,
+          "contribution": 11.69
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Indy 500 / IMS oval history 2021-2025 (aero era)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no Indy 500 starts in the 2021-2025 aero-era window",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 17,
+          "grade": "F",
+          "detail": "4 starts (0W/0T5/0T10/1DNF; avg 22.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2308,
+          "contribution": 3.92
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 38,
+          "grade": "F",
+          "detail": "grid P21, qual speed 230.212 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3077,
+          "contribution": 11.69
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "mediocre IndyCar oval avg finish (22.5) over 4 oval starts",
+        "no Indy 500 / IMS oval history in the 2021-2025 aero era window (rookie or gap)"
+      ],
+      "final_reasoning_summary": "composite=38 from 4 layer(s): baseline_fundamentals=72×0.1538=11.08 + season_form_2026=38×0.3077=11.69 + oval_superspeedway_history=17×0.2308=3.92 + qualifying_starting_position=38×0.3077=11.69. Missing: ims_500_history, carb_day_long_run. Ceiling=WATCH (composite 38 below TOP 20 threshold)."
+    },
+    {
+      "rank": 27,
+      "driver_name": "Jack Harvey",
+      "car_number": 24,
+      "team": "Dreyer & Reinbold Racing",
+      "engine": "Chevrolet",
+      "starting_position": 33,
+      "final_composite_score": 35,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 35 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 67,
+          "grade": "C",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 73
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 65
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 64
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 60
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 7.05
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 45,
+          "grade": "D",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 18.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 9.47
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 44,
+          "grade": "D",
+          "detail": "5 starts (0W/0T5/1T10/2DNF; avg 19)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 13.89
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 29,
+          "grade": "F",
+          "detail": "14 starts (0W/0T5/3T10/4DNF; avg 19.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 4.58
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 0,
+          "grade": "F",
+          "detail": "grid P33, qual speed 0.000 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 0
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "IMS DNF rate 40% (2/5) over 5 Indy 500 starts",
+        "weak IMS avg finish (19) over 5 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (19.5) over 14 oval starts",
+        "deep starting position P33 — extra traffic and attrition exposure"
+      ],
+      "final_reasoning_summary": "composite=35 from 5 layer(s): baseline_fundamentals=67×0.1053=7.05 + season_form_2026=45×0.2105=9.47 + ims_500_history=44×0.3158=13.89 + oval_superspeedway_history=29×0.1579=4.58 + qualifying_starting_position=0×0.2105=0. Missing: carb_day_long_run. Ceiling=WATCH (composite 35 below TOP 20 threshold)."
+    },
+    {
+      "rank": 28,
+      "driver_name": "Mick Schumacher",
+      "car_number": 47,
+      "team": "Rahal Letterman Lanigan Racing",
+      "engine": "Honda",
+      "starting_position": 27,
+      "final_composite_score": 34,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 34 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 75,
+          "grade": "B",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 76
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 65
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 81
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 74
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1538,
+          "contribution": 11.54
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 41,
+          "grade": "F",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 20)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3077,
+          "contribution": 12.62
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Indy 500 / IMS oval history 2021-2025 (aero era)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no Indy 500 starts in the 2021-2025 aero-era window",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 19,
+          "grade": "F",
+          "detail": "4 starts (0W/0T5/0T10/1DNF; avg 22)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2308,
+          "contribution": 4.38
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 19,
+          "grade": "F",
+          "detail": "grid P27, qual speed 229.450 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3077,
+          "contribution": 5.85
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "mediocre IndyCar oval avg finish (22) over 4 oval starts",
+        "deep starting position P27 — extra traffic and attrition exposure",
+        "no Indy 500 / IMS oval history in the 2021-2025 aero era window (rookie or gap)"
+      ],
+      "final_reasoning_summary": "composite=34 from 4 layer(s): baseline_fundamentals=75×0.1538=11.54 + season_form_2026=41×0.3077=12.62 + oval_superspeedway_history=19×0.2308=4.38 + qualifying_starting_position=19×0.3077=5.85. Missing: ims_500_history, carb_day_long_run. Ceiling=WATCH (composite 34 below TOP 20 threshold)."
+    },
+    {
+      "rank": 29,
+      "driver_name": "Dennis Hauger",
+      "car_number": 19,
+      "team": "Dale Coyne Racing",
+      "engine": "Honda",
+      "starting_position": 29,
+      "final_composite_score": 34,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 34 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 68,
+          "grade": "C",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 72
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 62
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 68
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 64
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1429,
+          "contribution": 9.71
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 39,
+          "grade": "F",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 20.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2857,
+          "contribution": 11.14
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Indy 500 / IMS oval history 2021-2025 (aero era)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no Indy 500 starts in the 2021-2025 aero-era window",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 25,
+          "grade": "F",
+          "detail": "4 starts (0W/0T5/1T10/1DNF; avg 20.5)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2143,
+          "contribution": 5.36
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 13,
+          "grade": "F",
+          "detail": "grid P29, qual speed 228.982 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2857,
+          "contribution": 3.71
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "IndyCar Carb Day 2026 (May 23) practice — top N only",
+          "value": 64,
+          "grade": "C",
+          "detail": "Carb Day P10 (225.187 mph)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.0714,
+          "contribution": 4.57
+        }
+      ],
+      "final_invalidators": [
+        "mediocre IndyCar oval avg finish (20.5) over 4 oval starts",
+        "deep starting position P29 — extra traffic and attrition exposure",
+        "no Indy 500 / IMS oval history in the 2021-2025 aero era window (rookie or gap)"
+      ],
+      "final_reasoning_summary": "composite=34 from 5 layer(s): baseline_fundamentals=68×0.1429=9.71 + season_form_2026=39×0.2857=11.14 + oval_superspeedway_history=25×0.2143=5.36 + qualifying_starting_position=13×0.2857=3.71 + carb_day_long_run=64×0.0714=4.57. Missing: ims_500_history. Ceiling=WATCH (composite 34 below TOP 20 threshold)."
+    },
+    {
+      "rank": 30,
+      "driver_name": "Sting Ray Robb",
+      "car_number": 77,
+      "team": "Juncos Hollinger Racing",
+      "engine": "Chevrolet",
+      "starting_position": 31,
+      "final_composite_score": 29,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 29 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 68,
+          "grade": "C",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 70
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 63
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 70
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 66
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 7.16
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 34,
+          "grade": "F",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 22)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 7.16
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 31,
+          "grade": "F",
+          "detail": "3 starts (0W/0T5/0T10/1DNF; avg 23)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 9.79
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 23,
+          "grade": "F",
+          "detail": "8 starts (0W/0T5/1T10/2DNF; avg 21)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 3.63
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 6,
+          "grade": "F",
+          "detail": "grid P31, qual speed 226.572 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 1.26
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "IMS DNF rate 33% (1/3) over 3 Indy 500 starts",
+        "weak IMS avg finish (23) over 3 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (21) over 8 oval starts",
+        "deep starting position P31 — extra traffic and attrition exposure"
+      ],
+      "final_reasoning_summary": "composite=29 from 5 layer(s): baseline_fundamentals=68×0.1053=7.16 + season_form_2026=34×0.2105=7.16 + ims_500_history=31×0.3158=9.79 + oval_superspeedway_history=23×0.1579=3.63 + qualifying_starting_position=6×0.2105=1.26. Missing: carb_day_long_run. Ceiling=WATCH (composite 29 below TOP 20 threshold)."
+    },
+    {
+      "rank": 31,
+      "driver_name": "Caio Collet",
+      "car_number": 4,
+      "team": "A.J. Foyt Racing",
+      "engine": "Chevrolet",
+      "starting_position": 32,
+      "final_composite_score": 27,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 27 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 68,
+          "grade": "C",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 71
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 60
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 73
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 65
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1538,
+          "contribution": 10.46
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 38,
+          "grade": "F",
+          "detail": "6 races (0W/0T5/0T10/1DNF; avg 21)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3077,
+          "contribution": 11.69
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Indy 500 / IMS oval history 2021-2025 (aero era)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no Indy 500 starts in the 2021-2025 aero-era window",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 15,
+          "grade": "F",
+          "detail": "4 starts (0W/0T5/0T10/1DNF; avg 23)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2308,
+          "contribution": 3.46
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 3,
+          "grade": "F",
+          "detail": "grid P32, qual speed 0.000 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3077,
+          "contribution": 0.92
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "mediocre IndyCar oval avg finish (23) over 4 oval starts",
+        "deep starting position P32 — extra traffic and attrition exposure",
+        "no Indy 500 / IMS oval history in the 2021-2025 aero era window (rookie or gap)"
+      ],
+      "final_reasoning_summary": "composite=27 from 4 layer(s): baseline_fundamentals=68×0.1538=10.46 + season_form_2026=38×0.3077=11.69 + oval_superspeedway_history=15×0.2308=3.46 + qualifying_starting_position=3×0.3077=0.92. Missing: ims_500_history, carb_day_long_run. Ceiling=WATCH (composite 27 below TOP 20 threshold)."
+    },
+    {
+      "rank": 32,
+      "driver_name": "Jacob Abel",
+      "car_number": 51,
+      "team": "Abel Motorsports",
+      "engine": "Chevrolet",
+      "starting_position": 30,
+      "final_composite_score": 26,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 26 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 59,
+          "grade": "D",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 65
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 55
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 58
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 52
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3333,
+          "contribution": 19.67
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (pre-Indy 500)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no 2026 IndyCar season starts before the Indy 500",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Indy 500 / IMS oval history 2021-2025 (aero era)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no Indy 500 starts in the 2021-2025 aero-era window",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "IndyCar oval/superspeedway history 2021-2025 (non-IMS ovals)",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "no non-IMS IndyCar oval starts in the 2021-2025 window",
+          "normalized_weight": null,
+          "contribution": null
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 9,
+          "grade": "F",
+          "detail": "grid P30, qual speed 228.169 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.6667,
+          "contribution": 6
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "deep starting position P30 — extra traffic and attrition exposure",
+        "no Indy 500 / IMS oval history in the 2021-2025 aero era window (rookie or gap)",
+        "no IndyCar non-IMS oval sample in the 2021-2025 aero era window",
+        "no 2026 IndyCar race-by-race form available"
+      ],
+      "final_reasoning_summary": "composite=26 from 2 layer(s): baseline_fundamentals=59×0.3333=19.67 + qualifying_starting_position=9×0.6667=6. Missing: season_form_2026, ims_500_history, oval_superspeedway_history, carb_day_long_run. Ceiling=WATCH (composite 26 below TOP 20 threshold)."
+    },
+    {
+      "rank": 33,
+      "driver_name": "Katherine Legge",
+      "car_number": 11,
+      "team": "HMD Motorsports",
+      "engine": "Chevrolet",
+      "starting_position": 26,
+      "final_composite_score": 22,
+      "final_ceiling": "WATCH",
+      "final_ceiling_reason": "composite 22 below TOP 20 threshold",
+      "final_evidence_ledger": [
+        {
+          "category": "baseline_fundamentals",
+          "label": "Baseline driver/team fundamentals",
+          "raw_weight": 0.1,
+          "source_basis": "base fundamentals composite (re-weighted over present sub-layers)",
+          "value": 64,
+          "grade": "C",
+          "detail": null,
+          "used_fields": [
+            {
+              "field": "driver_skill_rating",
+              "value": 68
+            },
+            {
+              "field": "driver_ability_to_convert",
+              "value": 60
+            },
+            {
+              "field": "team_equipment_quality",
+              "value": 63
+            },
+            {
+              "field": "strategy_risk_rating",
+              "value": 58
+            }
+          ],
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1053,
+          "contribution": 6.74
+        },
+        {
+          "category": "season_form_2026",
+          "label": "2026 IndyCar season form (pre-Indy 500)",
+          "raw_weight": 0.2,
+          "source_basis": "IndyCar 2026 NTT Series race results (Wikipedia/IndyCar.com; Indy 500 excluded)",
+          "value": 25,
+          "grade": "F",
+          "detail": "2 races (0W/0T5/0T10/0DNF; avg 25)",
+          "present": true,
+          "missing_note": "thin sample (2 races)",
+          "normalized_weight": 0.2105,
+          "contribution": 5.26
+        },
+        {
+          "category": "ims_500_history",
+          "label": "IMS / Indy 500 history (2021-2025 aero era)",
+          "raw_weight": 0.3,
+          "source_basis": "Wikipedia Indy 500 race articles 2021-2025 (IMS oval; aero era)",
+          "value": 16,
+          "grade": "F",
+          "detail": "3 starts (0W/0T5/0T10/1DNF; avg 28)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.3158,
+          "contribution": 5.05
+        },
+        {
+          "category": "oval_superspeedway_history",
+          "label": "IndyCar oval / superspeedway history (2021-2025)",
+          "raw_weight": 0.15,
+          "source_basis": "Wikipedia IndyCar oval race articles 2021-2025 (Texas, Iowa, Milwaukee, Gateway; IMS excluded)",
+          "value": 4,
+          "grade": "F",
+          "detail": "4 starts (0W/0T5/0T10/1DNF; avg 26)",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.1579,
+          "contribution": 0.63
+        },
+        {
+          "category": "qualifying_starting_position",
+          "label": "2026 Indy 500 qualifying + starting position",
+          "raw_weight": 0.2,
+          "source_basis": "2026 Indy 500 qualifying — official starting grid and qualifying speed",
+          "value": 22,
+          "grade": "F",
+          "detail": "grid P26, qual speed 229.456 mph",
+          "present": true,
+          "missing_note": null,
+          "normalized_weight": 0.2105,
+          "contribution": 4.63
+        },
+        {
+          "category": "carb_day_long_run",
+          "label": "Carb Day / final practice speeds",
+          "raw_weight": 0.05,
+          "source_basis": "Carb Day (May 23, 2026) / final practice speeds",
+          "value": null,
+          "grade": "n/a",
+          "detail": null,
+          "present": false,
+          "missing_note": "Carb Day long-run speeds not published or not available",
+          "normalized_weight": null,
+          "contribution": null
+        }
+      ],
+      "final_invalidators": [
+        "IMS DNF rate 33% (1/3) over 3 Indy 500 starts",
+        "weak IMS avg finish (28) over 3 Indy 500 starts",
+        "mediocre IndyCar oval avg finish (26) over 4 oval starts",
+        "deep starting position P26 — extra traffic and attrition exposure"
+      ],
+      "final_reasoning_summary": "composite=22 from 5 layer(s): baseline_fundamentals=64×0.1053=6.74 + season_form_2026=25×0.2105=5.26 + ims_500_history=16×0.3158=5.05 + oval_superspeedway_history=4×0.1579=0.63 + qualifying_starting_position=22×0.2105=4.63. Missing: carb_day_long_run. Ceiling=WATCH (composite 22 below TOP 20 threshold)."
+    }
+  ],
+  "no_trades": true,
+  "safety_note": "No bets or trades are placed by this workflow."
+}

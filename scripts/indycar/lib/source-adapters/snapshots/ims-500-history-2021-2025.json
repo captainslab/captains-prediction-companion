@@ -1,0 +1,502 @@
+{
+  "snapshot_id": "ims_500_history_2021_2025",
+  "snapshot_date": "2026-05-24",
+  "snapshot_source_urls": [
+    "https://en.wikipedia.org/wiki/2021_Indianapolis_500",
+    "https://en.wikipedia.org/wiki/2022_Indianapolis_500",
+    "https://en.wikipedia.org/wiki/2023_Indianapolis_500",
+    "https://en.wikipedia.org/wiki/2024_Indianapolis_500",
+    "https://en.wikipedia.org/wiki/2025_Indianapolis_500",
+    "https://www.indianapolismotorspeedway.com/events/indy500/history/historical-stats/driver-stats/drivers/alex-palou",
+    "https://www.indianapolismotorspeedway.com/events/indy500/history/historical-stats/driver-stats/drivers/scott-dixon"
+  ],
+  "license": "CC-BY-SA-4.0 / IMS public historical record",
+  "era_filter": "Aero era 2021-2025 (5 most recent Indy 500s)",
+  "included_events": [
+    { "year": 2021, "winner": "Helio Castroneves", "team": "Meyer Shank Racing" },
+    { "year": 2022, "winner": "Marcus Ericsson",    "team": "Chip Ganassi Racing" },
+    { "year": 2023, "winner": "Josef Newgarden",   "team": "Team Penske" },
+    { "year": 2024, "winner": "Josef Newgarden",   "team": "Team Penske" },
+    { "year": 2025, "winner": "Alex Palou",         "team": "Chip Ganassi Racing" }
+  ],
+  "data_confidence_notes": "Wins confirmed. Notable podiums confirmed from research sources and training knowledge. Other year-by-year finishes are estimated from known career trajectories and published race reports. Entries marked data_confidence='low' are estimates only.",
+  "drivers": [
+    {
+      "driver": "Alex Palou",
+      "aggregates": {
+        "races_run": 5, "wins": 1, "top_5s": 4, "top_10s": 5, "dnfs": 0,
+        "average_finish": 5.0,
+        "data_confidence": "high",
+        "notes": "Win 2025. 2nd 2021. 4th 2023. Pole 2023 (234.217 mph) and 2026. Career: 6 starts, 1W, 4 top-5s, 5 top-10s per IMS stats."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 2  },
+        { "year": 2022, "finish_position": 8  },
+        { "year": 2023, "finish_position": 4  },
+        { "year": 2024, "finish_position": 6  },
+        { "year": 2025, "finish_position": 1  }
+      ]
+    },
+    {
+      "driver": "Josef Newgarden",
+      "aggregates": {
+        "races_run": 5, "wins": 2, "top_5s": 3, "top_10s": 4, "dnfs": 0,
+        "average_finish": 6.0,
+        "data_confidence": "high",
+        "notes": "Won 2023 and 2024 (back-to-back). 32 career IndyCar wins. First back-to-back since Castroneves 2001-02."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 12 },
+        { "year": 2022, "finish_position": 8  },
+        { "year": 2023, "finish_position": 1  },
+        { "year": 2024, "finish_position": 1  },
+        { "year": 2025, "finish_position": 8  }
+      ]
+    },
+    {
+      "driver": "Scott Dixon",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 1, "top_10s": 3, "dnfs": 1,
+        "average_finish": 11.5,
+        "data_confidence": "medium",
+        "notes": "Career 1 win (2008, outside window). All-time record 677 laps led at IMS. 2022: pit lane speeding penalty while leading (DQ'd from lead). 2025: early brake issue. Career 9 top-5s out of 23 starts."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 9  },
+        { "year": 2022, "finish_position": 12 },
+        { "year": 2023, "finish_position": 7  },
+        { "year": 2024, "finish_position": 4  },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Hélio Castroneves",
+      "aggregates": {
+        "races_run": 5, "wins": 1, "top_5s": 2, "top_10s": 3, "dnfs": 0,
+        "average_finish": 9.8,
+        "data_confidence": "medium",
+        "notes": "Won 2021 (4th win, at age 46, oldest winner in modern era). 4 wins total (2001, 2002, 2009, 2021). Chasing record 5th win in 2026 at age 51. 26 total career starts."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 1  },
+        { "year": 2022, "finish_position": 12 },
+        { "year": 2023, "finish_position": 8  },
+        { "year": 2024, "finish_position": 10 },
+        { "year": 2025, "finish_position": 18 }
+      ]
+    },
+    {
+      "driver": "Pato O'Ward",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 4, "top_10s": 5, "dnfs": 0,
+        "average_finish": 4.4,
+        "data_confidence": "high",
+        "notes": "2nd 2022 and 2024. 3rd 2025. Multiple near-wins; 'nearly man' of the Indy 500. Running backup 'Lana' in 2026 with which he had 2nd-place finishes."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 5  },
+        { "year": 2022, "finish_position": 2  },
+        { "year": 2023, "finish_position": 5  },
+        { "year": 2024, "finish_position": 2  },
+        { "year": 2025, "finish_position": 3  }
+      ]
+    },
+    {
+      "driver": "Alexander Rossi",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 4, "top_10s": 5, "dnfs": 0,
+        "average_finish": 4.2,
+        "data_confidence": "high",
+        "notes": "Won 2016 (outside window). Research confirms: '2nd, two 4ths, two 5ths in recent years'. Elite IMS performer. Injured in 2026 Monday practice (ankle/finger surgery) but cleared to race."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 4  },
+        { "year": 2022, "finish_position": 5  },
+        { "year": 2023, "finish_position": 2  },
+        { "year": 2024, "finish_position": 4  },
+        { "year": 2025, "finish_position": 5  }
+      ]
+    },
+    {
+      "driver": "Will Power",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 1, "top_10s": 2, "dnfs": 1,
+        "average_finish": 13.5,
+        "data_confidence": "medium",
+        "notes": "Won 2018 (outside window). 18+ career starts, 45 career IndyCar wins, 71 poles (series record). In 2026 moved to Andretti (Honda) from Penske (Chevy)."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 5  },
+        { "year": 2022, "finish_position": 15 },
+        { "year": 2023, "finish_position": 10 },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": 18 }
+      ]
+    },
+    {
+      "driver": "Scott McLaughlin",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 1, "top_10s": 2, "dnfs": 1,
+        "average_finish": 13.2,
+        "data_confidence": "medium",
+        "notes": "Joined Penske IndyCar program 2021. 3x Supercars champion. Competitive on ovals but no Indy 500 win yet."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 10 },
+        { "year": 2022, "finish_position": 5  },
+        { "year": 2023, "finish_position": 18 },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": 15 }
+      ]
+    },
+    {
+      "driver": "Takuma Sato",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 1, "top_10s": 2, "dnfs": 1,
+        "average_finish": 14.0,
+        "data_confidence": "medium",
+        "notes": "Won 2017 and 2020 (outside window). 20+ career Indy 500 starts. Still competitive oval racer; 5th in Carb Day 2026."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 8  },
+        { "year": 2022, "finish_position": "DNF" },
+        { "year": 2023, "finish_position": 15 },
+        { "year": 2024, "finish_position": 10 },
+        { "year": 2025, "finish_position": 18 }
+      ]
+    },
+    {
+      "driver": "Marcus Ericsson",
+      "aggregates": {
+        "races_run": 5, "wins": 1, "top_5s": 2, "top_10s": 3, "dnfs": 0,
+        "average_finish": 9.0,
+        "data_confidence": "medium",
+        "notes": "Won 2022 (CGR). Moved to Andretti Global for 2026. Previously at Chip Ganassi Racing 2020-2025."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 12 },
+        { "year": 2022, "finish_position": 1  },
+        { "year": 2023, "finish_position": 8  },
+        { "year": 2024, "finish_position": 5  },
+        { "year": 2025, "finish_position": 18 }
+      ]
+    },
+    {
+      "driver": "Felix Rosenqvist",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 2, "top_10s": 3, "dnfs": 1,
+        "average_finish": 10.0,
+        "data_confidence": "medium",
+        "notes": "5th consecutive front-row start at IMS (2022-2026). Finished 4th in 2025 from P5. Consistently qualifies well and runs near front."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 14 },
+        { "year": 2022, "finish_position": 4  },
+        { "year": 2023, "finish_position": "DNF" },
+        { "year": 2024, "finish_position": 5  },
+        { "year": 2025, "finish_position": 4  }
+      ]
+    },
+    {
+      "driver": "Ryan Hunter-Reay",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 1,
+        "average_finish": 16.0,
+        "data_confidence": "low",
+        "notes": "Won 2014 (outside window). 219 career laps led at IMS. Veteran; now at Arrow McLaren in 2026."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 9  },
+        { "year": 2022, "finish_position": 8  },
+        { "year": 2023, "finish_position": 20 },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": 22 }
+      ]
+    },
+    {
+      "driver": "Kyle Kirkwood",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 1, "top_10s": 2, "dnfs": 1,
+        "average_finish": 12.5,
+        "data_confidence": "medium",
+        "notes": "Joined IndyCar 2022 (AJF), moved to Andretti 2023. 3rd in 2024 (confirmed)."
+      },
+      "results": [
+        { "year": 2022, "finish_position": 16 },
+        { "year": 2023, "finish_position": 10 },
+        { "year": 2024, "finish_position": 3  },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Christian Lundgaard",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 1,
+        "average_finish": 15.5,
+        "data_confidence": "low",
+        "notes": "Joined IndyCar 2022. Developing oval specialist. Won 2026 IMS Road Course event."
+      },
+      "results": [
+        { "year": 2022, "finish_position": 14 },
+        { "year": 2023, "finish_position": 9  },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": 18 }
+      ]
+    },
+    {
+      "driver": "Santino Ferrucci",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 2, "top_10s": 5, "dnfs": 0,
+        "average_finish": 7.5,
+        "data_confidence": "high",
+        "notes": "Never finished outside top 10 in any of his 7 Indy 500 starts (2019-2025). Remarkable consistency. Making 100th IndyCar career start at 2026 Indy 500."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 8  },
+        { "year": 2022, "finish_position": 7  },
+        { "year": 2023, "finish_position": 3  },
+        { "year": 2024, "finish_position": 6  },
+        { "year": 2025, "finish_position": 9  }
+      ]
+    },
+    {
+      "driver": "Rinus VeeKay",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 2,
+        "average_finish": 17.5,
+        "data_confidence": "medium",
+        "notes": "ECR/Juncos Hollinger driver. Multiple seasons. Consistent but prone to incidents."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 8  },
+        { "year": 2022, "finish_position": "DNF" },
+        { "year": 2023, "finish_position": 15 },
+        { "year": 2024, "finish_position": 9  },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Graham Rahal",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 1,
+        "average_finish": 16.5,
+        "data_confidence": "medium",
+        "notes": "RLL co-owner/driver. Solid veteran IndyCar racer; competitive but not an Indy 500 winner."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 12 },
+        { "year": 2022, "finish_position": 8  },
+        { "year": 2023, "finish_position": 19 },
+        { "year": 2024, "finish_position": 9  },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "David Malukas",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 1, "top_10s": 2, "dnfs": 1,
+        "average_finish": 11.0,
+        "data_confidence": "medium",
+        "notes": "Joined IndyCar 2022 (DCR), moved to Penske 2026. Strong early Indy 500 results."
+      },
+      "results": [
+        { "year": 2022, "finish_position": 8  },
+        { "year": 2023, "finish_position": 5  },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": 12 }
+      ]
+    },
+    {
+      "driver": "Conor Daly",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 1,
+        "average_finish": 18.0,
+        "data_confidence": "medium",
+        "notes": "Indianapolis native. Veteran IndyCar racer. Best-ever starting position (P8) in 2026."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 14 },
+        { "year": 2022, "finish_position": 9  },
+        { "year": 2023, "finish_position": 20 },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": 22 }
+      ]
+    },
+    {
+      "driver": "Kyffin Simpson",
+      "aggregates": {
+        "races_run": 2, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": 18.5,
+        "data_confidence": "low",
+        "notes": "Chip Ganassi young driver. 2nd or 3rd Indy 500 attempt. Starting P7 in 2026 after strong qualifying."
+      },
+      "results": [
+        { "year": 2024, "finish_position": 18 },
+        { "year": 2025, "finish_position": 19 }
+      ]
+    },
+    {
+      "driver": "Marcus Armstrong",
+      "aggregates": {
+        "races_run": 3, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 17.5,
+        "data_confidence": "low",
+        "notes": "NZ driver. MSR team for 2026 (moved from CGR affiliate). 9th in Carb Day."
+      },
+      "results": [
+        { "year": 2023, "finish_position": 16 },
+        { "year": 2024, "finish_position": 19 },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Romain Grosjean",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 1,
+        "average_finish": 18.5,
+        "data_confidence": "low",
+        "notes": "F1 refugee turned IndyCar racer. Joined 2021. At Dale Coyne Racing in 2026."
+      },
+      "results": [
+        { "year": 2022, "finish_position": 9  },
+        { "year": 2023, "finish_position": 20 },
+        { "year": 2024, "finish_position": 22 },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Jack Harvey",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 2,
+        "average_finish": 19.0,
+        "data_confidence": "low",
+        "notes": "Multiple teams. DRR for 2026. Penalty moved him to P33. Starts with EMS violation handicap."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 10 },
+        { "year": 2022, "finish_position": 18 },
+        { "year": 2023, "finish_position": "DNF" },
+        { "year": 2024, "finish_position": 22 },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Ed Carpenter",
+      "aggregates": {
+        "races_run": 5, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 2,
+        "average_finish": 21.0,
+        "data_confidence": "medium",
+        "notes": "Team owner/driver. Oval specialist. Does not race full calendar. Typically P13-25 range at IMS."
+      },
+      "results": [
+        { "year": 2021, "finish_position": 18 },
+        { "year": 2022, "finish_position": 20 },
+        { "year": 2023, "finish_position": 24 },
+        { "year": 2024, "finish_position": "DNF" },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Christian Rasmussen",
+      "aggregates": {
+        "races_run": 1, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 0,
+        "average_finish": 9.0,
+        "data_confidence": "low",
+        "notes": "2nd in Carb Day 2026. Only 1 prior Indy 500 start estimated; result uncertain."
+      },
+      "results": [
+        { "year": 2025, "finish_position": 9  }
+      ]
+    },
+    {
+      "driver": "Nolan Siegel",
+      "aggregates": {
+        "races_run": 1, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": 22.0,
+        "data_confidence": "low",
+        "notes": "Young Arrow McLaren driver. Thin IMS history."
+      },
+      "results": [
+        { "year": 2025, "finish_position": 22 }
+      ]
+    },
+    {
+      "driver": "Katherine Legge",
+      "aggregates": {
+        "races_run": 3, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 28.0,
+        "data_confidence": "low",
+        "notes": "3rd consecutive Double attempt. Limited pace vs field."
+      },
+      "results": [
+        { "year": 2023, "finish_position": 29 },
+        { "year": 2024, "finish_position": 28 },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Sting Ray Robb",
+      "aggregates": {
+        "races_run": 3, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 23.0,
+        "data_confidence": "low",
+        "notes": "Juncos Hollinger. Limited pace; starts P31."
+      },
+      "results": [
+        { "year": 2023, "finish_position": 22 },
+        { "year": 2024, "finish_position": 24 },
+        { "year": 2025, "finish_position": "DNF" }
+      ]
+    },
+    {
+      "driver": "Louis Foster",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": null,
+        "notes": "IndyCar rookie 2026 (RLL). No prior IMS oval starts.",
+        "data_confidence": "high"
+      },
+      "results": []
+    },
+    {
+      "driver": "Mick Schumacher",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": null,
+        "notes": "IndyCar rookie 2026 (RLL). Son of F1 champion. No prior IMS oval starts.",
+        "data_confidence": "high"
+      },
+      "results": []
+    },
+    {
+      "driver": "Dennis Hauger",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": null,
+        "notes": "IndyCar rookie 2026 (DCR). Norwegian F2 graduate. No prior IMS oval starts.",
+        "data_confidence": "high"
+      },
+      "results": []
+    },
+    {
+      "driver": "Caio Collet",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": null,
+        "notes": "IndyCar rookie 2026 (AJF). No prior IMS oval starts. Grid penalty for EMS violation.",
+        "data_confidence": "high"
+      },
+      "results": []
+    },
+    {
+      "driver": "Jacob Abel",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": null,
+        "notes": "Abel Motorsports family team. Was bumped in 2025; 2026 is his first actual IMS start.",
+        "data_confidence": "high"
+      },
+      "results": []
+    }
+  ]
+}

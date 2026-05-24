@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-05-24T16:34:24.689Z",
+  "sources": [
+    {
+      "source_id": "indy500_field_2026",
+      "status": "ok",
+      "record_count": 33
+    },
+    {
+      "source_id": "indycar_season_form_2026",
+      "status": "ok",
+      "record_count": 33
+    },
+    {
+      "source_id": "ims_500_history",
+      "status": "ok",
+      "record_count": 33
+    },
+    {
+      "source_id": "indycar_oval_superspeedway_history",
+      "status": "ok",
+      "record_count": 33
+    },
+    {
+      "source_id": "indycar_baseline_fundamentals",
+      "status": "ok",
+      "record_count": 33
+    },
+    {
+      "source_id": "carb_day_2026",
+      "status": "partial",
+      "record_count": 10
+    }
+  ]
+}

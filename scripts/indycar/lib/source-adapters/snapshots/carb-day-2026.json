@@ -1,0 +1,30 @@
+{
+  "snapshot_id": "carb_day_2026_practice",
+  "snapshot_date": "2026-05-23",
+  "source_urls": [
+    "https://www.indycar.com/news/2026/05/05-22-carbday-practice-ic",
+    "https://speedcafe.com/indycar-news-2026-indy-500-carb-day-practice-results-newgarden-fastest-mclaughlin-dixon-armstrong-power/"
+  ],
+  "license": "public domain / journalistic record",
+  "status": "partial",
+  "notes": "Carb Day (May 23, 2026) — two-hour final practice. All 33 drivers combined for 2,169 total laps. Full 33-driver speed/lap table was not published; only confirmed top finishers listed below. Non-listed drivers have no Carb Day score (not fabricated).",
+  "practice_top_n": [
+    { "rank": 1,  "car": 2,   "driver": "Josef Newgarden",     "speed_mph": 228.342 },
+    { "rank": 2,  "car": 21,  "driver": "Christian Rasmussen", "speed_mph": 227.474 },
+    { "rank": 3,  "car": 12,  "driver": "David Malukas",       "speed_mph": 226.565 },
+    { "rank": 4,  "car": 23,  "driver": "Conor Daly",          "speed_mph": 226.341 },
+    { "rank": 5,  "car": 75,  "driver": "Takuma Sato",         "speed_mph": 226.244 },
+    { "rank": 6,  "car": 10,  "driver": "Alex Palou",          "speed_mph": 225.986 },
+    { "rank": 8,  "car": 3,   "driver": "Scott McLaughlin",    "speed_mph": 225.642, "notes": "P7 not confirmed in available sources" },
+    { "rank": 9,  "car": 66,  "driver": "Marcus Armstrong",    "speed_mph": 225.322 },
+    { "rank": 10, "car": 19,  "driver": "Dennis Hauger",       "speed_mph": 225.187, "notes": "Fastest rookie in Carb Day" },
+    { "rank": 31, "car": 20,  "driver": "Alexander Rossi",     "speed_mph": 222.291, "notes": "Backup car after Monday crash and surgery; 48 laps only" }
+  ],
+  "additional_notes": [
+    "Scott Dixon (#9) ran 96 laps (most of any driver) — race-simulation focus.",
+    "Pato O'Ward (#5) ran 58 laps in backup car 'Lana'.",
+    "Will Power (#26) ran 89 laps.",
+    "Josef Newgarden also led Monday (May 18) practice at 226.198 mph before rain shortened it.",
+    "Positions 7 and 11-30 (partial) were not confirmed across available sources."
+  ]
+}

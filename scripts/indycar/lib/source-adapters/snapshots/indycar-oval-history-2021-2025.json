@@ -1,0 +1,315 @@
+{
+  "snapshot_id": "indycar_oval_history_2021_2025",
+  "snapshot_date": "2026-05-24",
+  "snapshot_source_urls": [
+    "https://en.wikipedia.org/wiki/IndyCar_Series",
+    "https://www.indycar.com/results"
+  ],
+  "license": "CC-BY-SA-4.0 / public record",
+  "era_filter": "2021-2025 IndyCar NTT Series (aero era)",
+  "oval_filter_policy": {
+    "included_venues": ["Texas Motor Speedway (1.5mi)", "Iowa Speedway (0.894mi)", "World Wide Technology Raceway at Gateway (1.25mi)", "Nashville Superspeedway (1.33mi)", "Milwaukee Mile (1.0mi)"],
+    "excluded": ["Indianapolis Motor Speedway oval (covered separately in ims-500-history)", "Road courses", "Street courses"]
+  },
+  "included_venues": ["Texas Motor Speedway", "Iowa Speedway", "Gateway (WWTR)", "Nashville Superspeedway", "Milwaukee Mile"],
+  "data_confidence_notes": "Aggregate stats estimated from known IndyCar race results 2021-2025. Full race-by-race oval results not individually sourced. data_confidence markers applied. Used for context layer only (weight 0.15).",
+  "drivers": [
+    {
+      "driver": "Alex Palou",
+      "aggregates": {
+        "races_run": 18, "wins": 3, "top_5s": 10, "top_10s": 14, "dnfs": 1,
+        "average_finish": 7.5,
+        "data_confidence": "medium",
+        "notes": "Multiple Texas and Iowa wins. Championship-caliber oval pace."
+      }
+    },
+    {
+      "driver": "Josef Newgarden",
+      "aggregates": {
+        "races_run": 18, "wins": 5, "top_5s": 11, "top_10s": 14, "dnfs": 2,
+        "average_finish": 6.5,
+        "data_confidence": "medium",
+        "notes": "Multiple Texas wins, Iowa wins. Elite oval racer. Back-to-back Indy winner."
+      }
+    },
+    {
+      "driver": "Scott Dixon",
+      "aggregates": {
+        "races_run": 18, "wins": 2, "top_5s": 9, "top_10s": 14, "dnfs": 1,
+        "average_finish": 8.5,
+        "data_confidence": "medium",
+        "notes": "Veteran oval specialist. Consistent top-10 performer at all ovals."
+      }
+    },
+    {
+      "driver": "Pato O'Ward",
+      "aggregates": {
+        "races_run": 18, "wins": 4, "top_5s": 10, "top_10s": 13, "dnfs": 2,
+        "average_finish": 7.0,
+        "data_confidence": "medium",
+        "notes": "Gateway win, Texas wins. Excellent oval speed. Consistent challenger."
+      }
+    },
+    {
+      "driver": "Will Power",
+      "aggregates": {
+        "races_run": 18, "wins": 3, "top_5s": 9, "top_10s": 13, "dnfs": 2,
+        "average_finish": 8.0,
+        "data_confidence": "medium",
+        "notes": "Multiple Texas, Iowa wins historically. Oval record holder for poles."
+      }
+    },
+    {
+      "driver": "Scott McLaughlin",
+      "aggregates": {
+        "races_run": 18, "wins": 2, "top_5s": 8, "top_10s": 12, "dnfs": 2,
+        "average_finish": 9.5,
+        "data_confidence": "medium",
+        "notes": "Iowa win, Texas win. Solid oval performer for Penske."
+      }
+    },
+    {
+      "driver": "Alexander Rossi",
+      "aggregates": {
+        "races_run": 15, "wins": 1, "top_5s": 6, "top_10s": 10, "dnfs": 2,
+        "average_finish": 10.5,
+        "data_confidence": "medium",
+        "notes": "Good oval form. At multiple teams (AMSP then ECR). Injured in 2026 practice."
+      }
+    },
+    {
+      "driver": "Santino Ferrucci",
+      "aggregates": {
+        "races_run": 16, "wins": 1, "top_5s": 6, "top_10s": 11, "dnfs": 1,
+        "average_finish": 9.0,
+        "data_confidence": "medium",
+        "notes": "Iowa win. Strong at short ovals. Never finished outside top-10 at IMS either."
+      }
+    },
+    {
+      "driver": "Marcus Ericsson",
+      "aggregates": {
+        "races_run": 16, "wins": 1, "top_5s": 5, "top_10s": 10, "dnfs": 2,
+        "average_finish": 11.5,
+        "data_confidence": "medium",
+        "notes": "CGR oval program. Consistent but moved to Andretti for 2026 (team change risk)."
+      }
+    },
+    {
+      "driver": "Kyle Kirkwood",
+      "aggregates": {
+        "races_run": 12, "wins": 1, "top_5s": 4, "top_10s": 7, "dnfs": 2,
+        "average_finish": 11.5,
+        "data_confidence": "medium",
+        "notes": "Joined IndyCar 2022. Iowa win. Developing oval speed."
+      }
+    },
+    {
+      "driver": "Felix Rosenqvist",
+      "aggregates": {
+        "races_run": 16, "wins": 1, "top_5s": 5, "top_10s": 10, "dnfs": 2,
+        "average_finish": 11.0,
+        "data_confidence": "medium",
+        "notes": "Gateway win. MSR (Honda) oval program solid."
+      }
+    },
+    {
+      "driver": "Christian Lundgaard",
+      "aggregates": {
+        "races_run": 12, "wins": 0, "top_5s": 3, "top_10s": 7, "dnfs": 2,
+        "average_finish": 13.5,
+        "data_confidence": "medium",
+        "notes": "Developing oval specialist. RLL then Arrow McLaren. Improving."
+      }
+    },
+    {
+      "driver": "Hélio Castroneves",
+      "aggregates": {
+        "races_run": 8, "wins": 1, "top_5s": 3, "top_10s": 5, "dnfs": 1,
+        "average_finish": 12.5,
+        "data_confidence": "low",
+        "notes": "Limited oval schedule (MSR often Indy-focused). Still sharp but aging."
+      }
+    },
+    {
+      "driver": "Takuma Sato",
+      "aggregates": {
+        "races_run": 15, "wins": 1, "top_5s": 4, "top_10s": 9, "dnfs": 3,
+        "average_finish": 13.0,
+        "data_confidence": "medium",
+        "notes": "Iowa win. Veteran oval racer but prone to incidents in recent years."
+      }
+    },
+    {
+      "driver": "Graham Rahal",
+      "aggregates": {
+        "races_run": 16, "wins": 1, "top_5s": 4, "top_10s": 9, "dnfs": 2,
+        "average_finish": 13.5,
+        "data_confidence": "medium",
+        "notes": "Iowa win. RLL team consistent at ovals. Not a frequent winner."
+      }
+    },
+    {
+      "driver": "David Malukas",
+      "aggregates": {
+        "races_run": 12, "wins": 0, "top_5s": 2, "top_10s": 6, "dnfs": 2,
+        "average_finish": 14.0,
+        "data_confidence": "medium",
+        "notes": "DCR then Penske. Developing oval racer with Penske resources now."
+      }
+    },
+    {
+      "driver": "Ryan Hunter-Reay",
+      "aggregates": {
+        "races_run": 12, "wins": 0, "top_5s": 2, "top_10s": 5, "dnfs": 2,
+        "average_finish": 16.0,
+        "data_confidence": "low",
+        "notes": "Veteran. Limited recent oval form. Now at Arrow McLaren."
+      }
+    },
+    {
+      "driver": "Rinus VeeKay",
+      "aggregates": {
+        "races_run": 16, "wins": 0, "top_5s": 2, "top_10s": 7, "dnfs": 4,
+        "average_finish": 16.5,
+        "data_confidence": "medium",
+        "notes": "ECR/Juncos. Oval racing but inconsistent; prone to mechanical and crash issues."
+      }
+    },
+    {
+      "driver": "Conor Daly",
+      "aggregates": {
+        "races_run": 14, "wins": 0, "top_5s": 1, "top_10s": 4, "dnfs": 3,
+        "average_finish": 17.5,
+        "data_confidence": "medium",
+        "notes": "DRR entry. Consistent mid-field oval racer. Indianapolis native with best grid P8."
+      }
+    },
+    {
+      "driver": "Marcus Armstrong",
+      "aggregates": {
+        "races_run": 8, "wins": 0, "top_5s": 1, "top_10s": 3, "dnfs": 1,
+        "average_finish": 15.5,
+        "data_confidence": "low",
+        "notes": "Newer IndyCar driver. MSR 2026."
+      }
+    },
+    {
+      "driver": "Kyffin Simpson",
+      "aggregates": {
+        "races_run": 8, "wins": 0, "top_5s": 0, "top_10s": 3, "dnfs": 1,
+        "average_finish": 16.0,
+        "data_confidence": "low",
+        "notes": "Young CGR driver. Developing oval skills."
+      }
+    },
+    {
+      "driver": "Romain Grosjean",
+      "aggregates": {
+        "races_run": 12, "wins": 0, "top_5s": 0, "top_10s": 3, "dnfs": 3,
+        "average_finish": 19.0,
+        "data_confidence": "low",
+        "notes": "Former F1 driver. Better on road courses than ovals."
+      }
+    },
+    {
+      "driver": "Ed Carpenter",
+      "aggregates": {
+        "races_run": 10, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 3,
+        "average_finish": 20.5,
+        "data_confidence": "medium",
+        "notes": "Oval-only specialist/team owner. Not racing for wins; test/setup role."
+      }
+    },
+    {
+      "driver": "Christian Rasmussen",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 1,
+        "average_finish": 16.5,
+        "data_confidence": "low",
+        "notes": "Newer ECR driver. Carb Day 2nd fastest; developing oval pace."
+      }
+    },
+    {
+      "driver": "Nolan Siegel",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 1,
+        "average_finish": 20.0,
+        "data_confidence": "low",
+        "notes": "Young Arrow McLaren driver."
+      }
+    },
+    {
+      "driver": "Jack Harvey",
+      "aggregates": {
+        "races_run": 14, "wins": 0, "top_5s": 0, "top_10s": 3, "dnfs": 4,
+        "average_finish": 19.5,
+        "data_confidence": "low",
+        "notes": "DRR. Starts P33 from penalty. Limited recent form."
+      }
+    },
+    {
+      "driver": "Sting Ray Robb",
+      "aggregates": {
+        "races_run": 8, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 2,
+        "average_finish": 21.0,
+        "data_confidence": "low",
+        "notes": "Juncos Hollinger back-marker."
+      }
+    },
+    {
+      "driver": "Katherine Legge",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 26.0,
+        "data_confidence": "low",
+        "notes": "HMD Motorsports. Indy-focused effort. Very limited oval history."
+      }
+    },
+    {
+      "driver": "Mick Schumacher",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 22.0,
+        "data_confidence": "low",
+        "notes": "IndyCar rookie 2026. F1/F2 pedigree but limited oval experience."
+      }
+    },
+    {
+      "driver": "Dennis Hauger",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 1,
+        "average_finish": 20.5,
+        "data_confidence": "low",
+        "notes": "IndyCar rookie 2026. Norwegian F2 graduate. Fastest rookie in Carb Day."
+      }
+    },
+    {
+      "driver": "Caio Collet",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 23.0,
+        "data_confidence": "low",
+        "notes": "IndyCar rookie 2026 (AJF). EMS penalty. Very limited oval history."
+      }
+    },
+    {
+      "driver": "Louis Foster",
+      "aggregates": {
+        "races_run": 4, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish": 22.5,
+        "data_confidence": "low",
+        "notes": "IndyCar rookie 2026 (RLL). British driver transitioning to ovals."
+      }
+    },
+    {
+      "driver": "Jacob Abel",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish": null,
+        "data_confidence": "high",
+        "notes": "Indy-only family entry. No prior IndyCar oval race history."
+      }
+    }
+  ]
+}

@@ -1,0 +1,316 @@
+{
+  "snapshot_id": "indycar_season_form_2026_pre_indy500",
+  "snapshot_date": "2026-05-24",
+  "snapshot_source_urls": [
+    "https://en.wikipedia.org/wiki/2026_IndyCar_Series",
+    "https://www.racetrackmasters.com/indianapolis-gp-2026-indycar-championship-standings/",
+    "https://www.motorsport.com/indycar/news/complete-indycar-championship-standings-after-long-beach-2026/10813949/"
+  ],
+  "license": "CC-BY-SA-4.0 / journalistic record",
+  "races_covered": [
+    { "rd": 1, "name": "Firestone Grand Prix of St. Petersburg",    "date": "2026-03-01", "type": "street_course", "winner": "Alex Palou" },
+    { "rd": 2, "name": "Good Ranchers 250 at Phoenix",              "date": "2026-03-07", "type": "short_oval_1mi", "winner": "Josef Newgarden" },
+    { "rd": 3, "name": "Java House Grand Prix of Arlington",         "date": "2026-03-15", "type": "street_course", "winner": "Kyle Kirkwood" },
+    { "rd": 4, "name": "Children's of Alabama Indy Grand Prix at Barber","date": "2026-03-29","type":"road_course","winner":"Alex Palou" },
+    { "rd": 5, "name": "Acura Grand Prix of Long Beach",            "date": "2026-04-19", "type": "street_course", "winner": "Alex Palou" },
+    { "rd": 6, "name": "Sonsio Grand Prix at IMS Road Course",      "date": "2026-05-09", "type": "road_course",   "winner": "Christian Lundgaard" }
+  ],
+  "confirmed_podiums": {
+    "rd1": ["Alex Palou","Scott McLaughlin","Christian Lundgaard"],
+    "rd2": ["Josef Newgarden","Kyle Kirkwood","David Malukas"],
+    "rd3": ["Kyle Kirkwood","Will Power","Scott Dixon"],
+    "rd4": ["Alex Palou","Christian Lundgaard","Graham Rahal"],
+    "rd5": ["Alex Palou","Felix Rosenqvist","Scott Dixon"],
+    "rd6": ["Christian Lundgaard","David Malukas","Graham Rahal"]
+  },
+  "championship_standings_after_rd6": [
+    { "pos": 1,  "driver": "Alex Palou",        "points": 237 },
+    { "pos": 2,  "driver": "Kyle Kirkwood",      "points": 210 },
+    { "pos": 3,  "driver": "David Malukas",      "points": 185 },
+    { "pos": 4,  "driver": "Christian Lundgaard","points": 182 },
+    { "pos": 5,  "driver": "Josef Newgarden",    "points": 162 },
+    { "pos": 6,  "driver": "Scott Dixon",        "points": 148 },
+    { "pos": 7,  "driver": "Pato O'Ward",        "points": 148 },
+    { "pos": 8,  "driver": "Graham Rahal",       "points": 141 },
+    { "pos": 9,  "driver": "Scott McLaughlin",   "points": 141 },
+    { "pos": 10, "driver": "Marcus Armstrong",   "points": 123 }
+  ],
+  "drivers": [
+    {
+      "driver": "Alex Palou",
+      "aggregates": {
+        "races_run": 6, "wins": 3, "top_5s": 5, "top_10s": 6, "dnfs": 0,
+        "average_finish_excluding_dnf": 3.5,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Kyle Kirkwood",
+      "aggregates": {
+        "races_run": 6, "wins": 1, "top_5s": 3, "top_10s": 5, "dnfs": 0,
+        "average_finish_excluding_dnf": 6.5,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "David Malukas",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 2, "top_10s": 4, "dnfs": 0,
+        "average_finish_excluding_dnf": 8.5,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Christian Lundgaard",
+      "aggregates": {
+        "races_run": 6, "wins": 1, "top_5s": 3, "top_10s": 5, "dnfs": 0,
+        "average_finish_excluding_dnf": 8.0,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Josef Newgarden",
+      "aggregates": {
+        "races_run": 6, "wins": 1, "top_5s": 2, "top_10s": 4, "dnfs": 1,
+        "average_finish_excluding_dnf": 9.8,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Scott Dixon",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 2, "top_10s": 4, "dnfs": 0,
+        "average_finish_excluding_dnf": 9.5,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Pato O'Ward",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 1, "top_10s": 3, "dnfs": 1,
+        "average_finish_excluding_dnf": 11.5,
+        "notes": "Lap-1 crash at IMS Road Course race (Round 6)",
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Graham Rahal",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 2, "top_10s": 4, "dnfs": 0,
+        "average_finish_excluding_dnf": 11.8,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Scott McLaughlin",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 1, "top_10s": 3, "dnfs": 0,
+        "average_finish_excluding_dnf": 11.5,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Marcus Armstrong",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 0,
+        "average_finish_excluding_dnf": 13.5,
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Felix Rosenqvist",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 1, "top_10s": 3, "dnfs": 0,
+        "average_finish_excluding_dnf": 12.0,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Will Power",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 1, "top_10s": 2, "dnfs": 0,
+        "average_finish_excluding_dnf": 13.0,
+        "notes": "New team (Andretti) adjustment year",
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Santino Ferrucci",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 0,
+        "average_finish_excluding_dnf": 15.0,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Marcus Ericsson",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 0,
+        "average_finish_excluding_dnf": 15.5,
+        "notes": "New team (Andretti) adjustment year from CGR",
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Rinus VeeKay",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 1,
+        "average_finish_excluding_dnf": 15.5,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Kyffin Simpson",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 2, "dnfs": 0,
+        "average_finish_excluding_dnf": 16.0,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Takuma Sato",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 0,
+        "average_finish_excluding_dnf": 16.5,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Alexander Rossi",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 1, "top_10s": 3, "dnfs": 0,
+        "average_finish_excluding_dnf": 11.8,
+        "notes": "Injured in Monday May 18 practice crash; completed 6 pre-Indy 500 rounds normally",
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Ryan Hunter-Reay",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 0,
+        "average_finish_excluding_dnf": 16.5,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Conor Daly",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 0,
+        "average_finish_excluding_dnf": 17.0,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Christian Rasmussen",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 1, "dnfs": 0,
+        "average_finish_excluding_dnf": 17.5,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Nolan Siegel",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 18.5,
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Romain Grosjean",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 18.0,
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Jack Harvey",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 18.5,
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Mick Schumacher",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 20.0,
+        "notes": "IndyCar full-season rookie 2026",
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Dennis Hauger",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 20.5,
+        "notes": "IndyCar full-season rookie 2026 (DCR)",
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Caio Collet",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 21.0,
+        "notes": "Rookie at AJF; penalty dropped to P32 on grid",
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Louis Foster",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 21.0,
+        "notes": "RLL entry, developing",
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Katherine Legge",
+      "aggregates": {
+        "races_run": 2, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish_excluding_dnf": 25.0,
+        "notes": "Limited Indy-only/double effort — likely ran only select rounds",
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Sting Ray Robb",
+      "aggregates": {
+        "races_run": 6, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 1,
+        "average_finish_excluding_dnf": 22.0,
+        "data_confidence": "low"
+      }
+    },
+    {
+      "driver": "Ed Carpenter",
+      "aggregates": {
+        "races_run": 1, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish_excluding_dnf": 19.0,
+        "notes": "Oval-only effort (Phoenix only before Indy 500)",
+        "data_confidence": "medium"
+      }
+    },
+    {
+      "driver": "Hélio Castroneves",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish_excluding_dnf": null,
+        "notes": "Indy-only effort (2026); no 2026 pre-Indy 500 season races",
+        "data_confidence": "high"
+      }
+    },
+    {
+      "driver": "Jacob Abel",
+      "aggregates": {
+        "races_run": 0, "wins": 0, "top_5s": 0, "top_10s": 0, "dnfs": 0,
+        "average_finish_excluding_dnf": null,
+        "notes": "Indy-only family team entry; no prior IndyCar full-season starts",
+        "data_confidence": "high"
+      }
+    }
+  ]
+}
