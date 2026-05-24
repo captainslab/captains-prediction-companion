@@ -222,6 +222,27 @@ function renderPacket({
   }
   lines.push('');
 
+  lines.push('## Executive Summary');
+  lines.push('');
+  lines.push('Charlotte\'s Coca-Cola 600 is a four-stage, 600-mile attrition race where long green-flag cycles and late cautions can both decide the winner. This board keeps the model\'s current scoring and ranking intact while translating the evidence into race-context interpretation for Charlotte specifically: intermediate-track balance, long-run tire management, and pit-cycle execution under fatigue. With pit-crew data missing and practice coverage limited to a published top subset, confidence is capped at EVIDENCE_LEAN even for the highest raw scorers.');
+  lines.push('');
+  lines.push('Because traditional qualifying was not available and the grid was set by formula, starting-position signal is weaker than usual for projecting clean-air dependence versus pass-quality. The result is a wider uncertainty band around early race pace and setup direction, especially for teams that typically improve through multi-run practice notebooks.');
+  lines.push('');
+  lines.push('### Race Volatility Note (600-mile variance)');
+  lines.push('');
+  lines.push('The 600\'s length increases variance through compounding pit cycles, tire-cycle management, heat-to-night track evolution, and caution timing. Even strong baseline profiles can lose position through one poorly timed yellow or an execution miss late, while mid-tier cars can jump tiers on strategy sequence. Treat the top of this board as probability-weighted profiles, not deterministic race scripts.');
+  lines.push('');
+  lines.push('### Top-driver Charlotte Profiles (rankings unchanged)');
+  lines.push('');
+  const topProfiles = multiLaneBoard.candidates.slice(0, 8);
+  for (const c of topProfiles) {
+    const score = c.composite_score ?? 'n/a';
+    const top10 = c?.lanes?.top_10?.status ?? 'n/a';
+    const top20 = c?.lanes?.top_20?.status ?? 'n/a';
+    lines.push(`- #${c.car_number ?? '?'} ${c.driver_name ?? 'Unknown'} (rank ${c.pool_rank}, score ${score}) — Charlotte fit: ${c.final_reasoning_summary ?? 'Model favors this profile on combined driver-skill, equipment, and strategy-risk inputs.'} Long-run context: current packet has no full-field run-by-run falloff telemetry; interpretation is inferred from available strategy-risk and equipment layers only. Path to failure: ${c.final_invalidators?.[0] ?? 'Late-cycle caution variance and missing pit-crew granularity can erase edge quickly.'} Ceiling posture: Top 10 ${top10}; Top 20 ${top20}.`);
+  }
+  lines.push('');
+
   // Per-driver evidence ledger — the heart of the reasoning-backed board.
   lines.push('### Per-driver Evidence Ledger');
   lines.push('');
