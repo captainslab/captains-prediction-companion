@@ -1,0 +1,2021 @@
+{
+  "snapshot_id": "wikipedia_2026_cup_season_form_pre_coca_cola_600",
+  "snapshot_source_url": "https://en.wikipedia.org/wiki/2026_NASCAR_Cup_Series",
+  "snapshot_section": "Season summary / Race results matrix + Drivers' championship",
+  "snapshot_date": "2026-05-25",
+  "as_of_event_label": "After All-Star race; before 2026 Coca-Cola 600",
+  "license": "CC-BY-SA-4.0",
+  "attribution": "Wikipedia contributors, '2026 NASCAR Cup Series', Wikipedia, The Free Encyclopedia. Used under CC-BY-SA 4.0. Race-by-race finish positions and DNF flags transcribed from the Race results matrix; season points from the Drivers' championship table.",
+  "transcription_notes": [
+    "Race-by-race finishes parsed from the Race results matrix table for races 1..12 (Daytona 500 through Go Bowling at The Glen), inclusive.",
+    "DNF flag set when the cell background color is #CFCFFF (Wikipedia driver-results legend code for DNF/retired).",
+    "Finish position parsed as the leading integer in the cell, stripping annotations: bold/italic pole markers, * (most laps led), F (fastest lap), and 1/2/3 superscripts (stage winners).",
+    "Season points come from the Drivers' championship table (top-20 standings snapshot).",
+    "No fabrication: cells that are empty/upcoming are omitted from race_by_race."
+  ],
+  "era_filter": "Next Gen / Gen 7 (2022 Daytona 500 onward)",
+  "all_star_excluded": true,
+  "all_star_excluded_reason": "The 2026 NASCAR All-Star Race is an exhibition event awarding no championship points; it is not included in the Race results matrix and is excluded from race-by-race form aggregates.",
+  "drivers": [
+    {
+      "driver": "Tyler Reddick",
+      "points_position": 1,
+      "season_points": 567,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 14,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 5,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 5,
+        "top_5s": 8,
+        "top_10s": 9,
+        "dnfs": 0,
+        "average_finish_excluding_dnf": 5.67,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Denny Hamlin",
+      "points_position": 2,
+      "season_points": 438,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 31,
+          "dnf": true
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 16,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 1,
+        "top_5s": 5,
+        "top_10s": 7,
+        "dnfs": 1,
+        "average_finish_excluding_dnf": 8,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Chase Elliott",
+      "points_position": 3,
+      "season_points": 422,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 23,
+          "dnf": true
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 22,
+          "dnf": true
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 24,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 2,
+        "top_5s": 5,
+        "top_10s": 7,
+        "dnfs": 3,
+        "average_finish_excluding_dnf": 5.89,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Ryan Blaney",
+      "points_position": 4,
+      "season_points": 405,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 27,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 16,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 24,
+          "dnf": true
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 37,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 11,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 1,
+        "top_5s": 3,
+        "top_10s": 7,
+        "dnfs": 1,
+        "average_finish_excluding_dnf": 11.91,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Chris Buescher",
+      "points_position": 5,
+      "season_points": 375,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 24,
+          "dnf": true
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 14,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 19,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 12,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 6,
+        "dnfs": 1,
+        "average_finish_excluding_dnf": 10.18,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Ty Gibbs",
+      "points_position": 6,
+      "season_points": 372,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 23,
+          "dnf": true
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 37,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 34,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 36,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 3,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 1,
+        "top_5s": 6,
+        "top_10s": 8,
+        "dnfs": 1,
+        "average_finish_excluding_dnf": 13,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Carson Hocevar",
+      "points_position": 7,
+      "season_points": 342,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 18,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 31,
+          "dnf": true
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 22,
+          "dnf": true
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 17,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 1,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 28,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 1,
+        "top_5s": 3,
+        "top_10s": 5,
+        "dnfs": 3,
+        "average_finish_excluding_dnf": 10.44,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Kyle Larson",
+      "points_position": 8,
+      "season_points": 332,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 16,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 32,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 32,
+          "dnf": true
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 40,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 34,
+          "dnf": true
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 23,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 3,
+        "top_10s": 6,
+        "dnfs": 3,
+        "average_finish_excluding_dnf": 13.11,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Brad Keselowski",
+      "points_position": 9,
+      "season_points": 318,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 17,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 14,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 31,
+          "dnf": true
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 30,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 4,
+        "dnfs": 2,
+        "average_finish_excluding_dnf": 11.5,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Bubba Wallace",
+      "points_position": 10,
+      "season_points": 313,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 10,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 34,
+          "dnf": true
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 36,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 36,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 29,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 6,
+        "dnfs": 2,
+        "average_finish_excluding_dnf": 14.1,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Christopher Bell",
+      "points_position": 11,
+      "season_points": 311,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 35,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 21,
+          "dnf": true
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 4,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 19,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 27,
+          "dnf": true
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 17,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 38,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 21,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 3,
+        "top_10s": 4,
+        "dnfs": 3,
+        "average_finish_excluding_dnf": 16.11,
+        "note": ""
+      }
+    },
+    {
+      "driver": "William Byron",
+      "points_position": 12,
+      "season_points": 309,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 28,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 30,
+          "dnf": true
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 35,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 36,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 6,
+        "dnfs": 2,
+        "average_finish_excluding_dnf": 12.6,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Ryan Preece",
+      "points_position": 13,
+      "season_points": 296,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 25,
+          "dnf": true
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 18,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 18,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 14,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 14,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 2,
+        "dnfs": 1,
+        "average_finish_excluding_dnf": 12.82,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Daniel Suárez",
+      "points_position": 14,
+      "season_points": 295,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 13,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 25,
+          "dnf": true
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 30,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 18,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 19,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 13,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 3,
+        "dnfs": 1,
+        "average_finish_excluding_dnf": 14.09,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Austin Cindric",
+      "points_position": 15,
+      "season_points": 287,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 34,
+          "dnf": true
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 26,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 32,
+          "dnf": true
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 34,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 19,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 16,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 9,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 4,
+        "dnfs": 2,
+        "average_finish_excluding_dnf": 15.2,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Shane van Gisbergen",
+      "points_position": 16,
+      "season_points": 283,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 30,
+          "dnf": true
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 6,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 36,
+          "dnf": true
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 14,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 11,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 34,
+          "dnf": true
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 36,
+          "dnf": true
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 17,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 1,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 1,
+        "top_5s": 2,
+        "top_10s": 3,
+        "dnfs": 4,
+        "average_finish_excluding_dnf": 10.25,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Chase Briscoe",
+      "points_position": 17,
+      "season_points": 277,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 36,
+          "dnf": true
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 2,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 37,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 37,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 8,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 14,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 5,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 29,
+          "dnf": true
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 23,
+          "dnf": true
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 4,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 4,
+        "top_10s": 5,
+        "dnfs": 3,
+        "average_finish_excluding_dnf": 13.56,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Joey Logano",
+      "points_position": 18,
+      "season_points": 245,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 18,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 31,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 33,
+          "dnf": true
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 30,
+          "dnf": true
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 39,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 37,
+          "dnf": false
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 38,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 3,
+        "dnfs": 3,
+        "average_finish_excluding_dnf": 18.67,
+        "note": ""
+      }
+    },
+    {
+      "driver": "Ross Chastain",
+      "points_position": 19,
+      "season_points": 236,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 3,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 35,
+          "dnf": true
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 28,
+          "dnf": true
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 17,
+          "dnf": false
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 16,
+          "dnf": false
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 16,
+          "dnf": false
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 20,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 26,
+          "dnf": true
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 7,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 26,
+          "dnf": true
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 27,
+          "dnf": true
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 2,
+        "dnfs": 5,
+        "average_finish_excluding_dnf": 14.14,
+        "note": ""
+      }
+    },
+    {
+      "driver": "A. J. Allmendinger",
+      "points_position": 20,
+      "season_points": 235,
+      "race_by_race": [
+        {
+          "race_n": 1,
+          "race_name": "Daytona 500",
+          "track": "Daytona International Speedway",
+          "finish_position": 19,
+          "dnf": false
+        },
+        {
+          "race_n": 2,
+          "race_name": "Autotrader 400",
+          "track": "Atlanta Motor Speedway",
+          "finish_position": 12,
+          "dnf": false
+        },
+        {
+          "race_n": 3,
+          "race_name": "DuraMAX Texas Grand Prix",
+          "track": "Circuit of the Americas",
+          "finish_position": 9,
+          "dnf": false
+        },
+        {
+          "race_n": 4,
+          "race_name": "Straight Talk Wireless 500",
+          "track": "Phoenix Raceway",
+          "finish_position": 19,
+          "dnf": false
+        },
+        {
+          "race_n": 5,
+          "race_name": "Pennzoil 400",
+          "track": "Las Vegas Motor Speedway",
+          "finish_position": 24,
+          "dnf": true
+        },
+        {
+          "race_n": 6,
+          "race_name": "Goodyear 400",
+          "track": "Darlington Raceway",
+          "finish_position": 30,
+          "dnf": true
+        },
+        {
+          "race_n": 7,
+          "race_name": "Cook Out 400",
+          "track": "Martinsville Speedway",
+          "finish_position": 27,
+          "dnf": true
+        },
+        {
+          "race_n": 8,
+          "race_name": "Food City 500",
+          "track": "Bristol Motor Speedway",
+          "finish_position": 15,
+          "dnf": false
+        },
+        {
+          "race_n": 9,
+          "race_name": "AdventHealth 400",
+          "track": "Kansas Speedway",
+          "finish_position": 31,
+          "dnf": true
+        },
+        {
+          "race_n": 10,
+          "race_name": "Jack Link's 500",
+          "track": "Talladega Superspeedway",
+          "finish_position": 16,
+          "dnf": false
+        },
+        {
+          "race_n": 11,
+          "race_name": "Würth 400",
+          "track": "Texas Motor Speedway",
+          "finish_position": 25,
+          "dnf": true
+        },
+        {
+          "race_n": 12,
+          "race_name": "Go Bowling at The Glen",
+          "track": "Watkins Glen International",
+          "finish_position": 7,
+          "dnf": false
+        }
+      ],
+      "aggregates": {
+        "races_run": 12,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 2,
+        "dnfs": 5,
+        "average_finish_excluding_dnf": 13.86,
+        "note": ""
+      }
+    }
+  ]
+}

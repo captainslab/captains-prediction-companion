@@ -1,0 +1,829 @@
+{
+  "snapshot_id": "wikipedia_charlotte_oval_cup_history_2022_2025",
+  "snapshot_source_urls": [
+    "https://en.wikipedia.org/wiki/2022_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2023_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2024_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2025_Coca-Cola_600"
+  ],
+  "snapshot_date": "2026-05-24",
+  "license": "CC-BY-SA-4.0",
+  "attribution": "Wikipedia contributors, '2022/2023/2024/2025 Coca-Cola 600', Wikipedia, The Free Encyclopedia. Used under CC-BY-SA 4.0. Race result rows (position, driver, laps) manually transcribed via HTML parse from the Final Stage / Race results tables of each event article.",
+  "era_filter": "Next Gen / Gen 7 (2022 Daytona 500 onward)",
+  "oval_filter_policy": {
+    "track": "Charlotte Motor Speedway",
+    "layout_included": "oval (1.5-mile quad-oval)",
+    "layout_excluded": "roval (road course)",
+    "excluded_event_classes": [
+      {
+        "class": "Charlotte Roval Cup race (Bank of America Roval 400 / 2022, 2023, 2024, 2025)",
+        "reason": "Different layout (road course) — excluded by oval-only filter."
+      },
+      {
+        "class": "NASCAR All-Star Race",
+        "reason": "Not contested at Charlotte oval during the Gen 7 window (2022 Texas Motor Speedway; 2023, 2024, 2025 North Wilkesboro Speedway)."
+      },
+      {
+        "class": "Xfinity Series and Truck Series Charlotte races",
+        "reason": "Cup Series only."
+      },
+      {
+        "class": "Pre-2022 Charlotte Cup races",
+        "reason": "Outside Gen 7 era."
+      }
+    ]
+  },
+  "included_events": [
+    {
+      "event_id": "2022_coca_cola_600",
+      "year": 2022,
+      "date": "2022-05-29",
+      "name": "2022 Coca-Cola 600",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "race_laps": 400,
+      "source_url": "https://en.wikipedia.org/wiki/2022_Coca-Cola_600"
+    },
+    {
+      "event_id": "2023_coca_cola_600",
+      "year": 2023,
+      "date": "2023-05-28",
+      "name": "2023 Coca-Cola 600",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "race_laps": 400,
+      "source_url": "https://en.wikipedia.org/wiki/2023_Coca-Cola_600"
+    },
+    {
+      "event_id": "2024_coca_cola_600",
+      "year": 2024,
+      "date": "2024-05-26",
+      "name": "2024 Coca-Cola 600",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "race_laps": 400,
+      "source_url": "https://en.wikipedia.org/wiki/2024_Coca-Cola_600"
+    },
+    {
+      "event_id": "2025_coca_cola_600",
+      "year": 2025,
+      "date": "2025-05-25",
+      "name": "2025 Coca-Cola 600",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "race_laps": 400,
+      "source_url": "https://en.wikipedia.org/wiki/2025_Coca-Cola_600"
+    }
+  ],
+  "excluded_events": [
+    {
+      "event": "Bank of America Roval 400",
+      "year": 2022,
+      "layout": "roval",
+      "reason": "Charlotte road course — excluded by oval-only filter."
+    },
+    {
+      "event": "Bank of America Roval 400",
+      "year": 2023,
+      "layout": "roval",
+      "reason": "Charlotte road course — excluded by oval-only filter."
+    },
+    {
+      "event": "Bank of America Roval 400",
+      "year": 2024,
+      "layout": "roval",
+      "reason": "Charlotte road course — excluded by oval-only filter."
+    },
+    {
+      "event": "Bank of America Roval 400",
+      "year": 2025,
+      "layout": "roval",
+      "reason": "Charlotte road course — excluded by oval-only filter."
+    },
+    {
+      "event": "NASCAR All-Star Race",
+      "year": 2022,
+      "layout": "oval (Texas Motor Speedway)",
+      "reason": "Not at Charlotte oval."
+    },
+    {
+      "event": "NASCAR All-Star Race",
+      "year": 2023,
+      "layout": "short oval (North Wilkesboro)",
+      "reason": "Not at Charlotte oval."
+    },
+    {
+      "event": "NASCAR All-Star Race",
+      "year": 2024,
+      "layout": "short oval (North Wilkesboro)",
+      "reason": "Not at Charlotte oval."
+    },
+    {
+      "event": "NASCAR All-Star Race",
+      "year": 2025,
+      "layout": "short oval (North Wilkesboro)",
+      "reason": "Not at Charlotte oval."
+    }
+  ],
+  "drivers": [
+    {
+      "driver": "Tyler Reddick",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 6,
+          "laps_completed": 413
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 5,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 4,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 26,
+          "laps_completed": 398
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 3,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 10.25,
+        "note": null
+      }
+    },
+    {
+      "driver": "Denny Hamlin",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 1,
+          "laps_completed": 413
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 35,
+          "laps_completed": 185
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 5,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 16,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 1,
+        "top_5s": 2,
+        "top_10s": 2,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 14.25,
+        "note": null
+      }
+    },
+    {
+      "driver": "Chase Elliott",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 33,
+          "laps_completed": 188
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 34,
+          "laps_completed": 185
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 7,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 6,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 2,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 20,
+        "note": null
+      }
+    },
+    {
+      "driver": "Ryan Blaney",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 29,
+          "laps_completed": 195
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 1,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 39,
+          "laps_completed": 143
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 38,
+          "laps_completed": 245
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 1,
+        "top_5s": 1,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 26.75,
+        "note": null
+      }
+    },
+    {
+      "driver": "Chris Buescher",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 26,
+          "laps_completed": 346
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 8,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 23,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 22,
+          "laps_completed": 398
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 19.75,
+        "note": null
+      }
+    },
+    {
+      "driver": "Ty Gibbs",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 26,
+          "laps_completed": 398
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 6,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 24,
+          "laps_completed": 398
+        }
+      ],
+      "aggregates": {
+        "races_run": 3,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 1,
+        "average_finish_excluding_dns_dnf": 18.67,
+        "note": null
+      }
+    },
+    {
+      "driver": "Carson Hocevar",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 21,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 34,
+          "laps_completed": 306
+        }
+      ],
+      "aggregates": {
+        "races_run": 2,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 0,
+        "dnfs": null,
+        "dns": 2,
+        "average_finish_excluding_dns_dnf": 27.5,
+        "note": null
+      }
+    },
+    {
+      "driver": "Kyle Larson",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 9,
+          "laps_completed": 413
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 30,
+          "laps_completed": 377
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 37,
+          "laps_completed": 245
+        }
+      ],
+      "aggregates": {
+        "races_run": 3,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 1,
+        "average_finish_excluding_dns_dnf": 25.33,
+        "note": null
+      }
+    },
+    {
+      "driver": "Brad Keselowski",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 30,
+          "laps_completed": 193
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 19,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 2,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 5,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 2,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 14,
+        "note": null
+      }
+    },
+    {
+      "driver": "Bubba Wallace",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 28,
+          "laps_completed": 200
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 4,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 11,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 35,
+          "laps_completed": 306
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 19.5,
+        "note": null
+      }
+    },
+    {
+      "driver": "Christopher Bell",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 5,
+          "laps_completed": 413
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 24,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 1,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 8,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 1,
+        "top_5s": 2,
+        "top_10s": 3,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 9.5,
+        "note": null
+      }
+    },
+    {
+      "driver": "William Byron",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 32,
+          "laps_completed": 191
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 2,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 3,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 2,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 3,
+        "top_10s": 3,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 9.75,
+        "note": null
+      }
+    },
+    {
+      "driver": "Ryan Preece",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 37,
+          "laps_completed": 16
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 13,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 26,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 9,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 21.25,
+        "note": null
+      }
+    },
+    {
+      "driver": "Daniel Suárez",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 25,
+          "laps_completed": 346
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 23,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 24,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 36,
+          "laps_completed": 245
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 0,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 27,
+        "note": null
+      }
+    },
+    {
+      "driver": "Austin Cindric",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 34,
+          "laps_completed": 145
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 31,
+          "laps_completed": 369
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 20,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 31,
+          "laps_completed": 388
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 0,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 29,
+        "note": null
+      }
+    },
+    {
+      "driver": "Shane van Gisbergen",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 28,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 14,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 2,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 0,
+        "dnfs": null,
+        "dns": 2,
+        "average_finish_excluding_dns_dnf": 21,
+        "note": null
+      }
+    },
+    {
+      "driver": "Chase Briscoe",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 4,
+          "laps_completed": 413
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 20,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 25,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 3,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 2,
+        "top_10s": 2,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 13,
+        "note": null
+      }
+    },
+    {
+      "driver": "Joey Logano",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 20,
+          "laps_completed": 405
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 21,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 14,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 17,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 0,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 18,
+        "note": null
+      }
+    },
+    {
+      "driver": "Ross Chastain",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": 15,
+          "laps_completed": 413
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 22,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": 8,
+          "laps_completed": 249
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 1,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 4,
+        "wins": 1,
+        "top_5s": 1,
+        "top_10s": 2,
+        "dnfs": null,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 11.5,
+        "note": null
+      }
+    },
+    {
+      "driver": "A. J. Allmendinger",
+      "results": [
+        {
+          "event_id": "2022_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2023_coca_cola_600",
+          "finish_position": 14,
+          "laps_completed": 400
+        },
+        {
+          "event_id": "2024_coca_cola_600",
+          "finish_position": "DNS"
+        },
+        {
+          "event_id": "2025_coca_cola_600",
+          "finish_position": 4,
+          "laps_completed": 400
+        }
+      ],
+      "aggregates": {
+        "races_run": 2,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 1,
+        "dnfs": null,
+        "dns": 2,
+        "average_finish_excluding_dns_dnf": 9,
+        "note": null
+      }
+    }
+  ],
+  "warnings": [
+    "DNF status is not explicitly encoded in the Wikipedia Final Stage results tables (no Status column was published). Per-driver dnfs is therefore reported as null; finish_position reflects the official classified finishing order, and laps_completed is included where downstream consumers wish to infer DNFs heuristically."
+  ]
+}

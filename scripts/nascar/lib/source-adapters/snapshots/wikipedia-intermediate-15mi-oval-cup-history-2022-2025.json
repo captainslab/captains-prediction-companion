@@ -1,0 +1,2545 @@
+{
+  "snapshot_id": "wikipedia-intermediate-15mi-oval-cup-history-2022-2025",
+  "snapshot_source_urls": [
+    "https://en.wikipedia.org/wiki/2022_NASCAR_Cup_Series",
+    "https://en.wikipedia.org/wiki/2023_NASCAR_Cup_Series",
+    "https://en.wikipedia.org/wiki/2024_NASCAR_Cup_Series",
+    "https://en.wikipedia.org/wiki/2025_NASCAR_Cup_Series",
+    "https://en.wikipedia.org/wiki/2022_Pennzoil_400",
+    "https://en.wikipedia.org/wiki/2022_AdventHealth_400",
+    "https://en.wikipedia.org/wiki/2022_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2022_Autotrader_EchoPark_Automotive_500",
+    "https://en.wikipedia.org/wiki/2022_Hollywood_Casino_400",
+    "https://en.wikipedia.org/wiki/2022_South_Point_400",
+    "https://en.wikipedia.org/wiki/2022_Dixie_Vodka_400",
+    "https://en.wikipedia.org/wiki/2023_Pennzoil_400",
+    "https://en.wikipedia.org/wiki/2023_AdventHealth_400",
+    "https://en.wikipedia.org/wiki/2023_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2023_Autotrader_EchoPark_Automotive_400",
+    "https://en.wikipedia.org/wiki/2023_Hollywood_Casino_400",
+    "https://en.wikipedia.org/wiki/2023_South_Point_400",
+    "https://en.wikipedia.org/wiki/2023_4EVER_400",
+    "https://en.wikipedia.org/wiki/2024_Pennzoil_400",
+    "https://en.wikipedia.org/wiki/2024_AdventHealth_400",
+    "https://en.wikipedia.org/wiki/2024_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2024_Autotrader_EchoPark_Automotive_400",
+    "https://en.wikipedia.org/wiki/2024_Hollywood_Casino_400",
+    "https://en.wikipedia.org/wiki/2024_South_Point_400",
+    "https://en.wikipedia.org/wiki/2024_Straight_Talk_Wireless_400",
+    "https://en.wikipedia.org/wiki/2025_Pennzoil_400",
+    "https://en.wikipedia.org/wiki/2025_AdventHealth_400",
+    "https://en.wikipedia.org/wiki/2025_Coca-Cola_600",
+    "https://en.wikipedia.org/wiki/2025_Autotrader_EchoPark_Automotive_400",
+    "https://en.wikipedia.org/wiki/2025_Hollywood_Casino_400",
+    "https://en.wikipedia.org/wiki/2025_South_Point_400",
+    "https://en.wikipedia.org/wiki/2025_Straight_Talk_Wireless_400"
+  ],
+  "snapshot_date": "2026-05-24T00:57:32Z",
+  "license": "CC BY-SA 4.0",
+  "attribution": "Wikipedia contributors — NASCAR Cup Series race articles (2022–2025).",
+  "era_filter": "Next Gen / Gen 7 (2022 Daytona 500 onward)",
+  "transcription_notes": [
+    "Finish position taken directly from each race's 'Official race results' wikitable on its Wikipedia article.",
+    "DNF inferred heuristically: car credited with < 90% of winner's lap count is marked dnf=true (raw laps + winner_laps preserved for audit). Wikipedia 2022-2025 Cup race tables do not include an explicit 'Status' column.",
+    "DNS is not directly observable from Wikipedia race tables (only starters appear). All dns counts are therefore 0; if a pool driver missed a race, they simply have no result entry for that event_id rather than a 'DNS' marker.",
+    "Pool driver name matching strips trailing rookie/ineligible markers like '(R)' and '(i)'. 'Daniel Suarez' aliased to 'Daniel Suárez'.",
+    "Coca-Cola 600 results overlap with the dedicated Charlotte snapshot — intentional, intermediate-form aggregates include them."
+  ],
+  "intermediate_filter_policy": {
+    "definition": "Intermediate = 1.5-mile oval Cup track configuration only.",
+    "included_tracks": [
+      "Charlotte Motor Speedway (oval / Coca-Cola 600 only — fall Roval excluded)",
+      "Las Vegas Motor Speedway",
+      "Texas Motor Speedway",
+      "Kansas Speedway",
+      "Homestead-Miami Speedway"
+    ],
+    "excluded_event_classes": [
+      {
+        "class": "Atlanta Motor Speedway (2022-2025)",
+        "reason": "Reconfigured in 2022 to draft/superspeedway-style racing; no longer functions as a traditional intermediate."
+      },
+      {
+        "class": "Charlotte Roval (Bank of America Roval 400)",
+        "reason": "Road course infield+oval hybrid, not an intermediate oval."
+      },
+      {
+        "class": "Other road courses (COTA, Sonoma, Watkins Glen, Chicago Street, Mexico, Indy Road Course)",
+        "reason": "Road courses, not ovals."
+      },
+      {
+        "class": "Superspeedways (Daytona, Talladega)",
+        "reason": "Restrictor-plate / draft style, distinct from intermediate handling tracks."
+      },
+      {
+        "class": "Short tracks (Martinsville, Richmond, Bristol, Phoenix, North Wilkesboro, LA Coliseum)",
+        "reason": "Sub-1-mile tracks, distinct discipline."
+      },
+      {
+        "class": "Non-1.5-mi intermediates (Darlington 1.366 mi, Pocono 2.5 mi, Indianapolis Brickyard oval 2.5 mi, Michigan 2.0 mi, Auto Club 2.0 mi pre-reconfig, New Hampshire 1.058 mi, Nashville 1.33 mi, Gateway 1.25 mi, Iowa 0.875 mi)",
+        "reason": "Outside the 1.5-mile oval class."
+      },
+      {
+        "class": "NASCAR All-Star Race",
+        "reason": "Non-points exhibition; excluded from points-style aggregates."
+      },
+      {
+        "class": "Xfinity / Truck Series",
+        "reason": "Snapshot scoped to Cup Series only."
+      }
+    ]
+  },
+  "included_events": [
+    {
+      "event_id": "2022-las-vegas-spring",
+      "year": 2022,
+      "date": "2022-03-06",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_Pennzoil_400"
+    },
+    {
+      "event_id": "2022-kansas-spring",
+      "year": 2022,
+      "date": "2022-05-15",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_AdventHealth_400"
+    },
+    {
+      "event_id": "2022-charlotte-coke600",
+      "year": 2022,
+      "date": "2022-05-29",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_Coca-Cola_600"
+    },
+    {
+      "event_id": "2022-texas-fall",
+      "year": 2022,
+      "date": "2022-09-25",
+      "track": "Texas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_Autotrader_EchoPark_Automotive_500"
+    },
+    {
+      "event_id": "2022-kansas-fall",
+      "year": 2022,
+      "date": "2022-09-11",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_Hollywood_Casino_400"
+    },
+    {
+      "event_id": "2022-las-vegas-fall",
+      "year": 2022,
+      "date": "2022-10-16",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_South_Point_400"
+    },
+    {
+      "event_id": "2022-homestead",
+      "year": 2022,
+      "date": "2022-10-23",
+      "track": "Homestead-Miami Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2022_Dixie_Vodka_400"
+    },
+    {
+      "event_id": "2023-las-vegas-spring",
+      "year": 2023,
+      "date": "2023-03-05",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_Pennzoil_400"
+    },
+    {
+      "event_id": "2023-kansas-spring",
+      "year": 2023,
+      "date": "2023-05-07",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_AdventHealth_400"
+    },
+    {
+      "event_id": "2023-charlotte-coke600",
+      "year": 2023,
+      "date": "2023-05-28",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_Coca-Cola_600"
+    },
+    {
+      "event_id": "2023-texas-fall",
+      "year": 2023,
+      "date": "2023-09-24",
+      "track": "Texas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_Autotrader_EchoPark_Automotive_400"
+    },
+    {
+      "event_id": "2023-kansas-fall",
+      "year": 2023,
+      "date": "2023-09-10",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_Hollywood_Casino_400"
+    },
+    {
+      "event_id": "2023-las-vegas-fall",
+      "year": 2023,
+      "date": "2023-10-15",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_South_Point_400"
+    },
+    {
+      "event_id": "2023-homestead",
+      "year": 2023,
+      "date": "2023-10-22",
+      "track": "Homestead-Miami Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2023_4EVER_400"
+    },
+    {
+      "event_id": "2024-las-vegas-spring",
+      "year": 2024,
+      "date": "2024-03-03",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_Pennzoil_400"
+    },
+    {
+      "event_id": "2024-kansas-spring",
+      "year": 2024,
+      "date": "2024-05-05",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_AdventHealth_400"
+    },
+    {
+      "event_id": "2024-charlotte-coke600",
+      "year": 2024,
+      "date": "2024-05-26",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_Coca-Cola_600"
+    },
+    {
+      "event_id": "2024-texas-spring",
+      "year": 2024,
+      "date": "2024-04-14",
+      "track": "Texas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_Autotrader_EchoPark_Automotive_400"
+    },
+    {
+      "event_id": "2024-kansas-fall",
+      "year": 2024,
+      "date": "2024-09-29",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_Hollywood_Casino_400"
+    },
+    {
+      "event_id": "2024-las-vegas-fall",
+      "year": 2024,
+      "date": "2024-10-20",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_South_Point_400"
+    },
+    {
+      "event_id": "2024-homestead",
+      "year": 2024,
+      "date": "2024-10-27",
+      "track": "Homestead-Miami Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2024_Straight_Talk_Wireless_400"
+    },
+    {
+      "event_id": "2025-las-vegas-spring",
+      "year": 2025,
+      "date": "2025-03-16",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_Pennzoil_400"
+    },
+    {
+      "event_id": "2025-kansas-spring",
+      "year": 2025,
+      "date": "2025-05-11",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_AdventHealth_400"
+    },
+    {
+      "event_id": "2025-charlotte-coke600",
+      "year": 2025,
+      "date": "2025-05-25",
+      "track": "Charlotte Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_Coca-Cola_600"
+    },
+    {
+      "event_id": "2025-texas-spring",
+      "year": 2025,
+      "date": "2025-05-04",
+      "track": "Texas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_Autotrader_EchoPark_Automotive_400"
+    },
+    {
+      "event_id": "2025-kansas-fall",
+      "year": 2025,
+      "date": "2025-09-28",
+      "track": "Kansas Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_Hollywood_Casino_400"
+    },
+    {
+      "event_id": "2025-las-vegas-fall",
+      "year": 2025,
+      "date": "2025-10-12",
+      "track": "Las Vegas Motor Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_South_Point_400"
+    },
+    {
+      "event_id": "2025-homestead",
+      "year": 2025,
+      "date": "2025-10-26",
+      "track": "Homestead-Miami Speedway",
+      "layout": "oval",
+      "distance_miles": 1.5,
+      "source_url": "https://en.wikipedia.org/wiki/2025_Straight_Talk_Wireless_400"
+    }
+  ],
+  "excluded_events": [
+    {
+      "event": "Bank of America Roval 400 (Charlotte fall)",
+      "year": 2022,
+      "layout": "roval",
+      "reason": "Road course hybrid, not 1.5-mi oval."
+    },
+    {
+      "event": "Bank of America Roval 400 (Charlotte fall)",
+      "year": 2023,
+      "layout": "roval",
+      "reason": "Road course hybrid, not 1.5-mi oval."
+    },
+    {
+      "event": "Bank of America Roval 400 (Charlotte fall)",
+      "year": 2024,
+      "layout": "roval",
+      "reason": "Road course hybrid, not 1.5-mi oval."
+    },
+    {
+      "event": "Bank of America Roval 400 (Charlotte fall)",
+      "year": 2025,
+      "layout": "roval",
+      "reason": "Road course hybrid, not 1.5-mi oval."
+    },
+    {
+      "event": "Folds of Honor QuikTrip 500 (Atlanta spring)",
+      "year": 2022,
+      "layout": "1.54-mi oval (post-reconfig draft style)",
+      "reason": "Atlanta 2022 reconfiguration — drafting/superspeedway style."
+    },
+    {
+      "event": "Quaker State 400 (Atlanta summer)",
+      "year": 2022,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta 2022 reconfiguration."
+    },
+    {
+      "event": "Ambetter Health 400 (Atlanta spring)",
+      "year": 2023,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta reconfigured — draft style."
+    },
+    {
+      "event": "Quaker State 400 (Atlanta summer)",
+      "year": 2023,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta reconfigured."
+    },
+    {
+      "event": "Ambetter Health 400 (Atlanta spring)",
+      "year": 2024,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta reconfigured."
+    },
+    {
+      "event": "Quaker State 400 (Atlanta summer)",
+      "year": 2024,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta reconfigured."
+    },
+    {
+      "event": "Ambetter Health 400 (Atlanta spring)",
+      "year": 2025,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta reconfigured."
+    },
+    {
+      "event": "Quaker State 400 (Atlanta summer)",
+      "year": 2025,
+      "layout": "1.54-mi oval (draft)",
+      "reason": "Atlanta reconfigured."
+    },
+    {
+      "event": "NASCAR All-Star Race (all years)",
+      "year": "2022-2025",
+      "layout": "varies",
+      "reason": "Non-points exhibition."
+    }
+  ],
+  "drivers": [
+    {
+      "driver": "Tyler Reddick",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 67,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 35
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 8
+        }
+      ],
+      "aggregates": {
+        "races_run": 20,
+        "wins": 1,
+        "top_5s": 6,
+        "top_10s": 11,
+        "dnfs": 1,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 12.42
+      }
+    },
+    {
+      "driver": "Denny Hamlin",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 32,
+          "dnf": true,
+          "laps": 219,
+          "winner_laps": 274
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 185,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 196,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 5
+        }
+      ],
+      "aggregates": {
+        "races_run": 19,
+        "wins": 3,
+        "top_5s": 9,
+        "top_10s": 12,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 8.5
+      }
+    },
+    {
+      "driver": "Chase Elliott",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 29
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 33,
+          "dnf": true,
+          "laps": 188,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 32,
+          "dnf": true,
+          "laps": 184,
+          "winner_laps": 334
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 185,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 18
+        }
+      ],
+      "aggregates": {
+        "races_run": 18,
+        "wins": 1,
+        "top_5s": 2,
+        "top_10s": 8,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 11.27
+      }
+    },
+    {
+      "driver": "Ryan Blaney",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 104,
+          "winner_laps": 274
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 29,
+          "dnf": true,
+          "laps": 195,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 39,
+          "dnf": true,
+          "laps": 143,
+          "winner_laps": 249
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 194,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 38,
+          "dnf": true,
+          "laps": 245,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 207,
+          "winner_laps": 267
+        }
+      ],
+      "aggregates": {
+        "races_run": 19,
+        "wins": 1,
+        "top_5s": 4,
+        "top_10s": 6,
+        "dnfs": 6,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 12.23
+      }
+    },
+    {
+      "driver": "Chris Buescher",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 27
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 26,
+          "dnf": true,
+          "laps": 346,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 30,
+          "dnf": true,
+          "laps": 270,
+          "winner_laps": 334
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 27,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 6
+        }
+      ],
+      "aggregates": {
+        "races_run": 24,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 6,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 14.05
+      }
+    },
+    {
+      "driver": "Ty Gibbs",
+      "results": [
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 90,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 176,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 33,
+          "dnf": true,
+          "laps": 77,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 34
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 32
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 36
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 34
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 25
+        }
+      ],
+      "aggregates": {
+        "races_run": 25,
+        "wins": 0,
+        "top_5s": 3,
+        "top_10s": 5,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 20.77
+      }
+    },
+    {
+      "driver": "Carson Hocevar",
+      "results": [
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 110,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 32
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 306,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 302,
+          "winner_laps": 407
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 29
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 32
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 185,
+          "winner_laps": 267
+        }
+      ],
+      "aggregates": {
+        "races_run": 17,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 2,
+        "dnfs": 4,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 22.08
+      }
+    },
+    {
+      "driver": "Kyle Larson",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 94,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 245,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 1
+        }
+      ],
+      "aggregates": {
+        "races_run": 18,
+        "wins": 5,
+        "top_5s": 10,
+        "top_10s": 14,
+        "dnfs": 2,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 6.44
+      }
+    },
+    {
+      "driver": "Brad Keselowski",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 30,
+          "dnf": true,
+          "laps": 193,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 89,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 194,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 26
+        }
+      ],
+      "aggregates": {
+        "races_run": 26,
+        "wins": 0,
+        "top_5s": 5,
+        "top_10s": 9,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 13.78
+      }
+    },
+    {
+      "driver": "Bubba Wallace",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 28,
+          "dnf": true,
+          "laps": 200,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 94,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 35
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 33,
+          "dnf": true,
+          "laps": 212,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 306,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 3
+        }
+      ],
+      "aggregates": {
+        "races_run": 24,
+        "wins": 1,
+        "top_5s": 5,
+        "top_10s": 9,
+        "dnfs": 4,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 13.45
+      }
+    },
+    {
+      "driver": "Christopher Bell",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 136,
+          "winner_laps": 334
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 94,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 157,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 29
+        }
+      ],
+      "aggregates": {
+        "races_run": 19,
+        "wins": 1,
+        "top_5s": 6,
+        "top_10s": 9,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 11.81
+      }
+    },
+    {
+      "driver": "William Byron",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 32,
+          "dnf": true,
+          "laps": 191,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 31
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 12
+        }
+      ],
+      "aggregates": {
+        "races_run": 18,
+        "wins": 1,
+        "top_5s": 8,
+        "top_10s": 10,
+        "dnfs": 1,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 10.0
+      }
+    },
+    {
+      "driver": "Ryan Preece",
+      "results": [
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 16,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 27
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 9
+        }
+      ],
+      "aggregates": {
+        "races_run": 22,
+        "wins": 0,
+        "top_5s": 1,
+        "top_10s": 6,
+        "dnfs": 1,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 17.24
+      }
+    },
+    {
+      "driver": "Daniel Suárez",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 92,
+          "winner_laps": 274
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 25,
+          "dnf": true,
+          "laps": 346,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 27
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 201,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 245,
+          "winner_laps": 400
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 22
+        }
+      ],
+      "aggregates": {
+        "races_run": 27,
+        "wins": 0,
+        "top_5s": 3,
+        "top_10s": 7,
+        "dnfs": 4,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 15.52
+      }
+    },
+    {
+      "driver": "Austin Cindric",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 145,
+          "winner_laps": 413
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 29
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 31
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 31
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 27
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 31
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 29
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 184,
+          "winner_laps": 268
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 96,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 27
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 31
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 16
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 19
+        }
+      ],
+      "aggregates": {
+        "races_run": 26,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 2,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 20.04
+      }
+    },
+    {
+      "driver": "Shane van Gisbergen",
+      "results": [
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 29
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 34,
+          "dnf": true,
+          "laps": 195,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 32
+        }
+      ],
+      "aggregates": {
+        "races_run": 9,
+        "wins": 0,
+        "top_5s": 0,
+        "top_10s": 1,
+        "dnfs": 1,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 24.5
+      }
+    },
+    {
+      "driver": "Chase Briscoe",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 35,
+          "dnf": true,
+          "laps": 135,
+          "winner_laps": 274
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 24
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 160,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 28
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 32
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 10
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 25
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 26
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 4
+        }
+      ],
+      "aggregates": {
+        "races_run": 25,
+        "wins": 0,
+        "top_5s": 7,
+        "top_10s": 9,
+        "dnfs": 2,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 15.22
+      }
+    },
+    {
+      "driver": "Joey Logano",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 20
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 183,
+          "winner_laps": 271
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 6
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 34
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 11
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 17
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 14
+        }
+      ],
+      "aggregates": {
+        "races_run": 22,
+        "wins": 1,
+        "top_5s": 2,
+        "top_10s": 6,
+        "dnfs": 1,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 14.0
+      }
+    },
+    {
+      "driver": "Ross Chastain",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-spring",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2022-kansas-spring",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2022-charlotte-coke600",
+          "finish_position": 15
+        },
+        {
+          "event_id": "2022-texas-fall",
+          "finish_position": 13
+        },
+        {
+          "event_id": "2022-kansas-fall",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 2
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 12
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 22
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 31,
+          "dnf": true,
+          "laps": 221,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2024-las-vegas-spring",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2024-kansas-spring",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2024-charlotte-coke600",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2024-texas-spring",
+          "finish_position": 32
+        },
+        {
+          "event_id": "2024-kansas-fall",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2024-las-vegas-fall",
+          "finish_position": 7
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 1
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 33
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 23
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 31
+        }
+      ],
+      "aggregates": {
+        "races_run": 25,
+        "wins": 2,
+        "top_5s": 9,
+        "top_10s": 13,
+        "dnfs": 1,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 12.83
+      }
+    },
+    {
+      "driver": "A. J. Allmendinger",
+      "results": [
+        {
+          "event_id": "2022-las-vegas-fall",
+          "finish_position": 9
+        },
+        {
+          "event_id": "2022-homestead",
+          "finish_position": 3
+        },
+        {
+          "event_id": "2023-las-vegas-spring",
+          "finish_position": 18
+        },
+        {
+          "event_id": "2023-kansas-spring",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2023-charlotte-coke600",
+          "finish_position": 14
+        },
+        {
+          "event_id": "2023-texas-fall",
+          "finish_position": 29
+        },
+        {
+          "event_id": "2023-kansas-fall",
+          "finish_position": 30
+        },
+        {
+          "event_id": "2023-las-vegas-fall",
+          "finish_position": 21
+        },
+        {
+          "event_id": "2023-homestead",
+          "finish_position": 5
+        },
+        {
+          "event_id": "2024-homestead",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2025-las-vegas-spring",
+          "finish_position": 8
+        },
+        {
+          "event_id": "2025-kansas-spring",
+          "finish_position": 38,
+          "dnf": true,
+          "laps": 7,
+          "winner_laps": 267
+        },
+        {
+          "event_id": "2025-charlotte-coke600",
+          "finish_position": 4
+        },
+        {
+          "event_id": "2025-texas-spring",
+          "finish_position": 37,
+          "dnf": true,
+          "laps": 220,
+          "winner_laps": 407
+        },
+        {
+          "event_id": "2025-kansas-fall",
+          "finish_position": 36,
+          "dnf": true,
+          "laps": 216,
+          "winner_laps": 273
+        },
+        {
+          "event_id": "2025-las-vegas-fall",
+          "finish_position": 19
+        },
+        {
+          "event_id": "2025-homestead",
+          "finish_position": 7
+        }
+      ],
+      "aggregates": {
+        "races_run": 17,
+        "wins": 0,
+        "top_5s": 3,
+        "top_10s": 7,
+        "dnfs": 3,
+        "dns": 0,
+        "average_finish_excluding_dns_dnf": 13.5
+      }
+    }
+  ],
+  "warnings": []
+}

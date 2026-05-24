@@ -32,8 +32,12 @@ import { wikipediaTeamEquipmentEnvelope } from './source-adapters/wikipedia-team
 import { nascardataStrategyRiskEnvelope } from './source-adapters/nascardata-strategy.mjs';
 import { derivedDriverSkillEnvelope } from './source-adapters/derived-driver-skill.mjs';
 import { cupPointsTop20Envelope } from './source-adapters/cup-points-top-20.mjs';
+import { seasonForm2026Envelope } from './source-adapters/season-form-2026.mjs';
+import { charlotteOvalHistoryEnvelope } from './source-adapters/charlotte-oval-history.mjs';
+import { intermediate15miOvalHistoryEnvelope } from './source-adapters/intermediate-15mi-oval-history.mjs';
 import { composeBaseFundamentals, fundamentalsForStoryline } from './base-fundamentals.mjs';
 import { composeMultiLaneCeilingBoard, MULTI_LANE_LANES } from './multi-lane-ceiling.mjs';
+import { composeFinalCeilingBoardOverlay, FINAL_CEILINGS } from './final-ceiling.mjs';
 
 const RUN_DATE = '2026-05-25';
 const FROZEN_DEFAULT = '2026-05-24T18:00:00.000Z';
@@ -257,6 +261,59 @@ function renderPacket({
   for (const note of multiLaneBoard.safety_notes) lines.push(`- ${note}`);
   lines.push('');
 
+  // ── Final Ceiling Board (single ceiling per driver) ────────────────────
+  lines.push('## Final Ceiling Board (single ceiling per driver)');
+  lines.push('');
+  const fcs = multiLaneBoard.final_ceiling_schema ?? {};
+  lines.push(`Ceilings allowed: ${(fcs.ceilings_allowed ?? []).join(' | ')}`);
+  lines.push(`Era filter: ${fcs.era_filter ?? 'n/a'}`);
+  lines.push(`Charlotte filter: ${fcs.charlotte_filter ?? 'n/a'}`);
+  lines.push('Sources:');
+  for (const [cat, urls] of Object.entries(fcs.sources ?? {})) {
+    lines.push(`  - ${cat}: ${(urls ?? []).join(' | ') || 'n/a'}`);
+  }
+  lines.push('');
+  lines.push('Rank | Driver                    | Car | Score | Ceiling       | Reasoning Summary');
+  lines.push('-----+---------------------------+-----+-------+---------------+---------------------------------------');
+  for (const c of multiLaneBoard.candidates) {
+    const rank = String(c.pool_rank).padStart(4);
+    const name = String(c.driver_name ?? '').padEnd(26).slice(0, 26);
+    const car = String(c.car_number ?? '?').padStart(3);
+    const sc = String(c.final_composite_score ?? 'n/a').padStart(5);
+    const ce = String(c.final_ceiling ?? 'NO CLEAR PICK').padEnd(13);
+    const sum = String(c.final_reasoning_summary ?? '').slice(0, 200);
+    lines.push(`${rank} | ${name}| ${car} | ${sc} | ${ce} | ${sum}`);
+  }
+  lines.push('');
+
+  lines.push('### Per-driver Final-Ceiling Evidence Ledger');
+  lines.push('');
+  for (const c of multiLaneBoard.candidates) {
+    lines.push(`#${c.car_number ?? '?'} ${c.driver_name ?? 'Unknown'} (${c.team ?? 'team n/a'}) — pool_rank=${c.pool_rank}`);
+    lines.push(`  Composite score: ${c.final_composite_score ?? 'n/a'} (over ${c.final_layers_present} layer(s))`);
+    lines.push(`  Final ceiling: ${c.final_ceiling} — ${c.final_ceiling_reason}`);
+    lines.push('  Evidence ledger:');
+    for (const row of c.final_evidence_ledger ?? []) {
+      if (row.present) {
+        lines.push(`    - ${row.category} [${row.label}]: value=${row.value} grade=${row.grade} raw_weight=${row.raw_weight} norm_weight=${row.normalized_weight} contribution=${row.contribution}`);
+        lines.push(`        source: ${row.source_basis}`);
+        if (row.detail) lines.push(`        detail: ${row.detail}`);
+        if (row.missing_note) lines.push(`        note: ${row.missing_note}`);
+      } else {
+        lines.push(`    - ${row.category} [${row.label}]: MISSING — excluded from score (raw_weight=${row.raw_weight} would have been re-normalized away).`);
+        lines.push(`        source: ${row.source_basis}`);
+        if (row.missing_note) lines.push(`        note: ${row.missing_note}`);
+      }
+    }
+    lines.push('  Invalidators:');
+    if ((c.final_invalidators ?? []).length === 0) {
+      lines.push('    - (none flagged)');
+    } else {
+      for (const inv of c.final_invalidators) lines.push(`    - ${inv}`);
+    }
+    lines.push('');
+  }
+
   lines.push('## Market Context');
   lines.push('');
   lines.push('Market lanes are listed here as REFERENCE ONLY and are explicitly separated from the Edge Basis below. Price, volume, OI, and line movement are Market Context only and never create edge.');
@@ -448,6 +505,62 @@ export async function composeCocaCola600Packet({
     candidatePoolBasis: 'cup_points_top_20',
     candidatePoolSourceUrls: cupPointsEnv.source_urls,
   });
+
+  // 3d. Final-ceiling overlay — collapses the 4 lane statuses into ONE
+  // ceiling per driver (WIN / TOP 5 / TOP 10 / TOP 20 / WATCH / NO CLEAR PICK),
+  // backed by a 6-category source-cited evidence ledger.
+  const seasonFormEnv = seasonForm2026Envelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/fundamentals`,
+  });
+  const charlotteOvalEnv = charlotteOvalHistoryEnvelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/fundamentals`,
+  });
+  const intermediateEnv = intermediate15miOvalHistoryEnvelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/fundamentals`,
+  });
+
+  const finalCeilingOverlay = composeFinalCeilingBoardOverlay({
+    candidates: multiLaneBoard.candidates,
+    seasonFormEnvelope: seasonFormEnv,
+    charlotteOvalEnvelope: charlotteOvalEnv,
+    intermediateEnvelope: intermediateEnv,
+    practiceQualifyingEnvelope: envelopes.practice_qualifying,
+  });
+
+  // Inject overlay fields onto each candidate row (single source of truth).
+  for (let i = 0; i < multiLaneBoard.candidates.length; i++) {
+    const c = multiLaneBoard.candidates[i];
+    const o = finalCeilingOverlay[i];
+    c.final_ceiling = o.final_ceiling;
+    c.final_ceiling_reason = o.final_ceiling_reason;
+    c.final_composite_score = o.composite_score;
+    c.final_layers_present = o.layers_present;
+    c.final_evidence_ledger = o.evidence_ledger;
+    c.final_invalidators = o.invalidators;
+    c.final_reasoning_summary = o.reasoning_summary;
+  }
+  multiLaneBoard.final_ceiling_schema = {
+    ceilings_allowed: FINAL_CEILINGS,
+    layer_categories: [
+      'baseline_fundamentals',
+      'season_form_2026',
+      'charlotte_oval_history',
+      'intermediate_15mi_oval',
+      'practice_qualifying',
+      'long_run_race_type_fit',
+    ],
+    sources: {
+      season_form_2026: seasonFormEnv.source_urls,
+      charlotte_oval_history: charlotteOvalEnv.source_urls,
+      intermediate_15mi_oval: intermediateEnv.source_urls,
+      practice_qualifying: envelopes.practice_qualifying.source_urls,
+    },
+    era_filter: 'Next Gen / Gen 7 (2022 Daytona 500 onward)',
+    charlotte_filter: 'Charlotte Motor Speedway OVAL only — Roval explicitly excluded',
+  };
 
   // Pick the fundamentals entry whose car matches the active candidate
   // (fallback: first entry). Convert to storyline-gate input.
