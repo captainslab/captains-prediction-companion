@@ -32,6 +32,7 @@ import { wikipediaTeamEquipmentEnvelope } from './source-adapters/wikipedia-team
 import { nascardataStrategyRiskEnvelope } from './source-adapters/nascardata-strategy.mjs';
 import { derivedDriverSkillEnvelope } from './source-adapters/derived-driver-skill.mjs';
 import { cupPointsTop20Envelope } from './source-adapters/cup-points-top-20.mjs';
+import { activeFieldPoolEnvelope } from './source-adapters/active-field-pool.mjs';
 import { seasonForm2026Envelope } from './source-adapters/season-form-2026.mjs';
 import { seasonSpeedSignal2026Envelope } from './source-adapters/season-speed-signal-2026.mjs';
 import { charlotteOvalHistoryEnvelope } from './source-adapters/charlotte-oval-history.mjs';
@@ -188,7 +189,7 @@ function renderPacket({
   lines.push(`- Disclaimer: "${modifier.disclaimer}"`);
   lines.push('');
 
-  lines.push('## Ceiling Board (Top 20 candidate pool)');
+  lines.push('## Ceiling Board (full active field)');
   lines.push('');
   lines.push(`- candidate_pool_size: ${multiLaneBoard.candidate_pool_size}`);
   lines.push(`- candidate_pool_basis: ${multiLaneBoard.candidate_pool_basis}`);
@@ -269,34 +270,57 @@ function renderPacket({
   lines.push(`Ceilings allowed: ${(fcs.ceilings_allowed ?? []).join(' | ')}`);
   lines.push(`Era filter: ${fcs.era_filter ?? 'n/a'}`);
   lines.push(`Charlotte filter: ${fcs.charlotte_filter ?? 'n/a'}`);
+  lines.push(`Grid basis: ${fcs.grid_basis ?? 'n/a'} (rules_set => practice_qualifying weight reduced 50%)`);
+  if (Array.isArray(fcs.cup_history_lockouts) && fcs.cup_history_lockouts.length > 0) {
+    lines.push('Cup-history lockouts:');
+    for (const lk of fcs.cup_history_lockouts) {
+      lines.push(`  - #${lk.car_number}: ${lk.reason}`);
+    }
+  }
   lines.push('Sources:');
   for (const [cat, urls] of Object.entries(fcs.sources ?? {})) {
     lines.push(`  - ${cat}: ${(urls ?? []).join(' | ') || 'n/a'}`);
   }
   lines.push('');
-  lines.push('Rank | Driver                    | Car | Score | Ceiling       | Reasoning Summary');
-  lines.push('-----+---------------------------+-----+-------+---------------+---------------------------------------');
-  for (const c of multiLaneBoard.candidates) {
-    const rank = String(c.pool_rank).padStart(4);
-    const name = String(c.driver_name ?? '').padEnd(26).slice(0, 26);
-    const car = String(c.car_number ?? '?').padStart(3);
-    const sc = String(c.final_composite_score ?? 'n/a').padStart(5);
-    const ce = String(c.final_ceiling ?? 'NO CLEAR PICK').padEnd(13);
-    const sum = String(c.final_reasoning_summary ?? '').slice(0, 200);
-    lines.push(`${rank} | ${name}| ${car} | ${sc} | ${ce} | ${sum}`);
+
+  function renderBoardSection(title, rows) {
+    lines.push(`### ${title}`);
+    lines.push('');
+    lines.push('Sorted by composite score descending. PtsR = season points rank (— if not in top-20). Start = published starting grid position.');
+    lines.push('');
+    lines.push('Rank | Driver                    | Car | PtsR | Start | Score | Ceiling       | Reasoning Summary');
+    lines.push('-----+---------------------------+-----+------+-------+-------+---------------+---------------------------------------');
+    for (const c of rows) {
+      const rank = String(c.display_rank ?? '?').padStart(4);
+      const name = String(c.driver_name ?? '').padEnd(26).slice(0, 26);
+      const car = String(c.car_number ?? '?').padStart(3);
+      const ptsR = String(c.points_position ?? '—').padStart(4);
+      const grid = String(c.starting_grid_position ?? '?').padStart(5);
+      const sc = String(c.final_composite_score ?? 'n/a').padStart(5);
+      const ce = String(c.final_ceiling ?? 'NO CLEAR PICK').padEnd(13);
+      const sum = String(c.final_reasoning_summary ?? '').slice(0, 200);
+      lines.push(`${rank} | ${name}| ${car} | ${ptsR} | ${grid} | ${sc} | ${ce} | ${sum}`);
+    }
+    lines.push('');
   }
-  lines.push('');
+  renderBoardSection('1. Main scored field (Cup points top-20, in-grid)', multiLaneBoard.scored_head ?? []);
+  renderBoardSection('2. Field tail / lower-confidence entries', multiLaneBoard.field_tail ?? []);
 
   lines.push('### Per-driver Final-Ceiling Evidence Ledger');
   lines.push('');
   for (const c of multiLaneBoard.candidates) {
-    lines.push(`#${c.car_number ?? '?'} ${c.driver_name ?? 'Unknown'} (${c.team ?? 'team n/a'}) — pool_rank=${c.pool_rank}`);
+    const section = c.pool_section === 'field_tail' ? ' [field-tail]' : '';
+    const ptsTxt = c.points_position ? ` points_rank=${c.points_position}` : '';
+    const startTxt = c.starting_grid_position ? ` start=P${c.starting_grid_position}` : '';
+    lines.push(`#${c.car_number ?? '?'} ${c.driver_name ?? 'Unknown'} (${c.team ?? 'team n/a'}) — display_rank=${c.display_rank}${ptsTxt}${startTxt}${section}`);
     lines.push(`  Composite score: ${c.final_composite_score ?? 'n/a'} (over ${c.final_layers_present} layer(s))`);
     lines.push(`  Final ceiling: ${c.final_ceiling} — ${c.final_ceiling_reason}`);
     lines.push('  Evidence ledger:');
     for (const row of c.final_evidence_ledger ?? []) {
       if (row.present) {
-        lines.push(`    - ${row.category} [${row.label}]: value=${row.value} grade=${row.grade} raw_weight=${row.raw_weight} norm_weight=${row.normalized_weight} contribution=${row.contribution}`);
+        const eff = row.effective_weight !== undefined && row.effective_weight !== row.raw_weight
+          ? ` eff_weight=${row.effective_weight}` : '';
+        lines.push(`    - ${row.category} [${row.label}]: value=${row.value} grade=${row.grade} raw_weight=${row.raw_weight}${eff} norm_weight=${row.normalized_weight} contribution=${row.contribution}`);
         lines.push(`        source: ${row.source_basis}`);
         if (row.detail) lines.push(`        detail: ${row.detail}`);
         if (row.missing_note) lines.push(`        note: ${row.missing_note}`);
@@ -314,6 +338,30 @@ function renderPacket({
     }
     lines.push('');
   }
+
+  // ── Storyline / tiebreaker context (non-scoring) ───────────────────────
+  lines.push('## Storyline / Tiebreaker Context (non-scoring)');
+  lines.push('');
+  lines.push('These notes explain risk, narrative, and tie-breakers. They have ZERO impact on composite scores or final ceilings. No driver here is upgraded by storyline.');
+  lines.push('');
+  lines.push('### Kyle Busch — NOT entered (memorial context only)');
+  lines.push('- Kyle Busch is not on the published 2026 Coca-Cola 600 starting grid and is excluded from scoring.');
+  lines.push('- Do NOT mark him DNQ; he was not racing. Treat references purely as memorial / RCR No. 8 backstory.');
+  lines.push('- His season-form, Charlotte history, and 1.5-mi record are not applied to any active driver.');
+  lines.push('');
+  lines.push('### #8 / #33 disambiguation');
+  lines.push('- The active RCR storyline car is #33, driven by Austin Hill (part-time).');
+  lines.push('- Austin Hill is NOT "the #8." Tyler Reddick #8 (historical) and Kyle Busch #8 (memorial) do NOT transfer to Austin Hill #33.');
+  lines.push('- Cup-history layers (season form, Charlotte oval, intermediate oval, season speed signal) are MISSING for #33 with the lockout reason recorded in the ledger.');
+  lines.push('- Austin Hill\'s NASCAR national-series (Xfinity) record may be used as a labeled lower-confidence readiness note for his active entry only. It is excluded from his Cup composite score and from any other driver\'s score. Trucks are excluded.');
+  lines.push('');
+  lines.push('### Storyline beneficiary detection (modifier-only)');
+  const sIn2 = modifier.inputs_echo?.storyline ?? {};
+  const twm2 = modifier.true_win_modifier ?? {};
+  lines.push(`- Beneficiary candidate: ${beneficiary.driver_name ?? 'n/a'} (#${beneficiary.car_number ?? '?'}) — ${beneficiary.connection_type ?? 'none'}`);
+  lines.push(`- Storyline summary: ${sIn2.summary ?? '(unknown)'}`);
+  lines.push(`- True-win delta_probability: +${(Number(twm2.delta_probability ?? 0) * 100).toFixed(2)}pp (capped +${((twm2.capped_at ?? 0.04) * 100).toFixed(0)}pp; applied=${twm2.applied === true}). This is a MODIFIER ONLY and never raises a ceiling.`);
+  lines.push('');
 
   lines.push('## Market Context');
   lines.push('');
@@ -472,25 +520,35 @@ export async function composeCocaCola600Packet({
   };
   const fundamentals = composeBaseFundamentals({ envelopes: fundamentalsEnvelopes });
 
-  // 3c. Multi-lane ceiling board — top-20 candidate pool with 4 lanes
-  //     (win, top_5, top_10, top_20) per driver.
+  // 3c. Multi-lane ceiling board — full ACTIVE field as the pool.
   //
-  // Pool basis is CUP POINTS top-20 (current Drivers' championship standings),
-  // NOT fundamentals composite. Drivers without a fundamentals join stay in
-  // the pool with NO CLEAR PICK lanes — they are not dropped or replaced.
+  // Pool basis is now CUP POINTS top-20 (head) plus the remaining published
+  // Coca-Cola 600 starting-grid entries (field tail). Only ACTIVE entries
+  // are scored — drivers not on the published grid (e.g. Kyle Busch in 2026)
+  // are excluded from scoring and surfaced exclusively in the storyline
+  // section. Drivers without a fundamentals join stay in the pool with NO
+  // CLEAR PICK lanes; they are not dropped or replaced.
+  const activePoolEnv = activeFieldPoolEnvelope({
+    checked_at_utc: checkedAtUtc,
+    outputDir: `${absOutputDir}/discovery`,
+  });
+  // Keep legacy points adapter wired for downstream consumers / tests.
   const cupPointsEnv = cupPointsTop20Envelope({
     checked_at_utc: checkedAtUtc,
     outputDir: `${absOutputDir}/discovery`,
     poolSize: 20,
   });
-  const candidatePool = cupPointsEnv.records.map(r => ({
+  const candidatePool = activePoolEnv.records.map(r => ({
     driver_name: r.driver_name,
     car_number: r.car_number,
     team: r.team,
     manufacturer: r.manufacturer,
     points_position: r.points_position,
     season_points: r.season_points,
+    starting_grid_position: r.starting_grid_position,
+    pool_section: r.pool_section,
   }));
+  const poolSize = candidatePool.length;
 
   const multiLaneBoard = composeMultiLaneCeilingBoard({
     fundamentals,
@@ -501,11 +559,25 @@ export async function composeCocaCola600Packet({
       car_number: 33,
       connection_type: 'current_team',
     },
-    poolSize: 20,
+    poolSize,
     candidatePool,
-    candidatePoolBasis: 'cup_points_top_20',
-    candidatePoolSourceUrls: cupPointsEnv.source_urls,
+    candidatePoolBasis: 'cup_points_plus_active_field',
+    candidatePoolSourceUrls: activePoolEnv.source_urls,
   });
+
+  // Re-stamp per-candidate fields the multi-lane board strips off, so the
+  // downstream final-ceiling overlay and renderer can split scored head
+  // vs field tail and display points_position / grid position.
+  const poolByCar = new Map(candidatePool.map(p => [p.car_number, p]));
+  for (const c of multiLaneBoard.candidates) {
+    const src = poolByCar.get(c.car_number);
+    if (src) {
+      c.points_position = src.points_position;
+      c.season_points = src.season_points;
+      c.starting_grid_position = src.starting_grid_position;
+      c.pool_section = src.pool_section;
+    }
+  }
 
   // 3d. Final-ceiling overlay — collapses the 4 lane statuses into ONE
   // ceiling per driver (WIN / TOP 5 / TOP 10 / TOP 20 / WATCH / NO CLEAR PICK),
@@ -527,6 +599,16 @@ export async function composeCocaCola600Packet({
     outputDir: `${absOutputDir}/fundamentals`,
   });
 
+  // Cup-history lockout: Austin Hill #33 is a part-time Cup driver running an
+  // RCR tribute car. He has no transferable Cup body of work, and the
+  // #8/Kyle Busch/Tyler Reddick history is NOT his. Force Cup-history
+  // layers to MISSING with a labeled reason so the storyline cannot inflate
+  // his ceiling. Xfinity readiness is surfaced separately in the packet
+  // storyline section as a lower-confidence context note (not a layer).
+  const cupHistoryLockouts = new Map([
+    [33, 'Austin Hill #33 is a part-time Cup entry in an RCR tribute car; he has no 2026 Cup season form, no Charlotte Cup-oval starts, and no Gen-7 1.5-mi Cup sample. Tyler Reddick #8 and Kyle Busch #8 history does NOT transfer to this entry.'],
+  ]);
+
   const finalCeilingOverlay = composeFinalCeilingBoardOverlay({
     candidates: multiLaneBoard.candidates,
     seasonFormEnvelope: seasonFormEnv,
@@ -534,6 +616,8 @@ export async function composeCocaCola600Packet({
     charlotteOvalEnvelope: charlotteOvalEnv,
     intermediateEnvelope: intermediateEnv,
     practiceQualifyingEnvelope: envelopes.practice_qualifying,
+    gridBasis: envelopes.practice_qualifying?.snapshot?.grid_basis ?? null,
+    cupHistoryLockouts,
   });
 
   // Inject overlay fields onto each candidate row (single source of truth).
@@ -568,7 +652,30 @@ export async function composeCocaCola600Packet({
     },
     era_filter: 'Next Gen / Gen 7 (2022 Daytona 500 onward)',
     charlotte_filter: 'Charlotte Motor Speedway OVAL only — Roval explicitly excluded',
+    grid_basis: envelopes.practice_qualifying?.snapshot?.grid_basis ?? null,
+    cup_history_lockouts: Array.from(cupHistoryLockouts.entries()).map(([car, reason]) => ({ car_number: car, reason })),
   };
+
+  // Sort candidates within each section by composite desc; stamp display rank.
+  function sortAndRank(list) {
+    const sorted = [...list].sort((a, b) => {
+      const sa = a.final_composite_score ?? -1;
+      const sb = b.final_composite_score ?? -1;
+      if (sb !== sa) return sb - sa;
+      // Tiebreakers: points_position asc (lower=better), then grid pos asc.
+      const pa = a.points_position ?? 999;
+      const pb = b.points_position ?? 999;
+      if (pa !== pb) return pa - pb;
+      return (a.starting_grid_position ?? 999) - (b.starting_grid_position ?? 999);
+    });
+    sorted.forEach((c, i) => { c.display_rank = i + 1; });
+    return sorted;
+  }
+  const scoredHead = sortAndRank(multiLaneBoard.candidates.filter(c => c.pool_section === 'points_top_20'));
+  const fieldTail = sortAndRank(multiLaneBoard.candidates.filter(c => c.pool_section === 'field_tail'));
+  multiLaneBoard.scored_head = scoredHead;
+  multiLaneBoard.field_tail = fieldTail;
+  multiLaneBoard.candidates = [...scoredHead, ...fieldTail];
 
   // Pick the fundamentals entry whose car matches the active candidate
   // (fallback: first entry). Convert to storyline-gate input.

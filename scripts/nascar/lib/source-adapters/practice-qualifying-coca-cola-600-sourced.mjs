@@ -70,6 +70,9 @@ export function sourcedCocaCola600PracticeEnvelope({
     errors: [],
     source_urls: [snap.snapshot_source_url],
   });
+  const gridBasis = /competition-based/i.test(snap.qualifying_format_note ?? '')
+    ? 'rules_set'
+    : 'qualifying_session';
   env.snapshot = {
     snapshot_id: snap.snapshot_id,
     snapshot_date: snap.snapshot_date,
@@ -77,6 +80,13 @@ export function sourcedCocaCola600PracticeEnvelope({
     qualifying_format_note: snap.qualifying_format_note,
     pole_position_driver: snap.pole_position_driver,
     pole_position_car: snap.pole_position_car,
+    grid_basis: gridBasis,
   };
+  if (gridBasis === 'rules_set') {
+    env.warnings = [
+      ...(env.warnings ?? []),
+      'grid_basis=rules_set: timed qualifying cancelled; grid set by competition-based formula. practice_qualifying layer weight will be reduced downstream.',
+    ];
+  }
   return env;
 }

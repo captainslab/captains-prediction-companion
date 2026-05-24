@@ -172,7 +172,10 @@ function evalIntermediate(rec) {
 }
 
 // 5) Practice + qualifying for THIS race (Wikipedia 2026 Coca-Cola 600)
-function evalPracticeQualifying(rec, pqStatus) {
+//    gridBasis === 'rules_set' (qualifying cancelled, grid by competition
+//    formula) attaches a confidence note. Effective layer weight is reduced
+//    by the caller via PRACTICE_QUALIFYING_RULES_SET_WEIGHT_FACTOR.
+function evalPracticeQualifying(rec, pqStatus, gridBasis) {
   if (!rec) {
     return { present: false, score: null, grade: 'n/a',
       basis: 'Wikipedia 2026 Coca-Cola 600 grid + practice',
@@ -192,15 +195,25 @@ function evalPracticeQualifying(rec, pqStatus) {
   const parts = [gridScore, pracScore].filter(s => s !== null);
   const score = parts.length === 0 ? null : Math.round(parts.reduce((a,b)=>a+b,0) / parts.length);
   const detailBits = [];
-  if (grid !== null) detailBits.push(`grid P${grid}`);
+  if (grid !== null) {
+    detailBits.push(gridBasis === 'rules_set'
+      ? `grid P${grid} (rules-set, qualifying cancelled)`
+      : `grid P${grid}`);
+  }
   if (prac !== null) detailBits.push(`practice P${prac}`);
+  const notes = [];
+  if (prac === null) notes.push('practice rank not published for this driver (top-N only)');
+  if (gridBasis === 'rules_set') notes.push('grid set by competition-based formula (no timed qualifying); layer weight reduced 50%');
   return {
     present: true,
     score,
     grade: gradeLabel(score),
-    basis: 'Wikipedia 2026 Coca-Cola 600 — official starting grid + practice results',
+    basis: gridBasis === 'rules_set'
+      ? 'Wikipedia 2026 Coca-Cola 600 — competition-formula starting grid (rules-set) + practice results'
+      : 'Wikipedia 2026 Coca-Cola 600 — official starting grid + practice results',
     detail: detailBits.join(', '),
-    missing_note: prac === null ? 'practice rank not published for this driver (top-N only)' : null,
+    missing_note: notes.length > 0 ? notes.join('; ') : null,
+    grid_basis: gridBasis ?? 'qualifying_session',
   };
 }
 
@@ -285,6 +298,26 @@ function buildInvalidators(layerOutputs, rec2026, recOval, recInter, recPQ) {
 
 // --- Public composer ------------------------------------------------------
 
+// When the grid is set by a competition-based formula instead of timed
+// qualifying, the practice_qualifying layer cannot claim raw speed.
+// Keep the layer present (the starting position is still a real race
+// position) but reduce its effective weight by half.
+const PRACTICE_QUALIFYING_RULES_SET_WEIGHT_FACTOR = 0.5;
+
+// Cup-history lockout reasons (e.g. Austin Hill #33 has zero Cup starts at
+// Charlotte oval or 1.5-mi ovals). When set, the named Cup-history layers
+// are forced to MISSING with the lockout reason as the missing_note, so we
+// do not borrow Tyler Reddick's or Kyle Busch's history under the #8/#33
+// storyline. Hill's national-series readiness is documented separately in
+// the packet renderer as a labeled lower-confidence context note, NOT a
+// composite layer.
+const CUP_HISTORY_LAYERS = Object.freeze([
+  'season_form_2026',
+  'season_speed_signal_2026',
+  'charlotte_oval_history',
+  'intermediate_15mi_oval',
+]);
+
 export function composeFinalCeilingForDriver({
   driver,                  // pool entry with fundamentals-merged fields
   seasonFormRecord = null,
@@ -293,30 +326,44 @@ export function composeFinalCeilingForDriver({
   intermediateRecord = null,
   practiceQualifyingRecord = null,
   practiceQualifyingStatus = null,
+  gridBasis = null,
+  cupHistoryLockoutReason = null,
 } = {}) {
+  const lock = cupHistoryLockoutReason
+    ? { present: false, score: null, grade: 'n/a',
+        basis: 'Cup-history lockout: this active entry has no transferable Cup record under the storyline rules',
+        missing_note: cupHistoryLockoutReason, detail: null }
+    : null;
+
   const layers = {
     baseline_fundamentals:    evalBaselineFundamentals(driver),
-    season_form_2026:         evalSeasonForm(seasonFormRecord),
-    season_speed_signal_2026: evalSeasonSpeedSignal(seasonSpeedSignalRecord),
-    charlotte_oval_history:   evalCharlotteOval(charlotteOvalRecord),
-    intermediate_15mi_oval:   evalIntermediate(intermediateRecord),
-    practice_qualifying:      evalPracticeQualifying(practiceQualifyingRecord, practiceQualifyingStatus),
+    season_form_2026:         lock ?? evalSeasonForm(seasonFormRecord),
+    season_speed_signal_2026: lock ?? evalSeasonSpeedSignal(seasonSpeedSignalRecord),
+    charlotte_oval_history:   lock ?? evalCharlotteOval(charlotteOvalRecord),
+    intermediate_15mi_oval:   lock ?? evalIntermediate(intermediateRecord),
+    practice_qualifying:      evalPracticeQualifying(practiceQualifyingRecord, practiceQualifyingStatus, gridBasis),
     long_run_race_type_fit:   evalLongRunFit(),
   };
 
-  // Composite over present layers (re-normalized).
+  // Composite over present layers (re-normalized). Effective weight may
+  // be reduced for practice_qualifying when the grid is rules_set.
   let num = 0, den = 0;
   const ledger = [];
   for (const def of LAYER_DEFS) {
     const lo = layers[def.key];
+    let effWeight = def.weight;
+    if (def.key === 'practice_qualifying' && lo.present && gridBasis === 'rules_set') {
+      effWeight = +(def.weight * PRACTICE_QUALIFYING_RULES_SET_WEIGHT_FACTOR).toFixed(4);
+    }
     if (lo.present && lo.score !== null) {
-      num += lo.score * def.weight;
-      den += def.weight;
+      num += lo.score * effWeight;
+      den += effWeight;
     }
     ledger.push({
       category: def.key,
       label: def.label,
       raw_weight: def.weight,
+      effective_weight: effWeight,
       source_basis: lo.basis,
       value: lo.score,
       grade: lo.grade,
@@ -331,8 +378,8 @@ export function composeFinalCeilingForDriver({
   }
   for (const row of ledger) {
     if (row.present && row.value !== null && den > 0) {
-      row.normalized_weight = +(row.raw_weight / den).toFixed(4);
-      row.contribution = +(row.value * (row.raw_weight / den)).toFixed(2);
+      row.normalized_weight = +(row.effective_weight / den).toFixed(4);
+      row.contribution = +(row.value * (row.effective_weight / den)).toFixed(2);
     }
   }
   const composite = den === 0 ? null : Math.round(clamp(num / den, 0, 100));
@@ -340,12 +387,21 @@ export function composeFinalCeilingForDriver({
   const hasOval = layers.charlotte_oval_history.present;
   const hasInter = layers.intermediate_15mi_oval.present;
 
-  const { ceiling, reason } = assignCeiling({
+  let { ceiling, reason } = assignCeiling({
     composite,
     layersPresent,
     hasOval,
     hasIntermediate: hasInter,
   });
+
+  // Cup-history lockout cap: if Cup-history layers are locked MISSING for this
+  // active entry (e.g. Austin Hill #33), a single P/Q row cannot lift the
+  // ceiling above WATCH. Storyline-attached entries must show direct Cup
+  // evidence — they get a real ceiling, not borrowed equity.
+  if (cupHistoryLockoutReason) {
+    ceiling = 'WATCH';
+    reason = `Cup-history lockout: ${cupHistoryLockoutReason} No transferable Cup evidence exists; ceiling capped at WATCH regardless of practice/qualifying or fundamentals.`;
+  }
 
   const invalidators = buildInvalidators(
     layers, seasonFormRecord, charlotteOvalRecord, intermediateRecord, practiceQualifyingRecord,
@@ -380,6 +436,8 @@ export function composeFinalCeilingBoardOverlay({
   charlotteOvalEnvelope = null,
   intermediateEnvelope = null,
   practiceQualifyingEnvelope = null,
+  gridBasis = null,
+  cupHistoryLockouts = null,         // Map<carNumber, reasonString>
 } = {}) {
   function indexByName(envelope) {
     const m = new Map();
@@ -396,8 +454,13 @@ export function composeFinalCeilingBoardOverlay({
   for (const r of pqRecords) pqByName.set(normKey(r.driver_name), r);
   const pqStatus = practiceQualifyingEnvelope?.status ?? null;
 
+  const effectiveGridBasis = gridBasis
+    ?? practiceQualifyingEnvelope?.snapshot?.grid_basis
+    ?? null;
+
   return candidates.map(c => {
     const key = normKey(c.driver_name);
+    const lockoutReason = cupHistoryLockouts?.get?.(c.car_number) ?? null;
     const r = composeFinalCeilingForDriver({
       driver: c,
       seasonFormRecord: seasonIdx.get(key) ?? null,
@@ -406,6 +469,8 @@ export function composeFinalCeilingBoardOverlay({
       intermediateRecord: interIdx.get(key) ?? null,
       practiceQualifyingRecord: pqByName.get(key) ?? null,
       practiceQualifyingStatus: pqStatus,
+      gridBasis: effectiveGridBasis,
+      cupHistoryLockoutReason: lockoutReason,
     });
     return { driver_name: c.driver_name, car_number: c.car_number, ...r };
   });

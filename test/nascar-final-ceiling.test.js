@@ -101,25 +101,31 @@ test('Coca-Cola 600 packet: every pool driver has exactly one final_ceiling and 
   const result = await composeCocaCola600Packet({ outputDir });
   const board = JSON.parse(readFileSync(join(outputDir, 'ceiling_board.json'), 'utf8'));
 
-  assert.equal(board.candidates.length, 20, 'must have all 20 pool drivers');
-  assert.equal(board.candidate_pool_basis, 'cup_points_top_20');
+  assert.ok(board.candidates.length >= 20, 'must include at least the 20 points-pool drivers');
+  assert.equal(board.candidate_pool_basis, 'cup_points_plus_active_field');
+  assert.equal(board.scored_head.length, 20, 'scored head must be 20 (points top-20)');
 
   for (const c of board.candidates) {
     assert.ok(FINAL_CEILINGS.includes(c.final_ceiling),
       `${c.driver_name} has invalid final_ceiling=${c.final_ceiling}`);
     assert.ok(Array.isArray(c.final_evidence_ledger) && c.final_evidence_ledger.length === 7,
-      `${c.driver_name} ledger length must be 6`);
+      `${c.driver_name} ledger length must be 7`);
     assert.ok(typeof c.final_reasoning_summary === 'string' && c.final_reasoning_summary.length > 0);
     assert.ok(Array.isArray(c.final_invalidators));
     assert.ok(typeof c.final_ceiling_reason === 'string' && c.final_ceiling_reason.length > 0);
   }
 
-  // Pool order is preserved.
-  assert.equal(board.candidates[0].driver_name, 'Tyler Reddick');
+  // Scored head sorted by composite desc.
+  const head = board.scored_head;
+  for (let i = 1; i < head.length; i++) {
+    assert.ok((head[i - 1].final_composite_score ?? -1) >= (head[i].final_composite_score ?? -1),
+      `scored_head must be sorted by composite desc at index ${i}`);
+  }
 
-  // Tyler Reddick must have 2026 season-form + practice/qualifying ledger
-  // rows MARKED PRESENT (not missing).
-  const reddick = board.candidates[0];
+  // Tyler Reddick must be present and have 2026 form + practice/qualifying
+  // ledger rows MARKED PRESENT (not missing).
+  const reddick = board.candidates.find(c => c.driver_name === 'Tyler Reddick');
+  assert.ok(reddick, 'Tyler Reddick must appear in the active pool');
   const season = reddick.final_evidence_ledger.find(r => r.category === 'season_form_2026');
   const pq = reddick.final_evidence_ledger.find(r => r.category === 'practice_qualifying');
   assert.equal(season.present, true, 'Reddick 2026 form must be present');
@@ -130,10 +136,16 @@ test('Coca-Cola 600 packet: every pool driver has exactly one final_ceiling and 
   assert.deepEqual(board.final_ceiling_schema.ceilings_allowed, FINAL_CEILINGS);
   assert.match(board.final_ceiling_schema.charlotte_filter, /OVAL only/);
   assert.match(board.final_ceiling_schema.era_filter, /Gen 7/);
+  assert.equal(board.final_ceiling_schema.grid_basis, 'rules_set');
 
   // packet.md surfaces the new section + the required row schema.
   const md = readFileSync(join(outputDir, 'packet.md'), 'utf8');
   assert.ok(md.includes('## Final Ceiling Board (single ceiling per driver)'));
+  assert.ok(md.includes('1. Main scored field'));
+  assert.ok(md.includes('2. Field tail'));
+  assert.ok(md.includes('## Storyline / Tiebreaker Context (non-scoring)'));
+  assert.ok(md.includes('Kyle Busch — NOT entered'));
+  assert.ok(md.includes('#8 / #33 disambiguation'));
   assert.ok(md.includes('Rank | Driver'));
   assert.ok(md.includes('Ceiling'));
   assert.ok(md.includes('Reasoning Summary'));
@@ -141,6 +153,25 @@ test('Coca-Cola 600 packet: every pool driver has exactly one final_ceiling and 
     const stripped = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\./g, '');
     assert.ok(md.includes(name) || md.includes(stripped),
       `packet.md missing driver ${name}`);
+  }
+
+  // Kyle Busch is NEVER scored.
+  for (const c of board.candidates) {
+    assert.notEqual(c.driver_name, 'Kyle Busch', 'Kyle Busch must not be a scored candidate');
+  }
+
+  // Austin Hill #33 must appear in field_tail with Cup-history lockout
+  // (season_form_2026 / charlotte_oval_history / intermediate_15mi_oval MISSING with lockout reason).
+  const hill = board.candidates.find(c => c.car_number === 33);
+  if (hill) {
+    const lockMsg = /lockout|no transferable Cup record|no 2026 Cup season form|tribute car/i;
+    const cupLayers = ['season_form_2026', 'season_speed_signal_2026', 'charlotte_oval_history', 'intermediate_15mi_oval'];
+    for (const cat of cupLayers) {
+      const row = hill.final_evidence_ledger.find(r => r.category === cat);
+      assert.equal(row.present, false, `Hill #33 ${cat} must be MISSING under lockout`);
+      assert.match(String(row.missing_note ?? ''), lockMsg, `Hill #33 ${cat} must have lockout missing_note`);
+    }
+    assert.equal(hill.final_ceiling, 'WATCH', 'Hill #33 must be capped at WATCH under Cup-history lockout');
   }
 });
 
