@@ -202,20 +202,57 @@ function renderPacket({
   lines.push(`- lanes: ${multiLaneBoard.lanes.join(', ')}`);
   lines.push(`- statuses allowed: ${multiLaneBoard.statuses.join(' | ')}`);
   lines.push('');
-  lines.push('Rank  Car  Driver                       Score  Win            Top5           Top10          Top20');
+  lines.push('Rank  Car  Driver                       Score  Cov  Win            Top5           Top10          Top20');
   for (const c of multiLaneBoard.candidates) {
     const name = String(c.driver_name ?? '').padEnd(28).slice(0, 28);
     const car = String(c.car_number ?? '').padStart(3);
     const rank = String(c.pool_rank).padStart(4);
     const sc = String(c.composite_score ?? 'n/a').padStart(5);
+    const cov = String(c.fundamentals_layer_coverage ?? 0).padStart(3);
     const w = String(c.lanes.win.status).padEnd(14);
     const t5 = String(c.lanes.top_5.status).padEnd(14);
     const t10 = String(c.lanes.top_10.status).padEnd(14);
     const t20 = String(c.lanes.top_20.status).padEnd(14);
     const bene = c.storyline_beneficiary ? '  * storyline beneficiary' : '';
-    lines.push(`${rank}  ${car}  ${name} ${sc}  ${w} ${t5} ${t10} ${t20}${bene}`);
+    lines.push(`${rank}  ${car}  ${name} ${sc}  ${cov}  ${w} ${t5} ${t10} ${t20}${bene}`);
   }
   lines.push('');
+
+  // Per-driver evidence ledger — the heart of the reasoning-backed board.
+  lines.push('### Per-driver Evidence Ledger');
+  lines.push('');
+  lines.push('Each driver shows: composite score, fundamentals layer coverage,');
+  lines.push('per-layer contribution/missingness, the coverage rule applied,');
+  lines.push('and the resulting per-lane ceiling with reason text.');
+  lines.push('');
+  for (const c of multiLaneBoard.candidates) {
+    lines.push(`#${c.car_number ?? '?'} ${c.driver_name ?? 'Unknown'} (${c.team ?? 'team n/a'})`);
+    lines.push(`  pool_rank: ${c.pool_rank}`);
+    lines.push(`  composite_score: ${c.composite_score ?? 'n/a'}`);
+    lines.push(`  fundamentals_layer_coverage: ${c.fundamentals_layer_coverage} — ${c.fundamentals_layer_coverage_label}`);
+    lines.push(`  coverage_cap_rule: ${c.coverage_cap_rule}`);
+    lines.push(`  score_reasoning: ${c.score_reasoning}`);
+    lines.push('  layer_evidence_ledger:');
+    for (const row of c.layer_evidence_ledger ?? []) {
+      if (row.present) {
+        const fieldStr = row.fields_used.map(f => `${f.field}=${f.value} (w=${f.normalized_weight}, contrib=${f.contribution})`).join('; ');
+        lines.push(`    - ${row.layer}: PRESENT — ${fieldStr}; layer_contribution_total=${row.contribution_total}`);
+      } else {
+        const missing = row.fields_missing.map(f => f.field).join(', ');
+        lines.push(`    - ${row.layer}: MISSING — no source-backed value; excluded from score (fields: ${missing}).`);
+      }
+    }
+    lines.push('  lane ceilings:');
+    for (const lane of multiLaneBoard.lanes) {
+      const l = c.lanes[lane];
+      lines.push(`    - ${l.narrative}`);
+    }
+    if (c.storyline_beneficiary) {
+      lines.push('  storyline_beneficiary: true (reference-only flag; never upgrades a lane).');
+    }
+    lines.push('');
+  }
+
   lines.push('Lane gating notes:');
   for (const note of multiLaneBoard.safety_notes) lines.push(`- ${note}`);
   lines.push('');

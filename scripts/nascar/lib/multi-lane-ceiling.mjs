@@ -70,24 +70,90 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 // Composite driver-strength score (0-100). Uses ONLY base fundamentals.
 // Missing layers contribute neutral 50 weighted by available-mass.
+//
+// Layer composition (weights are re-normalized over PRESENT inputs only so a
+// missing layer doesn't drag the score; missingness is surfaced separately in
+// fundamentals_layer_coverage and downgrade_reasons):
+//
+//   driver_skill_rating       0.30  (driver_skill layer)
+//   driver_ability_to_convert 0.20  (driver_skill layer)
+//   team_equipment_quality    0.30  (team_equipment layer)
+//   pit_crew_crew_chief_grade 0.10  (pit_crew layer)
+//   strategy_risk_rating      0.10  (strategy_risk layer)
+const SCORE_PARTS = Object.freeze([
+  { field: 'driver_skill_rating',       weight: 0.30, layer: 'driver_skill' },
+  { field: 'driver_ability_to_convert', weight: 0.20, layer: 'driver_skill' },
+  { field: 'team_equipment_quality',    weight: 0.30, layer: 'team_equipment' },
+  { field: 'pit_crew_crew_chief_grade', weight: 0.10, layer: 'pit_crew' },
+  { field: 'strategy_risk_rating',      weight: 0.10, layer: 'strategy_risk' },
+]);
+
 function driverStrengthScore(d) {
-  const parts = [
-    { v: d.driver_skill_rating, w: 0.30 },
-    { v: d.driver_ability_to_convert, w: 0.20 },
-    { v: d.team_equipment_quality, w: 0.30 },
-    { v: d.pit_crew_crew_chief_grade, w: 0.10 },
-    { v: d.strategy_risk_rating, w: 0.10 },
-  ];
+  const breakdown = scoreBreakdown(d);
+  return breakdown.composite_score;
+}
+
+// Returns a full attribution record:
+//   {
+//     composite_score: int|null,
+//     present_weight_sum: number,
+//     inputs_used:   [ {layer, field, value, weight, normalized_weight, contribution} ],
+//     missing_inputs:[ {layer, field, weight, reason} ],
+//     layers_present: [layer, ...],
+//     layers_missing: [layer, ...],
+//   }
+function scoreBreakdown(d) {
+  const inputs_used = [];
+  const missing_inputs = [];
+  const present_layers = new Set();
+  const missing_layers_set = new Set();
   let num = 0, den = 0;
-  for (const p of parts) {
-    if (p.v === null || p.v === undefined) continue;
-    const n = Number(p.v);
-    if (Number.isFinite(n)) { num += n * p.w; den += p.w; }
+  for (const p of SCORE_PARTS) {
+    const raw = d ? d[p.field] : null;
+    const n = (raw === null || raw === undefined || raw === '') ? null : Number(raw);
+    if (n !== null && Number.isFinite(n)) {
+      num += n * p.weight;
+      den += p.weight;
+      inputs_used.push({
+        layer: p.layer,
+        field: p.field,
+        value: n,
+        weight: p.weight,
+        // normalized_weight + contribution are filled in after the second pass
+        normalized_weight: null,
+        contribution: null,
+      });
+      present_layers.add(p.layer);
+    } else {
+      missing_inputs.push({
+        layer: p.layer,
+        field: p.field,
+        weight: p.weight,
+        reason: 'no_numeric_value',
+      });
+    }
   }
-  if (den === 0) return null;
-  // Re-normalize over present weights so missing layers don't punish the score
-  // (they show up separately in data_quality / downgrade_reasons).
-  return Math.round(clamp((num / den), 0, 100));
+  // Determine missing layers (a layer is missing only when NO field in it is present).
+  const allLayers = new Set(SCORE_PARTS.map(p => p.layer));
+  for (const layer of allLayers) {
+    if (!present_layers.has(layer)) missing_layers_set.add(layer);
+  }
+  // Fill in contributions now that den is known.
+  if (den > 0) {
+    for (const u of inputs_used) {
+      u.normalized_weight = +(u.weight / den).toFixed(4);
+      u.contribution = +(u.value * (u.weight / den)).toFixed(2);
+    }
+  }
+  const composite = den === 0 ? null : Math.round(clamp(num / den, 0, 100));
+  return {
+    composite_score: composite,
+    present_weight_sum: +den.toFixed(4),
+    inputs_used,
+    missing_inputs,
+    layers_present: [...present_layers].sort(),
+    layers_missing: [...missing_layers_set].sort(),
+  };
 }
 
 // Lane status from per-driver score, overall data quality, lane availability.
@@ -145,6 +211,20 @@ const STATUS_RANK = Object.freeze({
   EVIDENCE_LEAN: 3,
   PICK: 4,
 });
+function coverageLabel(coverage) {
+  if (coverage <= 0) return 'zero-layer (NO CLEAR PICK)';
+  if (coverage === 1) return 'single-layer (LEAN max)';
+  if (coverage === 2) return 'two-layer (EVIDENCE_LEAN max)';
+  return `${coverage}-layer (PICK eligible)`;
+}
+
+function coveragePenaltyLabel(coverage) {
+  if (coverage <= 0) return '0 layers -> NO CLEAR PICK (coverage cap forces this)';
+  if (coverage === 1) return '1 layer -> max LEAN (single-layer cap: LEAN max)';
+  if (coverage === 2) return '2 layers -> max EVIDENCE_LEAN (two-layer cap)';
+  return `${coverage} layers -> PICK eligible subject to global data-quality cap`;
+}
+
 function applyCoverageCap(status, coverage) {
   if (coverage <= 0) return { status: 'NO CLEAR PICK', reason: 'fundamentals_coverage_zero_layers' };
   if (coverage === 1) {
@@ -200,6 +280,41 @@ function gateStatus({ rawStatus, overallDataQuality, marketAvailable, isStorylin
   return { status, reasons };
 }
 
+// Human-readable explanation for a single gating/cap reason code.
+const REASON_EXPLANATIONS = Object.freeze({
+  missing_market: 'Market lane is not source-available; downgraded to NO CLEAR PICK.',
+  fundamentals_unavailable: 'Overall fundamentals data quality is unavailable; lane forced to NO CLEAR PICK.',
+  fundamentals_degraded_cap_watch: 'Overall fundamentals data quality is degraded; lane capped at WATCH.',
+  fundamentals_partial_cap_evidence_lean: 'Overall fundamentals data quality is partial; PICK not allowed, capped at EVIDENCE_LEAN.',
+  fundamentals_coverage_zero_layers: 'No usable fundamentals layers for this driver; NO CLEAR PICK.',
+  fundamentals_coverage_one_layer_cap_lean: 'Single-layer cap: only one fundamentals layer present, ceiling is LEAN.',
+  fundamentals_coverage_two_layers_cap_evidence_lean: 'Two-layer cap: only two fundamentals layers present, ceiling is EVIDENCE_LEAN.',
+  storyline_beneficiary_watch_flag: 'Storyline beneficiary informational flag; storyline alone never upgrades a lane.',
+});
+
+function explainReason(code) {
+  return REASON_EXPLANATIONS[code] ?? code;
+}
+
+// Build one human-readable line per lane explaining where it ended up.
+function laneNarrative({ lane, label, status, rawStatus, score, reasons, marketAvailable, coverage }) {
+  if (!marketAvailable) {
+    return `${label}: NO CLEAR PICK — market lane not source-available (missing_market).`;
+  }
+  if (score === null) {
+    return `${label}: NO CLEAR PICK — composite score unavailable (no fundamentals inputs for this driver).`;
+  }
+  if (status === rawStatus && reasons.length === 0) {
+    return `${label}: ${status} — score ${score} clears the ${status} threshold and no caps applied.`;
+  }
+  const why = reasons.length > 0
+    ? reasons.map(explainReason).join(' ')
+    : `Downgraded from raw ${rawStatus} to ${status}.`;
+  if (STATUS_RANK[status] < STATUS_RANK[rawStatus]) {
+    return `${label}: ${status} (capped down from raw ${rawStatus}, score ${score}) — ${why}`;
+  }
+  return `${label}: ${status} — ${why}`;
+}
 function rankUniverse(byDriver) {
   // Sort by composite score desc; tiebreak by driver_skill_rating desc then car_number asc.
   return [...byDriver]
@@ -335,10 +450,46 @@ export function composeMultiLaneCeilingBoard({
     : null;
 
   const candidates = top.map((d, i) => {
-    const score = driverStrengthScore(d);
+    const breakdown = scoreBreakdown(d);
+    const score = breakdown.composite_score;
     const coverage = fundamentalsLayerCoverage(d);
+    const coverage_label = coverageLabel(coverage);
+    const coverage_penalty = coveragePenaltyLabel(coverage);
     const dKey = `${d.driver_name ?? ''}|${d.car_number ?? ''}`.toLowerCase();
     const isBene = beneficiaryKey && dKey === beneficiaryKey;
+
+    // Build a layer-level evidence ledger: one row per fundamentals layer
+    // showing whether it contributed, what value, and what its share was.
+    const layer_evidence_ledger = SCORE_PARTS
+      // collapse multi-field layers (driver_skill has 2 fields) by layer
+      .reduce((acc, p) => {
+        if (!acc.some(r => r.layer === p.layer)) acc.push({ layer: p.layer, fields: [] });
+        acc.find(r => r.layer === p.layer).fields.push(p.field);
+        return acc;
+      }, [])
+      .map(({ layer, fields }) => {
+        const used = breakdown.inputs_used.filter(u => u.layer === layer);
+        const missing = breakdown.missing_inputs.filter(m => m.layer === layer);
+        const present = used.length > 0;
+        return {
+          layer,
+          present,
+          fields_used: used.map(u => ({
+            field: u.field,
+            value: u.value,
+            normalized_weight: u.normalized_weight,
+            contribution: u.contribution,
+          })),
+          fields_missing: missing.map(m => ({ field: m.field, reason: m.reason })),
+          contribution_total: present
+            ? +used.reduce((s, u) => s + (u.contribution ?? 0), 0).toFixed(2)
+            : 0,
+          reason: present
+            ? `present (${fields.filter(f => used.some(u => u.field === f)).join(', ') || 'partial fields'})`
+            : 'no source-backed value for this layer; excluded from score',
+        };
+      });
+
     const lanes = {};
     for (const lane of LANES) {
       const raw = rawStatusFor(lane, score);
@@ -350,6 +501,9 @@ export function composeMultiLaneCeilingBoard({
         isStorylineBeneficiary: isBene,
         coverage,
       });
+      const narrative = laneNarrative({
+        lane, label: LANE_LABELS[lane], status, rawStatus: raw, score, reasons, marketAvailable, coverage,
+      });
       lanes[lane] = {
         lane,
         label: LANE_LABELS[lane],
@@ -357,9 +511,35 @@ export function composeMultiLaneCeilingBoard({
         raw_status: raw,
         score,
         reasons,
+        reason_explanations: reasons.map(r => ({ code: r, text: explainReason(r) })),
+        narrative,
         market_source_available: marketAvailable,
+        threshold_used: LANE_THRESHOLDS[lane],
+        downgraded: STATUS_RANK[status] < STATUS_RANK[raw],
       };
     }
+
+    // Per-driver top-level reasoning summary: a single line summarizing what
+    // the composite score was built from, the coverage cap, and any global cap.
+    let score_reasoning;
+    if (coverage === 0) {
+      score_reasoning =
+        'NO CLEAR PICK: no usable fundamentals layers for this driver. ' +
+        'Score is unavailable; all lanes default to NO CLEAR PICK.';
+    } else {
+      const presentList = breakdown.layers_present.join(', ');
+      const missingList = breakdown.layers_missing.length > 0
+        ? breakdown.layers_missing.join(', ')
+        : 'none';
+      const contribs = breakdown.inputs_used
+        .map(u => `${u.field}=${u.value}×${u.normalized_weight}=${u.contribution}`)
+        .join(' + ');
+      score_reasoning =
+        `composite_score=${score} from ${coverage} layer(s) [${presentList}]. ` +
+        `Contributions: ${contribs}. Missing layers: ${missingList}. ` +
+        `Coverage rule: ${coverage_penalty}.`;
+    }
+
     return {
       pool_rank: i + 1,
       driver_name: d.driver_name,
@@ -368,6 +548,11 @@ export function composeMultiLaneCeilingBoard({
       manufacturer: d.manufacturer,
       composite_score: score,
       fundamentals_layer_coverage: coverage,
+      fundamentals_layer_coverage_label: coverage_label,
+      coverage_cap_rule: coverage_penalty,
+      score_reasoning,
+      score_breakdown: breakdown,
+      layer_evidence_ledger,
       data_quality: d.data_quality,
       driver_skill_rating: d.driver_skill_rating,
       team_equipment_quality: d.team_equipment_quality,
