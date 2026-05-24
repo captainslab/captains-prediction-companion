@@ -112,8 +112,58 @@ function rawStatusFor(lane, score) {
   return 'WATCH';
 }
 
+// Count distinct fundamentals LAYERS (not fields) with a usable numeric
+// value for this driver. driver_skill_rating and driver_ability_to_convert
+// both live in the driver_skill layer, so they count as ONE layer of
+// coverage. This drives the per-driver coverage cap.
+function fundamentalsLayerCoverage(d) {
+  if (!d) return 0;
+  const has = (v) => {
+    if (v === null || v === undefined || v === '') return false;
+    const n = Number(v);
+    return Number.isFinite(n);
+  };
+  const layers = {
+    driver_skill: has(d.driver_skill_rating) || has(d.driver_ability_to_convert),
+    team_equipment: has(d.team_equipment_quality),
+    pit_crew: has(d.pit_crew_crew_chief_grade),
+    strategy_risk: has(d.strategy_risk_rating),
+  };
+  return Object.values(layers).filter(Boolean).length;
+}
+
+// Per-driver coverage cap. No driver may reach EVIDENCE_LEAN or PICK from
+// a single fundamentals layer alone.
+//   0 layers -> NO CLEAR PICK
+//   1 layer  -> max LEAN
+//   2 layers -> max EVIDENCE_LEAN
+//   3+ layers -> PICK eligible (still subject to data_quality + market caps)
+const STATUS_RANK = Object.freeze({
+  'NO CLEAR PICK': 0,
+  WATCH: 1,
+  LEAN: 2,
+  EVIDENCE_LEAN: 3,
+  PICK: 4,
+});
+function applyCoverageCap(status, coverage) {
+  if (coverage <= 0) return { status: 'NO CLEAR PICK', reason: 'fundamentals_coverage_zero_layers' };
+  if (coverage === 1) {
+    if (STATUS_RANK[status] > STATUS_RANK.LEAN) {
+      return { status: 'LEAN', reason: 'fundamentals_coverage_one_layer_cap_lean' };
+    }
+    return { status, reason: null };
+  }
+  if (coverage === 2) {
+    if (STATUS_RANK[status] > STATUS_RANK.EVIDENCE_LEAN) {
+      return { status: 'EVIDENCE_LEAN', reason: 'fundamentals_coverage_two_layers_cap_evidence_lean' };
+    }
+    return { status, reason: null };
+  }
+  return { status, reason: null };
+}
+
 // Cap status given overall data quality + market availability.
-function gateStatus({ rawStatus, overallDataQuality, marketAvailable, isStorylineBeneficiary }) {
+function gateStatus({ rawStatus, overallDataQuality, marketAvailable, isStorylineBeneficiary, coverage = 0 }) {
   const reasons = [];
   let status = rawStatus;
   if (!marketAvailable) {
@@ -133,6 +183,14 @@ function gateStatus({ rawStatus, overallDataQuality, marketAvailable, isStorylin
   } else if (overallDataQuality === 'partial') {
     // Cap at EVIDENCE_LEAN — no PICK allowed on partial fundamentals.
     if (status === 'PICK') { status = 'EVIDENCE_LEAN'; reasons.push('fundamentals_partial_cap_evidence_lean'); }
+  }
+  // Per-driver coverage cap: 1 layer -> max LEAN, 2 -> max EVIDENCE_LEAN, 3+ -> PICK eligible.
+  if (status !== 'NO CLEAR PICK') {
+    const capped = applyCoverageCap(status, coverage);
+    if (capped.status !== status) {
+      status = capped.status;
+      if (capped.reason) reasons.push(capped.reason);
+    }
   }
   // Storyline alone never creates PICK/EVIDENCE_LEAN — but the status here
   // came from fundamentals, not storyline. Beneficiary flag is informational.
@@ -278,6 +336,7 @@ export function composeMultiLaneCeilingBoard({
 
   const candidates = top.map((d, i) => {
     const score = driverStrengthScore(d);
+    const coverage = fundamentalsLayerCoverage(d);
     const dKey = `${d.driver_name ?? ''}|${d.car_number ?? ''}`.toLowerCase();
     const isBene = beneficiaryKey && dKey === beneficiaryKey;
     const lanes = {};
@@ -289,6 +348,7 @@ export function composeMultiLaneCeilingBoard({
         overallDataQuality: overallDQ,
         marketAvailable,
         isStorylineBeneficiary: isBene,
+        coverage,
       });
       lanes[lane] = {
         lane,
@@ -307,6 +367,7 @@ export function composeMultiLaneCeilingBoard({
       team: d.team,
       manufacturer: d.manufacturer,
       composite_score: score,
+      fundamentals_layer_coverage: coverage,
       data_quality: d.data_quality,
       driver_skill_rating: d.driver_skill_rating,
       team_equipment_quality: d.team_equipment_quality,
@@ -346,6 +407,7 @@ export function composeMultiLaneCeilingBoard({
       'Storyline alone cannot create PICK or EVIDENCE_LEAN; storyline beneficiary may be flagged WATCH only.',
       'Market context (price/OI/volume/line movement) cannot create PICK or EVIDENCE_LEAN; missing market lanes downgrade to NO CLEAR PICK with reason "missing_market".',
       'Fundamentals data_quality caps allowed status: degraded -> WATCH ceiling, partial -> EVIDENCE_LEAN ceiling, ok -> full PICK eligibility.',
+      'Per-driver fundamentals coverage cap: 0 layers -> NO CLEAR PICK, 1 layer -> max LEAN, 2 layers -> max EVIDENCE_LEAN, 3+ layers -> PICK eligible (still subject to data_quality and market caps).',
       'No trade, order, stake, fair_value, edge, kelly, or execution fields emitted.',
     ],
   };
