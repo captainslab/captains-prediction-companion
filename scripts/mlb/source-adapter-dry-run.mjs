@@ -7,10 +7,11 @@ import { fetchWeatherReadonly } from './source-adapters/weather-readonly.mjs';
 import { fetchLiquidityReadonly } from './source-adapters/liquidity-readonly.mjs';
 import { fetchSportsbookReadonly } from './source-adapters/sportsbook-readonly.mjs';
 import { fetchContextReadonly } from './source-adapters/context-readonly.mjs';
+import { fetchStatsReadonly } from './source-adapters/stats-readonly.mjs';
 import { defaultDiscoveryDir, formatDateInTimeZone, writeJsonAtomic, writeTextAtomic } from './file-io.mjs';
 import { pathToFileURL } from 'node:url';
 
-const VALID_SOURCES = new Set(['kalshi', 'mlb', 'baseball_savant', 'savant', 'weather', 'liquidity', 'sportsbook', 'context', 'all']);
+const VALID_SOURCES = new Set(['kalshi', 'mlb', 'baseball_savant', 'savant', 'weather', 'liquidity', 'sportsbook', 'context', 'stats', 'all']);
 
 function parseArgs(argv) {
   const options = {
@@ -55,7 +56,7 @@ function parseArgs(argv) {
 function usage() {
   return [
     'Usage:',
-    '  node scripts/mlb/source-adapter-dry-run.mjs [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--source kalshi|mlb|baseball_savant|weather|liquidity|sportsbook|context|all] [--out path]',
+    '  node scripts/mlb/source-adapter-dry-run.mjs [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--source kalshi|mlb|baseball_savant|weather|liquidity|sportsbook|context|stats|all] [--out path]',
     '',
     'Defaults:',
     '  --fixtures-only is used unless --live-readonly is provided.',
@@ -80,6 +81,7 @@ function makeSkippedEnvelope(sourceId, runDate, outputDir) {
     baseball_savant: 'baseball_savant_adapter',
     weather: 'weather_adapter',
     liquidity: 'liquidity_adapter',
+    mlb_stats: 'stats_adapter',
   };
   return {
     source_id: sourceId,
@@ -106,7 +108,7 @@ function readExistingOrSkipped({ sourceId, filePath, runDate, outputDir }) {
   };
 }
 
-function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope, baseballSavantEnvelope, weatherEnvelope, liquidityEnvelope, sportsbookEnvelope, contextEnvelope }) {
+function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope, baseballSavantEnvelope, weatherEnvelope, liquidityEnvelope, sportsbookEnvelope, contextEnvelope, statsEnvelope }) {
   const kalshiCount = safeArray(kalshiEnvelope.records).length;
   const kalshiRejectedCount = Array.isArray(kalshiEnvelope.rejected_records)
     ? kalshiEnvelope.rejected_records.length
@@ -117,6 +119,7 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
   const liquidityCount = safeArray(liquidityEnvelope.records).length;
   const sportsbookCount = safeArray(sportsbookEnvelope?.records).length;
   const contextCount = safeArray(contextEnvelope?.records).length;
+  const statsCount = safeArray(statsEnvelope?.records).length;
   const warnings = [
     ...safeArray(kalshiEnvelope.warnings),
     ...safeArray(mlbEnvelope.warnings),
@@ -125,6 +128,7 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
     ...safeArray(liquidityEnvelope.warnings),
     ...safeArray(sportsbookEnvelope?.warnings),
     ...safeArray(contextEnvelope?.warnings),
+    ...safeArray(statsEnvelope?.warnings),
   ];
   const errors = [
     ...safeArray(kalshiEnvelope.errors),
@@ -134,6 +138,7 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
     ...safeArray(liquidityEnvelope.errors),
     ...safeArray(sportsbookEnvelope?.errors),
     ...safeArray(contextEnvelope?.errors),
+    ...safeArray(statsEnvelope?.errors),
   ];
 
   return [
@@ -148,6 +153,7 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
     `- Liquidity source status: ${liquidityEnvelope.status}`,
     `- Sportsbook reference status: ${sportsbookEnvelope?.status ?? 'skipped'}`,
     `- Lineup/injury/bullpen status: ${contextEnvelope?.status ?? 'skipped'}`,
+    `- MLB stats source status: ${statsEnvelope?.status ?? 'skipped'}`,
     `- Kalshi records found: ${kalshiCount}`,
     `- Kalshi rejected records: ${kalshiRejectedCount}`,
     `- MLB games found: ${mlbCount}`,
@@ -156,6 +162,7 @@ function buildSummary({ runDate, checkedAtUtc, mode, kalshiEnvelope, mlbEnvelope
     `- Liquidity records found: ${liquidityCount}`,
     `- Sportsbook reference records found: ${sportsbookCount}`,
     `- Context records found: ${contextCount}`,
+    `- MLB stats records found: ${statsCount}`,
     '',
     'This is discovery only.',
     'No picks made.',
@@ -184,6 +191,7 @@ export async function runSourceAdapterDryRun(options = {}) {
   const runLiquidity = shouldRunSource(requestedSource, 'liquidity');
   const runSportsbook = shouldRunSource(requestedSource, 'sportsbook');
   const runContext = shouldRunSource(requestedSource, 'context');
+  const runStats = shouldRunSource(requestedSource, 'stats');
 
   const kalshiPath = `${outputDir}/kalshi_adapter.json`;
   const mlbPath = `${outputDir}/mlb_official_adapter.json`;
@@ -192,6 +200,7 @@ export async function runSourceAdapterDryRun(options = {}) {
   const liquidityPath = `${outputDir}/liquidity_adapter.json`;
   const sportsbookPath = `${outputDir}/sportsbook_adapter.json`;
   const contextPath = `${outputDir}/context_adapter.json`;
+  const statsPath = `${outputDir}/stats_adapter.json`;
   const summaryPath = `${outputDir}/discovery_summary.md`;
   const rejectedPath = `${outputDir}/kalshi_rejected_records.json`;
 
@@ -272,6 +281,15 @@ export async function runSourceAdapterDryRun(options = {}) {
       })
     : readExistingOrSkipped({ sourceId: 'lineup_injury_bullpen', filePath: contextPath, runDate, outputDir });
 
+  const statsEnvelope = runStats
+    ? await fetchStatsReadonly({
+        runDate,
+        outputDir,
+        fixturesOnly,
+        mlbGames: safeArray(mlbEnvelope.records),
+      })
+    : readExistingOrSkipped({ sourceId: 'mlb_stats', filePath: statsPath, runDate, outputDir });
+
   const finalKalshiEnvelope = { ...kalshiEnvelope, cache_path: kalshiPath };
   const finalMlbEnvelope = { ...mlbEnvelope, cache_path: mlbPath };
   const finalBaseballSavantEnvelope = { ...baseballSavantEnvelope, cache_path: baseballSavantPath };
@@ -302,6 +320,9 @@ export async function runSourceAdapterDryRun(options = {}) {
   if (runContext) {
     writeJsonAtomic(contextPath, { ...contextEnvelope, cache_path: contextPath });
   }
+  if (runStats) {
+    writeJsonAtomic(statsPath, { ...statsEnvelope, cache_path: statsPath });
+  }
   if (runKalshi && rejectedRecords.length > 0) {
     writeJsonAtomic(rejectedPath, rejectedRecords);
   }
@@ -318,6 +339,7 @@ export async function runSourceAdapterDryRun(options = {}) {
       liquidityEnvelope: finalLiquidityEnvelope,
       sportsbookEnvelope,
       contextEnvelope,
+      statsEnvelope,
     }),
   );
 
@@ -334,6 +356,7 @@ export async function runSourceAdapterDryRun(options = {}) {
       ...(runLiquidity ? { liquidity_adapter: liquidityPath } : {}),
       ...(runSportsbook ? { sportsbook_adapter: sportsbookPath } : {}),
       ...(runContext ? { context_adapter: contextPath } : {}),
+      ...(runStats ? { stats_adapter: statsPath } : {}),
       discovery_summary: summaryPath,
       ...(runKalshi && rejectedRecords.length > 0 ? { kalshi_rejected_records: rejectedPath } : {}),
     },
@@ -344,6 +367,7 @@ export async function runSourceAdapterDryRun(options = {}) {
     liquidity_status: finalLiquidityEnvelope.status,
     sportsbook_status: sportsbookEnvelope?.status ?? 'skipped',
     context_status: contextEnvelope?.status ?? 'skipped',
+    stats_status: statsEnvelope?.status ?? 'skipped',
     kalshi_records: safeArray(finalKalshiEnvelope.records).length,
     kalshi_rejected_records: rejectedRecords.length,
     mlb_games: safeArray(finalMlbEnvelope.records).length,
@@ -352,6 +376,7 @@ export async function runSourceAdapterDryRun(options = {}) {
     liquidity_records: safeArray(finalLiquidityEnvelope.records).length,
     sportsbook_records: safeArray(sportsbookEnvelope?.records).length,
     context_records: safeArray(contextEnvelope?.records).length,
+    stats_records: safeArray(statsEnvelope?.records).length,
     message: 'Discovery only. No picks made. No trades placed.',
   };
 }

@@ -6,7 +6,7 @@
 // Usage:
 //   node scripts/mlb/late-slate-composite-refresh.mjs [--date YYYY-MM-DD] [--dry-run] [--no-send]
 //
-// Requires: state/mlb/DATE/today-execution-board.json (created by morning scan)
+// Requires: state/mlb/DATE/discovery/{mlb_official,stats,weather,context}_adapter.json
 // No trades. No bankroll. Composite model only.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
@@ -25,13 +25,14 @@ import {
 // ---- Arg parsing -----------------------------------------------------------
 
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', dryRun: false, noSend: false };
+  const opts = { date: null, stateRoot: 'state', dryRun: false, noSend: false, allowPendingLineups: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
     else if (a === '--state-root') opts.stateRoot = argv[++i];
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--no-send') opts.noSend = true;
+    else if (a === '--allow-pending-lineups') opts.allowPendingLineups = true;
     else if (a === '--help' || a === '-h') { opts.help = true; }
     else { throw new Error(`Unknown argument: ${a}`); }
   }
@@ -41,7 +42,7 @@ function parseArgs(argv) {
 
 // ---- Composite pipeline for one game ---------------------------------------
 
-function runComposite(input) {
+export function runComposite(input) {
   const game = { game_pk: input.game_pk, away_team: input.away_team, home_team: input.home_team };
   const envelopes = buildFundamentalEnvelopes(input);
   const fundamentals = composeBaseFundamentals({ game, envelopes });
@@ -155,7 +156,7 @@ function renderCompactRefresh({ date, results, watchGames }) {
   if (watchGames.length > 0) {
     lines.push('');
     lines.push(`○ WATCH (composite pending): ${watchGames.join(' · ')}`);
-    lines.push('  Market-only analysis for these games. Composite layers require pitcher/team stats.');
+    lines.push('  Composite requires confirmed lineup state plus source-backed pitcher/team stats.');
   }
 
   lines.push('');
@@ -163,87 +164,252 @@ function renderCompactRefresh({ date, results, watchGames }) {
   return lines.join('\n');
 }
 
-// ---- Game data for tonight's known matchups --------------------------------
-// Sourced from earlier research agent runs. Pitcher stats from public records.
-// These entries match confirmed games on today's Kalshi slate.
+// ---- Dynamic discovery input builder ---------------------------------------
 
-const TONIGHT_GAMES = [
-  {
-    label: 'TB@BAL',
-    game_pk: 824837,
-    away_team: 'Tampa Bay Rays',
-    home_team: 'Baltimore Orioles',
-    away_pitcher: { name: 'Griffin Jax', hand: 'R', era: 1.93, fip: 2.10, kPct: 0.268, bbPct: 0.082, recentQualityStarts: 2, recentStarts: 3 },
-    home_pitcher: { name: 'Shane Baz', hand: 'R', era: 4.87, fip: 4.50, kPct: 0.195, bbPct: 0.095, recentQualityStarts: 1, recentStarts: 7 },
-    away_pitcher_splits: {
-      park:       { era: 1.50, fip: 1.90, hr9: 0.30, games: 4 },
-      vsOpponent: { era: 1.80, fip: 2.00, kPct: 0.290, wins: 3, losses: 1, games: 4 },
-    },
-    home_pitcher_splits: {
-      park:       { era: 5.20, fip: 4.80, hr9: 1.40, games: 3 },
-      vsOpponent: { era: 6.10, fip: 5.50, kPct: 0.170, wins: 1, losses: 4, games: 5 },
-    },
-    away_team_stats: { wins: 34, losses: 17, runDiff: 65, ops: 0.765, last10: '7-3' },
-    home_team_stats: { wins: 23, losses: 30, runDiff: -25, ops: 0.710, last10: '4-6' },
-    away_bullpen: { era: 3.40, recentLoadPct: 30 },
-    home_bullpen: { era: 4.20, recentLoadPct: 55 },
-    away_bullpen_fatigue: { consecutiveHLDays: 0, keyRelieverAvailable: true },
-    home_bullpen_fatigue: { consecutiveHLDays: 2, keyRelieverAvailable: true },
-    away_lineup_handedness: { vsRhpOps: 0.720, vsLhpOps: 0.690, rhbPct: 0.55, lhbPct: 0.45 },
-    home_lineup_handedness: { vsRhpOps: 0.680, vsLhpOps: 0.700, rhbPct: 0.40, lhbPct: 0.60 },
-    park: { factor: 97, name: 'Camden Yards' },
-    weather: { temperatureF: 72, windMph: 8, precipRisk: 0.05 },
-  },
-  {
-    label: 'ATL@BOS',
-    game_pk: 824758,
-    away_team: 'Atlanta Braves',
-    home_team: 'Boston Red Sox',
-    away_pitcher: { name: 'Spencer Strider', hand: 'R', era: 3.00, fip: 2.80, kPct: 0.305, bbPct: 0.078, recentQualityStarts: 3, recentStarts: 4 },
-    home_pitcher: { name: 'Ranger Suarez', hand: 'L', era: 2.40, fip: 2.70, kPct: 0.225, bbPct: 0.080, recentQualityStarts: 3, recentStarts: 4 },
-    away_team_stats: { wins: 36, losses: 18, runDiff: 102, ops: 0.790, last10: '6-4' },
-    home_team_stats: { wins: 22, losses: 30, runDiff: -35, ops: 0.695, last10: '4-6' },
-    away_bullpen: { era: 3.60, recentLoadPct: 35 },
-    home_bullpen: { era: 4.50, recentLoadPct: 45 },
-    park: { factor: 109, name: 'Fenway Park' },
-    weather: { temperatureF: 68, windMph: 12, precipRisk: 0.10 },
-  },
-  {
-    label: 'CIN@NYM',
-    game_pk: 824760,
-    away_team: 'Cincinnati Reds',
-    home_team: 'New York Mets',
-    away_pitcher: { name: 'Chase Burns', hand: 'R', era: 1.83, fip: 2.20, kPct: 0.304, bbPct: 0.072, recentQualityStarts: 4, recentStarts: 5 },
-    home_pitcher: { name: 'BULLPEN GAME', isBullpenGame: true },
-    away_team_stats: { wins: 28, losses: 25, runDiff: 12, ops: 0.703, last10: '7-3' },
-    home_team_stats: { wins: 22, losses: 32, runDiff: -28, ops: 0.643, last10: '3-7' },
-    away_bullpen: { era: 4.10, recentLoadPct: 40 },
-    home_bullpen: { era: 3.90, recentLoadPct: 45 },
-    park: { factor: 98, name: 'Citi Field' },
-    weather: { temperatureF: 74, windMph: 6, precipRisk: 0.02 },
-  },
-  {
-    label: 'NYY@KC',
-    game_pk: 824776,
-    away_team: 'New York Yankees',
-    home_team: 'Kansas City Royals',
-    away_pitcher: { name: 'Cam Schlittler', hand: 'R', era: 1.50, fip: 1.80, kPct: 0.280, bbPct: 0.058, recentQualityStarts: 5, recentStarts: 7 },
-    home_pitcher: { name: 'Bailey Falter', hand: 'L', era: 9.82, fip: 7.50, kPct: 0.155, bbPct: 0.125, recentQualityStarts: 0, recentStarts: 2 },
-    away_team_stats: { wins: 32, losses: 22, runDiff: 55, ops: 0.745, last10: '6-4' },
-    home_team_stats: { wins: 22, losses: 32, runDiff: -40, ops: 0.695, last10: '4-6' },
-    away_bullpen: { era: 3.70, recentLoadPct: 35 },
-    home_bullpen: { era: 4.40, recentLoadPct: 55 },
-    home_bullpen_fatigue: { consecutiveHLDays: 2, keyRelieverAvailable: true },
-    park: { factor: 104, name: 'Kauffman Stadium' },
-    weather: { temperatureF: 76, windMph: 10, precipRisk: 0.08 },
-  },
-];
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
 
-// Games on tonight's Kalshi slate that don't yet have composite stats
-const WATCH_GAME_LABELS = [
-  'WSH@CLE', 'LAA@DET', 'CHC@PIT', 'MIA@TOR', 'STL@MIL',
-  'MIN@CWS', 'HOU@TEX', 'SEA@ATH', 'PHI@SD', 'AZ@SF', 'COL@LAD',
-];
+function readJsonIfExists(filePath) {
+  if (!existsSync(filePath)) return null;
+  return JSON.parse(readFileSync(filePath, 'utf8'));
+}
+
+function indexByGamePk(envelope) {
+  const map = new Map();
+  for (const record of safeArray(envelope?.records)) {
+    if (record.game_pk !== null && record.game_pk !== undefined && !map.has(record.game_pk)) {
+      map.set(record.game_pk, record);
+    }
+  }
+  return map;
+}
+
+function labelForGame(game, stats) {
+  if (stats?.label) return stats.label;
+  if (stats?.away_team_abbrev && stats?.home_team_abbrev) return `${stats.away_team_abbrev}@${stats.home_team_abbrev}`;
+  const abbrev = name => String(name ?? '')
+    .split(/\s+/)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase();
+  return `${abbrev(game?.away_team)}@${abbrev(game?.home_team)}`;
+}
+
+function numeric(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(String(value).match(/-?\d+(\.\d+)?/)?.[0] ?? value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizePrecip(value) {
+  const n = numeric(value);
+  if (n === null) return null;
+  return n > 1 ? n / 100 : n;
+}
+
+function normalizeLineupStatus(context) {
+  const raw = String(context?.lineup_status ?? '').toLowerCase();
+  if (!raw) return null;
+  if (raw === 'confirmed' || raw === 'confirmed_or_boxscore_available' || raw.includes('boxscore')) return 'confirmed';
+  if (raw.includes('pending')) return 'pending';
+  if (raw.includes('incomplete')) return 'incomplete';
+  return raw;
+}
+
+function mapPitcher(pitcher) {
+  if (!pitcher) return null;
+  return {
+    name: pitcher.name ?? null,
+    id: pitcher.id ?? pitcher.mlb_id ?? null,
+    mlb_id: pitcher.mlb_id ?? pitcher.id ?? null,
+    hand: pitcher.hand ?? null,
+    era: numeric(pitcher.era),
+    fip: numeric(pitcher.fip),
+    whip: numeric(pitcher.whip),
+    k_per_9: numeric(pitcher.k_per_9),
+    bb_per_9: numeric(pitcher.bb_per_9),
+    kPct: numeric(pitcher.kPct ?? pitcher.k_pct),
+    bbPct: numeric(pitcher.bbPct ?? pitcher.bb_pct),
+    recentQualityStarts: numeric(pitcher.recentQualityStarts ?? pitcher.quality_starts),
+    recentStarts: numeric(pitcher.recentStarts ?? pitcher.games_started),
+    isBullpenGame: pitcher.isBullpenGame ?? false,
+  };
+}
+
+function mapTeamStats(teamStats) {
+  if (!teamStats) return null;
+  return {
+    wins: numeric(teamStats.wins),
+    losses: numeric(teamStats.losses),
+    gamesPlayed: numeric(teamStats.gamesPlayed),
+    runDiff: numeric(teamStats.runDiff ?? teamStats.run_diff),
+    ops: numeric(teamStats.ops),
+    woba: numeric(teamStats.woba),
+    woba_proxy: numeric(teamStats.woba_proxy),
+    woba_proxy_source: teamStats.woba_proxy_source ?? null,
+    last10: teamStats.last10 ?? null,
+    last5: teamStats.last5 ?? null,
+    trend: teamStats.trend ?? null,
+  };
+}
+
+function mapPitcherSplits(pitcher, opponentTeamName) {
+  if (!pitcher) return null;
+  const out = {};
+  const park = pitcher.at_park ?? null;
+  if (park && (park.era != null || park.ip != null || park.gs != null)) {
+    out.park = {
+      era: numeric(park.era),
+      fip: null,
+      hr9: null,
+      games: numeric(park.gs),
+      source_path: park.source_path ?? null,
+    };
+  }
+  const vs = pitcher.vs_opponent ?? null;
+  if (vs && (vs.era != null || vs.ip != null)) {
+    out.vsOpponent = {
+      era: numeric(vs.era),
+      fip: null,
+      kPct: null,
+      wins: null,
+      losses: null,
+      games: null,
+      span: vs.span ?? null,
+      source_path: vs.source_path ?? null,
+      opponent: opponentTeamName ?? null,
+    };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function mapBullpen(bullpen) {
+  if (!bullpen) return null;
+  return {
+    era: numeric(bullpen.era),
+    whip: numeric(bullpen.whip),
+    recentLoadPct: numeric(bullpen.recentLoadPct),
+  };
+}
+
+function mapLineupHandedness(source) {
+  if (!source) return null;
+  return {
+    vsRhpOps: numeric(source.vsRhpOps ?? source.vs_rhp_ops),
+    vsLhpOps: numeric(source.vsLhpOps ?? source.vs_lhp_ops),
+    rhbPct: numeric(source.rhbPct),
+    lhbPct: numeric(source.lhbPct),
+  };
+}
+
+function mapWeather(weather) {
+  if (!weather) return null;
+  return {
+    temperatureF: numeric(weather.temperature ?? weather.temperatureF),
+    windMph: numeric(weather.wind_speed ?? weather.windMph),
+    precipRisk: normalizePrecip(weather.precipitation_risk ?? weather.precipRisk),
+    roofType: weather.roof_type ?? weather.roof_status ?? null,
+  };
+}
+
+function missingStatsReasons(stats) {
+  const reasons = [];
+  if (!stats) return ['stats_missing'];
+  if (numeric(stats.away_pitcher?.era) === null) reasons.push('away_pitcher_era_missing');
+  if (numeric(stats.home_pitcher?.era) === null) reasons.push('home_pitcher_era_missing');
+  if (numeric(stats.away_team_stats?.ops ?? stats.away_team_ops) === null) reasons.push('away_team_ops_missing');
+  if (numeric(stats.home_team_stats?.ops ?? stats.home_team_ops) === null) reasons.push('home_team_ops_missing');
+  if (!stats.away_pitcher?.mlb_id && !stats.away_pitcher?.id) reasons.push('away_probable_id_missing');
+  if (!stats.home_pitcher?.mlb_id && !stats.home_pitcher?.id) reasons.push('home_probable_id_missing');
+  return reasons;
+}
+
+function buildResearchInput({ game, stats, weather, context }) {
+  const lineupStatus = normalizeLineupStatus(context) ?? 'pending';
+  const venueName = weather?.venue ?? stats?.venue ?? game?.venue ?? null;
+  return {
+    label: labelForGame(game, stats),
+    game_pk: game?.game_pk ?? stats?.game_pk ?? null,
+    away_team: game?.away_team ?? stats?.away_team ?? null,
+    home_team: game?.home_team ?? stats?.home_team ?? null,
+    away_pitcher: mapPitcher(stats?.away_pitcher),
+    home_pitcher: mapPitcher(stats?.home_pitcher),
+    away_team_stats: mapTeamStats(stats?.away_team_stats ?? {
+      ops: stats?.away_team_ops,
+      woba: stats?.away_team_woba,
+      woba_proxy: stats?.away_team_woba_proxy,
+    }),
+    home_team_stats: mapTeamStats(stats?.home_team_stats ?? {
+      ops: stats?.home_team_ops,
+      woba: stats?.home_team_woba,
+      woba_proxy: stats?.home_team_woba_proxy,
+    }),
+    away_pitcher_splits: mapPitcherSplits(stats?.away_pitcher, game?.home_team ?? stats?.home_team),
+    home_pitcher_splits: mapPitcherSplits(stats?.home_pitcher, game?.away_team ?? stats?.away_team),
+    away_bullpen: mapBullpen(stats?.away_bullpen),
+    home_bullpen: mapBullpen(stats?.home_bullpen),
+    away_lineup: { status: lineupStatus, ilHealth: null },
+    home_lineup: { status: lineupStatus, ilHealth: null },
+    away_lineup_handedness: mapLineupHandedness(stats?.away_lineup_handedness),
+    home_lineup_handedness: mapLineupHandedness(stats?.home_lineup_handedness),
+    park: venueName ? { factor: 100, name: venueName, factor_note: 'neutral default; park-factor adapter not wired' } : null,
+    weather: mapWeather(weather),
+  };
+}
+
+export function loadDynamicCompositeSlate({ date, stateRoot = 'state', allowPendingLineups = false } = {}) {
+  const discoveryDir = resolve(stateRoot, 'mlb', date, 'discovery');
+  const mlb = readJsonIfExists(resolve(discoveryDir, 'mlb_official_adapter.json'));
+  const stats = readJsonIfExists(resolve(discoveryDir, 'stats_adapter.json'));
+  const weather = readJsonIfExists(resolve(discoveryDir, 'weather_adapter.json'));
+  const context = readJsonIfExists(resolve(discoveryDir, 'context_adapter.json'));
+
+  const statsByGame = indexByGamePk(stats);
+  const weatherByGame = indexByGamePk(weather);
+  const contextByGame = indexByGamePk(context);
+  const games = safeArray(mlb?.records).length > 0 ? safeArray(mlb.records) : safeArray(stats?.records);
+  const inputs = [];
+  const watchDetails = [];
+
+  for (const game of games) {
+    const statsRecord = statsByGame.get(game.game_pk);
+    const weatherRecord = weatherByGame.get(game.game_pk) ?? null;
+    const contextRecord = contextByGame.get(game.game_pk) ?? null;
+    const label = labelForGame(game, statsRecord);
+    const reasons = missingStatsReasons(statsRecord);
+    const lineupStatus = normalizeLineupStatus(contextRecord);
+    if (!allowPendingLineups && lineupStatus !== 'confirmed') {
+      reasons.push(`lineup_${lineupStatus ?? 'missing'}`);
+    }
+
+    if (reasons.length > 0) {
+      watchDetails.push({ label, game_pk: game.game_pk ?? null, reasons });
+      continue;
+    }
+
+    inputs.push(buildResearchInput({
+      game,
+      stats: statsRecord,
+      weather: weatherRecord,
+      context: contextRecord,
+    }));
+  }
+
+  return {
+    discoveryDir,
+    inputs,
+    watchDetails,
+    watchGames: watchDetails.map(item => `${item.label} (${item.reasons.join(', ')})`),
+    counts: {
+      mlb_games: games.length,
+      stats_records: safeArray(stats?.records).length,
+      weather_records: safeArray(weather?.records).length,
+      context_records: safeArray(context?.records).length,
+    },
+  };
+}
 
 // ---- Plan file helpers -----------------------------------------------------
 
@@ -281,11 +447,16 @@ async function main() {
   const prefix = opts.dryRun ? '[dry-run]' : '[composite-refresh]';
   const stateDir = resolve(opts.stateRoot, 'mlb', opts.date);
   mkdirSync(stateDir, { recursive: true });
+  const slate = loadDynamicCompositeSlate({
+    date: opts.date,
+    stateRoot: opts.stateRoot,
+    allowPendingLineups: opts.allowPendingLineups,
+  });
 
-  console.log(`${prefix} date=${opts.date} games_with_stats=${TONIGHT_GAMES.length} watch_games=${WATCH_GAME_LABELS.length}`);
+  console.log(`${prefix} date=${opts.date} games_evaluated=${slate.inputs.length} watch_games=${slate.watchGames.length} stats_records=${slate.counts.stats_records}`);
 
   const results = [];
-  for (const input of TONIGHT_GAMES) {
+  for (const input of slate.inputs) {
     try {
       const result = runComposite(input);
       results.push({ label: input.label, result });
@@ -297,7 +468,7 @@ async function main() {
     }
   }
 
-  const text = renderCompactRefresh({ date: opts.date, results, watchGames: WATCH_GAME_LABELS });
+  const text = renderCompactRefresh({ date: opts.date, results, watchGames: slate.watchGames });
 
   const outPath    = resolve(stateDir, 'composite-refresh-verbose.txt');
   const compactPath = resolve(stateDir, 'composite-refresh-compact.txt');

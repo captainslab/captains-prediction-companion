@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -16,6 +16,14 @@ import {
   comboStatusFromMembers,
 } from '../scripts/mlb/output-writer-core.mjs';
 import { fixtureMlbScheduleEnvelope } from '../scripts/mlb/source-adapters/mlb-official-readonly.mjs';
+import {
+  fetchStatsReadonly,
+  fixtureStatsEnvelope,
+} from '../scripts/mlb/source-adapters/stats-readonly.mjs';
+import {
+  loadDynamicCompositeSlate,
+  runComposite,
+} from '../scripts/mlb/late-slate-composite-refresh.mjs';
 
 function makeJsonResponse(payload, status = 200) {
   return {
@@ -70,6 +78,244 @@ test('fixture MLB schedule envelope', () => {
   assert.equal(envelope.records[0].game_pk, 100001);
   assert.equal(envelope.records[0].away_team, 'Alpha City Aces');
   assert.equal(envelope.records[0].probable_pitchers.home, 'Placeholder Pitcher B');
+});
+
+test('fixture MLB stats envelope exposes composite-ready fields without prices', () => {
+  const envelope = fixtureStatsEnvelope({
+    runDate: '2026-05-15',
+    checkedAtUtc: '2026-05-15T14:00:00.000Z',
+    outputDir: 'state/mlb/2026-05-15/discovery',
+  });
+
+  assert.equal(envelope.source_id, 'mlb_stats');
+  assert.equal(envelope.status, 'ok');
+  assert.equal(envelope.records.length, 1);
+  assert.equal(envelope.records[0].away_pitcher.kPct, 0.24);
+  assert.equal(envelope.records[0].away_team_stats.ops, 0.735);
+  assert.equal(envelope.records[0].away_team_woba, null);
+  assert.doesNotMatch(JSON.stringify(envelope.records[0]), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+});
+
+test('live MLB stats adapter normalizes pitcher/team/bullpen stats from no-auth sources', async () => {
+  const fetchImpl = async url => {
+    const value = typeof url === 'string' ? url : url.toString();
+    if (value.includes('/schedule?')) {
+      return makeJsonResponse({
+        dates: [{
+          games: [{
+            gamePk: 200001,
+            officialDate: '2026-05-15',
+            gameDate: '2026-05-15T23:05:00Z',
+            status: { detailedState: 'Scheduled' },
+            teams: {
+              away: {
+                team: { id: 1, name: 'Alpha City Aces', abbreviation: 'ACA' },
+                probablePitcher: { id: 11, fullName: 'Ada Ace' },
+              },
+              home: {
+                team: { id: 2, name: 'Beta Town Bears', abbreviation: 'BTB' },
+                probablePitcher: { id: 22, fullName: 'Byron Bear' },
+              },
+            },
+            venue: { name: 'Source Park', timeZone: { id: 'America/New_York' } },
+          }],
+        }],
+      });
+    }
+    if (value.includes('/standings?')) {
+      return makeJsonResponse({
+        records: [{
+          teamRecords: [
+            {
+              team: { id: 1, name: 'Alpha City Aces' },
+              wins: 12,
+              losses: 8,
+              gamesPlayed: 20,
+              runDifferential: 25,
+              runsScored: 102,
+              runsAllowed: 77,
+              records: { splitRecords: [{ type: 'lastTen', wins: 7, losses: 3 }] },
+            },
+            {
+              team: { id: 2, name: 'Beta Town Bears' },
+              wins: 9,
+              losses: 11,
+              gamesPlayed: 20,
+              runDifferential: -14,
+              runsScored: 80,
+              runsAllowed: 94,
+              records: { splitRecords: [{ type: 'lastTen', wins: 4, losses: 6 }] },
+            },
+          ],
+        }],
+      });
+    }
+    if (/\/people\/11$/.test(value)) return makeJsonResponse({ people: [{ fullName: 'Ada Ace', pitchHand: { code: 'R' } }] });
+    if (/\/people\/22$/.test(value)) return makeJsonResponse({ people: [{ fullName: 'Byron Bear', pitchHand: { code: 'L' } }] });
+    if (value.includes('/people/11/stats') && value.includes('seasonAdvanced')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { qualityStarts: 3, battersFaced: 50 } }] }] });
+    }
+    if (value.includes('/people/22/stats') && value.includes('seasonAdvanced')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { qualityStarts: 1, battersFaced: 60 } }] }] });
+    }
+    if (value.includes('/people/11/stats')) {
+      return makeJsonResponse({
+        stats: [{ splits: [{ stat: {
+          era: '3.20',
+          whip: '1.10',
+          strikeOuts: 10,
+          baseOnBalls: 3,
+          battersFaced: 50,
+          strikeoutsPer9Inn: '9.00',
+          walksPer9Inn: '2.70',
+          gamesStarted: 4,
+          inningsPitched: '20.0',
+        } }] }],
+      });
+    }
+    if (value.includes('/people/22/stats')) {
+      return makeJsonResponse({
+        stats: [{ splits: [{ stat: {
+          era: '4.50',
+          whip: '1.35',
+          strikeOuts: 12,
+          baseOnBalls: 6,
+          battersFaced: 60,
+          strikeoutsPer9Inn: '8.10',
+          walksPer9Inn: '4.05',
+          gamesStarted: 4,
+          inningsPitched: '18.0',
+        } }] }],
+      });
+    }
+    if (value.includes('/teams/1/stats') && value.includes('group=hitting') && value.includes('stats=season')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { gamesPlayed: 20, ops: '.760', avg: '.250', obp: '.330', slg: '.430' } }] }] });
+    }
+    if (value.includes('/teams/2/stats') && value.includes('group=hitting') && value.includes('stats=season')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { gamesPlayed: 20, ops: '.690', avg: '.230', obp: '.310', slg: '.380' } }] }] });
+    }
+    if (value.includes('/teams/1/stats') && value.includes('sitCodes=vl')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { ops: '.740' } }] }] });
+    }
+    if (value.includes('/teams/1/stats') && value.includes('sitCodes=vr')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { ops: '.770' } }] }] });
+    }
+    if (value.includes('/teams/2/stats') && value.includes('sitCodes=vl')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { ops: '.680' } }] }] });
+    }
+    if (value.includes('/teams/2/stats') && value.includes('sitCodes=vr')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { ops: '.700' } }] }] });
+    }
+    if (value.includes('/teams/1/stats') && value.includes('group=pitching')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { era: '3.60', whip: '1.20', inningsPitched: '80.0', gamesPitched: 20 } }] }] });
+    }
+    if (value.includes('/teams/2/stats') && value.includes('group=pitching')) {
+      return makeJsonResponse({ stats: [{ splits: [{ stat: { era: '4.80', whip: '1.40', inningsPitched: '75.0', gamesPitched: 20 } }] }] });
+    }
+    return makeJsonResponse({}, 404);
+  };
+
+  const envelope = await fetchStatsReadonly({
+    runDate: '2026-05-15',
+    outputDir: 'state/mlb/2026-05-15/discovery',
+    fixturesOnly: false,
+    fetchImpl,
+    now: new Date('2026-05-15T14:00:00.000Z'),
+    mlbGames: [{
+      game_pk: 200001,
+      away_team: 'Alpha City Aces',
+      home_team: 'Beta Town Bears',
+    }],
+  });
+
+  assert.equal(envelope.status, 'ok');
+  assert.equal(envelope.records.length, 1);
+  const record = envelope.records[0];
+  assert.equal(record.game_pk, 200001);
+  assert.equal(record.away_pitcher.k_pct, 0.2);
+  assert.equal(record.away_pitcher.bb_pct, 0.06);
+  assert.equal(record.away_team_stats.runDiff, 25);
+  assert.equal(record.home_team_stats.last10, '4-6');
+  assert.equal(record.away_bullpen.era, 3.6);
+  assert.equal(record.away_lineup_handedness.vsRhpOps, 0.77);
+  assert.equal(record.away_team_woba, null);
+  assert.doesNotMatch(JSON.stringify(record), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+});
+
+test('dynamic composite builder uses stats_adapter and confirmed context without price inputs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mlb-dynamic-composite-'));
+  const runDate = '2026-05-15';
+  const discoveryDir = join(dir, 'mlb', runDate, 'discovery');
+  mkdirSync(discoveryDir, { recursive: true });
+
+  try {
+    writeFileSync(join(discoveryDir, 'mlb_official_adapter.json'), JSON.stringify({
+      source_id: 'mlb_official',
+      status: 'ok',
+      records: [{
+        game_pk: 200001,
+        game_date: runDate,
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        probable_pitchers: { away_id: 11, home_id: 22, away: 'Ada Ace', home: 'Byron Bear' },
+        venue: 'Source Park',
+      }],
+    }));
+    writeFileSync(join(discoveryDir, 'stats_adapter.json'), JSON.stringify({
+      source_id: 'mlb_stats',
+      status: 'ok',
+      records: [{
+        game_pk: 200001,
+        label: 'ACA@BTB',
+        away_team: 'Alpha City Aces',
+        home_team: 'Beta Town Bears',
+        venue: 'Source Park',
+        away_pitcher: { name: 'Ada Ace', mlb_id: 11, hand: 'R', era: 3.2, whip: 1.1, k_pct: 0.2, bb_pct: 0.06, games_started: 4, quality_starts: 3 },
+        home_pitcher: { name: 'Byron Bear', mlb_id: 22, hand: 'L', era: 4.5, whip: 1.35, k_pct: 0.2, bb_pct: 0.1, games_started: 4, quality_starts: 1 },
+        away_team_stats: { wins: 12, losses: 8, gamesPlayed: 20, runDiff: 25, ops: 0.76, last10: '7-3' },
+        home_team_stats: { wins: 9, losses: 11, gamesPlayed: 20, runDiff: -14, ops: 0.69, last10: '4-6' },
+        away_bullpen: { era: 3.6, recentLoadPct: null },
+        home_bullpen: { era: 4.8, recentLoadPct: null },
+        away_lineup_handedness: { vsRhpOps: 0.77, vsLhpOps: 0.74 },
+        home_lineup_handedness: { vsRhpOps: 0.7, vsLhpOps: 0.68 },
+      }],
+    }));
+    writeFileSync(join(discoveryDir, 'weather_adapter.json'), JSON.stringify({
+      source_id: 'weather',
+      status: 'ok',
+      records: [{
+        game_pk: 200001,
+        venue: 'Source Park',
+        temperature: 72,
+        wind_speed: '8 mph',
+        precipitation_risk: 10,
+      }],
+    }));
+    writeFileSync(join(discoveryDir, 'context_adapter.json'), JSON.stringify({
+      source_id: 'lineup_injury_bullpen',
+      status: 'ok',
+      records: [{
+        game_pk: 200001,
+        lineup_status: 'confirmed_or_boxscore_available',
+      }],
+    }));
+
+    const slate = loadDynamicCompositeSlate({ date: runDate, stateRoot: dir });
+    assert.equal(slate.inputs.length, 1);
+    assert.equal(slate.watchGames.length, 0);
+    assert.doesNotMatch(JSON.stringify(slate.inputs[0]), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+
+    const result = runComposite(slate.inputs[0]);
+    const categories = result.gameLedger.away.evidence_ledger
+      .filter(row => row.present)
+      .map(row => row.category);
+    assert.ok(categories.includes('starting_pitcher_signal'));
+    assert.ok(categories.includes('season_form'));
+    assert.ok(categories.includes('lineup_handedness_matchup'));
+    assert.ok(result.gameLedger.away.layers_present >= 6);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('CLI defaults to fixtures-only and writes discovery summary', () => {
