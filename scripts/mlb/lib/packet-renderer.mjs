@@ -532,3 +532,113 @@ export function renderBlockPacket(block, perGamePackets) {
 
   return all.join('\n');
 }
+
+// ---- compact slate renderer (Telegram-friendly) ----------------------------
+//
+// One game = two lines max:
+//   STATUS  AWAY@HOME  →  Lane
+//   <≤2-sentence why>
+//
+// WATCH / NO CLEAR PICK games are collapsed into a single footer line.
+// Raw market prices (¢, liq=, oi=, vol=) are never shown.
+// Designed to fit in ONE Telegram message for a full slate.
+//
+// Optional `compositeOverrides` map: game_key → { status, lane, why }
+// When provided, composite-model picks replace the market-engine signal.
+
+export function renderCompactSlate(block, perGamePackets, compositeOverrides = new Map()) {
+  const date  = block.lead_first_pitch_ct ?? block.block_id ?? '';
+  const lines = [`MLB — ${block.block_id}  ${date}`, '─'.repeat(32)];
+
+  const STATUS_EMOJI = { PICK: '★', PLAY: '★', CLEAR: '★', LEAN: '◆', WATCH: '○', 'NO CLEAR PICK': '–' };
+  const STATUS_RANK  = { PICK: 0, PLAY: 0, CLEAR: 0, LEAN: 1, WATCH: 2, 'NO CLEAR PICK': 3 };
+
+  const sorted = sortPacketsByDecision(perGamePackets);
+  const watchGames  = [];
+  const pickedGames = [];
+
+  for (const p of sorted) {
+    const override = compositeOverrides.get(p.gameKey ?? p.game_key ?? '');
+    const matchup = `${p.awayAbbrev ?? '?'}@${p.homeAbbrev ?? '?'}`;
+
+    if (override) {
+      const rank = STATUS_RANK[override.status] ?? STATUS_RANK[p.bestLaneDecisionLabel] ?? 3;
+      if (rank <= 1) {
+        pickedGames.push({ matchup, status: override.status, lane: override.lane, why: override.why ?? '', rank });
+      } else {
+        watchGames.push(matchup);
+      }
+      continue;
+    }
+
+    const label = p.bestLaneDecisionLabel ?? 'NO CLEAR PICK';
+    const rank  = STATUS_RANK[label] ?? 3;
+
+    if (rank <= 1) {
+      // Distill the raw market reason into ≤2 clean sentences.
+      const rawReason = p.bestLaneReason ?? '';
+      const why = distillReason(rawReason, label);
+      pickedGames.push({ matchup, status: label, lane: p.bestLane ?? '', why, rank });
+    } else {
+      watchGames.push(matchup);
+    }
+  }
+
+  pickedGames.sort((a, b) => a.rank - b.rank);
+
+  for (const g of pickedGames) {
+    const emoji = STATUS_EMOJI[g.status] ?? '◆';
+    lines.push(`${emoji} ${g.status.padEnd(5)}  ${g.matchup.padEnd(10)}→  ${laneName(g.lane)}`);
+    if (g.why) lines.push(g.why);
+    lines.push('');
+  }
+
+  if (watchGames.length > 0) {
+    if (pickedGames.length > 0) lines.push('─'.repeat(32));
+    lines.push(`○ WATCH  ${watchGames.join(' · ')}`);
+    lines.push('No actionable edge — board awaits starters, lineups, fundamentals.');
+  }
+
+  lines.push('─'.repeat(32));
+  lines.push('Research only. No trades placed.');
+
+  return lines.join('\n');
+}
+
+function laneName(lane) {
+  const MAP = {
+    winner: 'ML', spread: 'Run Line', total: 'Total',
+    yfri: 'YRFI/NRFI', moneyline_away: 'Away ML', moneyline_home: 'Home ML',
+    run_line_away: 'Away -1.5', run_line_home: 'Home -1.5',
+    total_over: 'OVER', total_under: 'UNDER', yrfi: 'YRFI', nrfi: 'NRFI',
+  };
+  return MAP[lane] ?? lane;
+}
+
+// Condense a verbose market-engine reason string into ≤2 tight sentences.
+// Strips raw price data (¢, liq=, oi=, vol=) and structural jargon.
+function distillReason(raw, status) {
+  if (!raw) return '';
+  // Remove price noise
+  let s = raw
+    .replace(/YES\([^)]+\)=\d+¢\s*/g, '')
+    .replace(/\d+¢\s*\+\s*\d+¢\s*=\s*\d+¢/g, match => match) // keep totals
+    .replace(/liq=[\d.]+\s*/gi, '')
+    .replace(/oi=[\d.]+\s*/gi, '')
+    .replace(/vol=[\d.]+\s*/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  // Truncate to ~180 chars (≈2 short sentences) at a sentence boundary
+  if (s.length > 200) {
+    const cut = s.slice(0, 200);
+    const lastPeriod = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    s = lastPeriod > 80 ? cut.slice(0, lastPeriod + 1) : cut + '…';
+  }
+  // If it reads like "Fundamentals required: ..." replace with a clean placeholder
+  if (/^Fundamentals required/i.test(s)) {
+    return status === 'LEAN'
+      ? 'Market signal detected; composite fundamentals will surface the edge when lineups confirm.'
+      : 'Awaiting confirmed starters and lineups to support this lane.';
+  }
+  return s;
+}

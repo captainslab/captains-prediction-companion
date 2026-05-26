@@ -106,28 +106,19 @@ test('summarizeMarketCoverage flags MISSING / UNQUOTED / OK', () => {
   assert.equal(cov.rfi.status, 'MISSING');
 });
 
-test('renderGameSection emits required structural headings + MISSING markers', () => {
+test('renderGameSection emits matchup, time, and composite-pending status', () => {
   const game = {
     game_key: '26MAY192140SFAZ',
     away: 'SF', home: 'AZ', away_full: 'San Francisco Giants', home_full: 'Arizona Diamondbacks',
     start_utc: '2026-05-20T01:40:00.000Z', start_ct: '2026-05-19 20:40 CT',
-    series: {}, // all missing
+    series: {},
   };
   const out = renderGameSection(game);
   const txt = out.text;
-  for (const h of [
-    'Game:', '- Matchup:', '- First pitch:', '- Venue/weather:',
-    '- Probable starters:', '- Market snapshot:',
-    'Main pick review:', '- ML:', '- Spread:', '- Total:',
-    '- Best side:', '- Decision:', '- Reasoning:',
-    'Game total ceiling:', 'Props:', '- Home runs:',
-    '- Away starter strikeout ceiling:', '- Home starter strikeout ceiling:',
-    'YFRI/NFRI:', 'Game summary and history:',
-    'Final game call:', '- Best available angle:',
-    '- Confidence:', 'NO CLEAR PICK',
-  ]) {
-    assert.ok(txt.includes(h), `missing heading/text: ${h}`);
-  }
-  // Required: K props default to WATCH (or NO CLEAR PICK), never LEAN.
-  assert.ok(!/Decision: LEAN/.test(txt), 'K-prop section must not LEAN by default');
+  assert.ok(txt.includes('SF @ AZ'), 'missing matchup');
+  assert.ok(txt.includes('20:40 CT'), 'missing game time');
+  assert.ok(txt.includes('pending'), 'missing composite-pending status');
+  assert.equal(out.analysis.final.decision_status, 'NO CLEAR PICK');
+  assert.ok(!txt.includes('YES '), 'must not include market prices');
+  assert.ok(!txt.includes('¢'), 'must not include cent prices');
 });

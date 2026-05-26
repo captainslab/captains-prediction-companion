@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// One-shot helper invoked by cron: send rendered+undelivered windows for TODAY UTC.
+// One-shot helper invoked by cron: send rendered+undelivered windows for TODAY CT.
+// Uses America/Chicago date so late-night games (post-midnight UTC) stay on the
+// correct slate date rather than rolling over to the next UTC day at 7pm CT.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 const PLAN = `state/mlb/${TODAY}/slate-run-plan.json`;
 if (!fs.existsSync(PLAN)) { console.log(`no plan for ${TODAY}`); process.exit(0); }
 
@@ -33,34 +34,6 @@ writePlan();
 
 if (sendList.length === 0) { console.log('no due windows to send'); process.exit(0); }
 
-const CHUNK = 3500;
-function chunkText(text) {
-  const lines = text.split('\n');
-  const chunks = [];
-  let cur = '';
-  for (const ln of lines) {
-    const add = (cur ? cur + '\n' : '') + ln;
-    if (add.length > CHUNK && cur) { chunks.push(cur); cur = ln; }
-    else cur = add;
-  }
-  if (cur) chunks.push(cur);
-  return chunks;
-}
-
-async function tgSend(text) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
-  if (!token || !chat) throw new Error('telegram env missing');
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
-  });
-  const j = await res.json();
-  if (!j.ok) throw new Error('telegram fail: ' + JSON.stringify(j));
-  return j.result.message_id;
-}
-
 // Load env from project .env if present
 function loadEnv(file) {
   if (!fs.existsSync(file)) return;
@@ -75,46 +48,51 @@ function loadEnv(file) {
 loadEnv('.env');
 loadEnv('.env.local');
 
+async function tgSendDocument(filePath, caption) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
+  if (!token || !chat) throw new Error('telegram env missing');
+  const form = new FormData();
+  form.append('chat_id', chat);
+  form.append('caption', caption);
+  form.append('document', new Blob([fs.readFileSync(filePath)], { type: 'text/plain' }), path.basename(filePath));
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+    method: 'POST',
+    body: form,
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error('telegram fail: ' + JSON.stringify(j));
+  return j.result.message_id;
+}
+
+function countPicks(text) {
+  let n = 0;
+  for (const ln of text.split('\n')) {
+    if (/^[-★◆]\s*(PICK|PLAY|CLEAR|LEAN)/i.test(ln)) { n++; continue; }
+    const m = ln.match(/^- (Decision|Confidence):\s*(.+?)\s*$/);
+    if (m && /^(CLEAR|LEAN)/i.test(m[2]) && !/^NO CLEAR PICK/i.test(m[2])) n++;
+  }
+  return n;
+}
+
 const summary = [];
 for (const w of sendList) {
-  let text = fs.readFileSync(w.last_artifact, 'utf8');
-  // count CLEAR/LEAN on Decision/Confidence lines, excluding "NO CLEAR PICK"
-  let clearLean = 0;
-  for (const ln of text.split('\n')) {
-    const m = ln.match(/^- (Decision|Confidence):\s*(.+?)\s*$/);
-    if (!m) continue;
-    const val = m[2].trim();
-    if (/^NO CLEAR PICK/i.test(val)) continue;
-    const tok = val.toUpperCase();
-    if (tok === 'CLEAR' || tok === 'LEAN') clearLean++;
+  const artifactPath = (w.compact_artifact && fs.existsSync(w.compact_artifact))
+    ? w.compact_artifact
+    : w.last_artifact;
+  const text = fs.readFileSync(artifactPath, 'utf8');
+  const clearLean = countPicks(text);
+  if (clearLean === 0) {
+    console.log(`skip ${w.cluster_id} — no picks`);
+    continue;
   }
-  const mode = clearLean === 0 ? 'BOARD_ONLY' : 'PICKS_PRESENT';
-  const oldTitle = '=== Captain MLB — Pre-Lock Pick Report ===';
-  const newTitle = mode === 'BOARD_ONLY'
-    ? '=== Captain MLB — NO CLEAR PICK REPORT — board only ==='
-    : oldTitle;
-  const subhdr = mode === 'BOARD_ONLY'
-    ? 'mode: BOARD_ONLY — scaffolding build; no fair-value model, lineups, weather, park, starter splits, or ump/handedness gates integrated yet. Use as decision-support board, NOT as picks.'
-    : 'mode: PICKS_PRESENT — at least one game has a CLEAR or LEAN; review evidence before acting.';
-  if (text.startsWith(oldTitle)) {
-    text = newTitle + '\n' + subhdr + '\n' + text.slice(oldTitle.length + 1);
-  } else if (/^=== Captain MLB[^\n]*\n/.test(text)) {
-    text = newTitle + '\n' + subhdr + '\n' + text.replace(/^=== Captain MLB[^\n]*\n/, '');
-  } else {
-    text = newTitle + '\n' + subhdr + '\n' + text;
-  }
-  const chunks = chunkText(text);
-  const M = chunks.length;
-  const ids = [];
-  for (let i = 0; i < M; i++) {
-    const body = M > 1 ? `[part ${i+1}/${M}]\n${chunks[i]}` : chunks[i];
-    const id = await tgSend(body);
-    ids.push(id);
-  }
+  const caption = `MLB ${w.cluster_id} — ${clearLean} pick${clearLean !== 1 ? 's' : ''}`;
+
+  const id = await tgSendDocument(artifactPath, caption);
   w.status = 'sent';
   w.delivered_idempotency_key = w.idempotency_key;
   w.delivered_utc = new Date().toISOString();
-  w.delivered_telegram_message_ids = ids;
+  w.delivered_telegram_message_ids = [id];
   w.delivered_mode = mode;
   w.clear_lean_count = clearLean;
   writePlan();

@@ -66,78 +66,36 @@ async function gatherWindowGames(date, gameKeys, options = {}) {
 
 export function buildReportText({ plan, window: win, games }) {
   const sections = games.map((g) => ({ game: g, ...renderGameSection(g) }));
-  const evidenceLeanItems = [];
-  const marketOnlyItems = [];
-  for (const s of sections) {
-    const status = s.analysis.final.decision_status;
-    if (status === 'EVIDENCE LEAN' || status === 'STRONG EVIDENCE LEAN') {
-      evidenceLeanItems.push({
-        matchup: `${s.game.away_full || s.game.away} at ${s.game.home_full || s.game.home}`,
-        final: s.analysis.final,
-        sections: s.analysis.sections,
-      });
-    } else if (status === 'MARKET-ONLY LEAN') {
-      marketOnlyItems.push({
-        matchup: `${s.game.away_full || s.game.away} at ${s.game.home_full || s.game.home}`,
-        final: s.analysis.final,
-        sections: s.analysis.sections,
-      });
-    }
-  }
-  const hasPicks = evidenceLeanItems.length > 0;
-  const title = hasPicks
-    ? '=== Captain MLB — Pre-Lock Evidence-Lean Report ==='
-    : marketOnlyItems.length
-      ? '=== Captain MLB — MARKET-ONLY LEAN REPORT — evidence incomplete ==='
-      : '=== Captain MLB — NO CLEAR PICK REPORT ===';
+  const pickItems = sections.filter((s) => {
+    const st = s.analysis.final.decision_status;
+    return st === 'EVIDENCE LEAN' || st === 'STRONG EVIDENCE LEAN' || st === 'CLEAR' || st === 'LEAN';
+  });
+  const hasPicks = pickItems.length > 0;
+
   const lines = [];
-  lines.push(title);
-  lines.push(`date: ${plan.date}`);
-  lines.push(`cluster: ${win.cluster_id}`);
-  lines.push(`report_at_ct: ${win.report_at_ct}`);
-  lines.push(`lead_first_pitch_ct: ${win.lead_first_pitch_ct}`);
-  lines.push(`games_in_window: ${games.length}`);
-  lines.push(`game_keys: ${win.game_keys.join(', ')}`);
-  lines.push(`idempotency_key: ${win.idempotency_key}`);
-  lines.push(`mode: ${hasPicks ? 'EVIDENCE_LEAN_REPORT' : marketOnlyItems.length ? 'MARKET_ONLY_LEAN_REPORT' : 'NO_CLEAR_PICK_REPORT'}`);
-  lines.push(`evidence_lean_count: ${evidenceLeanItems.length}`);
-  lines.push(`market_only_lean_count: ${marketOnlyItems.length}`);
-  lines.push(`generated_utc: ${new Date().toISOString()}`);
+  lines.push(`=== Captain MLB — ${win.cluster_id} | ${win.lead_first_pitch_ct} ===`);
+  lines.push(`generated: ${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`);
   lines.push('');
-  lines.push('TLDR');
-  lines.push(`- Evidence leans: ${evidenceLeanItems.length}`);
-  lines.push(`- Market-only leans downgraded for incomplete context: ${marketOnlyItems.length}`);
-  lines.push('- Price, open interest, spread shape, movement, and liquidity cannot create a real pick by themselves.');
-  lines.push('');
+
   if (hasPicks) {
-    lines.push('--- EVIDENCE LEAN SUMMARY ---');
-    for (const it of evidenceLeanItems) {
-      lines.push(`- [${it.final.decision_status}] ${it.matchup}`);
-      lines.push(`    ${it.final.reason}`);
+    lines.push('PICKS');
+    for (const it of pickItems) {
+      const away = it.game.away ?? '?';
+      const home = it.game.home ?? '?';
+      lines.push(`★ ${away} @ ${home}  — ${it.analysis.final.decision_status}`);
+      lines.push(`  ${it.analysis.final.reason}`);
     }
-    lines.push('');
-  } else if (marketOnlyItems.length) {
-    lines.push('--- MARKET-ONLY LEAN SUMMARY (NOT REAL PICKS) ---');
-    for (const it of marketOnlyItems) {
-      lines.push(`- [${it.final.decision_status}] ${it.matchup}`);
-      lines.push(`    Missing evidence: ${it.final.decision_process.missingEvidence.join('; ')}`);
-      lines.push(`    Board signal: ${it.final.reason}`);
-    }
-    lines.push('');
-  } else {
-    lines.push('No section across any game produced an evidence-supported lean.');
-    lines.push('Board attached for review only — no pick is being claimed.');
     lines.push('');
   }
+
+  lines.push('GAMES');
   for (const s of sections) {
     lines.push(s.text);
     lines.push('');
-    lines.push('---');
-    lines.push('');
   }
-  lines.push('No trades placed. No bankroll sizing. Research only.');
-  lines.push('Markets covered per game: ML (KXMLBGAME), Spread (KXMLBSPREAD), Total (KXMLBTOTAL), HR (KXMLBHR), K props (KXMLBKS), YFRI/NFRI (KXMLBRFI).');
-  return { text: lines.join('\n'), hasPicks, clearLeanCount: evidenceLeanItems.length, marketOnlyLeanCount: marketOnlyItems.length };
+
+  lines.push('No trades placed. Research only.');
+  return { text: lines.join('\n'), hasPicks, clearLeanCount: pickItems.length, marketOnlyLeanCount: 0 };
 }
 
 async function main() {

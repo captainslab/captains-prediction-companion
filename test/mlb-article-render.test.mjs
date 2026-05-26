@@ -277,7 +277,7 @@ test('TLDR: slate article has TLDR immediately after headline, no engine vocab',
   }
 });
 
-test('cron pre-lock report downgrades incomplete raw LEAN to MARKET-ONLY LEAN', () => {
+test('cron pre-lock report produces clean no-pick output without market analysis', () => {
   const game = makeGame({ away: 'TEX', home: 'COL', gameKey: 'GCRON' });
   const built = buildReportText({
     plan: { date: '2026-05-18' },
@@ -292,17 +292,18 @@ test('cron pre-lock report downgrades incomplete raw LEAN to MARKET-ONLY LEAN', 
   });
   assert.equal(built.hasPicks, false);
   assert.equal(built.clearLeanCount, 0);
-  assert.equal(built.marketOnlyLeanCount, 1);
-  assert.match(built.text, /MARKET-ONLY LEAN REPORT/);
-  assert.match(built.text, /NOT REAL PICKS/);
-  assert.match(built.text, /Price, open interest, spread shape, movement, and liquidity cannot create a real pick by themselves/);
+  assert.equal(built.marketOnlyLeanCount, 0);
+  assert.match(built.text, /W99/);
+  assert.match(built.text, /TEX @ COL/);
+  assert.doesNotMatch(built.text, /¢/);
+  assert.doesNotMatch(built.text, /MARKET-ONLY LEAN/);
 });
 
-test('cron pre-lock report downgrades raw player-prop CLEAR to MARKET-ONLY LEAN', () => {
+test('cron pre-lock report does not include prop ladders or market prices', () => {
   const game = makeGame({ away: 'TEX', home: 'COL', gameKey: 'GPROP' });
   game.series.hr.markets = [
-    { ticker: 'KXMLBHR-GPROP-TEXSMITH-1', title: 'John Smith: 1+ home runs?', yes_ask_dollars: 0.04, no_ask_dollars: 0.97, yes_bid_dollars: 0.03, no_bid_dollars: 0.96, floor_strike: 1, open_interest_fp: 200, volume_fp: 20 },
-    { ticker: 'KXMLBHR-GPROP-TEXSMITH-2', title: 'John Smith: 2+ home runs?', yes_ask_dollars: 0.10, no_ask_dollars: 0.91, yes_bid_dollars: 0.09, no_bid_dollars: 0.90, floor_strike: 2, open_interest_fp: 200, volume_fp: 20 },
+    { ticker: 'KXMLBHR-GPROP-TEXSMITH-1', title: 'John Smith: 1+ home runs?', yes_ask_dollars: 0.04, no_ask_dollars: 0.97, floor_strike: 1, open_interest_fp: 200, volume_fp: 20 },
+    { ticker: 'KXMLBHR-GPROP-TEXSMITH-2', title: 'John Smith: 2+ home runs?', yes_ask_dollars: 0.10, no_ask_dollars: 0.91, floor_strike: 2, open_interest_fp: 200, volume_fp: 20 },
   ];
   game.series.hr.market_count = game.series.hr.markets.length;
   const built = buildReportText({
@@ -316,9 +317,8 @@ test('cron pre-lock report downgrades raw player-prop CLEAR to MARKET-ONLY LEAN'
     },
     games: [game],
   });
-  assert.doesNotMatch(built.text, /- Decision: CLEAR\b/);
-  assert.match(built.text, /Player Prop Research Completeness/);
-  assert.match(built.text, /Raw ladder decision: CLEAR/);
-  assert.match(built.text, /Decision status: MARKET-ONLY LEAN/);
-  assert.match(built.text, /not a player-prop pick without domain evidence/i);
+  assert.doesNotMatch(built.text, /Player Prop Research Completeness/);
+  assert.doesNotMatch(built.text, /yes_ask/);
+  assert.doesNotMatch(built.text, /¢/);
+  assert.match(built.text, /TEX @ COL/);
 });

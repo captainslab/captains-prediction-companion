@@ -344,7 +344,7 @@ async function main() {
 
   // 4. Load renderer (will throw with a clear message if missing).
   const renderer = await getPacketRenderer();
-  const { renderPerGamePacket, renderBlockPacket } = renderer;
+  const { renderPerGamePacket, renderBlockPacket, renderCompactSlate } = renderer;
 
   // 5. Process each due block.
   for (const block of dueBlocks) {
@@ -445,9 +445,16 @@ async function main() {
       writeFileSync(gameTxtPath, p.text || '', 'utf8');
     }
 
-    // Block packet.
+    // Block packet (full).
     const blockTxtPath = resolve(outDir, `${base}-block.txt`);
     writeFileSync(blockTxtPath, packetTextPayload(blockPacket), 'utf8');
+
+    // Compact artifact — single Telegram message, picks + 2-sentence why.
+    const compactText = renderCompactSlate ? renderCompactSlate(block, perGamePackets) : null;
+    const compactTxtPath = compactText ? resolve(outDir, `${base}-compact.txt`) : null;
+    if (compactText && compactTxtPath) {
+      writeFileSync(compactTxtPath, compactText, 'utf8');
+    }
 
     // Meta.
     const metaPath = resolve(outDir, `${base}.meta.json`);
@@ -470,6 +477,7 @@ async function main() {
         b.lineup_status = lineupStatus;
         b.last_rendered_utc = new Date().toISOString();
         b.last_artifact = blockTxtPath;
+        if (compactTxtPath) b.compact_artifact = compactTxtPath;
       }
     }
     saveScheduleAtomic(schedulePath, schedule);
