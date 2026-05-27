@@ -86,6 +86,7 @@ for (const w of sendList) {
     console.log(`skip ${w.cluster_id} — no picks`);
     continue;
   }
+  const mode = (artifactPath === w.compact_artifact) ? 'compact' : 'verbose';
   const caption = `MLB ${w.cluster_id} — ${clearLean} pick${clearLean !== 1 ? 's' : ''}`;
 
   const id = await tgSendDocument(artifactPath, caption);

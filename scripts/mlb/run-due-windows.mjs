@@ -37,16 +37,27 @@ async function main() {
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
   const now = Date.now();
   const due = (plan.report_windows || []).filter((w) => {
-    if (w.status === 'rendered' || w.status === 'sent') return false;
+    if (w.status === 'sent') return false;
     const t = Date.parse(w.report_at_utc);
-    return Number.isFinite(t) && t <= now && (now - t) <= opts.graceMinutes * 60_000;
+    const isInitialDue = Number.isFinite(t) && t <= now && (now - t) <= opts.graceMinutes * 60_000;
+    if (w.status !== 'rendered' && isInitialDue) return true;
+    // One-shot final retry if lineups were still pending at first render.
+    if (w.status === 'rendered' && !w.final_retry_done) {
+      const r = Date.parse(w.final_retry_at_utc);
+      if (Number.isFinite(r) && r <= now && (now - r) <= opts.graceMinutes * 60_000) {
+        const pendingLineups = w.lineup_status === 'pending' || (w.clear_lean_count ?? 0) === 0;
+        return pendingLineups;
+      }
+    }
+    return false;
   });
   if (!due.length) {
     console.log(`[mlb-run-due] no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
     return;
   }
   for (const w of due) {
-    console.log(`[mlb-run-due] firing cluster=${w.cluster_id} report_at=${w.report_at_utc}`);
+    const isRetry = w.status === 'rendered';
+    console.log(`[mlb-run-due] firing cluster=${w.cluster_id} report_at=${w.report_at_utc}${isRetry ? ' (final-retry)' : ''}`);
     const r = spawnSync('node', [
       'scripts/mlb/pre-lock-report.mjs',
       '--date', opts.date,
@@ -56,6 +67,19 @@ async function main() {
     ], { stdio: 'inherit' });
     if (r.status !== 0) {
       console.error(`[mlb-run-due] cluster=${w.cluster_id} exited status=${r.status}`);
+    }
+    if (isRetry) {
+      // Read-modify-write to mark final_retry_done so we never spin again.
+      try {
+        const cur = JSON.parse(readFileSync(planPath, 'utf8'));
+        for (const x of cur.report_windows || []) {
+          if (x.cluster_id === w.cluster_id) x.final_retry_done = true;
+        }
+        const { writeFileSync } = await import('node:fs');
+        writeFileSync(planPath, JSON.stringify(cur, null, 2));
+      } catch (e) {
+        console.error(`[mlb-run-due] failed to mark final_retry_done for ${w.cluster_id}: ${e.message}`);
+      }
     }
   }
 }
