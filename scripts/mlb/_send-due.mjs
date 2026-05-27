@@ -1,13 +1,43 @@
 #!/usr/bin/env node
-// One-shot helper invoked by cron: send rendered+undelivered windows for TODAY CT.
-// Uses America/Chicago date so late-night games (post-midnight UTC) stay on the
-// correct slate date rather than rolling over to the next UTC day at 7pm CT.
+// One-shot helper invoked by cron: send rendered+undelivered composite windows for TODAY CT.
+// MLB composite-only: only windows from late-slate-composite-refresh are delivered.
+// Forbidden-string guard blocks any artifact that contains pricing or legacy board content.
+// Uses America/Chicago date so late-night games stay on the correct slate date.
 import fs from 'node:fs';
 import path from 'node:path';
 
-const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
-const PLAN = `state/mlb/${TODAY}/slate-run-plan.json`;
+function parseArgs(argv) {
+  const opts = { date: null, stateRoot: 'state', dryRun: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--date') opts.date = argv[++i];
+    else if (a === '--state-root') opts.stateRoot = argv[++i];
+    else if (a === '--dry-run') opts.dryRun = true;
+    else throw new Error(`Unknown argument: ${a}`);
+  }
+  if (!opts.date) opts.date = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  return opts;
+}
+
+const opts = parseArgs(process.argv.slice(2));
+const TODAY = opts.date;
+const PLAN = path.join(opts.stateRoot, 'mlb', TODAY, 'slate-run-plan.json');
 if (!fs.existsSync(PLAN)) { console.log(`no plan for ${TODAY}`); process.exit(0); }
+
+// Only windows produced by the composite pipeline are eligible for delivery.
+const COMPOSITE_SOURCE = 'late-slate-composite-refresh';
+
+// Strings that must never appear in an MLB Telegram artifact.
+const FORBIDDEN = [
+  'BOARD_ONLY', 'MARKET-ONLY', 'MARKET_ONLY', 'KXMLB',
+  '¢', 'open interest', 'open_interest',
+  ' bid', ' ask', ' volume',
+];
+
+export function hasForbiddenContent(text) {
+  const lower = text.toLowerCase();
+  return FORBIDDEN.some((s) => lower.includes(s.toLowerCase()));
+}
 
 const plan = JSON.parse(fs.readFileSync(PLAN, 'utf8'));
 const windows = plan.report_windows || [];
@@ -23,6 +53,11 @@ for (const w of windows) {
   if (w.status !== 'rendered') continue;
   if (w.delivered_idempotency_key && w.delivered_idempotency_key === w.idempotency_key) continue;
   if (!w.last_artifact) continue;
+  // Composite-only guard: skip windows not produced by the composite pipeline.
+  if (w.source !== COMPOSITE_SOURCE) {
+    console.log(`skip ${w.cluster_id} — not composite source (${w.source ?? 'none'})`);
+    continue;
+  }
   if (!fs.existsSync(w.last_artifact)) {
     w.status = 'error';
     w.error = 'artifact_missing';
@@ -89,6 +124,15 @@ for (const w of sendList) {
   const mode = (artifactPath === w.compact_artifact) ? 'compact' : 'verbose';
   const caption = `MLB ${w.cluster_id} — ${clearLean} pick${clearLean !== 1 ? 's' : ''}`;
 
+  // Forbidden-string guard: never deliver an artifact that contains pricing or legacy board labels.
+  if (hasForbiddenContent(text)) {
+    console.error(`BLOCK ${w.cluster_id} — artifact contains forbidden content (pricing/board data). Not sent.`);
+    continue;
+  }
+  if (opts.dryRun) {
+    console.log(`[dry-run] would send ${w.cluster_id} (${mode}) — ${clearLean} pick(s)`);
+    continue;
+  }
   const id = await tgSendDocument(artifactPath, caption);
   w.status = 'sent';
   w.delivered_idempotency_key = w.idempotency_key;

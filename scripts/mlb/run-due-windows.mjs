@@ -55,32 +55,39 @@ async function main() {
     console.log(`[mlb-run-due] no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
     return;
   }
-  for (const w of due) {
-    const isRetry = w.status === 'rendered';
-    console.log(`[mlb-run-due] firing cluster=${w.cluster_id} report_at=${w.report_at_utc}${isRetry ? ' (final-retry)' : ''}`);
-    const r = spawnSync('node', [
-      'scripts/mlb/pre-lock-report.mjs',
-      '--date', opts.date,
-      '--state-root', opts.stateRoot,
-      '--cluster', w.cluster_id,
-      '--dry-run',
-    ], { stdio: 'inherit' });
-    if (r.status !== 0) {
-      console.error(`[mlb-run-due] cluster=${w.cluster_id} exited status=${r.status}`);
-    }
-    if (isRetry) {
-      // Read-modify-write to mark final_retry_done so we never spin again.
-      try {
-        const cur = JSON.parse(readFileSync(planPath, 'utf8'));
-        for (const x of cur.report_windows || []) {
-          if (x.cluster_id === w.cluster_id) x.final_retry_done = true;
+
+  // Composite-only dispatch: fire one composite refresh for all due windows.
+  // pre-lock-report.mjs (legacy board-only path) is intentionally bypassed here.
+  const clusterIds = due.map((w) => w.cluster_id).join(', ');
+  console.log(`[mlb-run-due] firing composite refresh for ${due.length} due window(s): ${clusterIds}`);
+  const r = spawnSync('node', [
+    'scripts/mlb/late-slate-composite-refresh.mjs',
+    '--date', opts.date,
+    '--state-root', opts.stateRoot,
+    '--no-send',  // _send-due.mjs cron handles Telegram delivery
+  ], { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error(`[mlb-run-due] composite refresh exited status=${r.status}`);
+  }
+
+  // Mark each triggered cluster window as rendered with a non-deliverable source
+  // so it is not re-fired during the grace window by the next poll iteration.
+  try {
+    const { writeFileSync } = await import('node:fs');
+    const cur = JSON.parse(readFileSync(planPath, 'utf8'));
+    for (const fired of due) {
+      for (const x of cur.report_windows || []) {
+        if (x.cluster_id === fired.cluster_id && x.status !== 'sent') {
+          x.status = 'rendered';
+          x.last_rendered_utc = new Date().toISOString();
+          x.source = 'composite-refresh-trigger';
+          if (fired.status === 'rendered') x.final_retry_done = true;
         }
-        const { writeFileSync } = await import('node:fs');
-        writeFileSync(planPath, JSON.stringify(cur, null, 2));
-      } catch (e) {
-        console.error(`[mlb-run-due] failed to mark final_retry_done for ${w.cluster_id}: ${e.message}`);
       }
     }
+    writeFileSync(planPath, JSON.stringify(cur, null, 2));
+  } catch (e) {
+    console.error(`[mlb-run-due] failed to mark windows rendered: ${e.message}`);
   }
 }
 

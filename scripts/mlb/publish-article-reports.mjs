@@ -225,6 +225,15 @@ async function telegramSendDocument({ token, chat }, filePath, caption) {
 // --- Main pipeline ---
 
 export async function publish(opts) {
+  // Legacy article-report Telegram sends are disabled. The composite pipeline
+  // (late-slate-composite-refresh.mjs → _send-due.mjs) is the only authorized
+  // MLB Telegram delivery path. Article reports use pricing/market-only labels
+  // that must not appear in Telegram output.
+  if (opts.sendTelegram) {
+    throw new Error(
+      '[mlb-articles] --send-telegram is disabled. Use late-slate-composite-refresh.mjs for MLB Telegram delivery.',
+    );
+  }
   const { plan, path: planPath } = loadPlan(opts.stateRoot, opts.date);
   const planGameKeys = plan.games.map((g) => g.game_key);
   if (!planGameKeys.length) throw new Error(`Plan ${planPath} has zero games.`);
