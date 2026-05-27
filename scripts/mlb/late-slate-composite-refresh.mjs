@@ -81,12 +81,16 @@ export function runComposite(input) {
 
 const PICK_ICON   = { PICK: '★', EVIDENCE_LEAN: '◆', LEAN: '◇', WATCH: '○' };
 
-function topPickLine(label, board) {
+function topPickLine(label, board, ouLine) {
   const tp = board.top_pick;
   if (!tp || tp.status === 'NO CLEAR PICK' || tp.status === 'WATCH') return null;
   const icon = PICK_ICON[tp.status] ?? '·';
   const diff = board.score_differential != null ? `  (diff: ${board.score_differential > 0 ? '+' : ''}${board.score_differential})` : '';
-  return `${icon} ${tp.status.padEnd(13)} ${label.padEnd(10)} →  ${tp.label}${diff}`;
+  let pickLabel = tp.label;
+  if (ouLine != null && (tp.lane === 'total_over' || tp.lane === 'total_under')) {
+    pickLabel = tp.label.replace(/^Total /, '') + ' ' + ouLine;
+  }
+  return `${icon} ${tp.status.padEnd(13)} ${label.padEnd(10)} →  ${pickLabel}${diff}`;
 }
 
 function whyLine(board, gameLedger) {
@@ -137,9 +141,9 @@ function renderCompactRefresh({ date, results, watchGames }) {
 
   // Picks section
   let pickCount = 0;
-  for (const { result, label } of results) {
+  for (const { result, label, ouLine } of results) {
     const { board, gameLedger } = result;
-    const line = topPickLine(label, board);
+    const line = topPickLine(label, board, ouLine);
     if (line) {
       lines.push(line);
       const why = whyLine(board, gameLedger);
@@ -227,6 +231,8 @@ function mapPitcher(pitcher) {
     hand: pitcher.hand ?? null,
     era: numeric(pitcher.era),
     fip: numeric(pitcher.fip),
+    fip_source: pitcher.fip_source ?? null,
+    era_source: pitcher.era_source ?? null,
     whip: numeric(pitcher.whip),
     k_per_9: numeric(pitcher.k_per_9),
     bb_per_9: numeric(pitcher.bb_per_9),
@@ -366,9 +372,14 @@ export function loadDynamicCompositeSlate({ date, stateRoot = 'state', allowPend
   const weather = readJsonIfExists(resolve(discoveryDir, 'weather_adapter.json'));
   const context = readJsonIfExists(resolve(discoveryDir, 'context_adapter.json'));
 
+  const sportsbook = readJsonIfExists(resolve(discoveryDir, 'sportsbook_adapter.json'));
   const statsByGame = indexByGamePk(stats);
   const weatherByGame = indexByGamePk(weather);
   const contextByGame = indexByGamePk(context);
+  const sbOuByTeams = new Map();
+  for (const rec of safeArray(sportsbook?.records)) {
+    if (rec.over_under != null) sbOuByTeams.set(`${rec.away_team}|${rec.home_team}`, rec.over_under);
+  }
   const games = safeArray(mlb?.records).length > 0 ? safeArray(mlb.records) : safeArray(stats?.records);
   const inputs = [];
   const watchDetails = [];
@@ -389,12 +400,14 @@ export function loadDynamicCompositeSlate({ date, stateRoot = 'state', allowPend
       continue;
     }
 
-    inputs.push(buildResearchInput({
+    const input = buildResearchInput({
       game,
       stats: statsRecord,
       weather: weatherRecord,
       context: contextRecord,
-    }));
+    });
+    input.ou_line = sbOuByTeams.get(`${game.away_team}|${game.home_team}`) ?? null;
+    inputs.push(input);
   }
 
   return {
@@ -459,7 +472,7 @@ async function main() {
   for (const input of slate.inputs) {
     try {
       const result = runComposite(input);
-      results.push({ label: input.label, result });
+      results.push({ label: input.label, result, ouLine: input.ou_line ?? null });
       const tp = result.board.top_pick;
       const statusStr = tp ? `${tp.status} (${result.board.score_differential ?? '?'} diff)` : 'WATCH';
       console.log(`${prefix}   ${input.label}: ${statusStr}  [${result.gameLedger.away.layers_present}L away / ${result.gameLedger.home.layers_present}L home]`);
