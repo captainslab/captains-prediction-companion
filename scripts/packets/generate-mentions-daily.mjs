@@ -46,6 +46,11 @@ import {
   PROFILE_KEY as SPORTS_ANNOUNCER_PROFILE,
   LAYER_DEFS as SPORTS_ANNOUNCER_LAYERS,
 } from '../mentions/profiles/sports-announcer-mentions.mjs';
+import {
+  evaluateSourceLadder,
+  applyQualificationCap,
+  renderSourceLadder,
+} from '../mentions/source-ladder.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 const DEFAULT_WINDOW_DAYS = 7; // forward-looking week
@@ -215,6 +220,26 @@ function eventNameForComposite(event = {}, legacy = null) {
   );
 }
 
+function firstSourceLadderInputs(...carriers) {
+  const keys = ['source_ladder', 'sourceLadder', 'source_ladder_inputs', 'sourceLadderInputs'];
+  for (const carrier of carriers) {
+    if (!carrier || typeof carrier !== 'object') continue;
+    for (const key of keys) {
+      const value = carrier[key];
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    }
+    for (const nestedKey of ['mention_composite', 'mentionComposite', 'composite']) {
+      const nested = carrier[nestedKey];
+      if (!nested || typeof nested !== 'object') continue;
+      for (const key of keys) {
+        const value = nested[key];
+        if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+      }
+    }
+  }
+  return null;
+}
+
 export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -233,10 +258,26 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     layerRecords,
     marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
   });
+
+  // Source ladder (optional — runs if explicit inputs are supplied via market/event/legacy)
+  let ladder = null;
+  let postureFinal = result.posture;
+  let postureCap = null;
+  const ladderInputs = firstSourceLadderInputs(market, event, legacy);
+  if (ladderInputs) {
+    ladder = evaluateSourceLadder({ profile: profileResolution.profile, inputs: ladderInputs });
+    const capRes = applyQualificationCap(result.posture, ladder);
+    postureFinal = capRes.posture;
+    postureCap = capRes.capped ? capRes.cap_reason : null;
+  }
+
   return {
     market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
     profile_basis: profileResolution.basis,
     result,
+    source_ladder: ladder,
+    posture_final: postureFinal,
+    posture_cap_reason: postureCap,
   };
 }
 
@@ -403,6 +444,17 @@ function renderCompositeEvidence(composites) {
       lines.push('      - MISSING: no source notes from present layers');
     }
     lines.push(`    reasoning_summary: ${r.reasoning_summary}`);
+    if (c.source_ladder) {
+      for (const ladderLine of renderSourceLadder(c.source_ladder)) {
+        lines.push(`    ${ladderLine}`);
+      }
+      lines.push(`    posture_final_after_ladder_cap: ${c.posture_final}`);
+      if (c.posture_cap_reason) {
+        lines.push(`    posture_cap_reason: ${c.posture_cap_reason}`);
+      }
+    } else {
+      lines.push('    source_ladder: MISSING (no source-ladder inputs supplied; pricing is still NOT IN SCORE)');
+    }
   }
   return lines;
 }
