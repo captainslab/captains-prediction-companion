@@ -4,8 +4,8 @@ Use Captains Prediction Companion as a private ChatGPT app with Developer mode e
 
 ## Current endpoint
 
-- MCP: `https://displayed-armed-arnold-drum.trycloudflare.com/mcp`
-- Health: `https://displayed-armed-arnold-drum.trycloudflare.com/healthz`
+- MCP: `https://YOUR_DEPLOYMENT_URL/mcp`
+- Health: `https://YOUR_DEPLOYMENT_URL/healthz`
 
 ## Steps
 

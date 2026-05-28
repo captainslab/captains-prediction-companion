@@ -4,7 +4,14 @@
   "description": "ChatGPT-first prediction companion powered by a remote MCP server, with room to grow into a dashboard.",
   "type": "module",
   "main": "src/server.js",
+  "bin": {
+    "cap": "bin/cap.mjs"
+  },
   "scripts": {
+    "cap": "node bin/cap.mjs",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "demo": "node scripts/demo.mjs",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test"

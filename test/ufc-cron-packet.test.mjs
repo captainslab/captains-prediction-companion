@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   evaluateDecisionProcess,
   renderDecisionProcess,
@@ -23,7 +24,7 @@ import {
 
 const UFC_CRON_EXPR = '0 9 * * 6';
 const GENERATOR = 'scripts/packets/generate-ufc-weekly.mjs';
-const REPO = '/home/jordan/captains-prediction-companion';
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const UFC_CRON_LINE = `${UFC_CRON_EXPR} cd ${REPO} && /usr/bin/node ${GENERATOR} >> logs/ufc-weekly.log 2>&1`;
 
 function readUserCrontab() {

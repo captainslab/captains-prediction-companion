@@ -123,7 +123,7 @@ Documentation-only cron example:
 # Documentation only. Do not install yet.
 # Run MLB morning scan at 08:30 America/Chicago.
 CRON_TZ=America/Chicago
-30 8 * * * cd /home/jordan/captains-prediction-companion && ./scripts/mlb-morning-scan --date today
+30 8 * * * cd /path/to/captains-prediction-companion && ./scripts/mlb-morning-scan --date today
 ```
 
 The command path is illustrative. Do not create `scripts/` or runtime code from this spec.
@@ -191,7 +191,7 @@ Documentation-only cron example:
 # Documentation only. Do not install yet.
 # Dispatcher checks whether any active MLB game needs pre-game refresh.
 CRON_TZ=America/Chicago
-*/10 10-23 * * * cd /home/jordan/captains-prediction-companion && ./scripts/mlb-pregame-refresh-dispatcher --date today
+*/10 10-23 * * * cd /path/to/captains-prediction-companion && ./scripts/mlb-pregame-refresh-dispatcher --date today
 ```
 
 The command path is illustrative. Do not create `scripts/` or runtime code from this spec.

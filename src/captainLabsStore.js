@@ -42,8 +42,8 @@ function seedState(baseTime = Date.now()) {
       {
         id: userId,
         profile: {
-          name: 'Jordan',
-          email: 'jordan@captainlabs.io',
+          name: 'Demo User',
+          email: 'user@captainlabs.io',
           role: 'trader',
         },
         preferences: {
