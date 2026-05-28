@@ -1,4 +1,4 @@
-// Source adapter stub: earnings mentions
+// Source adapter: earnings mentions
 //
 // Returns layer records for the earnings_mentions profile.
 // Canonical test event: Dell Earnings Call (keywords: Tailwind, PowerEdge, Headwind)
@@ -7,21 +7,38 @@
 // check the calendar icon (top-right of the Kalshi board) for the last 6 closed
 // earnings events for this company before scraping external transcripts.
 //
-// When a live data source is wired, replace the relevant stub record with a
-// real fetcher that returns { present: true, score, source_basis, source_path, detail }.
+// Three layers now fully wired (previously stubbed):
+//   baseline_relevance   — transcript frequency + analyst density + core-metric flag
+//   source_velocity      — independent source coverage aggregation
+//   sec_filing_language  — SEC filing / press release keyword presence
 //
 // NEVER include bid/ask/odds/volume/open_interest/line_movement in any record.
+
+export {
+  buildBaselineRelevanceRecord,
+  buildSourceVelocityRecord,
+  buildSecFilingLanguageRecord,
+} from './earnings-layer-builders.mjs';
+
+import {
+  buildBaselineRelevanceRecord,
+  buildSourceVelocityRecord,
+  buildSecFilingLanguageRecord,
+} from './earnings-layer-builders.mjs';
 
 /**
  * buildEarningsLayerRecords
  *
  * @param {object} opts
- * @param {string}  opts.company          - Company name (e.g. "Dell Technologies")
- * @param {string}  opts.keyword          - Target mention keyword (e.g. "PowerEdge")
- * @param {object?} opts.earningsEvent    - { call_date_utc, confirmed, fiscal_quarter }
+ * @param {string}  opts.company            - Company name (e.g. "Dell Technologies")
+ * @param {string}  opts.keyword            - Target mention keyword (e.g. "PowerEdge")
+ * @param {object?} opts.earningsEvent      - { call_date_utc, confirmed, fiscal_quarter }
  * @param {object?} opts.closedEventHitRate - { hits, total } from closed-event calendar
- * @param {object?} opts.secFilingMatch   - { found: boolean, filing_type, snippet } from SEC filings
- * @param {object?} opts.analystCoverage  - { mentions_in_coverage: boolean, detail } from analyst reports
+ * @param {object?} opts.secFilingMatch     - { found: boolean, filing_type, snippet } from SEC filings
+ *                                           OR { pressReleaseMentions, tenKMentions, tenQMentions, inRiskFactors, ... }
+ * @param {object?} opts.analystCoverage    - { mentions_in_coverage: boolean, detail } from analyst reports
+ * @param {object?} opts.baselineRelevance  - args for buildBaselineRelevanceRecord (transcriptHitRate, etc.)
+ * @param {object?} opts.sourceVelocity     - args for buildSourceVelocityRecord (sources array, etc.)
  *
  * @returns {object} Map of layerKey → layer record
  */
@@ -32,18 +49,18 @@ export function buildEarningsLayerRecords({
   closedEventHitRate = null,
   secFilingMatch = null,
   analystCoverage = null,
+  baselineRelevance = null,
+  sourceVelocity = null,
 } = {}) {
   const records = {};
 
-  // baseline_relevance — stub
-  records.baseline_relevance = {
-    present: false,
-    score: null,
-    source_basis: 'earnings-calendar-stub: requires product/segment-fit lookup',
-    source_path: null,
-    detail: null,
-    missing_note: `no baseline relevance data for "${company}" / "${keyword}"`,
-  };
+  // baseline_relevance — source-backed via buildBaselineRelevanceRecord
+  records.baseline_relevance = baselineRelevance
+    ? buildBaselineRelevanceRecord({ company, keyword, ...baselineRelevance })
+    : { present: false, score: null,
+        source_basis: 'earnings adapter: no baselineRelevance data supplied',
+        source_path: null, detail: null,
+        missing_note: 'supply baselineRelevance: { transcriptHitRate, transcriptAvgHitsPerCall, isCoreProductOrMetric, analystTopicScore }' };
 
   // event_proximity — populated if earnings event is provided
   if (earningsEvent?.call_date_utc && earningsEvent?.confirmed) {
@@ -99,33 +116,38 @@ export function buildEarningsLayerRecords({
     };
   }
 
-  // sec_filing_language — populated if SEC filing match is provided
-  if (secFilingMatch?.found === true) {
-    records.sec_filing_language = {
-      present: true,
-      score: 72,
-      source_basis: `${secFilingMatch.filing_type ?? 'SEC filing'} contains keyword "${keyword}"`,
-      source_path: secFilingMatch.source_url ?? null,
-      detail: secFilingMatch.snippet ?? `"${keyword}" found in ${secFilingMatch.filing_type}`,
-      missing_note: null,
-    };
-  } else if (secFilingMatch?.found === false) {
-    records.sec_filing_language = {
-      present: true,
-      score: 20,
-      source_basis: `SEC filings searched; keyword "${keyword}" not found in recent filings`,
-      source_path: secFilingMatch.source_url ?? null,
-      detail: `"${keyword}" absent from ${secFilingMatch.filing_type ?? 'SEC filings'}`,
-      missing_note: null,
-    };
+  // sec_filing_language — source-backed via buildSecFilingLanguageRecord
+  // Accepts either the legacy { found, filing_type, snippet } shape or the richer
+  // { pressReleaseMentions, tenKMentions, tenQMentions, inRiskFactors, ... } shape.
+  if (secFilingMatch !== null && secFilingMatch !== undefined) {
+    const hasRichData = 'pressReleaseMentions' in secFilingMatch
+      || 'tenKMentions' in secFilingMatch
+      || 'tenQMentions' in secFilingMatch;
+    if (hasRichData) {
+      records.sec_filing_language = buildSecFilingLanguageRecord({ company, keyword, ...secFilingMatch });
+    } else if (secFilingMatch.found === true) {
+      records.sec_filing_language = buildSecFilingLanguageRecord({
+        company, keyword,
+        pressReleaseMentions: 1,
+        filingType: secFilingMatch.filing_type ?? 'SEC filing',
+        sourceUrl: secFilingMatch.source_url ?? null,
+        snippet: secFilingMatch.snippet ?? null,
+      });
+    } else {
+      records.sec_filing_language = buildSecFilingLanguageRecord({
+        company, keyword,
+        pressReleaseMentions: 0,
+        tenKMentions: 0,
+        filingType: secFilingMatch.filing_type ?? 'SEC filings searched',
+        sourceUrl: secFilingMatch.source_url ?? null,
+      });
+    }
   } else {
     records.sec_filing_language = {
-      present: false,
-      score: null,
-      source_basis: 'earnings-calendar-stub: SEC filing search not yet performed',
-      source_path: null,
-      detail: null,
-      missing_note: 'search SEC EDGAR for 10-K/10-Q/8-K containing this keyword',
+      present: false, score: null,
+      source_basis: 'earnings adapter: no SEC filing data supplied',
+      source_path: null, detail: null,
+      missing_note: 'supply secFilingMatch: { pressReleaseMentions, tenKMentions, tenQMentions } from SEC EDGAR search',
     };
   }
 
@@ -159,9 +181,16 @@ export function buildEarningsLayerRecords({
     };
   }
 
-  // Remaining layers — stubs
+  // source_velocity — source-backed via buildSourceVelocityRecord
+  records.source_velocity = sourceVelocity
+    ? buildSourceVelocityRecord({ company, keyword, ...sourceVelocity })
+    : { present: false, score: null,
+        source_basis: 'earnings adapter: no sourceVelocity data supplied',
+        source_path: null, detail: null,
+        missing_note: 'supply sourceVelocity: { sources: [{ type, mentionsKeyword, recencyDays }] }' };
+
+  // Remaining layers — stubs requiring live integration
   const stubs = [
-    ['source_velocity',            'press/analyst keyword velocity search (stub)'],
     ['direct_mention_pathway',     'prior call script / IR talking-points review (stub)'],
     ['prepared_remarks_likelihood','prior call opening-script keyword analysis (stub)'],
     ['suppression_signal',         'PR/legal suppression-risk analysis (stub)'],
@@ -171,7 +200,7 @@ export function buildEarningsLayerRecords({
     records[key] = {
       present: false,
       score: null,
-      source_basis: `earnings-calendar-stub: ${note}`,
+      source_basis: `earnings adapter: ${note}`,
       source_path: null,
       detail: null,
       missing_note: `${key} requires live source integration`,

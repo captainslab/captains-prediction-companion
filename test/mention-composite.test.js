@@ -6,7 +6,12 @@ import { PROFILE_KEY as POL_KEY, LAYER_DEFS as POL_LAYERS } from '../scripts/men
 import { PROFILE_KEY as EARN_KEY, LAYER_DEFS as EARN_LAYERS } from '../scripts/mentions/profiles/earnings-mentions.mjs';
 import { PROFILE_KEY as SPORT_KEY, LAYER_DEFS as SPORT_LAYERS } from '../scripts/mentions/profiles/sports-announcer-mentions.mjs';
 import { buildPoliticalLayerRecords } from '../scripts/mentions/source-adapters/political-schedule-stub.mjs';
-import { buildEarningsLayerRecords } from '../scripts/mentions/source-adapters/earnings-calendar-stub.mjs';
+import {
+  buildEarningsLayerRecords,
+  buildBaselineRelevanceRecord,
+  buildSourceVelocityRecord,
+  buildSecFilingLanguageRecord,
+} from '../scripts/mentions/source-adapters/earnings-calendar-stub.mjs';
 import { buildSportsBroadcastLayerRecords } from '../scripts/mentions/source-adapters/sports-broadcast-stub.mjs';
 
 // ─── Profile separation ───────────────────────────────────────────────────────
@@ -458,4 +463,241 @@ test('invalid profile name throws with descriptive message', () => {
     () => composeMentionLedger({ event: 'test', targetMention: 'test', profile: 'invalid_profile', layerDefs: EARN_LAYERS, layerRecords: {} }),
     /unknown mention profile/i
   );
+});
+
+// ─── New layer builders ───────────────────────────────────────────────────────
+
+test('buildBaselineRelevanceRecord: populates from transcript hit rate + core flag', () => {
+  const rec = buildBaselineRelevanceRecord({
+    company: 'Dell Technologies', keyword: 'PowerEdge',
+    transcriptHitRate: 0.83, transcriptAvgHitsPerCall: 5.0,
+    isCoreProductOrMetric: true, analystTopicScore: 80, inEarningsRelease: true,
+  });
+  assert.equal(rec.present, true);
+  assert(rec.score >= 70, `expected score >= 70, got ${rec.score}`);
+  assert(rec.source_basis.includes('transcript_hit_rate'), 'source_basis must reference transcript_hit_rate');
+  assert(rec.source_basis.includes('core_product'), 'source_basis must reference core_product flag');
+  assert(!rec.missing_note, 'should have no missing_note when data is present');
+});
+
+test('buildBaselineRelevanceRecord: returns present=false when no data supplied', () => {
+  const rec = buildBaselineRelevanceRecord({ company: 'Dell', keyword: 'test' });
+  assert.equal(rec.present, false);
+  assert.equal(rec.score, null);
+  assert(rec.missing_note, 'must have missing_note explaining what to supply');
+});
+
+test('buildBaselineRelevanceRecord: high-frequency generic words are capped by normalizedCount', () => {
+  // avgHitsPerCall=100 should not dominate — capped at 15 hits = 100 score
+  const highFreq = buildBaselineRelevanceRecord({
+    company: 'Dell', keyword: 'the', transcriptHitRate: 1.0, transcriptAvgHitsPerCall: 100,
+    isCoreProductOrMetric: false, analystTopicScore: 50,
+  });
+  // normalized count component capped: 100/15 = 100 → score still bounded at 100
+  assert(highFreq.score <= 100, 'score must not exceed 100 even for very high frequency');
+  assert(highFreq.present, 'should be present with valid inputs');
+});
+
+test('buildSourceVelocityRecord: scores from multiple independent source types', () => {
+  const rec = buildSourceVelocityRecord({
+    company: 'Dell Technologies', keyword: 'EPS Growth',
+    sources: [
+      { type: 'news',       mentionsKeyword: true,  recencyDays: 0 },
+      { type: 'analyst',    mentionsKeyword: true,  recencyDays: 3 },
+      { type: 'company',    mentionsKeyword: true,  recencyDays: 0 },
+      { type: 'transcript', mentionsKeyword: true,  recencyDays: 1 },
+    ],
+  });
+  assert.equal(rec.present, true);
+  assert(rec.score >= 60, `expected score >= 60 for 4-type coverage, got ${rec.score}`);
+  assert(rec.source_basis.includes('4 independent source type'), 'source_basis must count source types');
+});
+
+test('buildSourceVelocityRecord: deduplicates same source type — takes most recent', () => {
+  const rec = buildSourceVelocityRecord({
+    company: 'Dell', keyword: 'test',
+    sources: [
+      { type: 'news', mentionsKeyword: true, recencyDays: 1 },
+      { type: 'news', mentionsKeyword: true, recencyDays: 5 },  // same type — should be deduped
+      { type: 'news', mentionsKeyword: true, recencyDays: 10 },
+    ],
+  });
+  // Only 1 distinct type → lower score than 3 types
+  assert.equal(rec.present, true);
+  assert(rec.score < 40, `single source type should score low, got ${rec.score}`);
+  assert(rec.source_basis.includes('1 independent source type'));
+});
+
+test('buildSourceVelocityRecord: zero-mention sources → present=true score=10', () => {
+  const rec = buildSourceVelocityRecord({
+    company: 'Dell', keyword: 'Mistral',
+    sources: [
+      { type: 'news',    mentionsKeyword: false, recencyDays: 5 },
+      { type: 'analyst', mentionsKeyword: false, recencyDays: 3 },
+    ],
+  });
+  assert.equal(rec.present, true);
+  assert.equal(rec.score, 10);
+  assert(/none mention/i.test(rec.source_basis), `must note no mentions; got: "${rec.source_basis}"`);
+});
+
+test('buildSourceVelocityRecord: no sources → present=false', () => {
+  const rec = buildSourceVelocityRecord({ company: 'Dell', keyword: 'test', sources: [] });
+  assert.equal(rec.present, false);
+  assert.equal(rec.score, null);
+  assert(rec.missing_note, 'must have missing_note');
+});
+
+test('buildSecFilingLanguageRecord: scores from press release + 10-K counts', () => {
+  const rec = buildSecFilingLanguageRecord({
+    company: 'Dell Technologies', keyword: 'dividend',
+    pressReleaseMentions: 5, tenKMentions: 41, tenQMentions: 8,
+    inRiskFactors: true, filingType: '10-K FY26 + Q1 FY27 8-K',
+    sourceUrl: 'https://www.sec.gov/Archives/edgar/data/1571996/000157199626000021/exhibit991earnings8kq1fy27.htm',
+  });
+  assert.equal(rec.present, true);
+  assert(rec.score >= 85, `dividend with 5x PR + 41x 10-K + risk factor should score >= 85, got ${rec.score}`);
+  assert(rec.source_basis.includes('press_release=5x'), 'source_basis must cite press release count');
+  assert(rec.source_basis.includes('10-K=41x'), 'source_basis must cite 10-K count');
+  assert(rec.source_basis.includes('risk_factor=YES'), 'source_basis must cite risk factor presence');
+  assert(rec.source_path.includes('sec.gov'), 'source_path must be SEC EDGAR URL');
+});
+
+test('buildSecFilingLanguageRecord: absent keyword scores 15 (not null)', () => {
+  const rec = buildSecFilingLanguageRecord({
+    company: 'Dell', keyword: 'tailwind',
+    pressReleaseMentions: 0, tenKMentions: 0, tenQMentions: 0,
+    inRiskFactors: false, filingType: '10-K FY26',
+  });
+  assert.equal(rec.present, true, 'absent keywords still produce a present record (confirmed absence is evidence)');
+  assert.equal(rec.score, 15, `all-zero counts should score 15, got ${rec.score}`);
+  assert(!rec.missing_note, 'should have no missing_note when filing was checked');
+});
+
+test('buildSecFilingLanguageRecord: risk factor bonus adds +8 to base score', () => {
+  const withoutRisk = buildSecFilingLanguageRecord({
+    company: 'Dell', keyword: 'test',
+    pressReleaseMentions: 1, tenKMentions: 0, inRiskFactors: false,
+  });
+  const withRisk = buildSecFilingLanguageRecord({
+    company: 'Dell', keyword: 'test',
+    pressReleaseMentions: 1, tenKMentions: 0, inRiskFactors: true,
+  });
+  assert(withRisk.score === withoutRisk.score + 8 || withRisk.score === 100,
+    `risk factor should add 8 points: ${withoutRisk.score} → ${withRisk.score}`);
+});
+
+test('buildSecFilingLanguageRecord: no data → present=false', () => {
+  const rec = buildSecFilingLanguageRecord({ company: 'Dell', keyword: 'test' });
+  assert.equal(rec.present, false);
+  assert.equal(rec.score, null);
+  assert(rec.missing_note, 'must have missing_note when no filing data supplied');
+});
+
+test('earnings adapter: all 3 new layers populate via baselineRelevance + sourceVelocity + secFilingMatch', () => {
+  const soonUTC = new Date(Date.now() + 30 * 60_000).toISOString();
+  const records = buildEarningsLayerRecords({
+    company: 'Dell Technologies',
+    keyword: 'dividend',
+    earningsEvent: { call_date_utc: soonUTC, confirmed: true, fiscal_quarter: 'Q1 FY2027' },
+    closedEventHitRate: { hits: 4, total: 6 },
+    secFilingMatch: {
+      pressReleaseMentions: 5, tenKMentions: 41, tenQMentions: 8,
+      inRiskFactors: true, filingType: '10-K FY26 + Q1 FY27 8-K',
+      sourceUrl: 'https://www.sec.gov/Archives/edgar/data/1571996/000157199626000021/exhibit991earnings8kq1fy27.htm',
+    },
+    baselineRelevance: {
+      transcriptHitRate: 0.67, transcriptAvgHitsPerCall: 3.0,
+      isCoreProductOrMetric: true, analystTopicScore: 55, inEarningsRelease: true,
+    },
+    sourceVelocity: {
+      sources: [
+        { type: 'company', mentionsKeyword: true, recencyDays: 0 },
+        { type: 'news',    mentionsKeyword: true, recencyDays: 0 },
+      ],
+    },
+  });
+
+  assert.equal(records.baseline_relevance.present, true, 'baseline_relevance must be present');
+  assert.equal(records.source_velocity.present, true, 'source_velocity must be present');
+  assert.equal(records.sec_filing_language.present, true, 'sec_filing_language must be present');
+
+  assert(records.baseline_relevance.score >= 60, `baseline_relevance score ${records.baseline_relevance.score} should be >= 60`);
+  assert(records.source_velocity.score >= 30, `source_velocity score ${records.source_velocity.score} should be >= 30`);
+  assert(records.sec_filing_language.score >= 85, `sec_filing_language score ${records.sec_filing_language.score} should be >= 85`);
+});
+
+test('Dell full 10/10 layers via composeMentionLedger with all three new layers wired', () => {
+  const soonUTC = new Date(Date.now() + 10 * 60_000).toISOString();
+  // Adapter wires 6 layers: baseline_relevance, event_proximity, historical_tendency,
+  // sec_filing_language, analyst_qa_pathway, source_velocity.
+  // Supply the remaining 4 inline to achieve 10/10.
+  const adapterRecords = buildEarningsLayerRecords({
+    company: 'Dell Technologies', keyword: 'EPS Growth',
+    earningsEvent: { call_date_utc: soonUTC, confirmed: true, fiscal_quarter: 'Q1 FY2027' },
+    closedEventHitRate: { hits: 6, total: 6 },
+    secFilingMatch: {
+      pressReleaseMentions: 27, tenKMentions: 20, tenQMentions: 8,
+      inRiskFactors: false, filingType: '10-K FY26 + Q1 FY27 8-K',
+      sourceUrl: 'https://www.sec.gov/Archives/edgar/data/1571996/000157199626000021/exhibit991earnings8kq1fy27.htm',
+    },
+    baselineRelevance: {
+      transcriptHitRate: 1.0, transcriptAvgHitsPerCall: 7.0,
+      isCoreProductOrMetric: true, analystTopicScore: 92, inEarningsRelease: true,
+    },
+    sourceVelocity: {
+      sources: [
+        { type: 'news',       mentionsKeyword: true, recencyDays: 3 },
+        { type: 'analyst',    mentionsKeyword: true, recencyDays: 5 },
+        { type: 'company',    mentionsKeyword: true, recencyDays: 0 },
+        { type: 'transcript', mentionsKeyword: true, recencyDays: 1 },
+      ],
+    },
+    analystCoverage: { mentions_in_coverage: true, detail: 'EPS beat and guidance raise are top Q&A topics' },
+  });
+
+  // Supply the 4 remaining stub layers inline
+  const records = {
+    ...adapterRecords,
+    direct_mention_pathway:      { present: true, score: 99, source_basis: 'Core Dell financial metric — stated verbatim every call' },
+    prepared_remarks_likelihood: { present: true, score: 99, source_basis: 'Record EPS $4.86 leads every prepared remarks section' },
+    suppression_signal:          { present: true, score: 98, source_basis: 'Record EPS — zero incentive to suppress' },
+    evidence_quality:            { present: true, score: 92, source_basis: 'Kalshi event confirmed; EDGAR filing accessible; IR calendar confirmed' },
+  };
+
+  const result = composeMentionLedger({
+    event: 'Dell Technologies Q1 FY27 Earnings Call',
+    targetMention: 'EPS Growth',
+    profile: EARN_KEY, layerDefs: EARN_LAYERS, layerRecords: records,
+    marketContext: { yes_bid_cents: 83, yes_ask_cents: 85 },
+  });
+
+  // Verify the three previously-missing adapter layers are now present
+  const ledgerMap = Object.fromEntries(result.evidence_ledger.map(r => [r.category, r]));
+  assert(ledgerMap.baseline_relevance.present, 'baseline_relevance must now be present');
+  assert(ledgerMap.source_velocity.present, 'source_velocity must now be present');
+  assert(ledgerMap.sec_filing_language.present, 'sec_filing_language must now be present');
+
+  // All 10 layers must be present
+  assert.equal(result._meta.layers_present, 10, `expected 10 layers, got ${result._meta.layers_present}`);
+  assert.equal(result._meta.layers_total, 10);
+  assert.equal(result.missing_layers.length, 0, 'no layers should be missing');
+
+  // Normalized weights of all present layers sum to ~1.0
+  const normSum = result.evidence_ledger.reduce((s, r) => s + (r.normalized_weight ?? 0), 0);
+  assert(Math.abs(normSum - 1.0) < 0.01, `normalized_weight sum ${normSum} must be ~1.0`);
+
+  // All three new layers have provenance in source_notes
+  assert(result.source_notes.some(n => n.includes('[baseline_relevance]')), 'source_notes must include baseline_relevance');
+  assert(result.source_notes.some(n => n.includes('[source_velocity]')), 'source_notes must include source_velocity');
+  assert(result.source_notes.some(n => n.includes('[sec_filing_language]')), 'source_notes must include sec_filing_language');
+
+  // Pricing excluded
+  assert.equal(result._meta.pricing_excluded, true);
+  assert.equal(result.market_context.yes_bid_cents, 83);
+  assert.equal(result.market_context._note.toLowerCase().includes('never scoring'), true);
+
+  // Strong score given 10 layers of evidence
+  assert(['PICK', 'EVIDENCE_LEAN'].includes(result.posture),
+    `expected PICK or EVIDENCE_LEAN for 10-layer EPS Growth, got "${result.posture}"`);
 });
