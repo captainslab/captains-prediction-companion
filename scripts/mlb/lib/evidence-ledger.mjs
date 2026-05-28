@@ -139,6 +139,7 @@ function evalStartingPitcherSignal(rec) {
   return {
     present: true, score: rec.score, grade: gradeLabel(rec.score),
     basis: rec.source_basis ?? 'Starting pitcher ERA/FIP/K% composite',
+    source_path: rec.source_path ?? null,
     detail: rec.detail ?? null,
     missing_note: rec.sample_quality === 'thin' ? `thin sample (${rec.starts} starts)` : null,
   };
@@ -169,6 +170,7 @@ function evalPitcherAtThisPark(rec) {
   return {
     present: true, score: rec.score, grade: gradeLabel(rec.score),
     basis: rec.source_basis ?? 'Starter venue splits',
+    source_path: rec.source_path ?? null,
     detail: rec.detail ?? null,
     missing_note: rec.sample_quality === 'thin' ? 'thin venue sample (<3 GS at this park)' : null,
   };
@@ -184,6 +186,7 @@ function evalPitcherVsThisOpponent(rec) {
   return {
     present: true, score: rec.score, grade: gradeLabel(rec.score),
     basis: rec.source_basis ?? 'Starter opponent splits',
+    source_path: rec.source_path ?? null,
     detail: rec.detail ?? null,
     missing_note: rec.sample_quality === 'thin' ? 'thin opponent sample (<4 GS vs this team)' : null,
   };
@@ -326,6 +329,7 @@ export function composeEvidenceLedgerForSide({
       label:          def.label,
       raw_weight:     def.weight,
       source_basis:   lo.basis,
+      source_path:    lo.source_path ?? null,
       value:          lo.score,
       grade:          lo.grade,
       detail:         lo.detail   ?? null,
@@ -564,6 +568,7 @@ export function buildPitcherSignalRecordSync({
   era, fip, kPct, bbPct,
   recentQualityStarts, recentStarts,
   starterName, isBullpenGame = false,
+  fipSource = null, eraSource = null,
 } = {}) {
   if (isBullpenGame) {
     return { present: true, score: 32, grade: 'F',
@@ -589,10 +594,11 @@ export function buildPitcherSignalRecordSync({
   return {
     present: true, score,
     source_basis: `Pitcher ERA/FIP/K%/BB% composite${starterName ? ` — ${starterName}` : ''}`,
+    source_path: fipSource ?? eraSource ?? null,
     detail: [
       starterName ?? null,
       era  != null ? `ERA ${era}` : null,
-      fip  != null ? `FIP ${fip}` : null,
+      fip  != null ? `FIP ${fip}${fipSource ? ` [${fipSource}]` : ''}` : null,
       kPct != null ? `K% ${Math.round(kPct * 100)}%` : null,
     ].filter(Boolean).join(', '),
     sample_quality: (recentStarts ?? 0) < 4 ? 'thin' : 'ok',
@@ -650,7 +656,7 @@ export function buildMatchupSplitsRecord({ pitcherVsLineupOps, h2hWins, h2hGames
   };
 }
 
-export function buildPitcherAtParkRecord({ parkEra, parkFip, parkHr9, gamesAtPark, venueName, starterName } = {}) {
+export function buildPitcherAtParkRecord({ parkEra, parkFip, parkHr9, gamesAtPark, venueName, starterName, sourcePath = null } = {}) {
   if (parkEra == null && parkFip == null) {
     return { present: false, score: null, missing_reason: `no venue split data${starterName ? ` for ${starterName}` : ''}${venueName ? ` at ${venueName}` : ''}` };
   }
@@ -664,18 +670,20 @@ export function buildPitcherAtParkRecord({ parkEra, parkFip, parkHr9, gamesAtPar
   return {
     present: true, score,
     source_basis: `${starterName ?? 'Starter'} at ${venueName ?? 'this venue'}: ERA ${parkEra ?? 'n/a'}${parkFip != null ? `, FIP ${parkFip}` : ''}`,
+    source_path: sourcePath,
     detail: [
       venueName ?? null,
       parkEra  != null ? `ERA ${parkEra}` : null,
       parkFip  != null ? `FIP ${parkFip}` : null,
       parkHr9  != null ? `HR/9 ${parkHr9}` : null,
       gamesAtPark != null ? `${gamesAtPark} GS here` : null,
+      sourcePath ? `[${sourcePath}]` : null,
     ].filter(Boolean).join(', '),
     sample_quality: (gamesAtPark ?? 0) < 3 ? 'thin' : 'ok',
   };
 }
 
-export function buildPitcherVsOpponentRecord({ vsEra, vsFip, vsKPct, wins, losses, gamesVsOpponent, opponentName, starterName } = {}) {
+export function buildPitcherVsOpponentRecord({ vsEra, vsFip, vsKPct, wins, losses, gamesVsOpponent, opponentName, starterName, sourcePath = null, span = null } = {}) {
   if (vsEra == null && vsFip == null && vsKPct == null) {
     return { present: false, score: null, missing_reason: `no opponent split data${starterName ? ` for ${starterName}` : ''}${opponentName ? ` vs ${opponentName}` : ''}` };
   }
@@ -692,7 +700,8 @@ export function buildPitcherVsOpponentRecord({ vsEra, vsFip, vsKPct, wins, losse
   const score = Math.round(scores.reduce((s, x) => s + x.score * x.weight, 0) / den);
   return {
     present: true, score,
-    source_basis: `${starterName ?? 'Starter'} vs ${opponentName ?? 'this opponent'}: ERA ${vsEra ?? 'n/a'}`,
+    source_basis: `${starterName ?? 'Starter'} vs ${opponentName ?? 'this opponent'}: ERA ${vsEra ?? 'n/a'}${span ? ` (${span})` : ''}`,
+    source_path: sourcePath,
     detail: [
       opponentName ?? null,
       vsEra  != null ? `ERA ${vsEra}` : null,
@@ -700,6 +709,8 @@ export function buildPitcherVsOpponentRecord({ vsEra, vsFip, vsKPct, wins, losse
       vsKPct != null ? `K% ${Math.round(vsKPct * 100)}%` : null,
       wins != null && losses != null ? `${wins}-${losses} W-L` : null,
       gamesVsOpponent != null ? `${gamesVsOpponent} GS vs them` : null,
+      span ? `span=${span}` : null,
+      sourcePath ? `[${sourcePath}]` : null,
     ].filter(Boolean).join(', '),
     sample_quality: (gamesVsOpponent ?? 0) < 4 ? 'thin' : 'ok',
   };

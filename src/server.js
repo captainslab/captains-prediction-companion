@@ -6,6 +6,7 @@ import { loadDotEnv } from './env.js'
 import { fetchKalshiMarkets } from './marketSources.js'
 import { buildEventMarketPlan, buildEventMarketPlanSummary, buildFocusedKalshiMarketPlan } from './eventMarketTool.js'
 import { buildEventMarketWorkflowPrompt } from './eventMarketPrompt.js'
+import { analyzeCompositeMarketLink } from '../scripts/mlb/link-composite-card.mjs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
@@ -72,8 +73,22 @@ function buildCardToolResult(result, { includeHidden = false } = {}) {
   }
 }
 
+function buildCompositeToolResult(result) {
+  const payload = result?.compact_card ?? result
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
+  }
+}
+
 export async function analyzeKalshiMarketUrlTool({ url }, options = {}) {
   options.pipelineService?.recordRecentUrl?.(url)
+  const marketLinkAnalyzer = options.marketLinkAnalyzer ?? analyzeCompositeMarketLink
+  const compositeResult = await marketLinkAnalyzer({ url })
+  if (compositeResult?.handled) {
+    return buildCompositeToolResult(compositeResult)
+  }
+
   const result = await buildFocusedKalshiMarketPlan({ url, venue: 'Kalshi' }, options)
   return buildCardToolResult(result)
 }
@@ -166,7 +181,12 @@ function writeJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
-export function createHttpRequestHandler({ pipelineService = null, noteStore = null, captainLabsStore: providedStore = null } = {}) {
+export function createHttpRequestHandler({
+  pipelineService = null,
+  noteStore = null,
+  captainLabsStore: providedStore = null,
+  marketLinkAnalyzer = analyzeCompositeMarketLink,
+} = {}) {
   const store = providedStore ?? captainLabsStore
   return async function handleRequest(req, res) {
     if (!req.url) {
@@ -253,6 +273,35 @@ export function createHttpRequestHandler({ pipelineService = null, noteStore = n
         url: result.url,
         status: pipelineService?.getStatus?.() ?? {},
       })
+      return
+    }
+
+    if (req.url === '/pipeline/analyze-link' && req.method === 'POST') {
+      let body = null
+      try {
+        body = await getBodyBuffer(req)
+      } catch {
+        writeJson(res, 400, { error: 'Invalid JSON body' })
+        return
+      }
+
+      if (typeof body?.url !== 'string' || !body.url.trim()) {
+        writeJson(res, 400, { error: 'Missing url' })
+        return
+      }
+
+      const result = await marketLinkAnalyzer({
+        url: body.url,
+        date: typeof body?.date === 'string' ? body.date : undefined,
+        stateRoot: typeof body?.state_root === 'string'
+          ? body.state_root
+          : typeof body?.stateRoot === 'string'
+            ? body.stateRoot
+            : undefined,
+        forceHandle: true,
+      })
+
+      writeJson(res, 200, result)
       return
     }
 

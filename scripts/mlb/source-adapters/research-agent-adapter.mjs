@@ -238,6 +238,8 @@ export function buildLayerRecords(input) {
         recentStarts:         p.recentStarts,
         starterName:          p.name,
         isBullpenGame:        p.isBullpenGame ?? false,
+        fipSource:            p.fip_source ?? null,
+        eraSource:            p.era_source ?? null,
       });
     }
 
@@ -251,6 +253,7 @@ export function buildLayerRecords(input) {
         gamesAtPark: ps.park.games,
         venueName:   input.park?.name ?? input.venue ?? null,
         starterName: p?.name ?? null,
+        sourcePath:  ps.park.source_path ?? null,
       });
     }
     if (ps?.vsOpponent) {
@@ -263,6 +266,8 @@ export function buildLayerRecords(input) {
         gamesVsOpponent: ps.vsOpponent.games,
         opponentName:    side === 'away' ? input.home_team : input.away_team,
         starterName:     p?.name ?? null,
+        sourcePath:      ps.vsOpponent.source_path ?? null,
+        span:            ps.vsOpponent.span ?? null,
       });
     }
 
