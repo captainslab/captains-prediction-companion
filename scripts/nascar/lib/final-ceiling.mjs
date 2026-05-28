@@ -12,7 +12,7 @@
 //   3. season_speed_signal_2026       0.10    Wikipedia 2026 stage points + "most laps led" race count
 //   4. charlotte_oval_history         0.20    Wikipedia 2022-2025 Coca-Cola 600s (oval only; Roval excluded)
 //   5. intermediate_15mi_oval         0.20    Wikipedia 2022-2025 1.5-mi-oval Cup races (Atlanta excluded)
-//   6. practice_qualifying            0.15    Wikipedia 2026 Coca-Cola 600 grid + practice
+//   6. practice_qualifying            0.15    Public 2026 Coca-Cola 600 grid + practice snapshots
 //   7. long_run_race_type_fit         0.00    UNAVAILABLE — no free static source (kept for transparency)
 //
 // Ceiling assignment on composite score, then capped by data coverage:
@@ -171,22 +171,27 @@ function evalIntermediate(rec) {
   };
 }
 
-// 5) Practice + qualifying for THIS race (Wikipedia 2026 Coca-Cola 600)
+// 5) Practice + qualifying for THIS race (public 2026 Coca-Cola 600 snapshots)
 //    gridBasis === 'rules_set' (qualifying cancelled, grid by competition
 //    formula) attaches a confidence note. Effective layer weight is reduced
 //    by the caller via PRACTICE_QUALIFYING_RULES_SET_WEIGHT_FACTOR.
 function evalPracticeQualifying(rec, pqStatus, gridBasis) {
   if (!rec) {
     return { present: false, score: null, grade: 'n/a',
-      basis: 'Wikipedia 2026 Coca-Cola 600 grid + practice',
+      basis: 'Public 2026 Coca-Cola 600 grid + practice snapshot',
       missing_note: `no practice/qualifying row for this driver (envelope=${pqStatus ?? 'unknown'})`,
       detail: null };
   }
-  const grid = Number.isFinite(Number(rec.starting_position)) ? Number(rec.starting_position) : null;
-  const prac = Number.isFinite(Number(rec.practice_rank)) ? Number(rec.practice_rank) : null;
+  const toNumericOrNull = value => {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const grid = toNumericOrNull(rec.starting_position);
+  const prac = toNumericOrNull(rec.practice_rank);
   if (grid === null && prac === null) {
     return { present: false, score: null, grade: 'n/a',
-      basis: 'Wikipedia 2026 Coca-Cola 600 grid + practice',
+      basis: 'Public 2026 Coca-Cola 600 grid + practice snapshot',
       missing_note: 'driver row present but no starting_position or practice_rank published',
       detail: null };
   }
@@ -209,8 +214,8 @@ function evalPracticeQualifying(rec, pqStatus, gridBasis) {
     score,
     grade: gradeLabel(score),
     basis: gridBasis === 'rules_set'
-      ? 'Wikipedia 2026 Coca-Cola 600 — competition-formula starting grid (rules-set) + practice results'
-      : 'Wikipedia 2026 Coca-Cola 600 — official starting grid + practice results',
+      ? 'Public 2026 Coca-Cola 600 snapshot — competition-formula starting grid (rules-set) + practice results'
+      : 'Public 2026 Coca-Cola 600 snapshot — official starting grid + practice results',
     detail: detailBits.join(', '),
     missing_note: notes.length > 0 ? notes.join('; ') : null,
     grid_basis: gridBasis ?? 'qualifying_session',

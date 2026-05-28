@@ -1,5 +1,5 @@
-// Tests for the Coca-Cola 600 dry-run packet composer.
-// Fixtures-only. No live network. No credentials. No trading.
+// Tests for the Coca-Cola 600 publication-safe packet composer.
+// Public-source snapshots. No credentials. No trading.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ function makeTempOutputDir() {
   return join(root, 'state', 'nascar', '2026-05-25');
 }
 
-test('Coca-Cola 600 packet: writes packet.md with six section headings, downgrades, and storyline_modifier.json', async () => {
+test('Coca-Cola 600 packet: writes article-ready final ceiling packet and storyline_modifier.json', async () => {
   const outputDir = makeTempOutputDir();
   const result = await composeCocaCola600Packet({ outputDir });
 
@@ -26,32 +26,53 @@ test('Coca-Cola 600 packet: writes packet.md with six section headings, downgrad
 
   const md = readFileSync(packetPath, 'utf8');
   for (const heading of [
-    '# Coca-Cola 600 — NASCAR Research Packet (Dry Run)',
-    '## Base Fundamentals',
-    '## Storyline Modifier',
+    '# Coca-Cola 600 - Final Ceiling Board (Race Live - Pre-Race Model Snapshot)',
+    '## Publication Safety Note',
+    '## Final Ceiling Board (single ceiling per driver)',
+    '### 1. Main scored field (Cup points top-20, in-grid)',
+    '### 2. Field tail / lower-confidence entries',
+    '## Final-Ceiling Evidence Ledger',
+    '## Appendix: Model Inputs, Caveats, and Source Index',
     '## Market Context',
     '## Edge Basis',
+    '## Storyline / Tiebreaker Context (non-scoring)',
     '## Safety',
   ]) {
     assert.ok(md.includes(heading), `missing heading: ${heading}`);
   }
   assert.ok(md.includes('Storyline does not create speed.'), 'missing storyline disclaimer');
+  assert.ok(md.includes('Publication source checks:'), 'missing publication source checks');
+  assert.ok(md.includes('Race status at publication check: live/in-progress'), 'missing live race status');
+  assert.ok(!md.includes('fixtures-only'), 'packet must not present source mode as fixtures-only');
+  assert.ok(!md.includes('Dry Run'), 'article title/body must not use Dry Run framing');
   assert.ok(md.includes('DOWNGRADED'), 'missing DOWNGRADED marker');
+  assert.ok(!md.includes('## Ceiling Board (full active field)'), 'legacy four-lane board must not render in packet.md');
+  assert.ok(!md.includes('Rank  Car  Driver'), 'legacy lane table must not render in packet.md');
+  assert.ok(!md.includes('## Storyline Modifier'), 'storyline modifier must not lead packet.md');
+  assert.ok(!md.includes('practice P0'), 'missing practice ranks must not render as practice P0');
 
-  // Practice + qualifying lines now use sourced data (Wikipedia 2026 Coca-Cola 600);
-  // qualifying must be AVAILABLE and practice PARTIAL (top-3 only published).
+  // Practice + qualifying lines use sourced public snapshots; qualifying must
+  // be AVAILABLE and practice must be explicitly PARTIAL/AVAILABLE.
   const practiceLine = md.split('\n').find(l => l.toLowerCase().includes('practice speed'));
   const qualLine = md.split('\n').find(l => l.toLowerCase().includes('qualifying position'));
   assert.ok(qualLine && qualLine.includes('AVAILABLE'), 'qualifying position line must be AVAILABLE (sourced grid)');
   assert.ok(practiceLine && (practiceLine.includes('PARTIAL') || practiceLine.includes('AVAILABLE')),
     'practice speed line must reflect sourced (PARTIAL/AVAILABLE), not DOWNGRADED');
 
-  // Section ordering: Base Fundamentals -> Storyline Modifier -> Market Context
-  const idxBase = md.indexOf('## Base Fundamentals');
-  const idxStory = md.indexOf('## Storyline Modifier');
+  // Section ordering: final board leads; storyline context stays near the bottom.
+  const idxBoard = md.indexOf('## Final Ceiling Board');
+  const idxLedger = md.indexOf('## Final-Ceiling Evidence Ledger');
+  const idxSource = md.indexOf('## Appendix: Model Inputs, Caveats, and Source Index');
   const idxMarket = md.indexOf('## Market Context');
-  assert.ok(idxBase >= 0 && idxStory > idxBase, 'Storyline Modifier must come after Base Fundamentals');
-  assert.ok(idxMarket > idxStory, 'Market Context must come after Storyline Modifier');
+  const idxEdge = md.indexOf('## Edge Basis');
+  const idxStory = md.indexOf('## Storyline / Tiebreaker Context');
+  const idxSafety = md.indexOf('## Safety');
+  assert.ok(idxBoard >= 0 && idxLedger > idxBoard, 'evidence ledger must come after final board');
+  assert.ok(idxSource > idxLedger, 'source notes must come after final evidence ledger');
+  assert.ok(idxMarket > idxSource, 'Market Context must come after source notes');
+  assert.ok(idxEdge > idxMarket, 'Edge Basis must come after Market Context');
+  assert.ok(idxStory > idxEdge, 'storyline context must come after Edge Basis');
+  assert.ok(idxSafety > idxStory, 'Safety must remain after storyline context');
 
   const modifier = JSON.parse(readFileSync(modifierPath, 'utf8'));
   assert.equal(modifier.schema_version, 'nascar_storyline_modifier_v1');

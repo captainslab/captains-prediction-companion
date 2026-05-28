@@ -1,8 +1,21 @@
 {
-  "snapshot_id": "wikipedia_2026_coca_cola_600",
-  "snapshot_source_url": "https://en.wikipedia.org/wiki/2026_Coca-Cola_600",
-  "snapshot_date": "2026-05-25",
-  "license": "CC-BY-SA-4.0",
+  "snapshot_id": "public_sources_2026_coca_cola_600",
+  "snapshot_source_url": "https://www.nascar.com/live-results/nascar-cup-series/2026-coca-cola-600/",
+  "snapshot_source_urls": [
+    "https://www.nascar.com/live-results/nascar-cup-series/2026-coca-cola-600/",
+    "https://www.charlottemotorspeedway.com/events/coca-cola-600/",
+    "https://www.motorsport.com/nascar-cup/news/coca-cola-600-starting-lineup-nascar-cup-qualifying-canceled-due-to-rain/10823468/",
+    "https://tobychristie.com/race-result/practice-results-2026-nascar-cup-series-coca-cola-600-at-charlotte/"
+  ],
+  "starting_grid_source_urls": [
+    "https://www.motorsport.com/nascar-cup/news/coca-cola-600-starting-lineup-nascar-cup-qualifying-canceled-due-to-rain/10823468/",
+    "https://www.nascar.com/live-results/nascar-cup-series/2026-coca-cola-600/"
+  ],
+  "practice_source_urls": [
+    "https://tobychristie.com/race-result/practice-results-2026-nascar-cup-series-coca-cola-600-at-charlotte/"
+  ],
+  "snapshot_date": "2026-05-24",
+  "license": "source citation only; public data manually transcribed from linked pages",
   "race_name": "2026 Coca-Cola 600",
   "track": "Charlotte Motor Speedway",
   "qualifying_format_note": "Grid positions set by competition-based formula (no traditional qualifying session); starting positions are the published grid.",

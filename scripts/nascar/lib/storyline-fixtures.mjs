@@ -1,21 +1,22 @@
-// Storyline + team graph fixtures for the Coca-Cola 600 dry-run packet.
-// Fixture-mode placeholders only. No live network. No credentials. No trading.
-// Sources are intentionally not real URLs; replace with sourced packet before publication.
+// Storyline + team graph snapshot for the Coca-Cola 600 packet.
+// Public-source context only. No credentials. No trading.
 //
 // Numeric fields (emotional_strength, direct_connection, track_relevance,
 // team_car_relevance, broadcast_public_attention, distraction_pressure_risk)
 // are flat scalars on the storyline so they feed composeStorylineModifier()
 // directly. Descriptive context lives under `meta`.
 
-export const FIXTURE_SOURCE_NOTE = 'fixture-mode placeholder; replace with sourced packet before publication';
+export const FIXTURE_SOURCE_NOTE = 'public-source storyline context; non-scoring only';
+const AP_RCR_NO33_URL = 'https://apnews.com/article/200880317c943523957143ac8f035af9';
+const NASCAR_TRIBUTE_URL = 'https://www.nascar.com/news-media/2026/05/23/cup-series-2026-kyle-busch-in-tribute/';
 
 export function cocaCola600StorylineFixture() {
   return {
     storyline_id: 'coca-cola-600-2026-kyle-busch-tribute',
     storyline_type: 'tragedy_tribute',
-    headline: 'RCR runs a black No. 8 tribute scheme for Kyle Busch at the Coca-Cola 600; Austin Hill subs in.',
+    headline: 'RCR suspends No. 8 use after Kyle Busch death; Austin Hill runs No. 33 at the Coca-Cola 600.',
     summary:
-      'Following the death of Kyle Busch, Richard Childress Racing announced a one-off tribute paint scheme on the No. 8 Chevrolet for the Coca-Cola 600. Austin Hill is named as the substitute driver for the tribute entry. Storyline is layered as a MODIFIER only; it does not by itself create on-track speed.',
+      'Following the death of Kyle Busch after hospitalization, public reports say Richard Childress Racing suspended use of No. 8, will run No. 33, and scheduled Austin Hill for Charlotte. Storyline is layered as a non-scoring modifier only; it does not by itself create on-track speed.',
     // Flat numeric inputs consumed by composeStorylineModifier:
     emotional_strength: 95,
     direct_connection: 90,
@@ -33,7 +34,7 @@ export function cocaCola600StorylineFixture() {
         team: 'Richard Childress Racing',
         car_number: 8,
         manufacturer: 'Chevrolet',
-        notes: 'Tribute paint scheme runs on the RCR No. 8.',
+        notes: 'RCR suspended use of No. 8 and shifted the active context to No. 33.',
       },
       beneficiary_hint: {
         driver_name: 'Austin Hill',
@@ -42,11 +43,11 @@ export function cocaCola600StorylineFixture() {
       },
     },
     sources: [
-      { label: FIXTURE_SOURCE_NOTE, url: null },
+      { label: 'AP/RCR No. 33 report', url: AP_RCR_NO33_URL },
+      { label: 'NASCAR Kyle Busch tribute analysis', url: NASCAR_TRIBUTE_URL },
     ],
     safety_notes: [
-      'Storyline fields are fixture placeholders and UNVERIFIED in source files.',
-      'No fabricated URLs included.',
+      'Storyline context is source-backed but non-scoring.',
       'Storyline is a modifier only; it does not create speed.',
     ],
   };
@@ -80,8 +81,8 @@ export function teamGraphFixture() {
         ],
         cars: [
           { car_number: 3 },
-          { car_number: 8, tribute_scheme_active: true, tribute_for: 'Kyle Busch' },
-          { car_number: 33, cross_series: true },
+          { car_number: 8, use_suspended: true, reserved_context_for: 'Kyle Busch' },
+          { car_number: 33, active_context_after_no8_suspension: true, cross_series: true },
         ],
       },
     },
@@ -103,7 +104,8 @@ export function teamGraphFixture() {
       },
     ],
     sources: [
-      { label: FIXTURE_SOURCE_NOTE, url: null },
+      { label: 'AP/RCR No. 33 report', url: AP_RCR_NO33_URL },
+      { label: 'NASCAR Kyle Busch tribute analysis', url: NASCAR_TRIBUTE_URL },
     ],
   };
 }

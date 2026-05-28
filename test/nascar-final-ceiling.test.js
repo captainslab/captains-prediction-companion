@@ -143,12 +143,17 @@ test('Coca-Cola 600 packet: every pool driver has exactly one final_ceiling and 
   assert.ok(md.includes('## Final Ceiling Board (single ceiling per driver)'));
   assert.ok(md.includes('1. Main scored field'));
   assert.ok(md.includes('2. Field tail'));
+  assert.ok(md.indexOf('## Final Ceiling Board (single ceiling per driver)') < md.indexOf('## Final-Ceiling Evidence Ledger'));
+  assert.ok(md.indexOf('## Final-Ceiling Evidence Ledger') < md.indexOf('## Storyline / Tiebreaker Context (non-scoring)'));
   assert.ok(md.includes('## Storyline / Tiebreaker Context (non-scoring)'));
-  assert.ok(md.includes('Kyle Busch — NOT entered'));
+  assert.ok(md.includes('Kyle Busch - NOT entered'));
   assert.ok(md.includes('#8 / #33 disambiguation'));
   assert.ok(md.includes('Rank | Driver'));
   assert.ok(md.includes('Ceiling'));
-  assert.ok(md.includes('Reasoning Summary'));
+  assert.ok(md.includes('Note'));
+  assert.ok(!md.includes('## Ceiling Board (full active field)'), 'packet.md must not render legacy lane-board section');
+  assert.ok(!md.includes('Rank  Car  Driver'), 'packet.md must not render legacy lane-board table');
+  assert.ok(!md.includes('practice P0'), 'null practice ranks must not render as practice P0');
   for (const name of POOL_TOP_20) {
     const stripped = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\./g, '');
     assert.ok(md.includes(name) || md.includes(stripped),
@@ -164,7 +169,7 @@ test('Coca-Cola 600 packet: every pool driver has exactly one final_ceiling and 
   // (season_form_2026 / charlotte_oval_history / intermediate_15mi_oval MISSING with lockout reason).
   const hill = board.candidates.find(c => c.car_number === 33);
   if (hill) {
-    const lockMsg = /lockout|no transferable Cup record|no 2026 Cup season form|tribute car/i;
+    const lockMsg = /lockout|no transferable Cup record|no 2026 Cup season form|No\. 33|No\. 8 suspension/i;
     const cupLayers = ['season_form_2026', 'season_speed_signal_2026', 'charlotte_oval_history', 'intermediate_15mi_oval'];
     for (const cat of cupLayers) {
       const row = hill.final_evidence_ledger.find(r => r.category === cat);

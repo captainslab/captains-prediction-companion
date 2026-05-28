@@ -38,7 +38,7 @@ const GRID_SNAPSHOT_PATH = resolve(
 
 const SOURCE_ID = 'active_field_pool';
 const STANDINGS_SOURCE_URL = 'https://en.wikipedia.org/wiki/2026_NASCAR_Cup_Series';
-const GRID_SOURCE_URL = 'https://en.wikipedia.org/wiki/2026_Coca-Cola_600';
+const GRID_SOURCE_URL = 'https://www.nascar.com/live-results/nascar-cup-series/2026-coca-cola-600/';
 
 function normalizeName(name) {
   return String(name ?? '')
@@ -132,7 +132,7 @@ export function activeFieldPoolEnvelope({
     records,
     warnings,
     errors: [],
-    source_urls: [STANDINGS_SOURCE_URL, GRID_SOURCE_URL],
+    source_urls: [STANDINGS_SOURCE_URL, ...(grid.snapshot_source_urls ?? [GRID_SOURCE_URL])],
   });
 
   return {

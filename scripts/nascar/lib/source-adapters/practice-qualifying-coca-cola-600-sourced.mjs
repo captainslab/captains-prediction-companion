@@ -1,12 +1,13 @@
 // Sourced practice/qualifying envelope for the 2026 Coca-Cola 600.
 //
-// Source: Wikipedia "2026 Coca-Cola 600" (CC-BY-SA-4.0).
+// Sources: public race-page, starting-lineup, and practice-result snapshots.
 // Snapshot: scripts/nascar/lib/source-adapters/snapshots/wikipedia-coca-cola-600-2026.json
 //
 // Provides:
 //   - starting_position from the published competition-based grid
-//   - practice_rank from the official practice results (top 3 listed by source;
-//     remaining drivers get null practice_rank — NOT fabricated)
+//   - practice_rank from the local public-source snapshot. The current
+//     snapshot ingests top-3 practice ranks only; remaining drivers get
+//     null practice_rank -- NOT fabricated.
 //   - multi_lap_rank set to null (snapshot does not publish it cleanly)
 //   - track_history_signal / liquidity_signal stay "unknown" (not in this source)
 //
@@ -26,12 +27,23 @@ function loadSnapshot() {
   return JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf-8'));
 }
 
+function snapshotSourceUrls(snap) {
+  return [
+    ...(snap.snapshot_source_urls ?? []),
+    ...(snap.starting_grid_source_urls ?? []),
+    ...(snap.practice_source_urls ?? []),
+    snap.snapshot_source_url,
+  ].filter(Boolean);
+}
+
 export function sourcedCocaCola600PracticeEnvelope({
   checked_at_utc = '2026-05-25T01:00:00.000Z',
   outputDir = 'state/nascar/2026-05-25/discovery',
 } = {}) {
   const snap = loadSnapshot();
-  const practiceByCar = new Map(snap.practice_top3.map(p => [p.car, p.pos]));
+  const practiceRows = snap.practice_results ?? snap.practice_top3 ?? [];
+  const source_urls = [...new Set(snapshotSourceUrls(snap))];
+  const practiceByCar = new Map(practiceRows.map(p => [p.car, p.pos]));
   const records = snap.starting_grid.map(g => ({
     query_type: 'driver_universe_entry',
     driver_name: g.driver,
@@ -50,10 +62,13 @@ export function sourcedCocaCola600PracticeEnvelope({
     override_reasons: [],
     data_quality: 'sourced',
     notes: practiceByCar.has(g.car)
-      ? 'Starting grid + practice top-3 from Wikipedia 2026 Coca-Cola 600.'
-      : 'Starting grid from Wikipedia 2026 Coca-Cola 600; practice rank not in top 3 published list.',
-    source_urls: [snap.snapshot_source_url],
+      ? 'Starting grid from public lineup sources; practice rank from public practice-result snapshot.'
+      : 'Starting grid from public lineup sources; practice rank not ingested in current model snapshot.',
+    source_urls,
   }));
+  const practiceScope = practiceRows.length >= records.length
+    ? 'full-field'
+    : `top-${practiceRows.length}`;
 
   const env = makeEnvelope({
     source_id: SOURCE_ID,
@@ -63,12 +78,12 @@ export function sourcedCocaCola600PracticeEnvelope({
     required: false,
     records,
     warnings: [
-      'Practice results are TOP-3 only as published by source; non-top-3 drivers have practice_rank=null (not fabricated).',
+      `Practice results are ${practiceScope} in the current model snapshot; non-ingested drivers have practice_rank=null (not fabricated).`,
       'multi_lap_rank is null — source does not publish it cleanly.',
       'current_points_rank is null on these records — pool selection should rely on fundamentals composite score, not these placeholder ranks.',
     ],
     errors: [],
-    source_urls: [snap.snapshot_source_url],
+    source_urls,
   });
   const gridBasis = /competition-based/i.test(snap.qualifying_format_note ?? '')
     ? 'rules_set'

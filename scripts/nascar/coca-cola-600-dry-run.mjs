@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// NASCAR Coca-Cola 600 dry-run packet CLI.
-// Fixtures-only. No live network. No credentials. No trading.
+// NASCAR Coca-Cola 600 packet CLI.
+// Public-source snapshots only. No credentials. No trading.
 import { pathToFileURL } from 'node:url';
 import { composeCocaCola600Packet } from './lib/coca-cola-600-packet.mjs';
 
@@ -19,7 +19,8 @@ async function main() {
     true_win_modifier_delta: result.modifier.true_win_modifier.delta_probability,
     true_win_modifier_applied: result.modifier.true_win_modifier.applied,
     beneficiary: result.beneficiary,
-    mode: 'fixtures-only',
+    mode: result.manifest.run_metadata.mode,
+    source_mode: result.manifest.run_metadata.source_mode,
     no_trades: true,
   };
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
