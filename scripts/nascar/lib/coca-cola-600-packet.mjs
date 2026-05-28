@@ -492,25 +492,36 @@ export async function composeCocaCola600Packet({
   };
   const fundamentals = composeBaseFundamentals({ envelopes: fundamentalsEnvelopes });
 
-  // 3c. Multi-lane ceiling board — top-20 candidate pool with 4 lanes
+  // 3c. Multi-lane ceiling board — full active-field candidate pool with 4 lanes
   //     (win, top_5, top_10, top_20) per driver.
   //
-  // Pool basis is CUP POINTS top-20 (current Drivers' championship standings),
-  // NOT fundamentals composite. Drivers without a fundamentals join stay in
-  // the pool with NO CLEAR PICK lanes — they are not dropped or replaced.
+  // Pool basis for article packet is the FULL active field from the sourced
+  // Coca-Cola 600 starting grid (Charlotte oval only). We left-join points
+  // position metadata where available but do not drop drivers missing points
+  // rows. Drivers without a fundamentals join stay in the pool with
+  // NO CLEAR PICK lanes — they are not dropped or replaced.
   const cupPointsEnv = cupPointsTop20Envelope({
     checked_at_utc: checkedAtUtc,
     outputDir: `${absOutputDir}/discovery`,
-    poolSize: 20,
+    poolSize: 39,
   });
-  const candidatePool = cupPointsEnv.records.map(r => ({
-    driver_name: r.driver_name,
-    car_number: r.car_number,
-    team: r.team,
-    manufacturer: r.manufacturer,
-    points_position: r.points_position,
-    season_points: r.season_points,
-  }));
+  const pointsByCar = new Map(
+    cupPointsEnv.records.map(r => [Number(r.car_number), r]),
+  );
+  const activeField = Array.isArray(envelopes.practice_qualifying?.records)
+    ? envelopes.practice_qualifying.records
+    : [];
+  const candidatePool = activeField.map(r => {
+    const points = pointsByCar.get(Number(r.car_number));
+    return {
+      driver_name: r.driver_name,
+      car_number: r.car_number,
+      team: r.team,
+      manufacturer: r.manufacturer,
+      points_position: points?.points_position ?? null,
+      season_points: points?.season_points ?? null,
+    };
+  });
 
   const multiLaneBoard = composeMultiLaneCeilingBoard({
     fundamentals,
@@ -521,10 +532,13 @@ export async function composeCocaCola600Packet({
       car_number: 33,
       connection_type: 'current_team',
     },
-    poolSize: 20,
+    poolSize: candidatePool.length,
     candidatePool,
-    candidatePoolBasis: 'cup_points_top_20',
-    candidatePoolSourceUrls: cupPointsEnv.source_urls,
+    candidatePoolBasis: 'coca_cola_600_active_field_grid',
+    candidatePoolSourceUrls: [
+      ...(envelopes.practice_qualifying.source_urls ?? []),
+      ...(cupPointsEnv.source_urls ?? []),
+    ],
   });
 
   // 3d. Final-ceiling overlay — collapses the 4 lane statuses into ONE
@@ -563,6 +577,10 @@ export async function composeCocaCola600Packet({
     c.final_invalidators = o.invalidators;
     c.final_reasoning_summary = o.reasoning_summary;
   }
+  multiLaneBoard.candidates.sort((a, b) => (Number(b.final_composite_score ?? -1) - Number(a.final_composite_score ?? -1)));
+  multiLaneBoard.candidates.forEach((c, idx) => {
+    c.pool_rank = idx + 1;
+  });
   multiLaneBoard.final_ceiling_schema = {
     ceilings_allowed: FINAL_CEILINGS,
     layer_categories: [
