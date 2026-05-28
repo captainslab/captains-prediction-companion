@@ -29,14 +29,240 @@ import {
   filterByEventDate,
   persistEventArtifacts,
   summarizeEvent,
-  renderMarketBlocks,
+  normalizeMarket,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
+import {
+  PROFILE_KEY as POLITICAL_PROFILE,
+  LAYER_DEFS as POLITICAL_LAYERS,
+} from '../mentions/profiles/political-mentions.mjs';
+import {
+  PROFILE_KEY as EARNINGS_PROFILE,
+  LAYER_DEFS as EARNINGS_LAYERS,
+} from '../mentions/profiles/earnings-mentions.mjs';
+import {
+  PROFILE_KEY as SPORTS_ANNOUNCER_PROFILE,
+  LAYER_DEFS as SPORTS_ANNOUNCER_LAYERS,
+} from '../mentions/profiles/sports-announcer-mentions.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 const DEFAULT_WINDOW_DAYS = 7; // forward-looking week
 const PACKET_LIMIT = 60;       // safety cap on packets emitted per run
+const PROFILE_REGISTRY = Object.freeze({
+  [POLITICAL_PROFILE]: {
+    layerDefs: POLITICAL_LAYERS,
+  },
+  [EARNINGS_PROFILE]: {
+    layerDefs: EARNINGS_LAYERS,
+  },
+  [SPORTS_ANNOUNCER_PROFILE]: {
+    layerDefs: SPORTS_ANNOUNCER_LAYERS,
+  },
+});
+const POSTURE_RANK = Object.freeze({
+  NO_CLEAR_PICK: 0,
+  WATCH: 1,
+  LEAN: 2,
+  EVIDENCE_LEAN: 3,
+  PICK: 4,
+});
+
+function asText(value) {
+  return value == null ? '' : String(value).trim();
+}
+
+function validProfile(value) {
+  const key = asText(value);
+  return Object.hasOwn(PROFILE_REGISTRY, key) ? key : null;
+}
+
+function lowerJoined(parts) {
+  return parts.map(asText).filter(Boolean).join(' ').toLowerCase();
+}
+
+function resolveMentionProfile({ event = null, market = null, legacy = null } = {}) {
+  const explicit = [
+    market?.mention_profile,
+    market?.mentionProfile,
+    market?.composite_profile,
+    market?.profile,
+    market?.mention_composite?.profile,
+    market?.mentionComposite?.profile,
+    event?.mention_profile,
+    event?.mentionProfile,
+    event?.composite_profile,
+    event?.profile,
+    legacy?.mention_profile,
+    legacy?.mentionProfile,
+    legacy?.composite_profile,
+    legacy?.profile,
+  ].map(validProfile).find(Boolean);
+  if (explicit) return { profile: explicit, basis: 'explicit_profile' };
+
+  const text = lowerJoined([
+    event?.event_ticker,
+    event?.series_ticker,
+    event?.title,
+    event?.sub_title,
+    market?.ticker,
+    market?.title,
+    market?.subtitle,
+    market?.yes_sub_title,
+    market?.no_sub_title,
+    market?.rules_primary,
+    market?.rules_secondary,
+    legacy?.event_id,
+    legacy?.target_phrase,
+    legacy?.speaker,
+    legacy?.company,
+    legacy?.entity,
+    legacy?.context,
+    legacy?.event_context,
+  ]);
+
+  if (/\b(earnings|earnings call|quarterly results|guidance|eps|revenue|cfo|ceo|investor relations|10-k|10-q|sec filing)\b/.test(text)) {
+    return { profile: EARNINGS_PROFILE, basis: 'inferred_earnings_terms' };
+  }
+  if (/\b(announcer|broadcast|commentator|commentary|pregame|postgame|espn|fox sports|tnt|cbs sports|nbc sports|game broadcast)\b/.test(text)) {
+    return { profile: SPORTS_ANNOUNCER_PROFILE, basis: 'inferred_broadcast_terms' };
+  }
+  if (/\b(president|trump|biden|vance|senate|congress|governor|mayor|election|debate|speech|rally|hearing|white house|secretary|minister|campaign|candidate)\b/.test(text)) {
+    return { profile: POLITICAL_PROFILE, basis: 'inferred_political_terms' };
+  }
+  return { profile: POLITICAL_PROFILE, basis: 'default_mentions_calendar_profile' };
+}
+
+function firstLayerRecordMap(...carriers) {
+  const keys = [
+    'layer_records',
+    'layerRecords',
+    'mention_layer_records',
+    'mentionLayerRecords',
+    'composite_layer_records',
+    'compositeLayerRecords',
+  ];
+  for (const carrier of carriers) {
+    if (!carrier || typeof carrier !== 'object') continue;
+    for (const key of keys) {
+      const value = carrier[key];
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    }
+    for (const nestedKey of ['mention_composite', 'mentionComposite', 'composite']) {
+      const nested = carrier[nestedKey];
+      if (!nested || typeof nested !== 'object') continue;
+      for (const key of keys) {
+        const value = nested[key];
+        if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+      }
+    }
+  }
+  return {};
+}
+
+function dollarsToCents(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+function numericOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function marketContextFromMarket(market = {}) {
+  const yesBid = dollarsToCents(market.yes_bid_dollars);
+  const yesAsk = dollarsToCents(market.yes_ask_dollars);
+  const noBid = dollarsToCents(market.no_bid_dollars);
+  const noAsk = dollarsToCents(market.no_ask_dollars);
+  const last = dollarsToCents(market.last_price_dollars);
+  const spread = yesBid !== null && yesAsk !== null ? yesAsk - yesBid : null;
+  return {
+    yes_bid_cents: yesBid,
+    yes_ask_cents: yesAsk,
+    no_bid_cents: noBid,
+    no_ask_cents: noAsk,
+    last_trade_price_cents: last,
+    spread_cents: spread,
+    volume: numericOrNull(market.volume_fp),
+    open_interest: numericOrNull(market.open_interest_fp),
+  };
+}
+
+function targetMentionFromMarket(market = {}) {
+  const normalized = normalizeMarket(market);
+  return (
+    normalized.full_strike_display ||
+    normalized.yes_sub_title ||
+    normalized.functional_strike ||
+    normalized.title ||
+    normalized.ticker ||
+    'MISSING'
+  );
+}
+
+function eventNameForComposite(event = {}, legacy = null) {
+  return (
+    asText(legacy?.event_context) ||
+    asText(legacy?.context) ||
+    [event?.title, event?.sub_title].map(asText).filter(Boolean).join(' - ') ||
+    asText(event?.event_ticker) ||
+    asText(legacy?.event_id) ||
+    'MISSING'
+  );
+}
+
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null } = {}) {
+  const profileResolution = resolveMentionProfile({ event, market, legacy });
+  const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
+  const targetMention = market ? targetMentionFromMarket(market) : (
+    asText(legacy?.target_phrase) ||
+    asText(legacy?.phrase) ||
+    asText(legacy?.keyword) ||
+    'MISSING'
+  );
+  const layerRecords = firstLayerRecordMap(market, event, legacy);
+  const result = composeMentionLedger({
+    event: eventNameForComposite(event ?? {}, legacy),
+    targetMention,
+    profile: profileResolution.profile,
+    layerDefs: profileConfig.layerDefs,
+    layerRecords,
+    marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
+  });
+  return {
+    market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
+    profile_basis: profileResolution.basis,
+    result,
+  };
+}
+
+function bestComposite(composites) {
+  const ranked = composites
+    .filter(c => c?.result)
+    .slice()
+    .sort((a, b) => {
+      const postureDiff = (POSTURE_RANK[b.result.posture] ?? -1) - (POSTURE_RANK[a.result.posture] ?? -1);
+      if (postureDiff !== 0) return postureDiff;
+      return (b.result.composite_score ?? -1) - (a.result.composite_score ?? -1);
+    });
+  return ranked[0] ?? null;
+}
+
+function summarizeCompositeRun(composites) {
+  const best = bestComposite(composites);
+  return {
+    market_count: composites.length,
+    scored_count: composites.filter(c => c?.result?.composite_score !== null).length,
+    best_posture: best?.result?.posture ?? 'NO_CLEAR_PICK',
+    best_score: best?.result?.composite_score ?? null,
+    best_target: best?.result?.target_mention ?? null,
+    pricing_excluded: true,
+  };
+}
 
 function firstMarketRules(event) {
   const markets = Array.isArray(event?.markets) ? event.markets : [];
@@ -85,6 +311,127 @@ function buildMentionProcess({ event, hasLocalEvidence = false, legacy = null })
   });
 }
 
+function formatMaybe(value) {
+  return value === null || value === undefined || value === '' ? 'MISSING' : String(value);
+}
+
+function marketRows(event) {
+  const markets = Array.isArray(event?.markets) ? event.markets.slice(0, PACKET_LIMIT) : [];
+  let missingStrikeCount = 0;
+  const rows = markets.map((raw) => {
+    const normalized = normalizeMarket(raw);
+    if (normalized.missing_strike_text) missingStrikeCount += 1;
+    return { raw, normalized };
+  });
+  return {
+    rows,
+    marketCount: Array.isArray(event?.markets) ? event.markets.length : 0,
+    missingStrikeCount,
+    missingMarkets: !Array.isArray(event?.markets) || event.markets.length === 0,
+    truncatedCount: Array.isArray(event?.markets) ? Math.max(0, event.markets.length - rows.length) : 0,
+  };
+}
+
+function renderContractInventory(marketInfo) {
+  const lines = [];
+  lines.push('kalshi_contract_inventory_NOT_IN_SCORE:');
+  lines.push('  note: contract metadata and settlement wording are listed for routing/research; not used as composite evidence layers.');
+  if (marketInfo.missingMarkets) {
+    lines.push('  MISSING_MARKETS: event has no markets[]');
+    return lines;
+  }
+  for (const { normalized: m } of marketInfo.rows) {
+    lines.push(`  - market_ticker: ${formatMaybe(m.ticker)}`);
+    lines.push(`    market_title: ${formatMaybe(m.title)}`);
+    lines.push(`    market_subtitle: ${formatMaybe(m.subtitle)}`);
+    lines.push(`    yes_sub_title: ${formatMaybe(m.yes_sub_title)}`);
+    lines.push(`    no_sub_title: ${formatMaybe(m.no_sub_title)}`);
+    lines.push(`    strike_source_used: ${formatMaybe(m.strike_source_used || 'MISSING_STRIKE_TEXT')}`);
+    lines.push(`    full_strike_display: ${formatMaybe(m.full_strike_display || 'MISSING_STRIKE_TEXT')}`);
+    lines.push(`    close_time_utc: ${formatMaybe(m.close_time)}`);
+    lines.push(`    expected_expiration_utc: ${formatMaybe(m.expected_expiration_time)}`);
+    lines.push(`    rules_primary: ${formatMaybe(m.rules_primary)}`);
+    lines.push(`    rules_secondary: ${formatMaybe(m.rules_secondary)}`);
+  }
+  if (marketInfo.truncatedCount > 0) {
+    lines.push(`  ... ${marketInfo.truncatedCount} additional markets truncated`);
+  }
+  return lines;
+}
+
+function renderCompositeEvidence(composites) {
+  const lines = [];
+  lines.push('--- Composite Evidence ---');
+  lines.push('scoring_model: mention_composite_v1');
+  lines.push('pricing_excluded: true');
+  lines.push('pricing_exclusion_note: market context is excluded from all layer records and composite math.');
+  if (!composites.length) {
+    lines.push('composite_markets: 0');
+    lines.push('composite_status: NO_CLEAR_PICK (no markets available for scoring)');
+    return lines;
+  }
+  lines.push(`composite_markets: ${composites.length}`);
+  for (const c of composites) {
+    const r = c.result;
+    lines.push(`  - market_ticker: ${formatMaybe(c.market_ticker)}`);
+    lines.push(`    target_mention: ${formatMaybe(r.target_mention)}`);
+    lines.push(`    profile: ${r.profile}`);
+    lines.push(`    profile_basis: ${c.profile_basis}`);
+    lines.push(`    composite_score: ${r.composite_score === null ? 'MISSING' : r.composite_score}`);
+    lines.push(`    composite_posture: ${r.posture}`);
+    lines.push(`    layers_present: ${r._meta.layers_present}/${r._meta.layers_total}`);
+    lines.push('    top_support:');
+    if (r.top_supporting_layers.length) {
+      for (const layer of r.top_supporting_layers) {
+        lines.push(`      - ${layer.category}: value=${layer.value} contribution=${layer.contribution}`);
+      }
+    } else {
+      lines.push('      - MISSING: no source-backed layers supplied');
+    }
+    lines.push('    missing_layers:');
+    if (r.missing_layers.length) {
+      for (const layer of r.missing_layers) {
+        lines.push(`      - ${layer.category}: ${layer.missing_note}`);
+      }
+    } else {
+      lines.push('      - none');
+    }
+    lines.push('    source_notes:');
+    if (r.source_notes.length) {
+      for (const note of r.source_notes) lines.push(`      - ${note}`);
+    } else {
+      lines.push('      - MISSING: no source notes from present layers');
+    }
+    lines.push(`    reasoning_summary: ${r.reasoning_summary}`);
+  }
+  return lines;
+}
+
+function renderMarketContextNotInScore(marketInfo) {
+  const lines = [];
+  lines.push('--- Market Context - NOT IN SCORE ---');
+  lines.push('note: Kalshi prices, liquidity, volume, and open interest are displayed only for validation/context and never enter mention_composite scoring.');
+  if (marketInfo.missingMarkets) {
+    lines.push('  MISSING_MARKETS: event has no markets[]');
+    return lines;
+  }
+  for (const { normalized: m } of marketInfo.rows) {
+    lines.push(`  - market_ticker: ${formatMaybe(m.ticker)}`);
+    lines.push(`    yes_bid: ${formatMaybe(m.yes_bid_dollars)}`);
+    lines.push(`    yes_ask: ${formatMaybe(m.yes_ask_dollars)}`);
+    lines.push(`    no_bid: ${formatMaybe(m.no_bid_dollars)}`);
+    lines.push(`    no_ask: ${formatMaybe(m.no_ask_dollars)}`);
+    lines.push(`    last_price: ${formatMaybe(m.last_price_dollars)}`);
+    lines.push(`    liquidity: ${formatMaybe(m.liquidity_dollars)}`);
+    lines.push(`    volume: ${formatMaybe(m.volume_fp)}`);
+    lines.push(`    open_interest: ${formatMaybe(m.open_interest_fp)}`);
+  }
+  if (marketInfo.truncatedCount > 0) {
+    lines.push(`  ... ${marketInfo.truncatedCount} additional market contexts truncated`);
+  }
+  return lines;
+}
+
 export function discoverMentionEvents(stateRoot, date) {
   const roots = [
     resolve(stateRoot, 'mentions', date),
@@ -109,9 +456,11 @@ export function discoverMentionEvents(stateRoot, date) {
   return events;
 }
 
-function buildKalshiEventPacket({ date, event, sourceUrl }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl }) {
   const s = summarizeEvent(event);
-  const block = renderMarketBlocks(event, { limit: PACKET_LIMIT });
+  const marketInfo = marketRows(event);
+  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw }));
+  const compositeSummary = summarizeCompositeRun(composites);
   const process = buildMentionProcess({ event });
   const header = packetHeader({
     title: 'Captain Mentions — Daily Event Packet',
@@ -123,7 +472,10 @@ function buildKalshiEventPacket({ date, event, sourceUrl }) {
   lines.push('TLDR:');
   lines.push(`  market_type: ${process.marketType}`);
   lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: no pick without exact wording, source/event path, and transcript/public-statement evidence.');
+  lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
+  lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
+  lines.push(`  composite_top_target: ${compositeSummary.best_target || 'MISSING'}`);
+  lines.push('  note: mention-composite is source-layer scoring only; market context is NOT IN SCORE.');
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');
@@ -134,8 +486,11 @@ function buildKalshiEventPacket({ date, event, sourceUrl }) {
   lines.push(`market_count: ${s.marketCount}`);
   lines.push(`close_time_utc: ${s.close}`);
   lines.push('');
-  lines.push('markets:');
-  for (const l of block.lines) lines.push(l);
+  for (const l of renderCompositeEvidence(composites)) lines.push(l);
+  lines.push('');
+  for (const l of renderContractInventory(marketInfo)) lines.push(l);
+  lines.push('');
+  for (const l of renderMarketContextNotInScore(marketInfo)) lines.push(l);
   lines.push('');
   lines.push('resolution_mechanics:');
   lines.push('  See market.rules_primary/rules_secondary per Kalshi listing.');
@@ -143,17 +498,20 @@ function buildKalshiEventPacket({ date, event, sourceUrl }) {
   lines.push('');
   lines.push('verified_vs_inference: MISSING (research-only packet; verification required by mentions-researcher)');
   lines.push(`decision_status: ${process.decisionStatus}`);
-  lines.push('posture: WATCH (insufficient verified evidence; not a real pick)');
+  lines.push(`posture: ${compositeSummary.best_posture} (mention composite; research only, no trade)`);
   return {
     text: header + lines.join('\n') + packetFooter(),
-    marketCount: block.marketCount,
-    missingStrikeCount: block.missingStrikeCount,
-    missingMarkets: block.missingMarkets,
+    marketCount: marketInfo.marketCount,
+    missingStrikeCount: marketInfo.missingStrikeCount,
+    missingMarkets: marketInfo.missingMarkets,
+    compositeSummary,
   };
 }
 
 function buildLegacyEventPacket({ date, event }) {
   const p = event.parsed || {};
+  const composite = buildMentionCompositeForMarket({ legacy: p });
+  const compositeSummary = summarizeCompositeRun([composite]);
   const process = buildMentionProcess({ event: null, hasLocalEvidence: Boolean((p.evidence || p.sources || []).length), legacy: p });
   const header = packetHeader({
     title: 'Captain Mentions — Daily Event Packet (legacy artifact)',
@@ -165,7 +523,9 @@ function buildLegacyEventPacket({ date, event }) {
   lines.push('TLDR:');
   lines.push(`  market_type: ${process.marketType}`);
   lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: legacy artifact requires settlement/source review before any lean.');
+  lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
+  lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
+  lines.push('  note: legacy artifact uses mention-composite only when source layer records are present.');
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');
@@ -185,9 +545,11 @@ function buildLegacyEventPacket({ date, event }) {
     lines.push('  MISSING');
   }
   lines.push('');
+  for (const l of renderCompositeEvidence([composite])) lines.push(l);
+  lines.push('');
   lines.push(`verified_vs_inference: ${p.verified_vs_inference || 'MISSING'}`);
   lines.push(`decision_status: ${process.decisionStatus}`);
-  lines.push(`posture: ${p.posture || 'WATCH (insufficient verified evidence; not a real pick)'}`);
+  lines.push(`posture: ${compositeSummary.best_posture} (mention composite; research only, no trade)`);
   return header + lines.join('\n') + packetFooter();
 }
 
@@ -354,6 +716,10 @@ async function main() {
         market_count: built.marketCount,
         missing_markets: built.missingMarkets,
         missing_strike_text_count: built.missingStrikeCount,
+        composite_scored_count: built.compositeSummary.scored_count,
+        composite_best_posture: built.compositeSummary.best_posture,
+        composite_best_score: built.compositeSummary.best_score,
+        composite_pricing_excluded: built.compositeSummary.pricing_excluded,
         kalshi_source_api: KALSHI_SOURCES.mentions.api_url,
         kalshi_source_page: KALSHI_SOURCES.mentions.page_url,
       });
