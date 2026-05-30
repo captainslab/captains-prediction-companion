@@ -313,6 +313,24 @@ test('dynamic composite builder uses stats_adapter and confirmed context without
     assert.ok(categories.includes('season_form'));
     assert.ok(categories.includes('lineup_handedness_matchup'));
     assert.ok(result.gameLedger.away.layers_present >= 6);
+
+    const polluted = runComposite({
+      ...slate.inputs[0],
+      supportedMarketLanes: [
+        { market_lane: 'moneyline', source_available: false },
+        { market_lane: 'game_total', source_available: false },
+        { market_lane: 'yrfi_nrfi', source_available: false },
+      ],
+      market_context: {
+        yes_ask: 0.99,
+        no_ask: 0.99,
+        odds: '+10000',
+        volume: 999999,
+        open_interest: 999999,
+      },
+    });
+    assert.deepEqual(polluted.board.top_pick, result.board.top_pick);
+    assert.doesNotMatch(JSON.stringify(polluted), /yes_ask|no_ask|open_interest|volume|\+10000/i);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
