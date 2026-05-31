@@ -464,8 +464,11 @@ test('event market alpha computes fair value and a directional side for a specif
       watch_for: ['alternate wording', 'segment exclusions'],
     },
     (query, options) => {
-      assert.equal(options.provider, 'gemini');
-      assert.equal(options.model, 'gemini-2.5-flash');
+      // No hard-coded model routing: with no explicit override configured,
+      // packet generation must NOT force a provider/model, so the Hermes CLI
+      // uses its own active default provider/model/reasoning.
+      assert.equal(options.provider ?? null, null);
+      assert.equal(options.model ?? null, null);
       assert.equal(options.source, 'event-market-alpha');
       assert.deepEqual(options.skills, []);
       assert.deepEqual(options.toolsets, []);
@@ -497,6 +500,57 @@ test('event market alpha computes fair value and a directional side for a specif
     'alternate wording',
     'segment exclusions',
   ]);
+});
+
+test('event market alpha honors an explicit model/provider override', async () => {
+  const eventPayload = buildTrumpEventPayload();
+  const marketPayload = {
+    market: {
+      ...eventPayload.markets[0],
+      event_ticker: 'KXTRUMPMENTIONB-26MAR27',
+      rules_secondary: 'Video of the remarks will be used as the primary settlement source.',
+    },
+  };
+  const orderbookPayload = {
+    orderbook_fp: {
+      yes_dollars: [
+        [0.86, 100],
+        [0.87, 50],
+      ],
+      no_dollars: [[0.18, 40]],
+    },
+  };
+  const fetchImpl = createFetchStub(
+    new Map([
+      [`${KALSHI_BASE_URL}/markets/KXTRUMPMENTIONB-26MAR27-BIDE`, marketPayload],
+      [`${KALSHI_BASE_URL}/markets/KXTRUMPMENTIONB-26MAR27-BIDE/orderbook`, orderbookPayload],
+      [`${KALSHI_BASE_URL}/events/KXTRUMPMENTIONB-26MAR27`, eventPayload],
+    ])
+  );
+  const alphaRunner = createAlphaRunnerStub(
+    {
+      fair_yes: 0.92,
+      confidence: 'high',
+      reasoning: 'Biden is a likely attack line in this remarks format.',
+      watch_for: ['alternate wording'],
+    },
+    (query, options) => {
+      // An explicit override must still flow through to the Hermes CLI call.
+      assert.equal(options.provider, 'copilot');
+      assert.equal(options.model, 'claude-opus-4.8');
+    }
+  );
+
+  const result = await buildEventMarketPlan(
+    {
+      venue: 'Kalshi',
+      market_id: 'KXTRUMPMENTIONB-26MAR27-BIDE',
+      url: TRUMP_EVENT_URL,
+    },
+    { fetchImpl, alphaRunner, alphaProvider: 'copilot', alphaModel: 'claude-opus-4.8' }
+  );
+
+  assert.equal(result.user_facing.status, 'ready');
 });
 
 test('event market alpha falls back cleanly when the model call fails', async () => {
