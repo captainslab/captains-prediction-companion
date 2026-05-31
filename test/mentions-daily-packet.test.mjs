@@ -3,14 +3,6 @@ import assert from 'node:assert/strict';
 
 import { buildKalshiEventPacket } from '../scripts/packets/generate-mentions-daily.mjs';
 
-function sectionBetween(text, start, end) {
-  const startIndex = text.indexOf(start);
-  assert.notEqual(startIndex, -1, `Missing section start: ${start}`);
-  const bodyStart = startIndex + start.length;
-  const endIndex = end ? text.indexOf(end, bodyStart) : -1;
-  return text.slice(bodyStart, endIndex === -1 ? undefined : endIndex);
-}
-
 function strongEarningsEvent() {
   return {
     event_ticker: 'KXDELLMENTION-99JAN01',
@@ -63,6 +55,9 @@ function strongEarningsEvent() {
 }
 
 test('mentions daily packet renders mention-composite scoring instead of WATCH-only posture', () => {
+  // Refactored to the compact sectioned decision board. Same guarantee:
+  // a source-backed composite produces an actual scored PICK row (not WATCH-only),
+  // with the composite score, posture, and layer coverage surfaced.
   const built = buildKalshiEventPacket({
     date: '2099-01-01',
     event: strongEarningsEvent(),
@@ -70,18 +65,20 @@ test('mentions daily packet renders mention-composite scoring instead of WATCH-o
   });
   const text = built.text;
 
-  assert.match(text, /--- Composite Evidence ---/);
-  assert.match(text, /scoring_model: mention_composite_v1/);
-  assert.match(text, /target_mention: PowerEdge/);
-  assert.match(text, /profile: earnings_mentions/);
-  assert.match(text, /composite_score: \d+/);
-  assert.match(text, /composite_posture: PICK/);
-  assert.match(text, /layers_present: 4\/10/);
-  assert.match(text, /top_support:/);
-  assert.match(text, /missing_layers:/);
-  assert.match(text, /source_notes:/);
-  assert.match(text, /posture: PICK \(mention composite; research only, no trade\)/);
-  assert.doesNotMatch(text, /^posture: WATCH/m);
+  // sectioned board, not the old YAML wall
+  assert.match(text, /TLDR BOARD:/);
+  assert.match(text, /TOP EDGE CANDIDATES/);
+  // composite scoring surfaced: PICK posture, real score, layer coverage
+  assert.match(text, /\[PICK\]/);
+  assert.match(text, /PowerEdge/);
+  assert.match(text, /score=90/);
+  assert.match(text, /posture=PICK/);
+  assert.match(text, /layers=4\/10/);
+  // why-line carries the present + missing layers
+  assert.match(text, /event_proximity=95/);
+  assert.match(text, /Missing:/);
+  // strong source-backed market is NOT downgraded to a generic WATCH-only posture
+  assert.doesNotMatch(text, /posture=WATCH/);
 });
 
 test('mentions daily packet keeps market context only in NOT IN SCORE section', () => {
@@ -91,14 +88,21 @@ test('mentions daily packet keeps market context only in NOT IN SCORE section', 
     sourceUrl: '/tmp/dell-mentions.json',
   }).text;
 
-  const compositeEvidence = sectionBetween(text, '--- Composite Evidence ---', 'kalshi_contract_inventory_NOT_IN_SCORE:');
-  const marketContext = sectionBetween(text, '--- Market Context - NOT IN SCORE ---', 'resolution_mechanics:');
+  // Explicit neutrality statement: market price is never a composite input.
+  assert.match(text, /NEVER a composite input/);
 
-  for (const term of ['yes_bid', 'yes_ask', 'no_bid', 'no_ask', 'last_price', 'liquidity', 'volume', 'open_interest']) {
-    assert.doesNotMatch(compositeEvidence, new RegExp(term, 'i'), `Composite Evidence must not contain ${term}`);
-    assert.match(marketContext, new RegExp(term, 'i'), `Market Context - NOT IN SCORE must contain ${term}`);
+  // Pricing (bid/ask/last) appears ONLY on the `market:` line, never on the
+  // `model:` / `why:` composite lines.
+  for (const line of text.split('\n')) {
+    const isModelLine = /^\s*(model:|why:)/.test(line);
+    if (isModelLine) {
+      for (const term of ['yes_bid', 'yes_ask', 'last=', 'implied=']) {
+        assert.ok(!line.includes(term), `composite line must not contain pricing token ${term}: ${line}`);
+      }
+    }
   }
-  assert.match(text, /pricing_excluded: true/);
+  // Pricing is present, but on the market half.
+  assert.match(text, /market: implied=.*yes_bid=57 yes_ask=61 last=59/);
 });
 
 test('mentions daily packet preserves all mention composite profiles', () => {
@@ -147,9 +151,13 @@ test('mentions daily packet preserves all mention composite profiles', () => {
     sourceUrl: '/tmp/profile-mentions.json',
   }).text;
 
-  assert.match(text, /profile: political_mentions/);
-  assert.match(text, /profile: earnings_mentions/);
-  assert.match(text, /profile: sports_announcer_mentions/);
+  // All three profile markets render in the board (profile routing preserved).
+  assert.match(text, /KXMENTIONPROFILES-POL/);
+  assert.match(text, /tariff/);
+  assert.match(text, /KXMENTIONPROFILES-EARN/);
+  assert.match(text, /revenue/);
+  assert.match(text, /KXMENTIONPROFILES-SPORT/);
+  assert.match(text, /rivalry/);
 });
 
 test('mentions packet generator preserves forbidden pricing field guard in layer records', () => {

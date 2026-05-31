@@ -30,8 +30,199 @@ import {
 } from './lib/kalshi-discovery.mjs';
 import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import {
+  buildDecisionRow,
+  renderDecisionBoard,
+  renderSectionedPacket,
+  rankDecisionRows,
+  buildInventoryArtifact,
+  EDGE_STATUS,
+  CONFIDENCE,
+} from '../shared/decision-packet.mjs';
 
 const PACKET_TYPE = 'mlb-daily';
+
+// Map an MLB scoring-core classification to the shared edge_status vocabulary.
+// The MLB scorer is the authority on the verdict; the shared row carries it as
+// statusOverride so the generic threshold logic does not relitigate it. Market
+// price is NEVER read back into the composite — fair_value (model) and
+// kalshi_ask (market) stay in separate halves of the row.
+const MLB_CLASSIFICATION_TO_STATUS = Object.freeze({
+  CLEAR_PICK: EDGE_STATUS.PICK,
+  PRE_LINEUP_PICK: EDGE_STATUS.PICK,
+  LEAN: EDGE_STATUS.LEAN,
+  WATCH_FOR_PRICE: EDGE_STATUS.WATCH,
+  WATCH_FOR_LISTING: EDGE_STATUS.WATCH,
+  CORRELATED_ALTERNATE: EDGE_STATUS.WATCH,
+  PASS: EDGE_STATUS.PASS,
+  FADE: EDGE_STATUS.FADE,
+  BLOCKED: EDGE_STATUS.BLOCKED,
+  BLOCKED_SOURCE_GAP: EDGE_STATUS.BLOCKED,
+});
+
+const MLB_POSTURE = Object.freeze({
+  CLEAR_PICK: 'PICK',
+  PRE_LINEUP_PICK: 'EVIDENCE_LEAN',
+  LEAN: 'LEAN',
+  WATCH_FOR_PRICE: 'WATCH',
+  WATCH_FOR_LISTING: 'WATCH',
+  CORRELATED_ALTERNATE: 'MARKET_ONLY_LEAN',
+  PASS: 'NO_CLEAR_PICK',
+  FADE: 'NO_CLEAR_PICK',
+  BLOCKED: 'NO_CLEAR_PICK',
+  BLOCKED_SOURCE_GAP: 'NO_CLEAR_PICK',
+});
+
+/**
+ * Load the MLB scoring artifacts (picks.json / today-execution-board.json) for
+ * a date if the sports-pre-game pipeline already produced them. Read-only.
+ * Returns { picks: [], source, runDate, summaryCounts } or null.
+ */
+export function loadMlbScoring(stateRoot, date) {
+  const picksPath = resolve(stateRoot, 'mlb', date, 'picks.json');
+  const json = readJsonIfExists(picksPath);
+  if (!json || !Array.isArray(json.picks)) return null;
+  return {
+    picks: json.picks,
+    source: picksPath,
+    runDate: json.run_date ?? date,
+    summaryCounts: json.summary_counts ?? {},
+    sourceHealth: json.source_health ?? {},
+  };
+}
+
+/**
+ * Convert one MLB pick record into a shared decision row. fair_value is the
+ * MARKET-NEUTRAL model probability from the composite scoring core; kalshi_ask
+ * is the market price. Edge derives from fair vs implied only.
+ * A lineup_pending confirmation downgrades confidence but does NOT collapse the
+ * row to WATCH — a strong pre-lineup edge still surfaces as a PICK.
+ */
+export function mlbPickToDecisionRow(pick = {}) {
+  const cls = String(pick.classification ?? 'PASS').toUpperCase();
+  const status = MLB_CLASSIFICATION_TO_STATUS[cls] ?? EDGE_STATUS.WATCH;
+  const posture = MLB_POSTURE[cls] ?? 'WATCH';
+  const missing = Array.isArray(pick.missing_confirmations) ? pick.missing_confirmations : [];
+  const gates = Array.isArray(pick.gates_passed) ? pick.gates_passed : [];
+  const lineupPending = missing.some((m) => /lineup/i.test(String(m)));
+
+  // Confidence: gate coverage, then downgrade once for a pending lineup so the
+  // pre-lineup nature is reflected without killing the pick.
+  let confidence = gates.length >= 5 ? CONFIDENCE.HIGH : gates.length >= 3 ? CONFIDENCE.MEDIUM : CONFIDENCE.LOW;
+  if (lineupPending && confidence === CONFIDENCE.HIGH) confidence = CONFIDENCE.MEDIUM;
+  else if (lineupPending && confidence === CONFIDENCE.MEDIUM) confidence = CONFIDENCE.LOW;
+
+  const sideTarget = pick.contract_title
+    ? `${pick.contract_title}${pick.game ? ` — ${pick.game}` : ''}`
+    : (pick.game ?? pick.market_title ?? 'MISSING');
+
+  const analysisBits = [];
+  if (pick.edge_pp != null) {
+    // Edge reference: prefer the market-neutral composite fair_value; if the
+    // composite produced no probability, fall back to the book-derived
+    // market_reference_prob (renamed from fair_value in 3f46ae8 so it is NOT
+    // mistaken for the composite). Label the source honestly and never emit NaN.
+    const composite = pick.fair_value != null && Number.isFinite(Number(pick.fair_value)) ? Number(pick.fair_value) : null;
+    const bookRef = pick.market_reference_prob != null && Number.isFinite(Number(pick.market_reference_prob)) ? Number(pick.market_reference_prob) : null;
+    const refProb = composite ?? bookRef;
+    const refLabel = composite != null ? 'model fair' : (bookRef != null ? 'book-ref (not composite)' : 'ref');
+    const refPct = refProb != null ? `${(refProb * 100).toFixed(0)}%` : 'MISSING';
+    const mktPct = Number.isFinite(Number(pick.kalshi_ask)) ? `${(Number(pick.kalshi_ask) * 100).toFixed(0)}%` : 'MISSING';
+    analysisBits.push(`${refLabel} ${refPct} vs market ${mktPct} = ${pick.edge_pp >= 0 ? '+' : ''}${Number(pick.edge_pp).toFixed(1)}pp`);
+  }
+  if (pick.dk_line != null) analysisBits.push(`book line ${pick.dk_line}`);
+  if (cls === 'CORRELATED_ALTERNATE') analysisBits.push('reference-only: primary pick selected elsewhere in correlation group');
+  if (lineupPending) analysisBits.push('pre-lineup: do not enter until lineup confirmed');
+  const analysis = analysisBits.length ? analysisBits.join('; ') : `classification ${cls}`;
+
+  const trigger = {
+    price: pick.target_entry ?? null,
+    event: lineupPending ? 'lineup confirmation' : (pick.target_entry != null ? 'price reaches target entry' : 'MISSING'),
+  };
+
+  return buildDecisionRow({
+    marketTicker: pick.market_ticker ?? 'MISSING',
+    sideTarget,
+    marketType: pick.market_lane ?? 'mlb',
+    settlementSummary: pick.market_title ?? pick.contract_title ?? 'MLB market settlement per Kalshi listing',
+    composite: {
+      score: pick.fair_value != null ? Math.round(Number(pick.fair_value) * 1000) / 10 : null,
+      posture,
+      layersPresent: gates.length,
+      layersTotal: gates.length + missing.length,
+      topEvidenceLayers: gates.map((g) => String(g).split(':')[0]),
+      missingLayers: missing,
+      modelProbability: pick.fair_value ?? null,
+    },
+    market: {
+      yes_ask: pick.kalshi_ask ?? null,
+      yes_bid: pick.kalshi_bid ?? null,
+      last_price: pick.kalshi_last ?? null,
+    },
+    fair: { probability: pick.fair_value ?? null },
+    confidence,
+    analysis,
+    trigger,
+    statusOverride: status,
+    edgeOverridePp: Number.isFinite(Number(pick.edge_pp)) ? Number(pick.edge_pp) : undefined,
+  });
+}
+
+/**
+ * Build the compact, sectioned MLB slate packet from picks.json scoring rows.
+ * Returns { text, rows, inventoryText, counts } or null if no scoring exists.
+ * The main user-facing text contains ONLY the sectioned decision board (TLDR +
+ * Top Edge / Watchlist / Fades / Blocked + audit pointers). The full per-pick
+ * inventory goes to a separate audit artifact, never the packet body.
+ */
+export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null }) {
+  if (!scoring || !Array.isArray(scoring.picks) || !scoring.picks.length) return null;
+  // Skip pure reference rows from the headline board so we don't pad sections,
+  // but keep them in the inventory artifact.
+  const allRows = scoring.picks.map((p) => mlbPickToDecisionRow(p));
+  const boardRows = allRows.filter((r) => r.market_type !== 'correlated_alternate');
+
+  const lineupPending = scoring.picks.filter((p) =>
+    Array.isArray(p.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m)))).length;
+
+  const tldrNote = lineupPending
+    ? `Pre-lineup slate: ${lineupPending} pick(s) await confirmed lineups — confidence is downgraded, not the board.`
+    : 'Lineups confirmed where available.';
+
+  const body = renderSectionedPacket(boardRows, {
+    tldrNote,
+    auditArtifacts: [inventoryPath, scoring.source].filter(Boolean),
+    perSectionLimit: 14,
+  });
+
+  const header = packetHeader({
+    packetType: PACKET_TYPE,
+    date,
+    title: 'MLB Daily Decision Board',
+    sources: [KALSHI_SOURCES.mlb?.page_url ?? KALSHI_SOURCES.mlb?.label, scoring.source].filter(Boolean),
+  });
+  const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
+  const text = [header, neutralityNote, body, packetFooter()].filter(Boolean).join('\n\n');
+
+  // Full per-pick inventory -> audit artifact only. Each line carries model and
+  // market fields together for routing/audit; pricing here is NOT a score input.
+  const inventoryLines = allRows.map((r, i) =>
+    `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | fair=${r.fair_probability_or_range} score=${r.composite_score} implied=${r.implied_probability} ask=${r.market_yes_ask} edge=${r.edge_cents_or_pp === null ? 'MISSING' : `${r.edge_cents_or_pp}pp`} conf=${r.confidence}`);
+  const inventoryText = buildInventoryArtifact({
+    marketType: 'mlb',
+    date,
+    eventTicker: `MLB-SLATE-${date}`,
+    inventoryLines,
+    meta: { summary_counts: JSON.stringify(scoring.summaryCounts ?? {}), board_rows: boardRows.length, total_rows: allRows.length },
+  });
+
+  return {
+    text,
+    rows: boardRows,
+    inventoryText,
+    counts: { total: allRows.length, board: boardRows.length, lineupPending },
+  };
+}
 
 function buildMlbPacketProcess({ event = null, marketCount = 0, artifacts = [] }) {
   const hasParticipants = Boolean(event?.title || event?.sub_title || marketCount > 0);
@@ -306,6 +497,39 @@ async function main() {
   let missingStrikeTextCount = 0;
   const items = [];
   const primeMeta = primeAttempts.map(({ label, ok, status, stderr, error }) => ({ label, ok, status, stderr, error }));
+
+  // PRIMARY OUTPUT: when the MLB scoring pipeline already produced picks.json,
+  // emit the compact sectioned decision board as the headline packet and push
+  // the full per-pick inventory to a separate audit artifact. This replaces the
+  // old all-WATCH per-event dump as the main user-facing result.
+  const scoring = loadMlbScoring(opts.stateRoot, opts.date);
+  if (scoring) {
+    const inventoryName = `${opts.date}-mlb-daily.inventory`;
+    const slate = buildMlbSlatePacket({
+      date: opts.date,
+      scoring,
+      artifacts,
+      inventoryPath: join(dir, `${inventoryName}.txt`),
+    });
+    if (slate) {
+      const invW = writeAudit(dir, inventoryName, slate.inventoryText, {
+        kind: 'raw_inventory_audit',
+        total_rows: slate.counts.total,
+        board_rows: slate.counts.board,
+      });
+      items.push({ name: 'mlb-daily.inventory', ...invW });
+      const w = writeAudit(dir, `${opts.date}-mlb-daily-board`, slate.text, {
+        kind: 'decision_board',
+        board_rows: slate.counts.board,
+        total_rows: slate.counts.total,
+        lineup_pending: slate.counts.lineupPending,
+        inventory_artifact: invW.txtPath ?? `${inventoryName}.txt`,
+        scoring_source: scoring.source,
+        research_prime: primeMeta,
+      });
+      items.push({ name: 'mlb-daily-board', ...w });
+    }
+  }
 
   if (!kalshiEvents.length) {
     const txt = buildEmptyPacket({ date: opts.date, artifacts, primeAttempts, kalshiSummary });
