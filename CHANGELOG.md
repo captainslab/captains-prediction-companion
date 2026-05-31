@@ -6,6 +6,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — decision-packet refactor + docs system (2026-05-31)
+
+### Added
+- Shared sectioned decision-packet renderer (`scripts/shared/decision-packet.mjs`): one row schema + board layout used by every market type (MLB, NASCAR, mentions/politics)
+- Six-section packet body: TLDR BOARD → Top Edge → Watchlist/Trigger → Fades → Blocked/Needs Source → Audit Artifacts
+- Audit-only raw inventory split: `buildInventoryArtifact()` keeps per-contract dumps out of the main board and in a separate `*.inventory.txt`
+- Discord dry-run formatter (`scripts/shared/discord-format.mjs`): offline, 2000-char-safe splitting, secret scrubbing, raw-inventory refusal — no network, no token reads
+- Deterministic docs updater (`scripts/docs/update-readme-updates.mjs`) + `npm run docs:update` / `docs:check`
+- README auto-generated `CPC:UPDATES` and `CPC:STATUS` blocks (sourced from CHANGELOG + package.json)
+- Documentation set: `docs/ARCHITECTURE.md`, `docs/USAGE.md`, `docs/PACKETS.md`, `docs/DISCORD.md`, `docs/SECURITY_PRIVACY.md`, `docs/AGENT_GUIDE.md`
+- `cpc-repo-upgrader` reusable operator (`docs/operators/cpc-repo-upgrader/SKILL.md`)
+- GitHub PR template and repo-upgrade issue template (`.github/`)
+
+### Changed
+- Decision packets are market-neutral: composite scoring half and market-price half are strictly separated; edge is model-fair vs market-implied only
+- `fair_value` (sportsbook-derived) renamed to `market_reference_prob` to pin composite market-neutrality
+- Packet generation routes through the active Hermes default model/provider/reasoning
+- MLB, NASCAR, and mentions/politics packet boards refactored onto the shared sectioned renderer
+
+### Tests
+- Decision-packet shape, market-neutrality, and Discord dry-run guard suites added
+- Full suite: 507/507 passing on `node --test`
+
+### Known limitations
+- Live Discord/webhook send is intentionally not implemented (dry-run only)
+- MLB composite still depends on a stats source adapter for full-slate coverage (see `AGENTS.md` handoff)
+- No live order placement or bankroll automation by design
+
+### Backlog
+- Wire stats-readonly adapter for full MLB slate composite coverage
+- Optional check-only GitHub Action for `docs:check`
+- Telegram/Discord live delivery behind explicit authorization
+
+---
+
 ## [Unreleased] — public-alpha prep (2026-05-25)
 
 ### Added

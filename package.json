@@ -14,7 +14,9 @@
     "demo": "node scripts/demo.mjs",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "docs:update": "node scripts/docs/update-readme-updates.mjs",
+    "docs:check": "node scripts/docs/update-readme-updates.mjs --check"
   },
   "keywords": [],
   "license": "ISC",
