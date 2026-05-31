@@ -82,28 +82,34 @@ function findSportsbookRecord(record, sportsbookRecords) {
 }
 
 /**
- * Calculate edge and fair value for moneyline markets.
- * Returns { edge_pp, fair_value } or { edge_pp: null, fair_value: null }.
+ * Calculate edge and market reference probability for moneyline markets.
+ *
+ * market_reference_prob is the de-vigged SPORTSBOOK probability (away/home
+ * no-vig fair price). It is a MARKET REFERENCE only — it is NOT an independent
+ * CPC model fair value. The 13-layer composite never consumes it. Edge here is
+ * Kalshi ask vs sportsbook reference, i.e. a cross-market divergence signal.
+ *
+ * Returns { edge_pp, market_reference_prob } or nulls.
  */
 function calcMoneylineEdge(market, sbRecord) {
-  if (!sbRecord) return { edge_pp: null, fair_value: null };
+  if (!sbRecord) return { edge_pp: null, market_reference_prob: null };
 
-  let fair_value = null;
+  let market_reference_prob = null;
   const teamSide = market.team_side ?? inferTeamSide(market, sbRecord);
 
   if (teamSide === 'away') {
-    fair_value = sbRecord.away_no_vig_fair ?? null;
+    market_reference_prob = sbRecord.away_no_vig_fair ?? null;
   } else if (teamSide === 'home') {
-    fair_value = sbRecord.home_no_vig_fair ?? null;
+    market_reference_prob = sbRecord.home_no_vig_fair ?? null;
   }
 
-  if (fair_value === null) return { edge_pp: null, fair_value: null };
+  if (market_reference_prob === null) return { edge_pp: null, market_reference_prob: null };
 
   const kalshi_ask = market.yes_ask ?? null;
-  if (kalshi_ask === null) return { edge_pp: null, fair_value };
+  if (kalshi_ask === null) return { edge_pp: null, market_reference_prob };
 
-  const edge_pp = (fair_value - kalshi_ask) * 100;
-  return { edge_pp, fair_value };
+  const edge_pp = (market_reference_prob - kalshi_ask) * 100;
+  return { edge_pp, market_reference_prob };
 }
 
 /**
@@ -158,13 +164,15 @@ function poissonOverProbability(strike, lambda) {
 // --- end Poisson CDF helpers ---
 
 /**
- * Calculate edge and fair value for game_total markets using Poisson CDF.
- * lambda = sportsbook over/under (DK 50/50 line ≈ expected total runs).
- * fair_value = P(total_runs > total_strike) via Poisson survival function.
- * Returns { edge_pp, fair_value } or { edge_pp: null, fair_value: null }.
+ * Calculate edge and market reference probability for game_total markets via Poisson CDF.
+ * lambda = SPORTSBOOK over/under (DK 50/50 line ≈ expected total runs).
+ * market_reference_prob = P(total_runs > total_strike) via Poisson survival function,
+ * seeded by the sportsbook line. This is a MARKET-DERIVED reference, NOT an
+ * independent CPC model fair value; the 13-layer composite never consumes it.
+ * Returns { edge_pp, market_reference_prob } or nulls.
  */
 function calcGameTotalEdge(market, sbRecord) {
-  if (!sbRecord) return { edge_pp: null, fair_value: null };
+  if (!sbRecord) return { edge_pp: null, market_reference_prob: null };
 
   const dk_line = sbRecord.over_under ?? null;
   const total_strike = market.total_strike ?? null;
@@ -176,21 +184,21 @@ function calcGameTotalEdge(market, sbRecord) {
     !Number.isFinite(total_strike) ||
     dk_line <= 0
   ) {
-    return { edge_pp: null, fair_value: null };
+    return { edge_pp: null, market_reference_prob: null };
   }
 
-  const fair_value = poissonOverProbability(total_strike, dk_line);
+  const market_reference_prob = poissonOverProbability(total_strike, dk_line);
 
   const kalshi_ask = market.yes_ask ?? null;
-  if (kalshi_ask === null) return { edge_pp: null, fair_value };
+  if (kalshi_ask === null) return { edge_pp: null, market_reference_prob };
 
-  const edge_pp = (fair_value - kalshi_ask) * 100;
-  return { edge_pp, fair_value };
+  const edge_pp = (market_reference_prob - kalshi_ask) * 100;
+  return { edge_pp, market_reference_prob };
 }
 
 /**
- * Calculate edge/fair_value for a market based on its lane.
- * Returns { edge_pp, fair_value }.
+ * Calculate edge/market_reference_prob for a market based on its lane.
+ * Returns { edge_pp, market_reference_prob }.
  */
 function calcEdge(market, sbRecord) {
   const lane = market.market_lane ?? null;
@@ -202,7 +210,7 @@ function calcEdge(market, sbRecord) {
     return calcGameTotalEdge(market, sbRecord);
   }
   // Other lanes: no edge calculation
-  return { edge_pp: null, fair_value: null };
+  return { edge_pp: null, market_reference_prob: null };
 }
 
 /**
@@ -332,7 +340,7 @@ function classifyMarket({
   gatesPassed,
   gatesFailed,
   edge_pp,
-  fair_value,
+  market_reference_prob,
   kalshi_ask,
   fixtureMode,
   lineupStatus,
@@ -565,7 +573,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
       game: null,
       classification: 'BLOCKED_SOURCE_GAP',
       edge_pp: null,
-      fair_value: null,
+      market_reference_prob: null,
       kalshi_ask: null,
       target_entry: null,
       missing_confirmations: ['kalshi_tradable'],
@@ -602,13 +610,13 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
         sbRecord,
       });
 
-      const { edge_pp, fair_value } = calcEdge(market, sbRecord);
+      const { edge_pp, market_reference_prob } = calcEdge(market, sbRecord);
 
       const { classification, target_entry, missing_confirmations, notes: marketNotes } = classifyMarket({
         gatesPassed: passed,
         gatesFailed: failed,
         edge_pp,
-        fair_value,
+        market_reference_prob,
         kalshi_ask,
         fixtureMode,
         lineupStatus,
@@ -637,7 +645,7 @@ export function scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, 
         correlation_group: buildCorrelationGroup(record, market),
         primary_pick: false,
         edge_pp: edge_pp !== null ? Math.round(edge_pp * 1000) / 1000 : null,
-        fair_value: fair_value !== null ? Math.round(fair_value * 10000) / 10000 : null,
+        market_reference_prob: market_reference_prob !== null ? Math.round(market_reference_prob * 10000) / 10000 : null,
         kalshi_ask,
         target_entry,
         missing_confirmations,

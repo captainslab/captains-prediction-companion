@@ -615,18 +615,18 @@ test('combo status tracks the weakest actionable member', () => {
   );
 });
 
-test('combo estimates multiply cost and fair values', () => {
+test('combo estimates multiply cost and market reference values', () => {
   const estimates = calculateComboEstimates(
     {
       leg_1_ask: 0.63,
-      leg_1_fair: 0.7112,
+      leg_1_market_ref: 0.7112,
       leg_2_ask: 0.57,
-      leg_2_fair: 0.5983,
+      leg_2_market_ref: 0.5983,
     },
   );
 
   assert.equal(estimates.estimatedComboCost, 0.3591);
-  assert.equal(estimates.estimatedComboFair, 0.4255);
+  assert.equal(estimates.estimatedComboMarketRef, 0.4255);
   assert.equal(estimates.comboEdgePp, (0.4255 - 0.3591) * 100);
 });
 
@@ -795,7 +795,7 @@ test('moneyline edge board keeps best positive-edge rows across classifications'
       classification: 'PASS',
       edge_pp: 0.8,
       kalshi_ask: 0.6,
-      fair_value: 0.608,
+      market_reference_prob: 0.608,
       missing_confirmations: ['lineup_pending'],
     },
     {
@@ -807,7 +807,7 @@ test('moneyline edge board keeps best positive-edge rows across classifications'
       classification: 'PASS',
       edge_pp: -0.4,
       kalshi_ask: 0.64,
-      fair_value: 0.6,
+      market_reference_prob: 0.6,
       missing_confirmations: ['lineup_pending'],
     },
     {
@@ -819,7 +819,7 @@ test('moneyline edge board keeps best positive-edge rows across classifications'
       classification: 'WATCH_FOR_PRICE',
       edge_pp: 1.1,
       kalshi_ask: 0.49,
-      fair_value: 0.501,
+      market_reference_prob: 0.501,
       target_entry: 0.48,
       missing_confirmations: ['stronger_edge'],
     },
@@ -832,7 +832,7 @@ test('moneyline edge board keeps best positive-edge rows across classifications'
       classification: 'LEAN',
       edge_pp: 2.4,
       kalshi_ask: 0.44,
-      fair_value: 0.464,
+      market_reference_prob: 0.464,
       missing_confirmations: [],
     },
     {
@@ -844,7 +844,7 @@ test('moneyline edge board keeps best positive-edge rows across classifications'
       classification: 'WATCH_FOR_PRICE',
       edge_pp: 3.2,
       kalshi_ask: 0.41,
-      fair_value: 0.442,
+      market_reference_prob: 0.442,
       missing_confirmations: ['lineup_pending'],
     },
     {
@@ -856,7 +856,7 @@ test('moneyline edge board keeps best positive-edge rows across classifications'
       classification: 'PASS',
       edge_pp: 0,
       kalshi_ask: 0.55,
-      fair_value: 0.55,
+      market_reference_prob: 0.55,
       missing_confirmations: [],
     },
   ]);
@@ -1083,7 +1083,7 @@ test('output writer surfaces same-game combo visibility in json and markdown', a
     const guide = readFileSync(join(outDir, 'daily-baseball-guide.md'), 'utf8');
     const boardMd = readFileSync(join(outDir, 'today-execution-board.md'), 'utf8');
     assert.match(boardMd, /Moneyline Edge Board/);
-    assert.match(boardMd, /\| market_ticker \| game \| Side \| Status \| Ask \| Fair \| Edge \| Target \| Why not \|/);
+    assert.match(boardMd, /\| market_ticker \| game \| Side \| Status \| Ask \| Mkt Ref \| Edge \| Target \| Why not \|/);
     assert.match(boardMd, /Alpha City Aces at Beta Town Bears/);
     assert.match(boardMd, /Why mostly totals\?/i);
     assert.match(guide, /Same-Game Combo Visibility/);
@@ -1502,8 +1502,8 @@ test('PASS moneylines do not emit combo candidates', async () => {
       Math.round((board.combo_candidates[0].leg_1_ask * board.combo_candidates[0].leg_2_ask) * 10000) / 10000,
     );
     assert.equal(
-      board.combo_candidates[0].estimated_combo_fair,
-      Math.round((board.combo_candidates[0].leg_1_fair * board.combo_candidates[0].leg_2_fair) * 10000) / 10000,
+      board.combo_candidates[0].estimated_combo_market_ref,
+      Math.round((board.combo_candidates[0].leg_1_market_ref * board.combo_candidates[0].leg_2_market_ref) * 10000) / 10000,
     );
     assert.match(board.combo_candidates[0].display_markets, /KXTEST-ML-AWAY/);
     assert.match(board.combo_candidates[0].display_markets, /KXTEST-TOTAL-OVER-[AB]/);
