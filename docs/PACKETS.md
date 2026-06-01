@@ -70,7 +70,7 @@ TLDR BOARD:
   Model fair beats market by a strong margin. Confirm trigger before acting.
 #1 [PICK] KXMLBGAME-26MAY31-XYZ :: HOME_ML
     model: fair=58% score=0.71 posture=STRONG EVIDENCE LEAN layers=9/13 conf=high
-    market: implied=50% yes_bid=0.49 yes_ask=0.51 last=0.50 | edge=+8pp
+    market: implied=0.50 yes_bid=0.49 yes_ask=0.51 last=0.50 | edge=+8pp
     why: front-line SP edge + park suppression; lineup confirmed
 ```
 
@@ -81,7 +81,7 @@ TLDR BOARD:
   Edge thin or evidence incomplete; each row lists what makes it playable.
 #1 [WATCH] KXMLBGAME-26MAY31-XYZ :: OVER_8_5
     model: fair=53% score=0.55 posture=EVIDENCE LEAN layers=6/13 conf=medium
-    market: implied=51% yes_bid=0.50 yes_ask=0.52 last=0.51 | edge=+2pp
+    market: implied=0.51 yes_bid=0.50 yes_ask=0.52 last=0.51 | edge=+2pp
     why: pace lean, but bullpen usage unconfirmed
     trigger: price=0.48 when=if line drops pre-lineup
 ```
@@ -93,7 +93,7 @@ TLDR BOARD:
   Market implied runs above model fair.
 #1 [FADE] KXMLBGAME-26MAY31-XYZ :: AWAY_ML
     model: fair=42% score=0.40 posture=NO CLEAR PICK layers=7/13 conf=medium
-    market: implied=52% yes_bid=0.51 yes_ask=0.53 last=0.52 | edge=-10pp
+    market: implied=0.52 yes_bid=0.51 yes_ask=0.53 last=0.52 | edge=-10pp
     why: name-brand SP priced up; underlying form does not support it
 ```
 
@@ -104,7 +104,7 @@ TLDR BOARD:
   Settlement- or model-critical input missing. Not a pick or a pass — research gap.
 #1 [BLOCKED] KXMLBGAME-26MAY31-XYZ :: K_OVER_6_5
     model: fair=model_fair_estimate_pending score=MISSING posture=WATCH layers=3/13 conf=low
-    market: implied=55% yes_bid=0.54 yes_ask=0.56 last=0.55 | edge=MISSING
+    market: implied=0.55 yes_bid=0.54 yes_ask=0.56 last=0.55 | edge=MISSING
     blocker: probable pitcher unconfirmed — no K-rate anchor
 ```
 

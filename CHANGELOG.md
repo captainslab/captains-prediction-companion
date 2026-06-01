@@ -43,14 +43,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Backlog
 - Wire stats-readonly adapter for full MLB slate composite coverage
-- Optional check-only GitHub Action for `docs:check`
 - Telegram/Discord live delivery behind explicit authorization
 
----
+### Earlier in this Unreleased cycle — public-alpha prep (2026-05-25)
 
-## [Unreleased] — public-alpha prep (2026-05-25)
-
-### Added
+#### Added
 - `scripts/setup.mjs` — first-run bootstrap: copies `.env.example` → `.env`, creates `data/`
 - `scripts/doctor.mjs` — config, deps, Hermes CLI, and live server health check in one command
 - `scripts/demo.mjs` — boots the server, hits key endpoints, exits clean
@@ -59,7 +56,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `CONTRIBUTING.md` — fork-first contribution guide; contact via `@CaptainMentions`
 - `.env.example` expanded to cover every runtime variable with inline annotations
 
-### Changed
+#### Changed
 - README complete rewrite: quickstart, full env-var table, troubleshooting section, "build on this" guide
 - `AGENTS.md` extended with CPC agent identity, skill inventory, and no-touch zones
 - `src/captainLabsStore.js` seed user anonymized (was a real name, now `Demo User`)

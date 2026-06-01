@@ -43,7 +43,7 @@ Find Captain on Discord and X as **@CaptainMentions** — or open an issue at
 - Added: README auto-generated `CPC:UPDATES` and `CPC:STATUS` blocks (sourced from CHANGELOG + package.json)
 - Added: Documentation set: `docs/ARCHITECTURE.md`, `docs/USAGE.md`, `docs/PACKETS.md`, `docs/DISCORD.md`, `docs/SECURITY_PRIVACY.md`, `docs/AGENT_GUIDE.md`
 - Added: `cpc-repo-upgrader` reusable operator (`docs/operators/cpc-repo-upgrader/SKILL.md`)
-- _…and 18 more — see [CHANGELOG.md](./CHANGELOG.md)_
+- _…and 29 more — see [CHANGELOG.md](./CHANGELOG.md)_
 
 _Auto-generated from `CHANGELOG.md` by `npm run docs:update`. Do not edit by hand._
 
