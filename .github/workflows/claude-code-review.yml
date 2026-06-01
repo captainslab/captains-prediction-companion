@@ -19,6 +19,13 @@ jobs:
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
 
     runs-on: ubuntu-latest
+    # Non-blocking: Claude Code Review is advisory. When org-level Claude/
+    # Anthropic subscription access is disabled (or the OAuth token is missing),
+    # the action exits non-zero through no fault of the PR's code. Marking the
+    # job continue-on-error keeps its advisory comments while reporting the
+    # check as neutral/success, so a pure infra/secret outage no longer paints
+    # a misleading red X on otherwise-green PRs.
+    continue-on-error: true
     permissions:
       contents: read
       pull-requests: read
