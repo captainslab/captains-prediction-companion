@@ -25,9 +25,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Packet generation routes through the active Hermes default model/provider/reasoning
 - MLB, NASCAR, and mentions/politics packet boards refactored onto the shared sectioned renderer
 
+### Model audit (2026-05-31)
+- Added `docs/MODEL_AUDIT.md`: read-only inventory, source-gap, calibration, and market-neutrality audit across MLB, NASCAR, mentions, politics, UFC, and shared packet infra
+- Confirmed UFC is packet-only (no model) and politics is a qualitative branch swarm (no numeric composite)
+- Pinned NASCAR market-neutrality with `test/nascar-composite-neutrality.test.js` (odds-injection pollute-vs-clean regression)
+- Pinned politics market-neutrality with `test/politics-neutrality.test.mjs` (market-board perturbation does not move the research judgment)
+
 ### Tests
 - Decision-packet shape, market-neutrality, and Discord dry-run guard suites added
-- Full suite: 507/507 passing on `node --test`
+- NASCAR + politics market-neutrality regression suites added
+- Full suite: 528/528 passing on `node --test`
 
 ### Known limitations
 - Live Discord/webhook send is intentionally not implemented (dry-run only)
