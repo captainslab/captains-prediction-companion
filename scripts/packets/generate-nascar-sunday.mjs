@@ -26,6 +26,7 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { routeNascarMarket } from '../nascar/lib/router.mjs';
 import {
   buildDecisionRow,
   renderSectionedPacket,
@@ -104,6 +105,31 @@ function fairWinProbabilities(candidates = []) {
 }
 
 /**
+ * True when a Kalshi market is a per-driver outright RACE-WINNER contract, as
+ * opposed to a same-event top3/top5/top10/top20 finishing-position or
+ * fastest_lap contract (which also carry a per-driver yes_sub_title).
+ *
+ * Strategy: a win market must first look like a per-driver binary (has a
+ * yes_sub_title or expiration_value). Then we run the tested NASCAR router over
+ * the market's title/rules text. We EXCLUDE only markets the router positively
+ * routes to a non-win lane (top3/top5/top10/top20/fastest_lap). Anything the
+ * router leaves as win / ambiguous / blocked stays on the board so genuine
+ * winner listings with sparse text are never dropped (fail-open).
+ *
+ * Market price fields are never read here — classification is wording-only.
+ */
+export function isWinLaneMarket(m) {
+  if (!m || (!m.yes_sub_title && !m.expiration_value)) return false;
+  const title = m.title ?? m.yes_sub_title ?? '';
+  const rules = m.rules_primary ?? m.rules_summary ?? '';
+  if (!title && !rules) return true; // no wording to classify -> keep (fail-open)
+  const route = routeNascarMarket({ market_title: title, rules_summary: rules });
+  const lane = route?.market_lane ?? null;
+  if (lane && lane !== 'win') return false; // positively a non-win lane -> drop
+  return true;
+}
+
+/**
  * Build the ranked NASCAR decision board from the ceiling model + Kalshi win
  * markets. Two modes:
  *   - JOINED:      ceiling candidates present -> per-driver rows with model
@@ -115,8 +141,14 @@ function fairWinProbabilities(candidates = []) {
  */
 export function buildNascarRows({ event, ceiling = null }) {
   const markets = Array.isArray(event?.markets) ? event.markets : [];
-  // Win lane = per-driver binary markets (one driver each via yes_sub_title).
-  const winMarkets = markets.filter((m) => (m.yes_sub_title || m.expiration_value));
+  // Win lane = per-driver binary race-winner markets only. Same-event top3/
+  // top5/top10/top20/fastest_lap contracts also carry a per-driver
+  // yes_sub_title, so a bare `yes_sub_title || expiration_value` test wrongly
+  // pulls those finishing-position lanes onto the win board. Use the tested
+  // NASCAR router to classify each market and keep only the win lane; markets
+  // the router cannot resolve to a non-win lane stay on the board (fail-open)
+  // so unclassifiable winner listings are never silently dropped.
+  const winMarkets = markets.filter((m) => isWinLaneMarket(m));
   if (!winMarkets.length) return null;
 
   const candidatesByName = new Map();
@@ -136,12 +168,20 @@ export function buildNascarRows({ event, ceiling = null }) {
     const laneStatus = (winLane?.status ?? '').toUpperCase();
     const fairProb = fairWin.get(driver) ?? null;
 
+    // Pass both Kalshi price shapes straight through. buildDecisionRow (and
+    // impliedProbabilityFromMarket) already resolve `yes_bid ?? yes_bid_dollars`
+    // and normalize cents (1..100) vs dollars (0..1). Flattening only the
+    // *_dollars fields here silently dropped live Kalshi `yes_bid`/`yes_ask`/
+    // `last_price` (cents) shapes, leaving the market half null mid-session.
     const marketHalf = {
-      yes_bid: m.yes_bid_dollars ?? null,
-      yes_ask: m.yes_ask_dollars ?? null,
-      last_price: m.last_price_dollars ?? null,
-      volume: m.volume_fp ?? null,
-      open_interest: m.open_interest_fp ?? null,
+      yes_bid: m.yes_bid ?? m.yes_bid_dollars ?? null,
+      yes_bid_dollars: m.yes_bid_dollars ?? null,
+      yes_ask: m.yes_ask ?? m.yes_ask_dollars ?? null,
+      yes_ask_dollars: m.yes_ask_dollars ?? null,
+      last_price: m.last_price ?? m.last_price_dollars ?? null,
+      last_price_dollars: m.last_price_dollars ?? null,
+      volume: m.volume ?? m.volume_fp ?? null,
+      open_interest: m.open_interest ?? m.open_interest_fp ?? null,
     };
 
     let statusOverride;
