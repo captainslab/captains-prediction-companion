@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   EDGE_STATUS,
+  EDGE_THRESHOLDS,
   CONFIDENCE,
   buildDecisionRow,
   renderDecisionBoard,
@@ -159,4 +160,102 @@ test('rows rank by edge status then magnitude (PICK/LEAN above WATCH/PASS)', () 
   const lean = strongRow({ marketTicker: 'L' });
   const ranked = rankDecisionRows([watch, lean]);
   assert.equal(ranked[0].market_ticker, 'L');
+});
+
+// --- P1 guard: statusOverride reconciled against numeric edge -----------------
+// A domain scorer can pass an authoritative statusOverride, but a POSITIVE
+// override (PICK/LEAN) must never survive when the numeric edge contradicts it.
+// BLOCKED still wins over everything. Market price never enters these checks —
+// edge is model-fair-vs-implied only.
+
+function overrideRow(overrides = {}) {
+  // fair 10% vs implied 80% => -70pp edge; the override claims a positive status.
+  return buildDecisionRow({
+    marketTicker: 'KXNASCAR-A',
+    sideTarget: 'Driver X to win',
+    marketType: 'sports_winner',
+    settlementSummary: 'Driver X wins the race',
+    composite: { score: 0.10, posture: 'EVIDENCE LEAN', layersPresent: 8, layersTotal: 12, modelProbability: 0.10 },
+    fair: { probability: 0.10 },
+    market: { yes_bid: 0.79, yes_ask: 0.81 },
+    analysis: 'Model 10% vs implied ~80%.',
+    ...overrides,
+  });
+}
+
+test('P1: a PICK override does NOT survive a clearly negative edge -> surfaces as FADE', () => {
+  const r = overrideRow({ statusOverride: EDGE_STATUS.PICK });
+  assert.ok(r.edge_cents_or_pp < 0, 'precondition: numeric edge is negative');
+  assert.equal(r.edge_status, EDGE_STATUS.FADE, 'positive override must yield to negative edge');
+  assert.notEqual(r.edge_status, EDGE_STATUS.PICK);
+  assert.notEqual(r.edge_status, EDGE_STATUS.LEAN);
+});
+
+test('P1: a LEAN override does NOT survive a clearly negative edge -> surfaces as FADE', () => {
+  const r = overrideRow({ statusOverride: EDGE_STATUS.LEAN });
+  assert.equal(r.edge_status, EDGE_STATUS.FADE);
+});
+
+test('P1: a contradicted positive override is NOT promoted into Top Edge by its magnitude', () => {
+  // The bug: large _edge_abs (70) on a LEAN row pushed it into the topEdge bucket.
+  const bad = overrideRow({ statusOverride: EDGE_STATUS.LEAN, marketTicker: 'BAD' });
+  const good = strongRow({ marketTicker: 'GOOD' }); // genuine +11pp LEAN
+  const ranked = rankDecisionRows([bad, good]);
+  // FADE sorts below LEAN, so the genuine positive edge must rank first.
+  assert.equal(ranked[0].market_ticker, 'GOOD');
+  assert.equal(bad.edge_status, EDGE_STATUS.FADE);
+});
+
+test('P1: a PICK/LEAN override inside the noise band downgrades to the threshold verdict (PASS)', () => {
+  // fair 50% vs implied ~50.5% => ~ -0.5pp, inside NOISE_PP band.
+  const r = buildDecisionRow({
+    marketTicker: 'KXNASCAR-B', sideTarget: 'Driver Y', marketType: 'sports_winner', settlementSummary: 's',
+    composite: { score: 0.5, posture: 'EVIDENCE LEAN', layersPresent: 8, layersTotal: 12, modelProbability: 0.5 },
+    fair: { probability: 0.50 },
+    market: { yes_bid: 0.50, yes_ask: 0.51 },
+    statusOverride: EDGE_STATUS.LEAN,
+  });
+  assert.ok(Math.abs(r.edge_cents_or_pp) <= 1.5, 'precondition: edge inside noise band');
+  assert.equal(r.edge_status, EDGE_STATUS.PASS, 'no real edge => override downgraded to PASS');
+});
+
+test('P1: a VALID positive edge still honors a PICK/LEAN override', () => {
+  // fair 62% vs implied ~51% => +11pp; override should be preserved.
+  const r = strongRow({ statusOverride: EDGE_STATUS.LEAN });
+  assert.ok(r.edge_cents_or_pp >= EDGE_THRESHOLDS.LEAN_PP, 'precondition: clear positive edge');
+  assert.equal(r.edge_status, EDGE_STATUS.LEAN, 'valid positive edge keeps the override');
+});
+
+test('P1: a FADE override is always honored (negative statuses never overstate edge)', () => {
+  // Even with a positive edge, a domain FADE call is trusted as-is.
+  const r = strongRow({ statusOverride: EDGE_STATUS.FADE });
+  assert.equal(r.edge_status, EDGE_STATUS.FADE);
+});
+
+test('P1: BLOCKED still overrides everything, including a positive override on a positive edge', () => {
+  const r = strongRow({ statusOverride: EDGE_STATUS.PICK, blocker: 'BLOCKED_SETTLEMENT_UNCLEAR' });
+  assert.equal(r.edge_status, EDGE_STATUS.BLOCKED);
+});
+
+test('P1: a positive override with NO numeric edge (model-only lane) is preserved', () => {
+  // No fair probability and no market implied => edge is null; override stands.
+  const r = buildDecisionRow({
+    marketTicker: 'KXNASCAR-C', sideTarget: 'Driver Z', marketType: 'sports_winner', settlementSummary: 's',
+    composite: { score: 0.7, posture: 'STRONG EVIDENCE LEAN', layersPresent: 9, layersTotal: 12 },
+    market: {}, // no price => no implied => edge null
+    statusOverride: EDGE_STATUS.PICK,
+  });
+  assert.equal(r.edge_cents_or_pp, null, 'precondition: no numeric edge');
+  assert.equal(r.edge_status, EDGE_STATUS.PICK, 'model-only lane keeps the override');
+});
+
+test('P1 neutrality: the guard reads only the model-vs-implied edge, never raw market price as a composite input', () => {
+  // Same composite + override, two wildly different prices: composite half is
+  // identical; only the reconciled edge_status flips with the edge direction.
+  const cheap = strongRow({ statusOverride: EDGE_STATUS.LEAN, market: { yes_bid: 0.30, yes_ask: 0.32 } });
+  const rich = strongRow({ statusOverride: EDGE_STATUS.LEAN, market: { yes_bid: 0.90, yes_ask: 0.92 } });
+  assert.equal(cheap.composite_score, rich.composite_score);
+  assert.equal(cheap.composite_posture, rich.composite_posture);
+  assert.equal(cheap.edge_status, EDGE_STATUS.LEAN, 'cheap market: real positive edge keeps LEAN');
+  assert.equal(rich.edge_status, EDGE_STATUS.FADE, 'rich market: negative edge forces FADE despite override');
 });

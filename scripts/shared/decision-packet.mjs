@@ -160,6 +160,49 @@ function decideEdgeStatus({ blocker, edgePp, confidence, posture }) {
   return postureInfo(posture).fallback;
 }
 
+// Positive edge statuses a domain override can assert. These are the ones that
+// can mislead a reader if they contradict the numeric edge (e.g. a LEAN sitting
+// on top of a −70pp edge would be promoted into Top Edge by its magnitude).
+const POSITIVE_OVERRIDE_STATUSES = Object.freeze(
+  new Set([EDGE_STATUS.PICK, EDGE_STATUS.LEAN]),
+);
+
+/**
+ * Reconcile a domain scorer's authoritative statusOverride against the numeric
+ * edge so an override can never assert a misleading positive verdict.
+ *
+ * Rules (blocker is handled earlier and always wins):
+ *   - No override                       -> use the generic threshold verdict.
+ *   - Override is NOT positive (FADE/    -> trust the domain scorer as-is. WATCH,
+ *     WATCH/PASS/BLOCKED)                   PASS, FADE never overstate edge.
+ *   - Override IS positive (PICK/LEAN):
+ *       * numeric edge unavailable      -> trust the override (model-only lane).
+ *       * edge clearly negative         -> a positive override is contradictory;
+ *         (<= -LEAN_PP)                     surface the threshold verdict instead
+ *                                           (FADE for a real negative edge).
+ *       * edge inside the noise band     -> downgrade PICK/LEAN to the threshold
+ *         (|edge| <= NOISE_PP)              verdict (PASS): no real edge to claim.
+ *       * edge positive / mild           -> honor the override (valid positive).
+ *
+ * This guarantees: BLOCKED overrides everything; numeric edge direction prevents
+ * misleading positive statuses; a clear negative edge surfaces as FADE; a valid
+ * positive edge can still surface as PICK/LEAN. Market price never enters here —
+ * edgePp is already the model-fair-vs-implied comparison computed by the caller.
+ */
+function reconcileOverrideWithEdge(override, thresholdStatus, edgePp) {
+  if (!override) return thresholdStatus;
+  if (!POSITIVE_OVERRIDE_STATUSES.has(override)) return override;
+  // Positive override but no numeric edge to check against: model-only lane.
+  if (edgePp === null) return override;
+  // Clear negative edge: a positive override is contradictory -> threshold wins
+  // (yields FADE for a genuinely negative edge).
+  if (edgePp <= -EDGE_THRESHOLDS.LEAN_PP) return thresholdStatus;
+  // Noise band: no real edge to claim -> downgrade to the threshold verdict.
+  if (Math.abs(edgePp) <= EDGE_THRESHOLDS.NOISE_PP) return thresholdStatus;
+  // Valid positive (or mildly positive) edge: honor the domain override.
+  return override;
+}
+
 /**
  * Build one decision-packet row. The single shared row schema for all cron
  * packet types. Composite (model) fields and market (board) fields are kept in
@@ -182,10 +225,15 @@ function decideEdgeStatus({ blocker, edgePp, confidence, posture }) {
  * @param {string} [input.blocker]            - non-empty => BLOCKED
  * @param {string} [input.statusOverride]     - domain scorer's authoritative edge_status
  *                                              (one of EDGE_STATUS). When supplied it wins over
- *                                              the generic threshold verdict, EXCEPT a blocker
- *                                              still forces BLOCKED. This is how the manual
- *                                              scoring layer (e.g. MLB scoreMarkets) and the
- *                                              cron path converge on one decision vocabulary.
+ *                                              the generic threshold verdict, EXCEPT: (1) a blocker
+ *                                              still forces BLOCKED, and (2) a POSITIVE override
+ *                                              (PICK/LEAN) is reconciled against the numeric edge so
+ *                                              it can never assert a misleading verdict — a clear
+ *                                              negative edge surfaces as FADE and a noise-band edge
+ *                                              downgrades to PASS (see reconcileOverrideWithEdge).
+ *                                              This is how the manual scoring layer (e.g. MLB
+ *                                              scoreMarkets) and the cron path converge on one
+ *                                              decision vocabulary without overstating edge.
  * @param {number} [input.edgeOverridePp]     - domain-computed edge in pp (e.g. MLB edge_pp);
  *                                              used when no model fair probability is available.
  */
@@ -213,7 +261,11 @@ export function buildDecisionRow(input = {}) {
     : null;
   const edgeStatus = blocker
     ? EDGE_STATUS.BLOCKED
-    : (override ?? decideEdgeStatus({ blocker, edgePp, confidence, posture: composite.posture }));
+    : reconcileOverrideWithEdge(
+        override,
+        decideEdgeStatus({ blocker, edgePp, confidence, posture: composite.posture }),
+        edgePp,
+      );
 
   const layersPresent = num(composite.layersPresent ?? composite.layers_present);
   const layersTotal = num(composite.layersTotal ?? composite.layers_total);
