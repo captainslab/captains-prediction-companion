@@ -51,6 +51,13 @@ import {
   applyQualificationCap,
   renderSourceLadder,
 } from '../mentions/source-ladder.mjs';
+import {
+  buildDecisionRow,
+  renderSectionedPacket,
+  buildInventoryArtifact,
+  EDGE_STATUS,
+  CONFIDENCE,
+} from '../shared/decision-packet.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 const DEFAULT_WINDOW_DAYS = 7; // forward-looking week
@@ -305,6 +312,164 @@ function summarizeCompositeRun(composites) {
   };
 }
 
+// Mention composite posture -> shared edge vocabulary. The composite core is the
+// authority on posture; we carry it as statusOverride so the generic threshold
+// logic does not relitigate it. Edge stays MISSING unless a calibrated model
+// probability exists — composite_score is a 0-100 conviction, NOT a probability,
+// so it is never converted into a fake fair probability or fake edge.
+const MENTION_POSTURE_TO_EDGE = Object.freeze({
+  PICK: EDGE_STATUS.PICK,
+  EVIDENCE_LEAN: EDGE_STATUS.LEAN,
+  LEAN: EDGE_STATUS.LEAN,
+  WATCH: EDGE_STATUS.WATCH,
+  NO_CLEAR_PICK: EDGE_STATUS.PASS,
+});
+
+/**
+ * Convert one mention composite (model) + its market context into a shared
+ * decision row. Market price lives only in the `market` half and never enters
+ * the composite score.
+ *
+ * HARD RULE: when the composite has zero source-backed layers
+ * (layers_present === 0) the row is BLOCKED_SOURCE_LAYER_MISSING — a research
+ * gap, not a useful final verdict — with the exact missing source layers, the
+ * target phrase, and the next research trigger. "source_ladder: MISSING" is
+ * never presented as an actionable result.
+ */
+export function mentionCompositeToDecisionRow(composite) {
+  const r = composite?.result ?? {};
+  const meta = r._meta ?? {};
+  const layersPresent = Number(meta.layers_present ?? 0);
+  const layersTotal = Number(meta.layers_total ?? 0);
+  const mc = r.market_context ?? {};
+
+  // market half (cents from composite core; buildDecisionRow treats >1.5 as cents)
+  const market = {
+    yes_bid: mc.yes_bid_cents ?? null,
+    yes_ask: mc.yes_ask_cents ?? null,
+    last_price: mc.last_trade_price_cents ?? null,
+    volume: mc.volume ?? null,
+    open_interest: mc.open_interest ?? null,
+  };
+
+  const missingCats = Array.isArray(r.missing_layers) ? r.missing_layers.map((l) => l.category) : [];
+  const topLayers = Array.isArray(r.top_supporting_layers) ? r.top_supporting_layers.map((l) => l.category) : [];
+  const target = r.target_mention ?? composite?.market_ticker ?? 'MISSING';
+
+  // No source-backed evidence at all -> BLOCKED on the missing source layers.
+  const sourceBlocked = layersPresent === 0;
+  const postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
+
+  let statusOverride;
+  let blocker = null;
+  let analysis;
+  let trigger;
+
+  if (sourceBlocked) {
+    statusOverride = EDGE_STATUS.BLOCKED;
+    blocker = `BLOCKED_SOURCE_LAYER_MISSING: no source-backed evidence layers for "${target}"`;
+    analysis = `Market priced; mention composite has 0/${layersTotal} source layers. Not a pick or a pass — research gap. Missing: ${missingCats.join(', ') || 'all source layers'}.`;
+    trigger = {
+      price: null,
+      event: `run mentions research for "${target}" (transcripts > quotes > context > prompt source ladder), then re-score`,
+    };
+  } else {
+    statusOverride = MENTION_POSTURE_TO_EDGE[postureFinal] ?? EDGE_STATUS.WATCH;
+    const capNote = composite?.posture_cap_reason ? ` (ladder cap: ${composite.posture_cap_reason})` : '';
+    analysis = `${r.reasoning_summary ?? `composite ${r.composite_score ?? 'n/a'} [${postureFinal}]`}${capNote}`;
+    trigger = {
+      price: null,
+      event: postureFinal === 'PICK' || postureFinal === 'EVIDENCE_LEAN'
+        ? 'confirm exact settlement wording + official event source, then enter on value'
+        : 'await stronger source layer (transcript/quote confirmation)',
+    };
+  }
+
+  return buildDecisionRow({
+    marketTicker: composite?.market_ticker ?? 'MISSING',
+    sideTarget: target,
+    marketType: `mention_${r.profile ?? 'unknown'}`,
+    settlementSummary: 'Exact-string mention settlement per Kalshi listing — verify wording before acting.',
+    composite: {
+      score: r.composite_score ?? null,
+      posture: postureFinal,
+      layersPresent,
+      layersTotal,
+      topEvidenceLayers: topLayers,
+      missingLayers: missingCats,
+      // composite_score is conviction, NOT a probability -> no modelProbability.
+    },
+    market,
+    confidence: layersPresent >= Math.ceil(layersTotal * 0.5) && layersTotal > 0
+      ? CONFIDENCE.MEDIUM
+      : CONFIDENCE.LOW,
+    analysis,
+    trigger,
+    statusOverride,
+    blocker,
+  });
+}
+
+/**
+ * Build the compact, sectioned mentions decision board from the per-market
+ * composites of a Kalshi mention event. Main text carries ONLY the sectioned
+ * board (TLDR + sections + audit pointers). The raw contract inventory + full
+ * market context go to a separate audit artifact, never the packet body.
+ * Returns { text, rows, inventoryText, counts } or null when no composites.
+ */
+export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null }) {
+  if (!Array.isArray(composites) || !composites.length) return null;
+  const s = summarizeEvent(event);
+  const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
+  const summary = summarizeCompositeRun(composites);
+
+  const blockedCount = rows.filter((r) => r.edge_status === EDGE_STATUS.BLOCKED).length;
+  const tldrNote = blockedCount === rows.length
+    ? `All ${rows.length} contract(s) BLOCKED on missing source layers — research the source ladder, then re-score. No tradeable edge yet.`
+    : `${summary.scored_count}/${rows.length} contract(s) have source-backed composite; best posture ${summary.best_posture}.`;
+
+  const body = renderSectionedPacket(rows, {
+    tldrNote,
+    auditArtifacts: [inventoryPath, sourcePath].filter(Boolean),
+    perSectionLimit: 16,
+  });
+
+  const header = packetHeader({
+    title: `Captain Mentions — Daily Decision Board: ${s.title}`,
+    date,
+    packetType: PACKET_TYPE,
+    sources: [sourcePath, KALSHI_SOURCES.mentions.page_url].filter(Boolean),
+  });
+  const neutralityNote = 'Mention composite is source-layer scoring only; Kalshi price/volume/OI is shown beside it for edge detection but is NEVER a composite input.';
+  const text = [header, neutralityNote, body, packetFooter()].filter(Boolean).join('\n\n');
+
+  // Raw per-contract inventory + market context -> audit artifact only.
+  const inventoryLines = rows.map((r, i) =>
+    `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | score=${r.composite_score} posture=${r.composite_posture} layers=${r.layers_present} implied=${r.implied_probability} ask=${r.market_yes_ask} bid=${r.market_yes_bid} vol=${r.volume} oi=${r.open_interest} conf=${r.confidence}`);
+  const inventoryText = buildInventoryArtifact({
+    marketType: 'mentions',
+    date,
+    eventTicker: s.ticker,
+    inventoryLines,
+    meta: {
+      best_posture: summary.best_posture,
+      best_score: summary.best_score ?? 'MISSING',
+      scored_count: summary.scored_count,
+      blocked_count: blockedCount,
+      pricing_excluded: true,
+    },
+  });
+
+  return {
+    text,
+    rows,
+    inventoryText,
+    counts: { total: rows.length, blocked: blockedCount, scored: summary.scored_count },
+    compositeSummary: summary,
+  };
+}
+
+
 function firstMarketRules(event) {
   const markets = Array.isArray(event?.markets) ? event.markets : [];
   const m = markets.find((x) => x?.rules_primary || x?.rules_secondary);
@@ -508,11 +673,34 @@ export function discoverMentionEvents(stateRoot, date) {
   return events;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
   const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw }));
   const compositeSummary = summarizeCompositeRun(composites);
+
+  // Preferred path: compact sectioned decision board (model + market + edge),
+  // raw inventory routed to a separate audit artifact.
+  const slate = buildMentionSlatePacket({
+    date,
+    event,
+    composites,
+    sourcePath: sourceUrl,
+    inventoryPath,
+  });
+  if (slate) {
+    return {
+      text: slate.text,
+      inventoryText: slate.inventoryText,
+      marketCount: marketInfo.marketCount,
+      missingStrikeCount: marketInfo.missingStrikeCount,
+      missingMarkets: marketInfo.missingMarkets,
+      compositeSummary,
+      counts: slate.counts,
+    };
+  }
+
+  // Fallback (no markets parsed): research-completeness note, no YAML wall.
   const process = buildMentionProcess({ event });
   const header = packetHeader({
     title: 'Captain Mentions — Daily Event Packet',
@@ -521,38 +709,14 @@ export function buildKalshiEventPacket({ date, event, sourceUrl }) {
     sources: [sourceUrl, KALSHI_SOURCES.mentions.page_url],
   });
   const lines = [];
-  lines.push('TLDR:');
-  lines.push(`  market_type: ${process.marketType}`);
+  lines.push('TLDR BOARD:');
+  lines.push(`  no markets parsed for ${s.title}; nothing to score or rank.`);
   lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
-  lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
-  lines.push(`  composite_top_target: ${compositeSummary.best_target || 'MISSING'}`);
-  lines.push('  note: mention-composite is source-layer scoring only; market context is NOT IN SCORE.');
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
-  lines.push('');
-  lines.push(`event_ticker: ${s.ticker}`);
-  lines.push(`event_title: ${s.title}`);
-  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
-  lines.push(`series_ticker: ${s.series}`);
-  lines.push(`market_count: ${s.marketCount}`);
-  lines.push(`close_time_utc: ${s.close}`);
-  lines.push('');
-  for (const l of renderCompositeEvidence(composites)) lines.push(l);
-  lines.push('');
-  for (const l of renderContractInventory(marketInfo)) lines.push(l);
-  lines.push('');
-  for (const l of renderMarketContextNotInScore(marketInfo)) lines.push(l);
-  lines.push('');
-  lines.push('resolution_mechanics:');
-  lines.push('  See market.rules_primary/rules_secondary per Kalshi listing.');
-  lines.push('  Verify exact-string mention criteria before publishing.');
-  lines.push('');
-  lines.push('verified_vs_inference: MISSING (research-only packet; verification required by mentions-researcher)');
-  lines.push(`decision_status: ${process.decisionStatus}`);
-  lines.push(`posture: ${compositeSummary.best_posture} (mention composite; research only, no trade)`);
   return {
     text: header + lines.join('\n') + packetFooter(),
+    inventoryText: buildInventoryArtifact({ marketType: 'mentions', date, eventTicker: s.ticker, inventoryLines: [], meta: { mode: 'NO_MARKETS' } }),
     marketCount: marketInfo.marketCount,
     missingStrikeCount: marketInfo.missingStrikeCount,
     missingMarkets: marketInfo.missingMarkets,
@@ -759,10 +923,20 @@ async function main() {
       if (!ticker || seen.has(ticker)) continue;
       seen.add(ticker);
       const sourcePath = resolve(opts.stateRoot, 'mentions', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const built = buildKalshiEventPacket({ date: opts.date, event: ev, sourceUrl: sourcePath });
+      const inventoryName = `${opts.date}-${ticker}.inventory`;
+      const inventoryPath = `${inventoryName}.txt`;
+      const built = buildKalshiEventPacket({ date: opts.date, event: ev, sourceUrl: sourcePath, inventoryPath });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
+      // Raw per-contract inventory -> audit artifact only (never the packet body).
+      if (built.inventoryText) {
+        const invW = writeAudit(dir, inventoryName, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+        });
+        items.push({ name: inventoryName, ...invW });
+      }
       const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
         event_ticker: ticker,
         market_count: built.marketCount,

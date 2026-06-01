@@ -6,9 +6,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — public-alpha prep (2026-05-25)
+## [Unreleased] — decision-packet refactor + docs system (2026-05-31)
 
 ### Added
+- Shared sectioned decision-packet renderer (`scripts/shared/decision-packet.mjs`): one row schema + board layout used by every market type (MLB, NASCAR, mentions/politics)
+- Six-section packet body: TLDR BOARD → Top Edge → Watchlist/Trigger → Fades → Blocked/Needs Source → Audit Artifacts
+- Audit-only raw inventory split: `buildInventoryArtifact()` keeps per-contract dumps out of the main board and in a separate `*.inventory.txt`
+- Discord dry-run formatter (`scripts/shared/discord-format.mjs`): offline, 2000-char-safe splitting, secret scrubbing, raw-inventory refusal — no network, no token reads
+- Deterministic docs updater (`scripts/docs/update-readme-updates.mjs`) + `npm run docs:update` / `docs:check`
+- README auto-generated `CPC:UPDATES` and `CPC:STATUS` blocks (sourced from CHANGELOG + package.json)
+- Documentation set: `docs/ARCHITECTURE.md`, `docs/USAGE.md`, `docs/PACKETS.md`, `docs/DISCORD.md`, `docs/SECURITY_PRIVACY.md`, `docs/AGENT_GUIDE.md`
+- `cpc-repo-upgrader` reusable operator (`docs/operators/cpc-repo-upgrader/SKILL.md`)
+- GitHub PR template and repo-upgrade issue template (`.github/`)
+
+### Changed
+- Decision packets are market-neutral: composite scoring half and market-price half are strictly separated; edge is model-fair vs market-implied only
+- `fair_value` (sportsbook-derived) renamed to `market_reference_prob` to pin composite market-neutrality
+- Packet generation routes through the active Hermes default model/provider/reasoning
+- MLB, NASCAR, and mentions/politics packet boards refactored onto the shared sectioned renderer
+
+### Model audit (2026-05-31)
+- Added `docs/MODEL_AUDIT.md`: read-only inventory, source-gap, calibration, and market-neutrality audit across MLB, NASCAR, mentions, politics, UFC, and shared packet infra
+- Confirmed UFC is packet-only (no model) and politics is a qualitative branch swarm (no numeric composite)
+- Pinned NASCAR market-neutrality with `test/nascar-composite-neutrality.test.js` (odds-injection pollute-vs-clean regression)
+- Pinned politics market-neutrality with `test/politics-neutrality.test.mjs` (market-board perturbation does not move the research judgment)
+
+### Tests
+- Decision-packet shape, market-neutrality, and Discord dry-run guard suites added
+- NASCAR + politics market-neutrality regression suites added
+- Full suite: 528/528 passing on `node --test`
+
+### Known limitations
+- Live Discord/webhook send is intentionally not implemented (dry-run only)
+- MLB composite still depends on a stats source adapter for full-slate coverage (see `AGENTS.md` handoff)
+- No live order placement or bankroll automation by design
+
+### Backlog
+- Wire stats-readonly adapter for full MLB slate composite coverage
+- Telegram/Discord live delivery behind explicit authorization
+
+### Earlier in this Unreleased cycle — public-alpha prep (2026-05-25)
+
+#### Added
 - `scripts/setup.mjs` — first-run bootstrap: copies `.env.example` → `.env`, creates `data/`
 - `scripts/doctor.mjs` — config, deps, Hermes CLI, and live server health check in one command
 - `scripts/demo.mjs` — boots the server, hits key endpoints, exits clean
@@ -17,7 +56,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `CONTRIBUTING.md` — fork-first contribution guide; contact via `@CaptainMentions`
 - `.env.example` expanded to cover every runtime variable with inline annotations
 
-### Changed
+#### Changed
 - README complete rewrite: quickstart, full env-var table, troubleshooting section, "build on this" guide
 - `AGENTS.md` extended with CPC agent identity, skill inventory, and no-touch zones
 - `src/captainLabsStore.js` seed user anonymized (was a real name, now `Demo User`)

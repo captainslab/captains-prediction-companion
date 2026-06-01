@@ -81,16 +81,23 @@ export function runComposite(input) {
 
 const PICK_ICON   = { PICK: '★', EVIDENCE_LEAN: '◆', LEAN: '◇', WATCH: '○' };
 
+function topPickMetricText(tp) {
+  if (!tp) return '';
+  const sideLane = tp.lane?.startsWith('moneyline') || tp.lane?.startsWith('run_line');
+  if (sideLane) return tp.differential != null ? `(diff: ${tp.differential > 0 ? '+' : ''}${tp.differential})` : '';
+  return tp.score != null ? `(signal: ${tp.score})` : '';
+}
+
 function topPickLine(label, board, ouLine) {
   const tp = board.top_pick;
   if (!tp || tp.status === 'NO CLEAR PICK' || tp.status === 'WATCH') return null;
   const icon = PICK_ICON[tp.status] ?? '·';
-  const diff = board.score_differential != null ? `  (diff: ${board.score_differential > 0 ? '+' : ''}${board.score_differential})` : '';
+  const metric = topPickMetricText(tp);
   let pickLabel = tp.label;
   if (ouLine != null && (tp.lane === 'total_over' || tp.lane === 'total_under')) {
     pickLabel = tp.label.replace(/^Total /, '') + ' ' + ouLine;
   }
-  return `${icon} ${tp.status.padEnd(13)} ${label.padEnd(10)} →  ${pickLabel}${diff}`;
+  return `${icon} ${tp.status.padEnd(13)} ${label.padEnd(10)} →  ${pickLabel}${metric ? `  ${metric}` : ''}`;
 }
 
 function whyLine(board, gameLedger) {
@@ -474,7 +481,8 @@ async function main() {
       const result = runComposite(input);
       results.push({ label: input.label, result, ouLine: input.ou_line ?? null });
       const tp = result.board.top_pick;
-      const statusStr = tp ? `${tp.status} (${result.board.score_differential ?? '?'} diff)` : 'WATCH';
+      const metric = topPickMetricText(tp);
+      const statusStr = tp ? `${tp.status}${metric ? ` ${metric}` : ''}` : 'WATCH';
       console.log(`${prefix}   ${input.label}: ${statusStr}  [${result.gameLedger.away.layers_present}L away / ${result.gameLedger.home.layers_present}L home]`);
     } catch (err) {
       console.error(`${prefix}   ERROR on ${input.label}: ${err.message}`);

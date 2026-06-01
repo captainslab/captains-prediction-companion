@@ -158,10 +158,14 @@ function normalizeLoadedState(raw) {
 }
 
 function resolveDefaultModels(defaultModels = {}) {
+  // No hard-coded model fallback. If neither an explicit override nor an env var
+  // is set, these resolve to null and the Hermes CLI uses its own active default
+  // provider/model/reasoning (see modelDefaults.js + hermesRuntime.runHermesChat,
+  // which omits --provider/-m when model is null).
   const implications =
     typeof defaultModels.implications === 'string' && defaultModels.implications.trim()
       ? defaultModels.implications.trim()
-      : resolveModelName('IMPLICATIONS_MODEL', 'gemini-2.5-flash');
+      : resolveModelName('IMPLICATIONS_MODEL');
   const validation =
     typeof defaultModels.validation === 'string' && defaultModels.validation.trim()
       ? defaultModels.validation.trim()

@@ -1,8 +1,12 @@
 import { runHermesChat } from './hermesRuntime.js';
 
 const EDGE_THRESHOLD_CENTS = 3;
-const ALPHA_PROVIDER_DEFAULT = 'gemini';
-const ALPHA_MODEL_DEFAULT = 'gemini-2.5-flash';
+// No hard-coded provider/model. When nothing explicit is configured (option,
+// EVENT_MARKET_ALPHA_*, GEMINI_MODEL, HERMES_*), these stay null so
+// runHermesChat omits --provider/-m and the Hermes CLI uses its own active
+// default provider/model/reasoning. Follows future default changes automatically.
+const ALPHA_PROVIDER_DEFAULT = null;
+const ALPHA_MODEL_DEFAULT = null;
 const ALPHA_SYSTEM_PROMPT =
   'You are the oracle stage for a prediction-market companion. Treat mention markets as exact-string, resolution-constrained language problems. Use only the provided market data and any supplied official source packet. Do not assume extra facts. Do not output pick, watch, or pass from price math alone. Reasoning must not be shallow or generic. If a real research packet is missing or empty, downgrade to watch or pass. For mention markets, explicitly evaluate the exact target phrase, whether the named speaker naturally uses that word or phrase, speaker repertoire / historical vocabulary evidence, transcript mechanics, eligible speaker segments, excluded segments, and market resolution rules. Separate verified evidence from inference; do not treat broad topic relevance as proof that the exact phrase will resolve YES. Respect the exact phrase, exact speaker, exact event boundary, exact source constraints, and exact official-source hierarchy from the rules summary. Return JSON only with keys fair_yes, confidence, reasoning, and watch_for. fair_yes must be a number from 0 to 1. confidence must be low, medium, or high. reasoning must be one short sentence and must explain why implied market probability differs from model/fair probability using at least one of: historical pattern, behavioral tendency, timing/catalyst insight, or market-structure mismatch. watch_for must be an array of up to three short strings. Do not use the live market price itself as evidence. If fair value is inside the no-bet band, say there is no actionable edge rather than implying certainty. watch_for items must be concrete monitoring hooks such as transcript release, exact-phrase confirmation, official-source publication, or excluded-segment risk, not names, tickers, or event titles. If a source packet is provided, prefer it over generic assumptions and do not invent evidence beyond it.';
 

@@ -23,13 +23,189 @@ import {
   filterNascarCupOnly,
   persistEventArtifacts,
   summarizeEvent,
-  renderMarketBlocks,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import {
+  buildDecisionRow,
+  renderSectionedPacket,
+  buildInventoryArtifact,
+  EDGE_STATUS,
+  CONFIDENCE,
+} from '../shared/decision-packet.mjs';
 
 const PACKET_TYPE = 'nascar-sunday';
 const SUPPORTED_LANES = ['win', 'top3', 'top5', 'top10', 'top20', 'fastest_lap'];
+
+// Map a NASCAR ceiling-board lane status to the shared edge vocabulary. The
+// ceiling model is the authority on driver posture; the shared row carries it
+// as statusOverride so the generic threshold logic does not relitigate it.
+const NASCAR_STATUS_TO_EDGE = Object.freeze({
+  PICK: EDGE_STATUS.PICK,
+  EVIDENCE_LEAN: EDGE_STATUS.LEAN,
+  'EVIDENCE LEAN': EDGE_STATUS.LEAN,
+  LEAN: EDGE_STATUS.LEAN,
+  WATCH: EDGE_STATUS.WATCH,
+  MARKET_ONLY: EDGE_STATUS.WATCH,
+  'MARKET ONLY': EDGE_STATUS.WATCH,
+  'NO CLEAR PICK': EDGE_STATUS.PASS,
+  NO_CLEAR_PICK: EDGE_STATUS.PASS,
+});
+
+const NASCAR_STATUS_TO_POSTURE = Object.freeze({
+  PICK: 'PICK',
+  EVIDENCE_LEAN: 'EVIDENCE_LEAN',
+  'EVIDENCE LEAN': 'EVIDENCE_LEAN',
+  LEAN: 'LEAN',
+  WATCH: 'WATCH',
+  MARKET_ONLY: 'MARKET_ONLY_LEAN',
+  'MARKET ONLY': 'MARKET_ONLY_LEAN',
+  'NO CLEAR PICK': 'NO_CLEAR_PICK',
+  NO_CLEAR_PICK: 'NO_CLEAR_PICK',
+});
+
+function nascarNum(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Load a NASCAR ceiling board (the model signal) for a date from located
+ * artifacts. Returns { candidates: [], source, lanes } or null. Read-only.
+ */
+export function loadNascarCeiling(artifacts = []) {
+  for (const fp of artifacts) {
+    if (!fp.endsWith('.json')) continue;
+    const data = readJsonIfExists(fp);
+    if (!data) continue;
+    if (Array.isArray(data.candidates) && data.candidates.length) {
+      return { candidates: data.candidates, source: fp, lanes: data.lanes ?? [] };
+    }
+  }
+  return null;
+}
+
+/**
+ * Field-normalize ceiling composite scores into a fair WIN probability that
+ * sums to ~1 across the candidate field. This is a MODEL-ONLY transform — it
+ * never reads market price. Used only as the fair anchor for edge comparison.
+ */
+function fairWinProbabilities(candidates = []) {
+  const scored = candidates
+    .map((c) => ({ name: (c.driver_name || '').trim(), score: nascarNum(c.composite_score) }))
+    .filter((c) => c.name && c.score !== null && c.score > 0);
+  const total = scored.reduce((s, c) => s + c.score, 0);
+  const map = new Map();
+  if (total > 0) {
+    for (const c of scored) map.set(c.name, c.score / total);
+  }
+  return map;
+}
+
+/**
+ * Build the ranked NASCAR decision board from the ceiling model + Kalshi win
+ * markets. Two modes:
+ *   - JOINED:      ceiling candidates present -> per-driver rows with model
+ *                  posture + fair win prob vs market implied (real edge).
+ *   - MARKET_ONLY: no ceiling candidates -> ranked rows sorted by market
+ *                  implied prob, each BLOCKED on the missing ceiling model with
+ *                  an explicit trigger. NEVER a 38-row forceWatch dump.
+ * Returns { rows, mode, joined, marketCount } or null when no win markets.
+ */
+export function buildNascarRows({ event, ceiling = null }) {
+  const markets = Array.isArray(event?.markets) ? event.markets : [];
+  // Win lane = per-driver binary markets (one driver each via yes_sub_title).
+  const winMarkets = markets.filter((m) => (m.yes_sub_title || m.expiration_value));
+  if (!winMarkets.length) return null;
+
+  const candidatesByName = new Map();
+  if (ceiling?.candidates?.length) {
+    for (const c of ceiling.candidates) candidatesByName.set((c.driver_name || '').trim(), c);
+  }
+  const fairWin = ceiling?.candidates?.length ? fairWinProbabilities(ceiling.candidates) : new Map();
+  const mode = candidatesByName.size ? 'JOINED' : 'MARKET_ONLY';
+
+  const rows = [];
+  let joined = 0;
+  for (const m of winMarkets) {
+    const driver = (m.yes_sub_title || m.expiration_value || 'MISSING').trim();
+    const cand = candidatesByName.get(driver) ?? null;
+    if (cand) joined += 1;
+    const winLane = cand?.lanes?.win ?? null;
+    const laneStatus = (winLane?.status ?? '').toUpperCase();
+    const fairProb = fairWin.get(driver) ?? null;
+
+    const marketHalf = {
+      yes_bid: m.yes_bid_dollars ?? null,
+      yes_ask: m.yes_ask_dollars ?? null,
+      last_price: m.last_price_dollars ?? null,
+      volume: m.volume_fp ?? null,
+      open_interest: m.open_interest_fp ?? null,
+    };
+
+    let statusOverride;
+    let blocker = null;
+    let posture;
+    let analysis;
+    let trigger;
+    const missingLayers = [];
+
+    if (cand) {
+      statusOverride = NASCAR_STATUS_TO_EDGE[laneStatus] ?? undefined;
+      posture = NASCAR_STATUS_TO_POSTURE[laneStatus] ?? 'WATCH';
+      const cov = nascarNum(cand.fundamentals_layer_coverage);
+      if (cov !== null && cov < 3) missingLayers.push(`fundamentals_coverage=${cov}/3`);
+      const breakdownMissing = /Missing layers:\s*([^.]+)/.exec(cand.score_reasoning || '');
+      if (breakdownMissing) missingLayers.push(...breakdownMissing[1].split(',').map((s) => s.trim()).filter(Boolean));
+      analysis = winLane?.narrative
+        ? winLane.narrative
+        : `composite ${cand.composite_score} (${cand.fundamentals_layer_coverage_label || 'coverage n/a'}); win lane ${laneStatus || 'n/a'}`;
+      trigger = {
+        price: null,
+        event: laneStatus === 'PICK' || laneStatus === 'EVIDENCE_LEAN'
+          ? 'confirm practice/qualifying then enter on value'
+          : 'await stronger model lane (practice/qualifying upgrade)',
+      };
+    } else {
+      // No model: do not fabricate a verdict. Block on the missing ceiling
+      // layer but keep the market priced and ranked so it is still useful.
+      statusOverride = EDGE_STATUS.BLOCKED;
+      blocker = 'BLOCKED_MODEL_LAYER_MISSING: no ceiling-board composite for this driver';
+      posture = 'NO_CLEAR_PICK';
+      missingLayers.push('ceiling_board_composite', 'fundamentals_layers');
+      analysis = 'Market priced; ceiling model absent for this date. Rank reflects market implied only — not a model edge.';
+      trigger = { price: null, event: 'run NASCAR ceiling board (scripts/nascar/nascar-workspace.mjs) for this race date' };
+    }
+
+    rows.push(buildDecisionRow({
+      marketTicker: m.ticker ?? 'MISSING',
+      sideTarget: `${driver} — WIN`,
+      marketType: 'nascar_win',
+      settlementSummary: m.rules_primary ? String(m.rules_primary).slice(0, 120) : 'NASCAR Cup race winner per Kalshi listing',
+      composite: {
+        score: cand ? nascarNum(cand.composite_score) : null,
+        posture,
+        layersPresent: cand ? nascarNum(cand.fundamentals_layer_coverage) : 0,
+        layersTotal: cand ? 4 : 4,
+        topEvidenceLayers: cand?.score_breakdown?.inputs_used?.map((x) => x.layer) ?? [],
+        missingLayers,
+        modelProbability: fairProb,
+      },
+      market: marketHalf,
+      fair: fairProb !== null ? { probability: fairProb } : {},
+      confidence: cand
+        ? (nascarNum(cand.fundamentals_layer_coverage) >= 3 ? CONFIDENCE.MEDIUM : CONFIDENCE.LOW)
+        : CONFIDENCE.LOW,
+      analysis,
+      trigger,
+      statusOverride,
+      blocker,
+    }));
+  }
+
+  return { rows, mode, joined, marketCount: winMarkets.length };
+}
 
 function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, artifacts = [] }) {
   return evaluateDecisionProcess({
@@ -40,17 +216,17 @@ function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, art
       projected_participants: marketCount > 0,
       lineup_injury_news: false,
       venue_context: Boolean(event?.product_metadata?.competition),
-      recent_form_matchup: Boolean(ceiling?.board?.length),
+      recent_form_matchup: Boolean(ceiling?.candidates?.length),
       market_board_context: marketCount > 0,
       evidence_supported_side: false,
     },
     topEvidence: [
       marketCount > 0 ? `Kalshi NASCAR board captured with ${marketCount} market(s).` : null,
-      ceiling?.board?.length ? `Ceiling board captured from ${ceiling.source}.` : null,
+      ceiling?.candidates?.length ? `Ceiling board captured from ${ceiling.source}.` : null,
       artifacts.length ? `${artifacts.length} local artifact(s) available.` : null,
     ].filter(Boolean),
     settlementRules: 'NASCAR market settlement criteria not independently pulled by this packet.',
-    verifiedFacts: ceiling?.board?.length ? 'Ceiling board present; qualifying/practice and entry status still required.' : 'No verified race-context facts supplied by packet generator.',
+    verifiedFacts: ceiling?.candidates?.length ? 'Ceiling board present; qualifying/practice and entry status still required.' : 'No verified race-context facts supplied by packet generator.',
     marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
     socialChatter: 'Not used as verified fact.',
     inference: 'Race inference blocked until official entry/status, practice/qualifying, track, and recent performance context are complete.',
@@ -107,71 +283,61 @@ function tryRunWorkspaceFixturesOnly(date) {
   }
 }
 
-function pickCeilingBoard(artifacts) {
-  for (const fp of artifacts) {
-    if (!fp.endsWith('.json')) continue;
-    const data = readJsonIfExists(fp);
-    if (!data) continue;
-    const board = data.ceiling_board || data.ceilings || data.board || null;
-    if (Array.isArray(board) && board.length) return { board, source: fp };
-    if (board && typeof board === 'object') {
-      const arr = Object.entries(board).map(([driver_name, ceiling]) => ({ driver_name, ceiling }));
-      if (arr.length) return { board: arr, source: fp };
-    }
-  }
-  return null;
-}
-
-function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult }) {
+export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult }) {
   const s = summarizeEvent(event);
-  const block = renderMarketBlocks(event, { limit: 60 });
+  const ceiling = loadNascarCeiling(artifacts);
+  const built = buildNascarRows({ event, ceiling });
   const header = packetHeader({
-    title: `Captain NASCAR — Sunday Morning Race Packet: ${s.title}`,
+    title: `Captain NASCAR — Sunday Race Decision Board: ${s.title}`,
     date,
     packetType: PACKET_TYPE,
-    sources: [sourcePath, KALSHI_SOURCES.nascar.page_url, ...artifacts],
+    sources: [sourcePath, KALSHI_SOURCES.nascar.page_url, ceiling?.source].filter(Boolean),
   });
-  const ceiling = pickCeilingBoard(artifacts);
-  const process = buildNascarProcess({ event, marketCount: block.marketCount, ceiling, artifacts });
-  const lines = [];
-  lines.push('TLDR:');
-  lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: race board only; no evidence lean without entry, track, practice, and qualifying context.');
-  lines.push('');
-  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
-  lines.push('');
-  lines.push(`event_ticker: ${s.ticker}`);
-  lines.push(`event_title: ${s.title}`);
-  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
-  lines.push(`series_ticker: ${s.series}`);
-  lines.push(`competition: ${event?.product_metadata?.competition || 'NASCAR Cup Series'}`);
-  lines.push(`market_count: ${s.marketCount}`);
-  lines.push(`close_time_utc: ${s.close}`);
-  lines.push('');
-  lines.push(`supported_market_lanes: ${SUPPORTED_LANES.join(', ')}`);
-  lines.push('');
-  lines.push('markets:');
-  for (const l of block.lines) lines.push(l);
-  lines.push('');
-  lines.push('ceiling_board (format: [driver_name] [ceiling]):');
-  if (ceiling && ceiling.board.length) {
-    for (const row of ceiling.board) {
-      lines.push(`  [${row.driver_name || 'MISSING'}] [${row.ceiling ?? 'MISSING'}]`);
-    }
-    lines.push(`  source: ${ceiling.source}`);
-  } else {
-    lines.push('  MISSING');
-    if (workspaceResult) {
-      lines.push(`  workspace_run_ok: ${workspaceResult.ok}`);
-      if (!workspaceResult.ok) lines.push(`  workspace_error: ${workspaceResult.error}`);
-    }
+
+  // No win markets at all -> fall back to a research-completeness note (no dump).
+  if (!built || !built.rows.length) {
+    const proc = buildNascarProcess({ event, marketCount: s.marketCount, ceiling, artifacts });
+    const body = [
+      'TLDR BOARD:',
+      `  no per-driver win markets parsed for ${s.title}; nothing to rank.`,
+      '',
+      renderDecisionProcess(proc, { heading: 'Research Completeness' }),
+    ].join('\n');
+    return {
+      text: [header, body, packetFooter()].join('\n\n'),
+      inventoryText: buildInventoryArtifact({ marketType: 'nascar_win', date, eventTicker: s.ticker, inventoryLines: [], meta: { mode: 'NO_WIN_MARKETS' } }),
+      marketCount: 0,
+      missingStrikeCount: 0,
+      missingMarkets: true,
+    };
   }
+
+  const modeNote = built.mode === 'JOINED'
+    ? `Ceiling model joined for ${built.joined}/${built.marketCount} drivers (source: ${ceiling.source}). Edge = model fair win − market implied.`
+    : `NO ceiling model for this race date: ${built.marketCount} win markets ranked by market implied only and BLOCKED on the missing model. Run the NASCAR ceiling board to unlock edges.`;
+
+  const body = renderSectionedPacket(built.rows, {
+    tldrNote: modeNote,
+    auditArtifacts: [`${date}-${s.ticker}.inventory.txt`, sourcePath].filter(Boolean),
+    perSectionLimit: 16,
+  });
+
+  const inventoryLines = built.rows.map((r, i) =>
+    `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | fair=${r.fair_probability_or_range} score=${r.composite_score} implied=${r.implied_probability} ask=${r.market_yes_ask} edge=${r.edge_cents_or_pp === null ? 'MISSING' : `${r.edge_cents_or_pp}pp`} conf=${r.confidence}`);
+  const inventoryText = buildInventoryArtifact({
+    marketType: 'nascar_win',
+    date,
+    eventTicker: s.ticker,
+    inventoryLines,
+    meta: { mode: built.mode, joined: built.joined, win_markets: built.marketCount, ceiling_source: ceiling?.source ?? 'MISSING' },
+  });
+
   return {
-    text: header + lines.join('\n') + packetFooter(),
-    marketCount: block.marketCount,
-    missingStrikeCount: block.missingStrikeCount,
-    missingMarkets: block.missingMarkets,
+    text: [header, body, packetFooter()].join('\n\n'),
+    inventoryText,
+    marketCount: built.marketCount,
+    missingStrikeCount: 0,
+    missingMarkets: false,
   };
 }
 
@@ -275,6 +441,14 @@ async function main() {
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
+      // Raw per-driver inventory -> audit artifact only (never the packet body).
+      if (built.inventoryText) {
+        const invW = writeAudit(dir, `${opts.date}-${ticker}.inventory`, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+        });
+        items.push({ name: `${ticker}.inventory`, ...invW });
+      }
       const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
         event_ticker: ticker,
         market_count: built.marketCount,

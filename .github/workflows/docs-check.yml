@@ -1,0 +1,33 @@
+name: docs-check
+
+# Check-only. No secrets, no network, no writes, no deploy.
+# Fails the build if the README auto-blocks are stale (run `npm run docs:update`).
+
+on:
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'package.json'
+      - 'scripts/docs/**'
+  push:
+    branches: [ main ]
+    paths:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'package.json'
+      - 'scripts/docs/**'
+
+permissions:
+  contents: read
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify README auto-blocks are in sync
+        run: npm run docs:check

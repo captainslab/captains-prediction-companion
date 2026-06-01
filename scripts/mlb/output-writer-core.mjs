@@ -163,7 +163,7 @@ export function buildMoneylineEdgeBoard(candidates) {
       market_ticker: candidate.market_ticker ?? null,
       classification: candidate.classification ?? null,
       kalshi_ask: candidate.kalshi_ask ?? null,
-      fair_value: candidate.fair_value ?? null,
+      market_reference_prob: candidate.market_reference_prob ?? null,
       edge_pp: candidate.edge_pp ?? null,
       target_entry: candidate.target_entry ?? null,
       missing_confirmations: safeArray(candidate.missing_confirmations),
@@ -189,24 +189,24 @@ function sameGameComboMemberLabel(candidate) {
   return `${lane}: ${ticker} (${classification}, ${edge})`;
 }
 
-export function calculateComboEstimates({ leg_1_ask, leg_1_fair, leg_2_ask, leg_2_fair }) {
+export function calculateComboEstimates({ leg_1_ask, leg_1_market_ref, leg_2_ask, leg_2_market_ref }) {
   const hasCostInputs = leg_1_ask !== null && leg_1_ask !== undefined && leg_2_ask !== null && leg_2_ask !== undefined;
-  const hasFairInputs =
-    leg_1_fair !== null && leg_1_fair !== undefined && leg_2_fair !== null && leg_2_fair !== undefined;
+  const hasMarketRefInputs =
+    leg_1_market_ref !== null && leg_1_market_ref !== undefined && leg_2_market_ref !== null && leg_2_market_ref !== undefined;
   const estimatedComboCost = hasCostInputs
     ? Math.round((leg_1_ask * leg_2_ask) * 10000) / 10000
     : null;
-  const estimatedComboFair = hasFairInputs
-    ? Math.round((leg_1_fair * leg_2_fair) * 10000) / 10000
+  const estimatedComboMarketRef = hasMarketRefInputs
+    ? Math.round((leg_1_market_ref * leg_2_market_ref) * 10000) / 10000
     : null;
   const comboEdgePp =
-    estimatedComboCost !== null && estimatedComboFair !== null
-      ? (estimatedComboFair - estimatedComboCost) * 100
+    estimatedComboCost !== null && estimatedComboMarketRef !== null
+      ? (estimatedComboMarketRef - estimatedComboCost) * 100
       : null;
 
   return {
     estimatedComboCost,
-    estimatedComboFair,
+    estimatedComboMarketRef,
     comboEdgePp,
   };
 }
@@ -269,7 +269,7 @@ export function buildSameGameCombos(candidates) {
           contract_title: member.contract_title ?? member.market_title ?? null,
           classification: member.classification ?? null,
           kalshi_ask: member.kalshi_ask ?? null,
-          fair_value: member.fair_value ?? null,
+          market_reference_prob: member.market_reference_prob ?? null,
           edge_pp: member.edge_pp ?? null,
           total_strike: member.total_strike ?? null,
           correlation_group: member.correlation_group ?? null,
@@ -330,12 +330,12 @@ function buildComboCandidates(candidates) {
       const bestMember = sortedComboMembers[0] ?? null;
       const secondMember = sortedComboMembers[1] ?? null;
       const comboClassification = classifyCombo(moneylineMember, totalMember);
-      const { estimatedComboCost, estimatedComboFair, comboEdgePp } = calculateComboEstimates(
+      const { estimatedComboCost, estimatedComboMarketRef, comboEdgePp } = calculateComboEstimates(
         {
           leg_1_ask: moneylineMember?.kalshi_ask ?? null,
-          leg_1_fair: moneylineMember?.fair_value ?? null,
+          leg_1_market_ref: moneylineMember?.market_reference_prob ?? null,
           leg_2_ask: totalMember?.kalshi_ask ?? null,
-          leg_2_fair: totalMember?.fair_value ?? null,
+          leg_2_market_ref: totalMember?.market_reference_prob ?? null,
         },
       );
       const missingConfirmations = [
@@ -356,16 +356,16 @@ function buildComboCandidates(candidates) {
         leg_1_side: moneylineMember?.contract_title ?? moneylineMember?.market_title ?? null,
         leg_1_strike: moneylineMember?.total_strike ?? null,
         leg_1_ask: moneylineMember?.kalshi_ask ?? null,
-        leg_1_fair: moneylineMember?.fair_value ?? null,
+        leg_1_market_ref: moneylineMember?.market_reference_prob ?? null,
         leg_2_market_ticker: totalMember?.market_ticker ?? null,
         leg_2_market_lane: totalMember?.market_lane ?? null,
         leg_2_classification: totalMember?.classification ?? null,
         leg_2_side: totalMember?.contract_title ?? totalMember?.market_title ?? null,
         leg_2_strike: totalMember?.total_strike ?? null,
         leg_2_ask: totalMember?.kalshi_ask ?? null,
-        leg_2_fair: totalMember?.fair_value ?? null,
+        leg_2_market_ref: totalMember?.market_reference_prob ?? null,
         estimated_combo_cost: estimatedComboCost,
-        estimated_combo_fair: estimatedComboFair,
+        estimated_combo_market_ref: estimatedComboMarketRef,
         combo_top_market_ticker: bestMember?.market_ticker ?? null,
         combo_top_market_lane: bestMember?.market_lane ?? null,
         combo_member_count: comboMembers.length,
@@ -968,7 +968,7 @@ function buildDailyGuide({
   const buildPickRow = (c, note) => {
     const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
     const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
-    return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTimeByGame.get(c.game) ?? 'TBD'} | ${tableEscape(missing)} | ${note} |`;
+    return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTimeByGame.get(c.game) ?? 'TBD'} | ${tableEscape(missing)} | ${note} |`;
   };
 
   const clearPickRows = clearPickCandidates.length > 0
@@ -979,7 +979,7 @@ function buildDailyGuide({
     ? [
         '_All hard source gates passed. Edge >= 3pp. Awaiting lineup confirmation — enter only after starting lineups are posted._',
         '',
-        '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+        '| Market | Game | Contract | Strike | Ask | Mkt Ref | Edge | Max Entry | Start | Missing | Note |',
         '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
         ...preLineupPickCandidates.map(c => buildPickRow(c, 'Pre-lineup only — do not enter until lineup confirmed.')),
       ]
@@ -1010,7 +1010,7 @@ function buildDailyGuide({
   const leanRows = leanDeduped.length > 0
     ? [
         ...leanDeduped.slice(0, 10).map(c =>
-          `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
+          `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
         ),
         ...(leanDeduped.length > 10 || leanCandidates.length > leanDeduped.length
           ? [`| _+${leanCandidates.length - Math.min(leanDeduped.length, 10)} more_ | see today-execution-board.json for full list |  |  |  |  |  |`]
@@ -1068,7 +1068,7 @@ function buildDailyGuide({
     ...whyMostlyTotalsSection({ scoring }),
     '## Clear Picks',
     '',
-    '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+    '| Market | Game | Contract | Strike | Ask | Mkt Ref | Edge | Max Entry | Start | Missing | Note |',
     '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
     ...clearPickRows,
     '',
@@ -1088,7 +1088,7 @@ function buildDailyGuide({
     '',
     '## Leans (Top 10 by Edge)',
     '',
-    '| Market | Game | Strike | Ask | Fair | Edge | Missing |',
+    '| Market | Game | Strike | Ask | Mkt Ref | Edge | Missing |',
     '|---|---|---:|---:|---:|---:|---|',
     ...leanRows,
     '',
@@ -1304,7 +1304,7 @@ function buildExecutionBoardMd({
   const moneylineEdgeBoard = board.moneyline_edge_board ?? [];
   const moneylineEdgeRows = moneylineEdgeBoard.length > 0
     ? moneylineEdgeBoard.slice(0, 10).map(c =>
-        `| ${tableEscape(c.market_ticker ?? '')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.side ?? '')} | ${tableEscape(c.classification ?? '')} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${c.target_entry ?? 'n/a'} | ${tableEscape(c.why_not)} |`,
+        `| ${tableEscape(c.market_ticker ?? '')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.side ?? '')} | ${tableEscape(c.classification ?? '')} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${c.target_entry ?? 'n/a'} | ${tableEscape(c.why_not)} |`,
       )
     : ['| none |  |  |  |  |  |  |  |  |'];
   const lines = [
@@ -1341,13 +1341,13 @@ function buildExecutionBoardMd({
     board.clear_picks.length === 0
       ? '- none'
       : [
-          '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+          '| Market | Game | Contract | Strike | Ask | Mkt Ref | Edge | Max Entry | Start | Missing | Note |',
           '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
           ...board.clear_picks.map(c => {
             const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
             const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
             const startTime = safeArray(board.games).find(g => g.game === c.game)?.start_time_utc ?? 'TBD';
-            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Discovery only — no trade placed. |`;
+            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Discovery only — no trade placed. |`;
           }),
         ].join('\n'),
     '',
@@ -1358,13 +1358,13 @@ function buildExecutionBoardMd({
       : [
           '_All hard source gates passed. Edge >= 3pp. Awaiting lineup confirmation — enter only after starting lineups are posted._',
           '',
-          '| Market | Game | Contract | Strike | Ask | Fair | Edge | Max Entry | Start | Missing | Note |',
+          '| Market | Game | Contract | Strike | Ask | Mkt Ref | Edge | Max Entry | Start | Missing | Note |',
           '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
           ...board.pre_lineup_picks.map(c => {
             const maxEntry = c.edge_pp !== null ? `$${Math.min(200, Math.round(c.edge_pp * 20))}` : 'n/a';
             const missing = safeArray(c.missing_confirmations).join(', ') || 'none';
             const startTime = safeArray(board.games).find(g => g.game === c.game)?.start_time_utc ?? 'TBD';
-            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Pre-lineup only — do not enter until lineup confirmed. |`;
+            return `| ${tableEscape(c.market_ticker ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.contract_title ?? c.market_title ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${maxEntry} | ${startTime} | ${tableEscape(missing)} | Pre-lineup only — do not enter until lineup confirmed. |`;
           }),
         ].join('\n'),
     '',
@@ -1383,10 +1383,10 @@ function buildExecutionBoardMd({
           const top10 = deduped.slice(0, 10);
           const overflowCount = board.leans.length - top10.length;
           return [
-            '| Market | Game | Strike | Ask | Fair | Edge | Missing |',
+            '| Market | Game | Strike | Ask | Mkt Ref | Edge | Missing |',
             '|---|---|---:|---:|---:|---:|---|',
             ...top10.map(c =>
-              `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.fair_value ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
+              `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
             ),
             ...(overflowCount > 0
               ? [`\n_${overflowCount} more leans — see today-execution-board.json for full list._`]
@@ -1418,7 +1418,7 @@ function buildExecutionBoardMd({
     '',
     '_Discovery view across all classifications. PASS and WATCH_FOR_PRICE rows are included for edge visibility, not action._',
     '',
-    '| market_ticker | game | Side | Status | Ask | Fair | Edge | Target | Why not |',
+    '| market_ticker | game | Side | Status | Ask | Mkt Ref | Edge | Target | Why not |',
     '|---|---|---|---|---:|---:|---:|---:|---|',
     ...moneylineEdgeRows,
     ...(moneylineEdgeBoard.length > 10
