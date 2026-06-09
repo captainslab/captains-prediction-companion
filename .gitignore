@@ -42,6 +42,12 @@ lib
 !scripts/politics/lib/kalshi-fetch.mjs
 !scripts/politics/lib/branch-contract.mjs
 !scripts/politics/lib/branch-dispatch.mjs
+!scripts/worldcup/lib/
+!scripts/worldcup/lib/evidence-ledger.mjs
+!scripts/worldcup/lib/multi-lane-ceiling.mjs
+!scripts/worldcup/lib/packet-renderer.mjs
+!scripts/worldcup/lib/market-parser.mjs
+!scripts/worldcup/lib/match-probabilities.mjs
 .DS_store
 
 # Next.js
@@ -98,5 +104,6 @@ state/mentions/
 state/ufc/
 state/mlb/
 state/nascar/
+state/worldcup/
 
 scratch/
