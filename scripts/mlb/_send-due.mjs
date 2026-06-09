@@ -17,6 +17,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { mkdirSync, appendFileSync } from 'node:fs';
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', dryRun: false };
@@ -34,13 +36,25 @@ function parseArgs(argv) {
 const opts = parseArgs(process.argv.slice(2));
 const TODAY = opts.date;
 const PLAN = path.join(opts.stateRoot, 'mlb', TODAY, 'slate-run-plan.json');
-if (!fs.existsSync(PLAN)) { console.log(`no plan for ${TODAY}`); process.exit(0); }
+if (!fs.existsSync(PLAN)) { log(`no plan for ${TODAY}`); process.exit(0); }
 
 // Accept both the legacy trigger source and the direct composite-refresh source.
 const COMPOSITE_SOURCES = new Set([
   'late-slate-composite-refresh',
   'composite-refresh-trigger',
 ]);
+
+const LOG_PATH = resolve('logs', 'mlb-prelock-delivery.log');
+
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try {
+    mkdirSync(dirname(LOG_PATH), { recursive: true });
+    appendFileSync(LOG_PATH, line);
+  } catch {
+    // If logging fails, silently drop — do not spam cron stdout.
+  }
+}
 
 // Strings that must never appear in an MLB Telegram artifact.
 const FORBIDDEN = [
@@ -88,7 +102,7 @@ for (const w of windows) {
 
   // Composite-only guard: skip windows not produced by the composite pipeline.
   if (!COMPOSITE_SOURCES.has(w.source)) {
-    console.log(`skip ${w.cluster_id} — not composite source (${w.source ?? 'none'})`);
+    log(`skip ${w.cluster_id} — not composite source (${w.source ?? 'none'})`);
     continue;
   }
 
@@ -116,7 +130,7 @@ for (const w of windows) {
 }
 writePlan();
 
-if (sendList.length === 0) { console.log('no due windows to send'); process.exit(0); }
+if (sendList.length === 0) { log('no due windows to send'); process.exit(0); }
 
 // Load env from project .env if present
 function loadEnv(file) {
@@ -164,7 +178,7 @@ for (const { window: w, artifactPath } of sendList) {
   const text = fs.readFileSync(artifactPath, 'utf8');
   const clearLean = countPicks(text);
   if (clearLean === 0) {
-    console.log(`skip ${w.cluster_id} — no picks`);
+    log(`skip ${w.cluster_id} — no picks`);
     continue;
   }
   const mode = (artifactPath === w.compact_artifact) ? 'compact' : 'verbose';
@@ -176,7 +190,7 @@ for (const { window: w, artifactPath } of sendList) {
     continue;
   }
   if (opts.dryRun) {
-    console.log(`[dry-run] would send ${w.cluster_id} (${mode}) — ${clearLean} pick(s)`);
+    log(`[dry-run] would send ${w.cluster_id} (${mode}) — ${clearLean} pick(s)`);
     continue;
   }
   const id = await tgSendDocument(artifactPath, caption);
@@ -187,7 +201,10 @@ for (const { window: w, artifactPath } of sendList) {
   w.delivered_mode = mode;
   w.clear_lean_count = clearLean;
   writePlan();
+  log(`sent ${w.cluster_id} (${mode}) — ${clearLean} pick(s), msg_id=${id}`);
   summary.push(`${w.cluster_id}(${mode})`);
 }
 
-console.log(`sent ${summary.length} window(s): ${summary.join(', ')}`);
+if (summary.length) {
+  log(`delivery complete: ${summary.length} window(s): ${summary.join(', ')}`);
+}

@@ -3,11 +3,25 @@
 // report windows whose report_at_utc has arrived (within --grace-minutes),
 // using idempotency_key to avoid duplicate sends. Designed to be called
 // every N minutes by a single recurring cron job. No trades.
+//
+// Quiet mode: routine logs go to a local log file; only hard errors go to stderr.
 
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+
+const LOG_PATH = resolve('logs', 'mlb-prelock-reporter.log');
+
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try {
+    mkdirSync(dirname(LOG_PATH), { recursive: true });
+    appendFileSync(LOG_PATH, line);
+  } catch {
+    // If logging fails, silently drop — do not spam cron stdout.
+  }
+}
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', graceMinutes: 60 };
@@ -31,7 +45,7 @@ async function main() {
   }
   const planPath = resolve(opts.stateRoot, 'mlb', opts.date, 'slate-run-plan.json');
   if (!existsSync(planPath)) {
-    console.log(`[mlb-run-due] no plan for ${opts.date} (${planPath}) — nothing to do`);
+    log(`no plan for ${opts.date} (${planPath}) — nothing to do`);
     return;
   }
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
@@ -52,14 +66,14 @@ async function main() {
     return false;
   });
   if (!due.length) {
-    console.log(`[mlb-run-due] no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
+    log(`no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
     return;
   }
 
   // Composite-only dispatch: fire one composite refresh for all due windows.
   // pre-lock-report.mjs (legacy board-only path) is intentionally bypassed here.
   const clusterIds = due.map((w) => w.cluster_id).join(', ');
-  console.log(`[mlb-run-due] firing composite refresh for ${due.length} due window(s): ${clusterIds}`);
+  log(`firing composite refresh for ${due.length} due window(s): ${clusterIds}`);
   const r = spawnSync('node', [
     'scripts/mlb/late-slate-composite-refresh.mjs',
     '--date', opts.date,
@@ -86,6 +100,7 @@ async function main() {
       }
     }
     writeFileSync(planPath, JSON.stringify(cur, null, 2));
+    log(`marked ${due.length} window(s) as rendered`);
   } catch (e) {
     console.error(`[mlb-run-due] failed to mark windows rendered: ${e.message}`);
   }
