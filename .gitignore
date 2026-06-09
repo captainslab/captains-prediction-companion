@@ -46,6 +46,8 @@ lib
 !scripts/worldcup/lib/evidence-ledger.mjs
 !scripts/worldcup/lib/multi-lane-ceiling.mjs
 !scripts/worldcup/lib/packet-renderer.mjs
+!scripts/worldcup/lib/market-parser.mjs
+!scripts/worldcup/lib/match-probabilities.mjs
 .DS_store
 
 # Next.js

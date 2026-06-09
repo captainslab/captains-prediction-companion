@@ -14,6 +14,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { parseMarketContract } from '../lib/market-parser.mjs';
+
 function nowIso() { return new Date().toISOString(); }
 
 function toProbability(value) {
@@ -40,13 +42,28 @@ export function computeEdge(modelProbability, marketImplied) {
   return Math.round((modelProbability - marketImplied) * 1000) / 10; // percentage points, 1 decimal
 }
 
-export function normalizeMarketContext(raw) {
+export function normalizeMarketContext(raw, { homeTeam = null, awayTeam = null } = {}) {
   if (!raw || !raw.ticker) return null;
   const imp = impliedProbability(raw);
+  // Contract TEXT parsing only — prices never reach the parser.
+  const parsed = parseMarketContract({
+    ticker: raw.ticker,
+    title: raw.title ?? '',
+    rules: raw.rules ?? raw.rules_primary ?? '',
+    homeTeam,
+    awayTeam,
+  });
   return {
     ticker: raw.ticker,
     title: raw.title ?? null,
-    market_type: raw.market_type ?? 'match_winner',
+    market_type: raw.market_type ?? parsed.market_type ?? 'match_winner',
+    market_family: parsed.market_family,
+    period: parsed.period,
+    side: parsed.side,
+    line: parsed.line,
+    settlement: parsed.settlement,
+    normalized_target: parsed.normalized_target,
+    parse_confidence: parsed.parse_confidence,
     implied_probability: imp,
     source_url: raw.source_url ?? null,
     fetched_at: nowIso(),

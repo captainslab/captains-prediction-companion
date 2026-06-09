@@ -38,12 +38,39 @@ function section(title) {
   return `\n${'─'.repeat(70)}\n  ${title}\n${'─'.repeat(70)}\n`;
 }
 
+function pct(p) {
+  return p == null ? 'N/A' : `${(p * 100).toFixed(0)}%`;
+}
+
 function formatLane(lane) {
-  const modelLine = `  MODEL: ${lane.recommendation} | composite H:${lane.composite_score_home ?? 'MISSING'} A:${lane.composite_score_away ?? 'MISSING'} | confidence:${lane.confidence}`;
-  const marketLine = lane.market_context
-    ? `  MARKET (NOT IN SCORE): ${lane.market_context.ticker ?? 'N/A'} | imp:${lane.market_context.implied_probability != null ? (lane.market_context.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | edge H:${lane.edge_home_pp ?? 'N/A'} A:${lane.edge_away_pp ?? 'N/A'}`
-    : `  MARKET (NOT IN SCORE): no market context attached`;
-  return [modelLine, marketLine, `  why: ${lane.explanation}`, ''].join('\n');
+  // Blocked lanes render as a single honest line — no fake model half.
+  if (lane.recommendation === 'BLOCKED_MODEL_LAYER_MISSING') {
+    const ref = lane.market_context
+      ? ` | market ref (NOT IN SCORE): ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
+      : '';
+    return `  [${lane.label}] BLOCKED_MODEL_LAYER_MISSING — ${lane.explanation}${ref}\n`;
+  }
+
+  const lines = [];
+  lines.push(`  [${lane.label}] MODEL: ${lane.recommendation} | composite H:${lane.composite_score_home ?? 'MISSING'} A:${lane.composite_score_away ?? 'MISSING'} | confidence:${lane.confidence}`);
+  if (lane.lane === 'match_winner' && lane.p_home != null) {
+    lines.push(`    1X2: H ${pct(lane.p_home)} / D ${pct(lane.p_draw)} / A ${pct(lane.p_away)} | winner_lean:${lane.winner_lean} | draw_risk:${lane.draw_risk} | draw:${lane.draw_evaluation}`);
+  }
+  if (lane.market_context) {
+    const mc = lane.market_context;
+    const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
+    const edges = [
+      lane.edge_home_pp != null ? `H:${lane.edge_home_pp}pp` : null,
+      lane.edge_draw_pp != null ? `D:${lane.edge_draw_pp}pp` : null,
+      lane.edge_away_pp != null ? `A:${lane.edge_away_pp}pp` : null,
+    ].filter(Boolean).join(' ') || 'none (no model fair probability)';
+    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | edge ${edges}`);
+  } else {
+    lines.push(`    MARKET (NOT IN SCORE): no market context attached`);
+  }
+  lines.push(`    why: ${lane.explanation}`);
+  lines.push('');
+  return lines.join('\n');
 }
 
 function formatMatch(match, board) {
@@ -52,6 +79,18 @@ function formatMatch(match, board) {
   lines.push(`  kickoff: ${match.kickoff_utc ?? 'TBD'}`);
   lines.push(`  lineup_status: ${match.lineup_status ?? 'unknown'}`);
   lines.push('');
+
+  const probs = board.probabilities;
+  if (probs && probs.p_home != null) {
+    lines.push(`  1X2 model: H ${Math.round(probs.p_home * 100)}% / D ${Math.round(probs.p_draw * 100)}% / A ${Math.round(probs.p_away * 100)}% | draw_risk:${probs.draw_risk} | draw read:${probs.draw_evaluation}`);
+    if (probs.goal_environment) {
+      lines.push(`  goal environment (proxy): total ${probs.goal_environment.xg_total} (H ${probs.goal_environment.xg_home} / A ${probs.goal_environment.xg_away})`);
+    }
+    lines.push('');
+  } else if (probs?.blocked_reason) {
+    lines.push(`  1X2 model: BLOCKED — ${probs.blocked_reason}`);
+    lines.push('');
+  }
 
   for (const lane of board.lanes || []) {
     // Keep the board compact: skip not-applicable lanes and lanes the model
@@ -162,6 +201,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
       if (board.composite_score_home == null) missing.push('home composite');
       if (board.composite_score_away == null) missing.push('away composite');
       lines.push(`  • ${match.home_team} vs ${match.away_team}: blocked — missing ${missing.join(', ')}`);
+    }
+    const blockedLanes = (board.lanes || []).filter(l => l.recommendation === 'BLOCKED_MODEL_LAYER_MISSING');
+    if (blockedLanes.length > 0) {
+      blockedCount++;
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${blockedLanes.length} market lane(s) BLOCKED_MODEL_LAYER_MISSING — ${blockedLanes.map(l => l.label).join(', ')}`);
     }
   }
   if (blockedCount === 0) lines.push('  No blocked matches.\n');

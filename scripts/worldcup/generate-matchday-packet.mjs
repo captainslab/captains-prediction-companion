@@ -24,7 +24,7 @@ import { fetchStaticStructure } from './source-adapters/static-structure.mjs';
 import { fetchTeamBaseline } from './source-adapters/team-baseline.mjs';
 import { buildOpponentMatchup, loadCachedMatchup } from './source-adapters/opponent-matchup.mjs';
 import { fetchMatchdayData, loadCachedMatchday } from './source-adapters/matchday-data.mjs';
-import { loadCachedMarketContext } from './source-adapters/market-context.mjs';
+import { loadCachedMarketContext, normalizeMarketContext } from './source-adapters/market-context.mjs';
 import { composeEvidenceLedgerForGame } from './lib/evidence-ledger.mjs';
 import { composeMultiLaneCeilingBoard } from './lib/multi-lane-ceiling.mjs';
 import { renderWorldCupPacket, writeWorldCupPacket } from './lib/packet-renderer.mjs';
@@ -172,9 +172,17 @@ async function main() {
     // 3d. Run composite model
     const ledger = composeEvidenceLedgerForGame(homeEntry, awayEntry, { isKnockout });
 
-    // 3e. Load market context
+    // 3e. Load market context (post-score reference only). Cache file may be
+    // a single contract or { markets: [...] }; every contract is normalized
+    // (family/period/side/line/settlement parsed from TEXT, prices stripped
+    // to implied_probability).
     const marketCtx = loadCachedMarketContext(stateRoot, date, match.match_id);
-    const marketContexts = marketCtx.ok ? [marketCtx] : [];
+    const rawMarkets = marketCtx.ok
+      ? (Array.isArray(marketCtx.markets) ? marketCtx.markets : [marketCtx])
+      : [];
+    const marketContexts = rawMarkets
+      .map(m => normalizeMarketContext(m, { homeTeam: match.home_team, awayTeam: match.away_team }))
+      .filter(Boolean);
 
     // 3f. Run multi-lane ceiling board
     const board = composeMultiLaneCeilingBoard({
@@ -193,6 +201,7 @@ async function main() {
       matchup: matchup.ok ? matchup : null,
       matchday: matchday.ok ? matchday : null,
       market_context: marketCtx.ok ? marketCtx : null,
+      parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
     });
   }
 

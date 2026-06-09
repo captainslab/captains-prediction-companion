@@ -97,10 +97,33 @@ Revisit weights against `state/worldcup/*/grades/` after group stage.
 ## Market normalization (post-score only)
 
 Kalshi markets are pre-fetched by the shared discovery step into
-`state/worldcup/<date>/market/<match_id>.json`; `market-context.mjs`
-normalizes to `{ticker, title, market_type, implied_probability}` — raw
-bid/ask/volume/OI are stripped before the context ever reaches a board.
-Edge (model prob − implied) is computed after the composite exists.
+`state/worldcup/<date>/market/<match_id>.json` (single contract or
+`{markets:[...]}`); `market-context.mjs` + `lib/market-parser.mjs` normalize
+each contract from its TEXT into `{market_family, period, side, line,
+settlement, normalized_target, implied_probability}` — raw bid/ask/volume/OI
+are stripped before the context ever reaches a board.
+
+Supported market families (lanes): 1X2 incl. Draw, goal spread/handicap,
+total goals, BTTS — each with a 1st-half variant. 1st-half lanes are
+`BLOCKED_MODEL_LAYER_MISSING` (no goals/shots-by-half source exists; market
+shown as reference only, never modeled from invented half data). Settlement
+defaults to regulation 90'+stoppage; ET/penalties only when the contract
+says so explicitly (`to advance` → includes penalties). Ambiguous contracts
+parse to `unknown`/low-confidence and route to audit, never guessed.
+
+1X2 probabilities (`lib/match-probabilities.mjs`) are computed from the
+composite ledgers BEFORE market attachment: logistic split on composite diff
+with a calibrated draw prior (base 22%, boosted by narrow gap / low goal
+environment / defensive matchup / draw incentive, clamped 10–42%). Draw is
+ACTIONABLE only with narrow gap AND low goal environment AND a secondary
+support (defensive matchup, draw incentive, or genuine scoring-suppression
+conditions); close strength alone → WATCH_ONLY. Missing attack/defense
+layers → BLOCKED_MODEL_LAYER_MISSING (no goal proxy, totals/BTTS/spread
+lanes block instead of defaulting).
+
+Edge (model prob − implied, percentage points) exists only where a model
+fair probability exists: the 1X2 lane (home/away/draw per parsed side).
+Spread/total/BTTS emit proxy reads (WATCH/LEAN bands), never a pp edge.
 
 ## Artifacts
 
