@@ -251,3 +251,170 @@ test('late-slate-composite-refresh dry-run output contains no forbidden strings'
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ─── 9. composite-refresh-trigger source is accepted ─────────────────────────
+
+test('_send-due delivers window with source="composite-refresh-trigger"', () => {
+  const date = '2099-01-09';
+  const root = makeTmpState(date);
+  try {
+    const art = writeArtifact(root, 'trigger.txt', [
+      '=== Captain MLB — Composite Refresh 2099-01-09 ===',
+      '13-layer model (market-neutral). Evidence scores only. No trades placed.',
+      '',
+      '◆ EVIDENCE_LEAN SEA@BAL    →  Seattle Mariners ML  (diff: +18)',
+      '  ↳ Logan Gilbert, ERA 3.79, FIP 4.16.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
+    ].join('\n'));
+    writePlan(root, date, [{
+      cluster_id: 'composite-refresh',
+      idempotency_key: 'trigger1',
+      status: 'rendered',
+      last_artifact: art,
+      compact_artifact: art,
+      source: 'composite-refresh-trigger',   // legacy trigger source — must be accepted
+      delivered_idempotency_key: null,
+    }]);
+
+    const r = runSendDue(root, date, ['--dry-run']);
+    assert.equal(r.status, 0, `process exited ${r.status}: ${r.stderr}`);
+    assert.match(r.stdout, /\[dry-run\] would send composite-refresh/, 'should log dry-run send for trigger source');
+    assert.doesNotMatch(r.stdout, /skip composite-refresh/, 'must NOT skip composite-refresh-trigger');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ─── 10. Missing last_artifact falls back to disk scan ───────────────────────
+
+test('_send-due discovers artifact on disk when last_artifact is missing', () => {
+  const date = '2099-01-10';
+  const root = makeTmpState(date);
+  try {
+    // Write artifact directly to state/mlb/<date>/ — NOT referenced in plan
+    const art = join(root, 'mlb', date, 'composite-refresh-compact.txt');
+    writeFileSync(art, [
+      '=== Captain MLB — Composite Refresh 2099-01-10 ===',
+      '',
+      '◇ LEAN  NYY@KC     →  NYY  (diff: +8)',
+      '  ↳ reason.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
+    ].join('\n'));
+
+    writePlan(root, date, [{
+      cluster_id: 'composite-refresh',
+      idempotency_key: 'fallback1',
+      status: 'rendered',
+      last_artifact: null,                 // missing — should fallback to disk
+      compact_artifact: null,
+      source: 'late-slate-composite-refresh',
+      delivered_idempotency_key: null,
+    }]);
+
+    const r = runSendDue(root, date, ['--dry-run']);
+    assert.equal(r.status, 0, `process exited ${r.status}: ${r.stderr}`);
+    assert.match(r.stdout, /\[dry-run\] would send composite-refresh/, 'should find artifact via disk fallback');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ─── 11. Already-delivered window is skipped ─────────────────────────────────
+
+test('_send-due skips window already delivered for current idempotency_key', () => {
+  const date = '2099-01-11';
+  const root = makeTmpState(date);
+  try {
+    const art = writeArtifact(root, 'delivered.txt', [
+      '=== Captain MLB — Composite Refresh 2099-01-11 ===',
+      '',
+      '★ PICK  NYY@KC     →  NYY  (diff: +14)',
+      '  ↳ reason.',
+    ].join('\n'));
+    writePlan(root, date, [{
+      cluster_id: 'composite-refresh',
+      idempotency_key: 'dup1',
+      status: 'rendered',
+      last_artifact: art,
+      compact_artifact: art,
+      source: 'late-slate-composite-refresh',
+      delivered_idempotency_key: 'dup1',   // already delivered
+      delivered_utc: '2099-01-11T12:00:00Z',
+    }]);
+
+    const r = runSendDue(root, date, ['--dry-run']);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /no due windows to send/, 'already-delivered window must not re-send');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ─── 12. No picks = skip delivery ────────────────────────────────────────────
+
+test('_send-due skips artifact with zero picks', () => {
+  const date = '2099-01-12';
+  const root = makeTmpState(date);
+  try {
+    const art = writeArtifact(root, 'nopicks.txt', [
+      '=== Captain MLB — Composite Refresh 2099-01-12 ===',
+      '',
+      '○ NO CLEAR PICKS — composite data insufficient for actionable signals today.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
+    ].join('\n'));
+    writePlan(root, date, [{
+      cluster_id: 'composite-refresh',
+      idempotency_key: 'nop1',
+      status: 'rendered',
+      last_artifact: art,
+      compact_artifact: art,
+      source: 'late-slate-composite-refresh',
+      delivered_idempotency_key: null,
+    }]);
+
+    const r = runSendDue(root, date, ['--dry-run']);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /skip composite-refresh — no picks/, 'zero-pick artifact must be skipped');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ─── 13. Standalone CLI exits cleanly with --dry-run (no env needed) ─────────
+
+test('_send-due --dry-run exits 0 without telegram env', () => {
+  const date = '2099-01-13';
+  const root = makeTmpState(date);
+  try {
+    const art = writeArtifact(root, 'standalone.txt', [
+      '=== Captain MLB — Composite Refresh 2099-01-13 ===',
+      '',
+      '★ PICK  NYY@KC     →  NYY  (diff: +14)',
+      '  ↳ reason.',
+    ].join('\n'));
+    writePlan(root, date, [{
+      cluster_id: 'composite-refresh',
+      idempotency_key: 'standalone1',
+      status: 'rendered',
+      last_artifact: art,
+      compact_artifact: art,
+      source: 'late-slate-composite-refresh',
+      delivered_idempotency_key: null,
+    }]);
+
+    const r = spawnSync(process.execPath, [
+      SEND_DUE, '--state-root', root, '--date', date, '--dry-run',
+    ], {
+      encoding: 'utf8',
+      cwd: REPO,
+      env: { PATH: process.env.PATH }, // no TELEGRAM_BOT_TOKEN
+    });
+    assert.equal(r.status, 0, `process exited ${r.status}: ${r.stderr}`);
+    assert.match(r.stdout, /\[dry-run\] would send/, 'dry-run should work without telegram env');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

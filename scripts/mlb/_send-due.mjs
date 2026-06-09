@@ -1,8 +1,20 @@
 #!/usr/bin/env node
 // One-shot helper invoked by cron: send rendered+undelivered composite windows for TODAY CT.
-// MLB composite-only: only windows from late-slate-composite-refresh are delivered.
+// MLB composite-only: only windows from the composite pipeline are delivered.
 // Forbidden-string guard blocks any artifact that contains pricing or legacy board content.
 // Uses America/Chicago date so late-night games stay on the correct slate date.
+//
+// Script-owned delivery only. No LLM agent. No send_message.
+// Idempotent: delivered_idempotency_key prevents duplicate sends.
+//
+// Usage:
+//   node scripts/mlb/_send-due.mjs [--date YYYY-MM-DD] [--state-root state] [--dry-run]
+//
+// Exit codes:
+//   0 = ok (nothing to send, or sent successfully)
+//   1 = unexpected error
+//   2 = telegram env missing
+
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -24,8 +36,11 @@ const TODAY = opts.date;
 const PLAN = path.join(opts.stateRoot, 'mlb', TODAY, 'slate-run-plan.json');
 if (!fs.existsSync(PLAN)) { console.log(`no plan for ${TODAY}`); process.exit(0); }
 
-// Only windows produced by the composite pipeline are eligible for delivery.
-const COMPOSITE_SOURCE = 'late-slate-composite-refresh';
+// Accept both the legacy trigger source and the direct composite-refresh source.
+const COMPOSITE_SOURCES = new Set([
+  'late-slate-composite-refresh',
+  'composite-refresh-trigger',
+]);
 
 // Strings that must never appear in an MLB Telegram artifact.
 const FORBIDDEN = [
@@ -48,22 +63,56 @@ const writePlan = () => {
   fs.renameSync(tmp, PLAN);
 };
 
+// Fallback: if a window lacks last_artifact, try to locate the newest
+// composite-refresh artifact for this date on disk.
+function findCompositeArtifact(stateRoot, date) {
+  const dir = path.join(stateRoot, 'mlb', date);
+  if (!fs.existsSync(dir)) return null;
+  const candidates = [];
+  for (const entry of fs.readdirSync(dir)) {
+    if (entry.startsWith('composite-refresh') && entry.endsWith('.txt')) {
+      const full = path.join(dir, entry);
+      const st = fs.statSync(full);
+      candidates.push({ path: full, mtime: st.mtimeMs });
+    }
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  return candidates[0].path;
+}
+
 const sendList = [];
 for (const w of windows) {
   if (w.status !== 'rendered') continue;
   if (w.delivered_idempotency_key && w.delivered_idempotency_key === w.idempotency_key) continue;
-  if (!w.last_artifact) continue;
+
   // Composite-only guard: skip windows not produced by the composite pipeline.
-  if (w.source !== COMPOSITE_SOURCE) {
+  if (!COMPOSITE_SOURCES.has(w.source)) {
     console.log(`skip ${w.cluster_id} — not composite source (${w.source ?? 'none'})`);
     continue;
   }
-  if (!fs.existsSync(w.last_artifact)) {
+
+  // Resolve artifact path: prefer compact, then last_artifact, then disk fallback.
+  let artifactPath = null;
+  if (w.compact_artifact && fs.existsSync(w.compact_artifact)) {
+    artifactPath = w.compact_artifact;
+  } else if (w.last_artifact && fs.existsSync(w.last_artifact)) {
+    artifactPath = w.last_artifact;
+  } else {
+    const fallback = findCompositeArtifact(opts.stateRoot, TODAY);
+    if (fallback) {
+      artifactPath = fallback;
+      // Heal the plan so the next poll finds the artifact immediately.
+      w.last_artifact = fallback;
+    }
+  }
+
+  if (!artifactPath || !fs.existsSync(artifactPath)) {
     w.status = 'error';
     w.error = 'artifact_missing';
     continue;
   }
-  sendList.push(w);
+  sendList.push({ window: w, artifactPath });
 }
 writePlan();
 
@@ -103,18 +152,15 @@ async function tgSendDocument(filePath, caption) {
 function countPicks(text) {
   let n = 0;
   for (const ln of text.split('\n')) {
-    if (/^[-★◆]\s*(PICK|PLAY|CLEAR|LEAN)/i.test(ln)) { n++; continue; }
+    if (/^[-★◆◇]\s*(PICK|PLAY|CLEAR|EVIDENCE_LEAN|LEAN)/i.test(ln)) { n++; continue; }
     const m = ln.match(/^- (Decision|Confidence):\s*(.+?)\s*$/);
-    if (m && /^(CLEAR|LEAN)/i.test(m[2]) && !/^NO CLEAR PICK/i.test(m[2])) n++;
+    if (m && /^(CLEAR|EVIDENCE_LEAN|LEAN)/i.test(m[2]) && !/^NO CLEAR PICK/i.test(m[2])) n++;
   }
   return n;
 }
 
 const summary = [];
-for (const w of sendList) {
-  const artifactPath = (w.compact_artifact && fs.existsSync(w.compact_artifact))
-    ? w.compact_artifact
-    : w.last_artifact;
+for (const { window: w, artifactPath } of sendList) {
   const text = fs.readFileSync(artifactPath, 'utf8');
   const clearLean = countPicks(text);
   if (clearLean === 0) {

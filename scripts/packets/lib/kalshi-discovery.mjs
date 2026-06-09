@@ -67,23 +67,43 @@ export const KALSHI_SOURCES = Object.freeze({
 });
 
 /**
- * Live fetch wrapper. Node 20+ ships global fetch.
+ * Live fetch wrapper with retry/backoff for transient failures (404, 429, 5xx, network errors).
+ * Node 20+ ships global fetch.
  * Returns { ok, status, json, error } - never throws.
  */
 export async function defaultFetcher(url, options = {}) {
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-      signal: options.signal,
-    });
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch {}
-    return { ok: res.ok, status: res.status, json, error: res.ok ? null : `HTTP ${res.status}` };
-  } catch (err) {
-    return { ok: false, status: 0, json: null, error: err.message || String(err) };
+  const maxRetries = options.maxRetries ?? 3;
+  const baseDelayMs = options.baseDelayMs ?? 1000;
+  let lastError = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        signal: options.signal,
+      });
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch {}
+      // Retry on transient errors: 404, 429, 5xx
+      if (!res.ok && (res.status === 404 || res.status === 429 || res.status >= 500)) {
+        lastError = `HTTP ${res.status}`;
+        if (attempt < maxRetries - 1) {
+          const delay = baseDelayMs * (2 ** attempt);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+      }
+      return { ok: res.ok, status: res.status, json, error: res.ok ? null : `HTTP ${res.status}` };
+    } catch (err) {
+      lastError = err.message || String(err);
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelayMs * (2 ** attempt);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
+  return { ok: false, status: 0, json: null, error: lastError };
 }
 
 /**
