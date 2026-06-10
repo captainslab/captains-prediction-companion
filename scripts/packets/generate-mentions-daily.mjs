@@ -11,7 +11,7 @@
 //   * Undated long-horizon events are DROPPED from daily windows unless the
 //     caller explicitly enables --allow-undated.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -31,6 +31,8 @@ import {
   summarizeEvent,
   normalizeMarket,
   KALSHI_SOURCES,
+  filterMentionEvents,
+  fetchMentionEventsBySeries,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
@@ -285,6 +287,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     source_ladder: ladder,
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
+    research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
   };
 }
 
@@ -358,7 +361,13 @@ export function mentionCompositeToDecisionRow(composite) {
 
   // No source-backed evidence at all -> BLOCKED on the missing source layers.
   const sourceBlocked = layersPresent === 0;
-  const postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
+  let postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
+
+  // Stub cap: never allow LEAN/EVIDENCE_LEAN/PICK from stub-only research
+  const isStub = (meta.research_quality === 'stub' || composite?.research_quality === 'stub');
+  if (isStub && POSTURE_RANK[postureFinal] > POSTURE_RANK.WATCH) {
+    postureFinal = 'WATCH';
+  }
 
   let statusOverride;
   let blocker = null;
@@ -673,6 +682,55 @@ export function discoverMentionEvents(stateRoot, date) {
   return events;
 }
 
+// ---------------------------------------------------------------------------
+// Research merge: read state/mentions/<date>/research/*.json and merge
+// layer_records + source_ladder_inputs into the Kalshi event/market objects.
+// ---------------------------------------------------------------------------
+function loadResearchForDate(stateRoot, date) {
+  const researchDir = resolve(stateRoot, 'mentions', date, 'research');
+  if (!existsSync(researchDir)) return new Map();
+  const map = new Map();
+  for (const entry of readdirSync(researchDir)) {
+    if (!entry.endsWith('.json')) continue;
+    const p = join(researchDir, entry);
+    const data = readJsonIfExists(p);
+    if (!data || !data.event_ticker) continue;
+    // Build a per-market-ticker lookup
+    const marketMap = new Map();
+    for (const m of data.markets || []) {
+      if (m.market_ticker) marketMap.set(m.market_ticker, m);
+    }
+    map.set(data.event_ticker, { ...data, _marketMap: marketMap });
+  }
+  return map;
+}
+
+function mergeResearchIntoEvent(event, researchEntry) {
+  if (!researchEntry) return event;
+  const cloned = { ...event };
+  const markets = Array.isArray(cloned.markets) ? cloned.markets.slice() : [];
+  const marketMap = researchEntry._marketMap || new Map();
+
+  cloned.markets = markets.map(m => {
+    const ticker = m.ticker;
+    const r = marketMap.get(ticker);
+    if (!r) return m;
+    const merged = { ...m };
+    if (r.layer_records) {
+      merged.layer_records = r.layer_records;
+    }
+    if (r.source_ladder_inputs) {
+      merged.source_ladder_inputs = r.source_ladder_inputs;
+    }
+    if (r.research_quality) {
+      merged.research_quality = r.research_quality;
+    }
+    return merged;
+  });
+
+  return cloned;
+}
+
 export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
@@ -769,19 +827,24 @@ function buildLegacyEventPacket({ date, event }) {
   return header + lines.join('\n') + packetFooter();
 }
 
-function buildEmptyDayPacket(date, primeAttempts = [], discovery = null) {
+function buildEmptyDayPacket(date, primeAttempts = [], discovery = null, mentionStats = null) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.MENTION_MARKET,
     rawDecision: 'NO CLEAR PICK',
     checked: { x_chatter_separated: true },
     settlementRules: 'MISSING: no market/event packet.',
-    verifiedFacts: 'MISSING: no events discovered.',
+    verifiedFacts: 'MISSING: no mention-style events discovered.',
     marketSignalText: 'No market board captured.',
     socialChatter: 'Not used.',
     inference: 'No inference.',
     skepticReview: 'MISSING.',
     finalJudgment: 'NO CLEAR PICK.',
   });
+
+  const classificationNote = mentionStats
+    ? `Language-based filtering scanned ${mentionStats.totalMarkets} market(s) across ${mentionStats.totalEvents} event(s); ${mentionStats.mentionMarkets} mention-style market(s) found, ${mentionStats.rejectedEvents} non-mention event(s) rejected.`
+    : 'No mention classification stats available.';
+
   return (
     packetHeader({
       title: 'Captain Mentions — Daily Event Packet',
@@ -793,7 +856,8 @@ function buildEmptyDayPacket(date, primeAttempts = [], discovery = null) {
       'TLDR:',
       `  market_type: ${process.marketType}`,
       `  decision_status: ${process.decisionStatus}`,
-      '  note: no events found; no pick or lean.',
+      '  note: no mention-style events found; no pick or lean.',
+      `  classification_note: ${classificationNote}`,
       '',
       renderDecisionProcess(process, { heading: 'Research Completeness' }),
       '',
@@ -807,13 +871,20 @@ function buildEmptyDayPacket(date, primeAttempts = [], discovery = null) {
         : ['  - MISSING: no discovery command attempted']),
       '',
       'kalshi_discovery:',
-      `  source_page: ${KALSHI_SOURCES.mentions.page_url}`,
-      `  source_api: ${KALSHI_SOURCES.mentions.api_url}`,
+      `  source_page: ${KALSHI_SOURCES.broad.page_url}`,
+      `  source_api: ${KALSHI_SOURCES.broad.api_url}`,
       `  reachable: ${discovery?.ok ? 'yes' : 'no'}`,
       ...(discovery?.error ? [`  error: ${discovery.error}`] : []),
+      ...(mentionStats ? [
+        `  total_events_scanned: ${mentionStats.totalEvents}`,
+        `  mention_events_found: ${mentionStats.mentionEvents}`,
+        `  rejected_non_mention_events: ${mentionStats.rejectedEvents}`,
+        `  total_markets_scanned: ${mentionStats.totalMarkets}`,
+        `  mention_markets_found: ${mentionStats.mentionMarkets}`,
+      ] : []),
       '',
       'status: MISSING',
-      `reason: no Kalshi Mentions events found with derived event-date inside window [${date}, +${DEFAULT_WINDOW_DAYS}d].`,
+      `reason: no Kalshi mention-style events found with derived event-date inside window [${date}, +${DEFAULT_WINDOW_DAYS}d].`,
       'posture: PASS (no data)',
     ].join('\n') +
     packetFooter()
@@ -878,20 +949,51 @@ async function main() {
   const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
   const primeAttempts = primeMentionResearch(opts.date);
 
-  const discovery = await fetchKalshiEvents('mentions');
+  const discovery = await fetchKalshiEvents('broad');
   const dateFilter = filterByEventDate(opts.date, {
     windowDays: extra.windowDays,
     allowUndated: extra.allowUndated,
   });
-  const filteredEvents = discovery.events.filter(dateFilter);
+  const dateFilteredEvents = discovery.events.filter(dateFilter);
+
+  // Language-based mention filtering: detect true mention-style markets
+  // (will X say Y in transcript) vs standard binary outcomes (IPO, M&A, metrics)
+  const { mentionEvents: filteredEvents, rejectedEvents, stats: mentionStats } = filterMentionEvents(dateFilteredEvents);
+
+  // Also scan mention-specific series for events with empty status fields
+  // that are invisible to general category+status queries (e.g. CBRL)
+  const seriesDiscovery = await fetchMentionEventsBySeries();
+  const seriesDateFiltered = seriesDiscovery.events.filter(dateFilter);
+  const { mentionEvents: seriesMentionEvents, stats: seriesStats } = filterMentionEvents(seriesDateFiltered);
+
+  // Merge broad and series-scan results, deduplicating by event_ticker
+  const allEvents = [...filteredEvents];
+  const seenTickers = new Set(filteredEvents.map(e => e.event_ticker));
+  for (const ev of seriesMentionEvents) {
+    if (!seenTickers.has(ev.event_ticker)) {
+      allEvents.push(ev);
+      seenTickers.add(ev.event_ticker);
+    }
+  }
+
+  // Combined stats for reporting
+  const combinedStats = {
+    totalEvents: mentionStats.totalEvents + seriesStats.totalEvents,
+    mentionEvents: allEvents.length,
+    rejectedEvents: mentionStats.rejectedEvents + seriesStats.rejectedEvents,
+    totalMarkets: mentionStats.totalMarkets + seriesStats.totalMarkets,
+    mentionMarkets: mentionStats.mentionMarkets + seriesStats.mentionMarkets,
+    broadEvents: mentionStats.totalEvents,
+    seriesEvents: seriesStats.totalEvents,
+  };
 
   let persistedCount = 0;
-  if (filteredEvents.length) {
+  if (allEvents.length) {
     const persisted = persistEventArtifacts({
       stateRoot: opts.stateRoot,
       sport: 'mentions',
       date: opts.date,
-      events: filteredEvents,
+      events: allEvents,
     });
     persistedCount = persisted.written.length;
   }
@@ -903,8 +1005,8 @@ async function main() {
   let missingStrikeTextCount = 0;
   const items = [];
 
-  if (!localEvents.length && !filteredEvents.length) {
-    const txt = buildEmptyDayPacket(opts.date, primeAttempts, discovery);
+  if (!localEvents.length && !allEvents.length) {
+    const txt = buildEmptyDayPacket(opts.date, primeAttempts, discovery, combinedStats);
     const w = writeAudit(dir, `${opts.date}-no-events`, txt, {
       event_count: 0,
       total_market_count: 0,
@@ -912,20 +1014,23 @@ async function main() {
       missing_strike_text_count: 0,
       window_days: extra.windowDays,
       allow_undated: extra.allowUndated,
-      kalshi_discovery: { ok: discovery.ok, error: discovery.error, total_returned: discovery.events.length, window_matched: filteredEvents.length },
+      kalshi_discovery: { ok: discovery.ok, error: discovery.error, total_returned: discovery.events.length, window_matched: dateFilteredEvents.length, mention_events: combinedStats.mentionEvents, rejected_events: combinedStats.rejectedEvents, total_markets_scanned: combinedStats.totalMarkets, mention_markets: combinedStats.mentionMarkets, broad_events: combinedStats.broadEvents, series_events: combinedStats.seriesEvents },
       research_prime: primeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
     });
     items.push({ name: 'no-events', ...w });
   } else {
     const seen = new Set();
-    for (const ev of filteredEvents) {
+    const researchMap = loadResearchForDate(opts.stateRoot, opts.date);
+    for (const ev of allEvents) {
       const ticker = ev?.event_ticker;
       if (!ticker || seen.has(ticker)) continue;
       seen.add(ticker);
+      const researchEntry = researchMap.get(ticker);
+      const mergedEvent = mergeResearchIntoEvent(ev, researchEntry);
       const sourcePath = resolve(opts.stateRoot, 'mentions', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
       const inventoryName = `${opts.date}-${ticker}.inventory`;
       const inventoryPath = `${inventoryName}.txt`;
-      const built = buildKalshiEventPacket({ date: opts.date, event: ev, sourceUrl: sourcePath, inventoryPath });
+      const built = buildKalshiEventPacket({ date: opts.date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
@@ -946,8 +1051,8 @@ async function main() {
         composite_best_posture: built.compositeSummary.best_posture,
         composite_best_score: built.compositeSummary.best_score,
         composite_pricing_excluded: built.compositeSummary.pricing_excluded,
-        kalshi_source_api: KALSHI_SOURCES.mentions.api_url,
-        kalshi_source_page: KALSHI_SOURCES.mentions.page_url,
+        kalshi_source_api: KALSHI_SOURCES.broad.api_url,
+        kalshi_source_page: KALSHI_SOURCES.broad.page_url,
       });
       items.push({ name: ticker, ...w });
     }
@@ -962,16 +1067,16 @@ async function main() {
     }
   }
 
-  const eventCount = filteredEvents.length + localEvents.length;
+  const eventCount = allEvents.length + localEvents.length;
   // Guard: event_count > 0 but total_market_count === 0 -> fail (Kalshi side only).
   let exitCode = 0;
-  if (filteredEvents.length > 0 && totalMarketCount === 0) {
-    console.error(`[${PACKET_TYPE}] FAIL: ${filteredEvents.length} Kalshi events but zero markets across all of them.`);
+  if (allEvents.length > 0 && totalMarketCount === 0) {
+    console.error(`[${PACKET_TYPE}] FAIL: ${allEvents.length} Kalshi events but zero markets across all of them.`);
     exitCode = 2;
   }
 
   console.log(printDryRunSummary({ packetType: PACKET_TYPE, date: opts.date, dir, items }));
-  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${filteredEvents.length} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} allow_undated=${extra.allowUndated}`);
+  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${dateFilteredEvents.length} mention_events=${combinedStats.mentionEvents} rejected_events=${combinedStats.rejectedEvents} total_markets_scanned=${combinedStats.totalMarkets} mention_markets=${combinedStats.mentionMarkets} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} allow_undated=${extra.allowUndated}`);
   if (exitCode) process.exit(exitCode);
 }
 

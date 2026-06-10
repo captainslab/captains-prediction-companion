@@ -132,3 +132,62 @@ test('market price never folds into mention composite score', () => {
   // but the market half DID change
   assert.notEqual(r1.market_yes_ask, r2.market_yes_ask);
 });
+
+test('stub research quality caps LEAN posture to WATCH', () => {
+  const composite = {
+    result: {
+      _meta: { layers_present: 2, layers_total: 10 },
+      posture: 'LEAN',
+      composite_score: 70,
+      target_mention: 'test-stub',
+      top_supporting_layers: [{ category: 'event_proximity' }],
+      missing_layers: [],
+      market_context: {},
+      reasoning_summary: 'test stub cap',
+    },
+    posture_final: 'LEAN',
+    research_quality: 'stub',
+  };
+  const row = mentionCompositeToDecisionRow(composite);
+  assert.equal(row.edge_status, 'WATCH', 'stub research must cap to WATCH');
+  assert.equal(row.composite_posture, 'WATCH', 'stub research must cap composite_posture to WATCH');
+});
+
+test('stub research quality caps EVIDENCE_LEAN posture to WATCH', () => {
+  const composite = {
+    result: {
+      _meta: { layers_present: 5, layers_total: 10 },
+      posture: 'EVIDENCE_LEAN',
+      composite_score: 75,
+      target_mention: 'test-stub-el',
+      top_supporting_layers: [{ category: 'baseline_relevance' }],
+      missing_layers: [],
+      market_context: {},
+      reasoning_summary: 'test stub cap on EVIDENCE_LEAN',
+    },
+    posture_final: 'EVIDENCE_LEAN',
+    research_quality: 'stub',
+  };
+  const row = mentionCompositeToDecisionRow(composite);
+  assert.equal(row.edge_status, 'WATCH', 'stub research must cap EVIDENCE_LEAN to WATCH');
+  assert.equal(row.composite_posture, 'WATCH', 'stub research must cap composite_posture from EVIDENCE_LEAN to WATCH');
+});
+
+test('source-backed research preserves EVIDENCE_LEAN posture', () => {
+  const composite = {
+    result: {
+      _meta: { layers_present: 7, layers_total: 10 },
+      posture: 'EVIDENCE_LEAN',
+      composite_score: 75,
+      target_mention: 'test-real',
+      top_supporting_layers: [{ category: 'baseline_relevance' }],
+      missing_layers: [],
+      market_context: {},
+      reasoning_summary: 'test source backed preserves EVIDENCE_LEAN',
+    },
+    posture_final: 'EVIDENCE_LEAN',
+    research_quality: 'source_backed',
+  };
+  const row = mentionCompositeToDecisionRow(composite);
+  assert.equal(row.composite_posture, 'EVIDENCE_LEAN', 'source-backed research must preserve EVIDENCE_LEAN composite_posture');
+});

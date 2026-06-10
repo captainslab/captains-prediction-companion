@@ -22,7 +22,16 @@ export const KALSHI_SOURCES = Object.freeze({
   mentions: {
     label: 'kalshi-calendar-mentions',
     page_url: 'https://kalshi.com/calendar/mentions',
+    // DEPRECATED: Kalshi no longer uses category=Mentions. The endpoint returns
+    // HTTP 200 but events have mixed categories (World, Politics, Companies, etc.)
+    // and none are true transcript/mention markets. Use 'broad' for language-based
+    // discovery instead. This source is kept for backward compatibility only.
     api_url: `${KALSHI_API_BASE}/events?category=Mentions&status=open&limit=200&with_nested_markets=true`,
+  },
+  broad: {
+    label: 'kalshi-broad-discovery',
+    page_url: 'https://kalshi.com/calendar',
+    api_url: `${KALSHI_API_BASE}/events?status=open&limit=200&with_nested_markets=true`,
   },
   mlb: {
     label: 'kalshi-calendar-baseball',
@@ -140,6 +149,77 @@ export async function fetchKalshiEvents(sourceKey, options = {}) {
     attempts,
     source,
     error: lastError,
+  };
+}
+
+/**
+ * Fetch mention-style events by scanning series tickers.
+ * Kalshi mention markets (earnings-call mentions, speech mentions) are organized
+ * under series tickers like KXEARNINGSMENTION*, KX*MENTION*, etc. The event
+ * containers often have empty status fields, so they are invisible to general
+ * category+status queries. This function discovers them via series scan.
+ *
+ * Returns { ok, events, raw, attempts, error }.
+ */
+export async function fetchMentionEventsBySeries(options = {}) {
+  const fetcher = options.fetcher ?? defaultFetcher;
+  const attempts = [];
+  const events = [];
+
+  // Step 1: Fetch all series (paginated)
+  let cursor = '';
+  let pageCount = 0;
+  const maxSeriesPages = options.maxSeriesPages ?? 10;
+  const allSeries = [];
+
+  while (pageCount < maxSeriesPages) {
+    const url = `${KALSHI_API_BASE}/series?limit=1000${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`;
+    const res = await fetcher(url);
+    attempts.push({ url, ok: res.ok, status: res.status, error: res.error });
+    if (!res.ok || !res.json) break;
+    const series = Array.isArray(res.json.series) ? res.json.series : [];
+    allSeries.push(...series);
+    cursor = res.json.cursor || '';
+    pageCount++;
+    if (!cursor) break;
+  }
+
+  // Step 2: Filter to mention-related series
+  const mentionPatterns = [/mention/i, /\bearnings\b.*\bmention\b/i, /\bmention\b.*\bearnings\b/i];
+  const mentionSeries = allSeries.filter(s => {
+    const text = ((s.ticker || '') + ' ' + (s.title || '')).toLowerCase();
+    return mentionPatterns.some(p => p.test(text));
+  });
+
+  // Step 3: Fetch events for each mention series (no status filter — events have empty status)
+  const maxEventPagesPerSeries = options.maxEventPagesPerSeries ?? 2;
+  for (const s of mentionSeries) {
+    let eCursor = '';
+    let ePageCount = 0;
+    while (ePageCount < maxEventPagesPerSeries) {
+      const eUrl = `${KALSHI_API_BASE}/events?series_ticker=${encodeURIComponent(s.ticker)}&limit=200&with_nested_markets=true${eCursor ? '&cursor=' + encodeURIComponent(eCursor) : ''}`;
+      const eRes = await fetcher(eUrl);
+      attempts.push({ url: eUrl, ok: eRes.ok, status: eRes.status, error: eRes.error });
+      if (!eRes.ok || !eRes.json) break;
+      const pageEvents = Array.isArray(eRes.json.events) ? eRes.json.events : [];
+      for (const ev of pageEvents) {
+        // Enrich with series metadata for downstream filtering
+        ev._discoveredVia = 'series_scan';
+        ev._seriesTitle = s.title || '';
+        events.push(ev);
+      }
+      eCursor = eRes.json.cursor || '';
+      ePageCount++;
+      if (!eCursor) break;
+    }
+  }
+
+  return {
+    ok: attempts.length > 0 && attempts.some(a => a.ok),
+    events,
+    raw: attempts,
+    attempts,
+    error: null,
   };
 }
 
@@ -466,5 +546,163 @@ export function renderMarketBlocks(event, options = {}) {
     marketCount: markets.length,
     missingStrikeCount,
     missingMarkets: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mention-style market classifier
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect whether an event or market is a true "mention" market (will X say Y
+ * in a transcript/earnings call/speech) vs a standard binary outcome market
+ * (IPO timing, M&A close, production metrics, CEO succession, etc.).
+ *
+ * A mention market must have language in event title, market title, or rules
+ * that explicitly references speech, utterance, or transcript mention.
+ *
+ * Excluded patterns (non-mention binary outcomes):
+ *   - IPO timing, M&A close, acquisition announcements
+ *   - Production/delivery/passenger/store metrics
+ *   - CEO succession, leadership changes
+ *   - Earnings beats (above/below X revenue/EPS)
+ *   - Price targets, valuation
+ *   - Standard election/political winner markets
+ */
+const MENTION_POSITIVE_PATTERNS = [
+  /\bwill\s+\w+\s+say\b/i,
+  /\bwill\s+\w+\s+mention\b/i,
+  /\bsay\s+during\b/i,
+  /\bmention\s+during\b/i,
+  /\bmentions?\s+of\b/i,
+  /\butter\b/i,
+  /\btranscript\b/i,
+  /\bearnings\s+call\b/i,
+  /\bconference\s+call\b/i,
+  /\bspeech\b/i,
+  /\bremarks\b/i,
+  /\bword\s+\w+\s+say\b/i,
+  /\bphrase\s+\w+\s+say\b/i,
+];
+
+const MENTION_NEGATIVE_PATTERNS = [
+  /\bipo\b/i,
+  /\bacquisition\b/i,
+  /\bmerge\b/i,
+  /\bproduction\b/i,
+  /\bdeliveries\b/i,
+  /\bpassengers?\s+flown\b/i,
+  /\btotal\s+global\s+stores\b/i,
+  /\bgross\s+merchandise\b/i,
+  /\bfunded\s+customers\b/i,
+  /\bvehicle\s+sales\b/i,
+  /\bcigarette\s+shipments\b/i,
+  /\bwho\s+will\s+be\s+the\s+next\s+ceo\b/i,
+  /\bwho\s+will\s+replace\b/i,
+  /\bwho\s+will\s+succeed\b/i,
+  /\babove\s+\d+.*\b(revenue|eps|production|deliveries|stores|passengers)\b/i,
+  /\breport\s+above\b/i,
+  /\btake-private\b/i,
+  /\bsuspend\s+habeas\b/i,
+  /\braise\s+corporate\s+taxes\b/i,
+  /\btariff\s+revenue\b/i,
+  /\bwhen\s+will\b/i,
+  /\bwill\s+.*\s+achieve\b/i,
+  /\bwill\s+.*\s+announce\b/i,
+  /\bwill\s+.*\s+close\b/i,
+  /\bwill\s+.*\s+report\b/i,
+  /\bwill\s+.*\s+take\s+control\b/i,
+];
+
+/**
+ * Score an event+market as mention-style. Returns { isMention, confidence, reason }.
+ * Confidence: 'high' (explicit mention language), 'medium' (contextual), 'low' (weak signals).
+ */
+export function classifyMentionMarket(event = {}, market = {}) {
+  const hay = [
+    event.title ?? '',
+    event.sub_title ?? '',
+    event.event_ticker ?? '',
+    market.title ?? '',
+    market.subtitle ?? '',
+    market.yes_sub_title ?? '',
+    market.no_sub_title ?? '',
+    market.rules_primary ?? '',
+    market.rules_secondary ?? '',
+  ].join(' ');
+
+  const lowerHay = hay.toLowerCase();
+
+  // Strong exclusion: if it matches a negative pattern, it's NOT a mention market
+  for (const neg of MENTION_NEGATIVE_PATTERNS) {
+    if (neg.test(hay)) {
+      return { isMention: false, confidence: 'high', reason: `negative_pattern: ${neg.source}` };
+    }
+  }
+
+  // Positive detection: must have explicit mention-style language
+  for (const pos of MENTION_POSITIVE_PATTERNS) {
+    if (pos.test(hay)) {
+      return { isMention: true, confidence: 'high', reason: `positive_pattern: ${pos.source}` };
+    }
+  }
+
+  // Weak contextual signals
+  const hasSpeaker = /\bspeaker\b|\bpresident\b|\bceo\b|\bcfo\b|\bannouncer\b/i.test(hay);
+  const hasEventContext = /\bearnings\b|\bconference\b|\bspeech\b|\bdebate\b|\bhearing\b/i.test(hay);
+  if (hasSpeaker && hasEventContext) {
+    return { isMention: true, confidence: 'medium', reason: 'contextual: speaker + event context' };
+  }
+
+  return { isMention: false, confidence: 'high', reason: 'no mention-style language detected' };
+}
+
+/**
+ * Filter a list of Kalshi events to only those containing at least one
+ * mention-style market. Returns { mentionEvents, rejectedEvents, stats }.
+ */
+export function filterMentionEvents(events = []) {
+  const mentionEvents = [];
+  const rejectedEvents = [];
+  let totalMarkets = 0;
+  let mentionMarkets = 0;
+
+  for (const event of events) {
+    const markets = Array.isArray(event.markets) ? event.markets : [];
+    totalMarkets += markets.length;
+    const mentionMarketsInEvent = [];
+
+    for (const market of markets) {
+      const classification = classifyMentionMarket(event, market);
+      if (classification.isMention) {
+        mentionMarketsInEvent.push({ ...market, _mentionClassification: classification });
+        mentionMarkets++;
+      }
+    }
+
+    if (mentionMarketsInEvent.length > 0) {
+      mentionEvents.push({
+        ...event,
+        markets: mentionMarketsInEvent,
+        _mentionStats: {
+          originalMarketCount: markets.length,
+          mentionMarketCount: mentionMarketsInEvent.length,
+        },
+      });
+    } else {
+      rejectedEvents.push(event);
+    }
+  }
+
+  return {
+    mentionEvents,
+    rejectedEvents,
+    stats: {
+      totalEvents: events.length,
+      mentionEvents: mentionEvents.length,
+      rejectedEvents: rejectedEvents.length,
+      totalMarkets,
+      mentionMarkets,
+    },
   };
 }
