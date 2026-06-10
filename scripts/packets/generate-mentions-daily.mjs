@@ -54,6 +54,10 @@ import {
   renderSourceLadder,
 } from '../mentions/source-ladder.mjs';
 import {
+  collectAlphaMentionIntake,
+  formatAlphaIntakeSummary,
+} from '../mentions/alpha-intake.mjs';
+import {
   buildDecisionRow,
   renderSectionedPacket,
   buildInventoryArtifact,
@@ -996,6 +1000,29 @@ async function main() {
     broadEvents: mentionStats.totalEvents,
     seriesEvents: seriesStats.totalEvents,
   };
+
+  const alphaIntake = await collectAlphaMentionIntake({
+    stateRoot: opts.stateRoot,
+    env: process.env,
+    fallbackEvents: allEvents,
+  });
+  if (alphaIntake.events.length) {
+    const seenIntakeTickers = new Set(allEvents.map((ev) => ev?.event_ticker).filter(Boolean));
+    for (const ev of alphaIntake.events) {
+      const ticker = ev?.event_ticker;
+      if (!ticker || seenIntakeTickers.has(ticker)) continue;
+      seenIntakeTickers.add(ticker);
+      allEvents.push(ev);
+    }
+  }
+  if (
+    alphaIntake.summary.accepted > 0 ||
+    alphaIntake.summary.manual_queue_consumed > 0 ||
+    alphaIntake.summary.env_seeds_consumed > 0 ||
+    alphaIntake.summary.fallback_used
+  ) {
+    console.log(`[mentions-alpha-intake] ${formatAlphaIntakeSummary(alphaIntake.summary)}`);
+  }
 
   let persistedCount = 0;
   if (allEvents.length) {
