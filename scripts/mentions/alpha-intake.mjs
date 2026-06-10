@@ -15,6 +15,7 @@ import { join, resolve } from 'node:path';
 import { parseKalshiUrl } from '../../channels/shared/intake.mjs';
 
 const KALSHI_EVENTS_API = 'https://api.elections.kalshi.com/trade-api/v2/events';
+const KALSHI_MARKETS_API = 'https://api.elections.kalshi.com/trade-api/v2/markets';
 const DEFAULT_RECENT_LIMIT = 200;
 const DEFAULT_FALLBACK_LIMIT = 1;
 const DEFAULT_SEED_ENV = 'CPC_MENTIONS_SEED_URLS';
@@ -206,16 +207,35 @@ function formatIntakeSummary(summary = {}) {
 async function fetchMentionEventByTicker(eventTicker, fetchImpl = fetch) {
   const ticker = asText(eventTicker);
   if (!ticker) return null;
-  const url = `${KALSHI_EVENTS_API}?event_ticker=${encodeURIComponent(ticker)}&with_nested_markets=true`;
-  const res = await fetchImpl(url);
-  if (!res.ok) {
-    const body = typeof res.text === 'function' ? await res.text().catch(() => '') : '';
-    throw new Error(`Kalshi intake fetch failed ${res.status} for ${ticker}${body ? ` :: ${body.slice(0, 120)}` : ''}`);
+
+  // Primary: direct event endpoint /events/{event_ticker}
+  const directUrl = `${KALSHI_EVENTS_API}/${encodeURIComponent(ticker)}`;
+  const directRes = await fetchImpl(directUrl);
+  if (directRes.ok) {
+    const data = await directRes.json();
+    if (data && typeof data === 'object' && data.event_ticker) {
+      return data;
+    }
+  } else if (directRes.status !== 404) {
+    const body = typeof directRes.text === 'function' ? await directRes.text().catch(() => '') : '';
+    throw new Error(`Kalshi intake fetch failed ${directRes.status} for ${ticker} at ${directUrl}${body ? ` :: ${body.slice(0, 120)}` : ''}`);
   }
-  const data = await res.json();
-  const events = Array.isArray(data?.events) ? data.events : [];
-  const exact = events.find((event) => event?.event_ticker === ticker);
-  return exact || null;
+
+  // Fallback: markets endpoint /markets?event_ticker={event_ticker}
+  const marketsUrl = `${KALSHI_MARKETS_API}?event_ticker=${encodeURIComponent(ticker)}`;
+  const marketsRes = await fetchImpl(marketsUrl);
+  if (!marketsRes.ok) {
+    if (marketsRes.status === 404) return null;
+    const body = typeof marketsRes.text === 'function' ? await marketsRes.text().catch(() => '') : '';
+    throw new Error(`Kalshi intake fetch failed ${marketsRes.status} for ${ticker} at ${marketsUrl}${body ? ` :: ${body.slice(0, 120)}` : ''}`);
+  }
+  const marketsData = await marketsRes.json();
+  const markets = Array.isArray(marketsData?.markets) ? marketsData.markets : [];
+  if (markets.length === 0) return null;
+  return {
+    event_ticker: ticker,
+    markets,
+  };
 }
 
 function decorateEvent(event, normalized, source) {
@@ -315,7 +335,7 @@ export async function collectAlphaMentionIntake({
         url: normalized.canonical_url,
         event_ticker: normalized.event_ticker,
         source,
-        status: 'processed',
+        status: 'accepted',
         seen_at: new Date().toISOString(),
       };
       nextRecent = upsertRecentItem(nextRecent, recentRecord);
@@ -356,7 +376,7 @@ export async function collectAlphaMentionIntake({
           url: event.source_url,
           event_ticker: event.event_ticker || event.intake_key,
           source: 'fallback',
-          status: 'processed',
+          status: 'accepted',
           seen_at: new Date().toISOString(),
         });
         recentKeys.add(event.intake_key);

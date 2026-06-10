@@ -28,25 +28,36 @@ function makeEvent(eventTicker, title = `Will ${eventTicker} be mentioned?`) {
   };
 }
 
-function makeFetch(eventsByTicker, calls) {
+function makeFetch(fixtures, calls) {
   return async (url) => {
     calls.push(url);
-    const eventTicker = new URL(url).searchParams.get('event_ticker');
-    const event = eventsByTicker[eventTicker];
-    if (!event) {
-      return {
-        ok: false,
-        status: 404,
-        json: async () => ({ events: [] }),
-        text: async () => '',
-      };
+    const parsed = new URL(url);
+    // Direct endpoint: /events/{ticker}
+    const pathMatch = parsed.pathname.match(/\/events\/([^/]+)$/);
+    if (pathMatch) {
+      const ticker = decodeURIComponent(pathMatch[1]);
+      const event = fixtures[ticker];
+      if (!event) {
+        return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+      }
+      return { ok: true, status: 200, json: async () => event, text: async () => JSON.stringify(event) };
     }
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ cursor: '', events: [event] }),
-      text: async () => JSON.stringify({ cursor: '', events: [event] }),
-    };
+    // Markets fallback: /markets?event_ticker=...
+    if (parsed.pathname.endsWith('/markets')) {
+      const ticker = parsed.searchParams.get('event_ticker');
+      const event = fixtures[ticker];
+      if (!event) {
+        return { ok: false, status: 404, json: async () => ({ markets: [] }), text: async () => '' };
+      }
+      return { ok: true, status: 200, json: async () => ({ cursor: '', markets: event.markets || [] }), text: async () => JSON.stringify({ cursor: '', markets: event.markets || [] }) };
+    }
+    // Query endpoint (legacy, no longer used by resolver but kept for test completeness)
+    const ticker = parsed.searchParams.get('event_ticker');
+    const event = fixtures[ticker];
+    if (!event) {
+      return { ok: false, status: 404, json: async () => ({ events: [] }), text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ cursor: '', events: [event] }), text: async () => JSON.stringify({ cursor: '', events: [event] }) };
   };
 }
 
@@ -74,13 +85,13 @@ test('manual_queue entries are processed once, removed, and recorded as recent',
   assert.equal(result.summary.manual_queue_consumed, 1);
   assert.equal(result.summary.accepted, 1);
   assert.equal(calls.length, 1);
-  assert.match(calls[0], /event_ticker=KXMANUAL-26JUN01/);
+  assert.match(calls[0], /\/events\/KXMANUAL-26JUN01/);
 
   assert.equal(loadManualQueue(stateRoot).length, 0, 'manual queue item was removed');
   const recent = loadRecentUrls(stateRoot);
   assert.equal(recent.length, 1, 'recent_urls captured the processed URL');
   assert.equal(recent[0].key, eventTicker);
-  assert.equal(recent[0].status, 'processed');
+  assert.equal(recent[0].status, 'accepted');
 
   const secondPass = await collectAlphaMentionIntake({ stateRoot, env: {}, fetchImpl });
   assert.equal(secondPass.events.length, 0, 'processed URL is not reprocessed');
@@ -159,4 +170,103 @@ test('fallback is only used when no manual queue or env seeds exist', async () =
   assert.equal(fallbackResult.events.length, 1);
   assert.equal(fallbackResult.events[0].event_ticker, 'KXFALLBACK-26JUN05');
   assert.equal(fallbackCalls.length, 0, 'fallback reuses the provided event instead of hitting the network');
+});
+
+test('manual_queue Psaki-style URL resolves via /events/{event_ticker} with 15 markets', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-alpha-psaki-'));
+  const paths = getIntakePaths(stateRoot);
+  const eventTicker = 'KXPSAKIMENTION-26JUN10';
+  const event = {
+    event_ticker: eventTicker,
+    title: 'Will Jen Psaki be mentioned?',
+    series_ticker: 'KXPSAKIMENTION',
+    markets: Array.from({ length: 15 }, (_, i) => ({
+      ticker: `${eventTicker}-${String.fromCharCode(65 + i)}`,
+      title: `Will Jen Psaki be mentioned on ${String.fromCharCode(65 + i)}?`,
+    })),
+  };
+  writeJson(paths.manualQueuePath, {
+    version: 1,
+    items: [{ url: `https://kalshi.com/markets/kxpsakimention/jen-psaki-mention/${eventTicker}`, note: 'psaki validation' }],
+  });
+
+  const calls = [];
+  const fetchImpl = makeFetch({ [eventTicker]: event }, calls);
+  const result = await collectAlphaMentionIntake({ stateRoot, env: {}, fetchImpl });
+
+  assert.equal(result.summary.manual_queue_offered, 1);
+  assert.equal(result.summary.manual_queue_consumed, 1);
+  assert.equal(result.summary.accepted, 1);
+  assert.equal(result.summary.invalid, 0);
+  assert.equal(result.events.length, 1);
+  assert.equal(result.events[0].event_ticker, eventTicker);
+  assert.equal(result.events[0].markets.length, 15);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /\/events\/KXPSAKIMENTION-26JUN10/);
+
+  assert.equal(loadManualQueue(stateRoot).length, 0, 'manual queue item was consumed');
+  const recent = loadRecentUrls(stateRoot);
+  assert.equal(recent.length, 1);
+  assert.equal(recent[0].key, eventTicker);
+  assert.equal(recent[0].status, 'accepted');
+});
+
+test('transient fetch failure does not consume manual_queue', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-alpha-transient-'));
+  const paths = getIntakePaths(stateRoot);
+  const eventTicker = 'KXTRANSIENT-26JUN07';
+  writeJson(paths.manualQueuePath, {
+    version: 1,
+    items: [{ url: `https://kalshi.com/markets/${eventTicker}` }],
+  });
+
+  const fetchImpl = async () => {
+    const err = new Error('ECONNRESET');
+    err.code = 'ECONNRESET';
+    throw err;
+  };
+
+  const result = await collectAlphaMentionIntake({ stateRoot, env: {}, fetchImpl });
+  assert.equal(result.events.length, 0);
+  assert.equal(result.summary.accepted, 0);
+  assert.equal(result.summary.invalid, 0);
+  assert.equal(result.summary.manual_queue_consumed, 0);
+  assert.equal(loadManualQueue(stateRoot).length, 1, 'manual queue item remains for retry');
+  const recent = loadRecentUrls(stateRoot);
+  assert.equal(recent.length, 0, 'no recent entry written on transient failure');
+});
+
+test('markets endpoint fallback is used when direct event returns 404', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-alpha-markets-fallback-'));
+  const paths = getIntakePaths(stateRoot);
+  const eventTicker = 'KXFALLBACKMARKETS-26JUN08';
+  const event = makeEvent(eventTicker);
+  writeJson(paths.manualQueuePath, {
+    version: 1,
+    items: [{ url: `https://kalshi.com/markets/${eventTicker}` }],
+  });
+
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    const parsed = new URL(url);
+    const pathMatch = parsed.pathname.match(/\/events\/([^/]+)$/);
+    if (pathMatch) {
+      return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+    }
+    if (parsed.pathname.endsWith('/markets')) {
+      return { ok: true, status: 200, json: async () => ({ cursor: '', markets: event.markets }), text: async () => JSON.stringify({ cursor: '', markets: event.markets }) };
+    }
+    return { ok: false, status: 404, json: async () => ({ events: [] }), text: async () => '' };
+  };
+
+  const result = await collectAlphaMentionIntake({ stateRoot, env: {}, fetchImpl });
+  assert.equal(result.summary.accepted, 1);
+  assert.equal(result.summary.invalid, 0);
+  assert.equal(result.events.length, 1);
+  assert.equal(result.events[0].event_ticker, eventTicker);
+  assert.equal(result.events[0].markets.length, 1);
+  assert.equal(calls.length, 2, 'direct endpoint tried first, then markets fallback');
+  assert.match(calls[0], /\/events\/KXFALLBACKMARKETS-26JUN08/);
+  assert.match(calls[1], /\/markets\?event_ticker=KXFALLBACKMARKETS-26JUN08/);
 });
