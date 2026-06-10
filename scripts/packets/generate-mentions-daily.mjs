@@ -953,35 +953,50 @@ function parseExtraArgs(argv) {
   return { passthrough, extra };
 }
 
-async function main() {
-  const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
-  const opts = parsePacketArgs(passthrough);
-  if (opts.help) {
-    console.log('Usage: node scripts/packets/generate-mentions-daily.mjs --date YYYY-MM-DD [--dry-run] [--window-days N] [--allow-undated]');
-    return;
-  }
-  const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
-  const primeAttempts = primeMentionResearch(opts.date);
+export async function gatherMentionEvents({
+  stateRoot,
+  date,
+  windowDays = DEFAULT_WINDOW_DAYS,
+  allowUndated = false,
+  env = process.env,
+  deps = {},
+} = {}) {
+  const fetchKalshiEventsImpl = deps.fetchKalshiEvents || fetchKalshiEvents;
+  const fetchMentionEventsBySeriesImpl = deps.fetchMentionEventsBySeries || fetchMentionEventsBySeries;
+  const collectAlphaMentionIntakeImpl = deps.collectAlphaMentionIntake || collectAlphaMentionIntake;
+  const filterMentionEventsImpl = deps.filterMentionEvents || filterMentionEvents;
+  const primeMentionResearchImpl = deps.primeMentionResearch || primeMentionResearch;
+  const primeMentionSourceResearchImpl = deps.primeMentionSourceResearch || primeMentionSourceResearch;
+  const persistEventArtifactsImpl = deps.persistEventArtifacts || persistEventArtifacts;
+  const consoleLog = deps.consoleLog || console.log;
 
-  const discovery = await fetchKalshiEvents('broad');
-  const dateFilter = filterByEventDate(opts.date, {
-    windowDays: extra.windowDays,
-    allowUndated: extra.allowUndated,
+  const primeAttempts = primeMentionResearchImpl(date);
+
+  // 1. Explicit Alpha intake FIRST (manual_queue + env seeds), no fallback
+  const alphaIntake = await collectAlphaMentionIntakeImpl({
+    stateRoot,
+    env,
+    fallbackEvents: [],
+  });
+  const explicitIntakeEvents = alphaIntake.events || [];
+  const hadExplicitIntake = (alphaIntake.summary.manual_queue_offered > 0) || (alphaIntake.summary.env_seeds_offered > 0);
+
+  // 2. Broad + series discovery
+  const discovery = await fetchKalshiEventsImpl('broad');
+  const dateFilter = filterByEventDate(date, {
+    windowDays,
+    allowUndated,
   });
   const dateFilteredEvents = discovery.events.filter(dateFilter);
 
-  // Language-based mention filtering: detect true mention-style markets
-  // (will X say Y in transcript) vs standard binary outcomes (IPO, M&A, metrics)
-  const { mentionEvents: filteredEvents, rejectedEvents, stats: mentionStats } = filterMentionEvents(dateFilteredEvents);
+  const { mentionEvents: filteredEvents, stats: mentionStats } = filterMentionEventsImpl(dateFilteredEvents);
 
-  // Also scan mention-specific series for events with empty status fields
-  // that are invisible to general category+status queries (e.g. CBRL)
-  const seriesDiscovery = await fetchMentionEventsBySeries();
+  const seriesDiscovery = await fetchMentionEventsBySeriesImpl();
   const seriesDateFiltered = seriesDiscovery.events.filter(dateFilter);
-  const { mentionEvents: seriesMentionEvents, stats: seriesStats } = filterMentionEvents(seriesDateFiltered);
+  const { mentionEvents: seriesMentionEvents, stats: seriesStats } = filterMentionEventsImpl(seriesDateFiltered);
 
   // Merge broad and series-scan results, deduplicating by event_ticker
-  const allEvents = [...filteredEvents];
+  let allEvents = [...filteredEvents];
   const seenTickers = new Set(filteredEvents.map(e => e.event_ticker));
   for (const ev of seriesMentionEvents) {
     if (!seenTickers.has(ev.event_ticker)) {
@@ -990,7 +1005,7 @@ async function main() {
     }
   }
 
-  // Combined stats for reporting
+  // Combined stats for reporting (discovery-only, same semantics as before)
   const combinedStats = {
     totalEvents: mentionStats.totalEvents + seriesStats.totalEvents,
     mentionEvents: allEvents.length,
@@ -1001,42 +1016,90 @@ async function main() {
     seriesEvents: seriesStats.totalEvents,
   };
 
-  const alphaIntake = await collectAlphaMentionIntake({
-    stateRoot: opts.stateRoot,
-    env: process.env,
-    fallbackEvents: allEvents,
-  });
-  if (alphaIntake.events.length) {
-    const seenIntakeTickers = new Set(allEvents.map((ev) => ev?.event_ticker).filter(Boolean));
-    for (const ev of alphaIntake.events) {
+  // 3. Fallback intake only when no explicit intake existed
+  if (!hadExplicitIntake && !explicitIntakeEvents.length && allEvents.length > 0) {
+    const fallbackIntake = await collectAlphaMentionIntakeImpl({
+      stateRoot,
+      env,
+      fallbackEvents: allEvents,
+    });
+    if (fallbackIntake.events.length) {
+      for (const ev of fallbackIntake.events) {
+        const ticker = ev?.event_ticker;
+        if (!ticker || seenTickers.has(ticker)) continue;
+        seenTickers.add(ticker);
+        allEvents.push(ev);
+      }
+    }
+    if (fallbackIntake.summary.fallback_used) {
+      consoleLog(`[mentions-alpha-intake] ${formatAlphaIntakeSummary(fallbackIntake.summary)}`);
+    }
+  }
+
+  // 4. Merge explicit intake events into allEvents (deduped)
+  if (explicitIntakeEvents.length) {
+    for (const ev of explicitIntakeEvents) {
       const ticker = ev?.event_ticker;
-      if (!ticker || seenIntakeTickers.has(ticker)) continue;
-      seenIntakeTickers.add(ticker);
+      if (!ticker || seenTickers.has(ticker)) continue;
+      seenTickers.add(ticker);
       allEvents.push(ev);
     }
   }
   if (
     alphaIntake.summary.accepted > 0 ||
     alphaIntake.summary.manual_queue_consumed > 0 ||
-    alphaIntake.summary.env_seeds_consumed > 0 ||
-    alphaIntake.summary.fallback_used
+    alphaIntake.summary.env_seeds_consumed > 0
   ) {
-    console.log(`[mentions-alpha-intake] ${formatAlphaIntakeSummary(alphaIntake.summary)}`);
+    consoleLog(`[mentions-alpha-intake] ${formatAlphaIntakeSummary(alphaIntake.summary)}`);
   }
 
   let persistedCount = 0;
   if (allEvents.length) {
-    const persisted = persistEventArtifacts({
-      stateRoot: opts.stateRoot,
+    const persisted = persistEventArtifactsImpl({
+      stateRoot,
       sport: 'mentions',
-      date: opts.date,
+      date,
       events: allEvents,
     });
     persistedCount = persisted.written.length;
   }
 
-  const researchPrimeAttempts = allEvents.length ? primeMentionSourceResearch(opts.date) : [];
+  const researchPrimeAttempts = allEvents.length ? primeMentionSourceResearchImpl(date) : [];
   const allPrimeAttempts = [...primeAttempts, ...researchPrimeAttempts];
+
+  return {
+    allEvents,
+    combinedStats,
+    discovery,
+    dateFilteredEvents,
+    persistedCount,
+    allPrimeAttempts,
+    seenTickers,
+  };
+}
+
+async function main() {
+  const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
+  const opts = parsePacketArgs(passthrough);
+  if (opts.help) {
+    console.log('Usage: node scripts/packets/generate-mentions-daily.mjs --date YYYY-MM-DD [--dry-run] [--window-days N] [--allow-undated]');
+    return;
+  }
+  const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
+
+  const {
+    allEvents,
+    combinedStats,
+    discovery,
+    dateFilteredEvents,
+    persistedCount,
+    allPrimeAttempts,
+  } = await gatherMentionEvents({
+    stateRoot: opts.stateRoot,
+    date: opts.date,
+    windowDays: extra.windowDays,
+    allowUndated: extra.allowUndated,
+  });
 
   const localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
 
