@@ -344,3 +344,75 @@ test('NASCAR Cup filter + filterByEventDate together: keep Cup race in window, d
   assert.equal(passed.length, 1);
   assert.equal(passed[0].event_ticker, 'KXNASCARRACE-NASA26');
 });
+
+// ---------------------------------------------------------------------------
+// Mention-market label + category-filtered discovery regressions (2026-06-10)
+// ---------------------------------------------------------------------------
+
+test('buildStrikeDisplay uses object custom_strike Word for mention contracts (yes==no sub_title)', () => {
+  // Real mention-market shape: phrase only in custom_strike.Word; yes/no
+  // sub_titles identical; title repeats the event question on every row.
+  const r = buildStrikeDisplay({
+    ticker: 'KXEARNINGSMENTIONORCL-26JUN10-STAR',
+    title: 'What will Oracle Corporation say during their next earnings call?',
+    yes_sub_title: 'Stargate',
+    no_sub_title: 'Stargate',
+    custom_strike: { Word: 'Stargate' },
+  });
+  assert.equal(r.source, 'custom_strike');
+  assert.equal(r.text, 'Stargate');
+  assert.equal(r.missing, false);
+});
+
+test('buildStrikeDisplay ignores opaque-identifier custom_strike objects', () => {
+  const r = buildStrikeDisplay({
+    ticker: 'KXMLBGAME-X-ATH',
+    title: "A's vs Los Angeles A Winner?",
+    yes_sub_title: "A's",
+    no_sub_title: "A's",
+    custom_strike: { baseball_team: '0b2f50f4-2b22-4a9f-bf3e-000000000000' },
+  });
+  assert.equal(r.source, 'title');
+});
+
+test('fetchKalshiEvents filters by series category client-side when source declares series_category', async () => {
+  const pages = {
+    'series?category=Mentions': { series: [{ ticker: 'KXTRUMPMENTION' }, { ticker: 'KXHEARINGMENTION' }] },
+    'page1': {
+      events: [
+        { event_ticker: 'KXTRUMPMENTION-26JUN10', series_ticker: 'KXTRUMPMENTION' },
+        { event_ticker: 'KXELONMARS-99', series_ticker: 'KXELONMARS' },
+      ],
+      cursor: 'c2',
+    },
+    'page2': {
+      events: [{ event_ticker: 'KXHEARINGMENTION-26JUN10', series_ticker: 'KXHEARINGMENTION' }],
+      cursor: '',
+    },
+  };
+  const fetcher = async (url) => {
+    let key;
+    if (url.includes('/series?category=')) key = 'series?category=Mentions';
+    else if (url.includes('cursor=')) key = 'page2';
+    else key = 'page1';
+    return { ok: true, status: 200, json: pages[key], error: null };
+  };
+  const res = await fetchKalshiEvents('mentions', { fetcher });
+  assert.equal(res.ok, true);
+  assert.deepEqual(
+    res.events.map((e) => e.event_ticker).sort(),
+    ['KXHEARINGMENTION-26JUN10', 'KXTRUMPMENTION-26JUN10'],
+  );
+});
+
+test('buildStrikeDisplay trusts short all-caps phrases from custom_strike display keys (MVP/GOAT)', () => {
+  const r = buildStrikeDisplay({
+    ticker: 'KXNBAMENTION-26JUN10SASNYK-MVP',
+    title: 'What will the announcers say during Spurs vs Knicks Professional Basketball Game?',
+    yes_sub_title: 'MVP',
+    no_sub_title: 'MVP',
+    custom_strike: { Word: 'MVP' },
+  });
+  assert.equal(r.source, 'custom_strike');
+  assert.equal(r.text, 'MVP');
+});

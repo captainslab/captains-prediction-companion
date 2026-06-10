@@ -22,7 +22,11 @@ export const KALSHI_SOURCES = Object.freeze({
   mentions: {
     label: 'kalshi-calendar-mentions',
     page_url: 'https://kalshi.com/calendar/mentions',
-    api_url: `${KALSHI_API_BASE}/events?category=Mentions&status=open&limit=200&with_nested_markets=true`,
+    // NOTE: /events does NOT honor a category filter — it silently returns all
+    // categories. Mentions span hundreds of series, so we resolve the series
+    // set from /series?category=Mentions and filter events client-side.
+    api_url: `${KALSHI_API_BASE}/events?status=open&limit=200&with_nested_markets=true`,
+    series_category: 'Mentions',
   },
   mlb: {
     label: 'kalshi-calendar-baseball',
@@ -107,8 +111,25 @@ export async function defaultFetcher(url, options = {}) {
 }
 
 /**
+ * Resolve the set of series tickers belonging to a Kalshi category
+ * (e.g. 'Mentions'). Used when /events cannot filter server-side.
+ * Returns { ok, tickers: Set, error }.
+ */
+export async function fetchSeriesTickersForCategory(category, options = {}) {
+  const fetcher = options.fetcher ?? defaultFetcher;
+  const url = `${KALSHI_API_BASE}/series?category=${encodeURIComponent(category)}`;
+  const res = await fetcher(url);
+  if (!res.ok || !res.json || !Array.isArray(res.json.series)) {
+    return { ok: false, tickers: new Set(), error: res.error || 'no series body' };
+  }
+  return { ok: true, tickers: new Set(res.json.series.map((s) => s.ticker).filter(Boolean)), error: null };
+}
+
+/**
  * Fetch events for a known source key with optional pagination.
- * Returns { ok, events, raw, attempts, source } - always defined arrays.
+ * When the source declares `series_category`, all open events are paged and
+ * filtered client-side to series in that category (the /events endpoint
+ * ignores a category param). Returns { ok, events, raw, attempts, source }.
  */
 export async function fetchKalshiEvents(sourceKey, options = {}) {
   const source = KALSHI_SOURCES[sourceKey];
@@ -120,15 +141,37 @@ export async function fetchKalshiEvents(sourceKey, options = {}) {
   const events = [];
   let cursor = '';
   let pageCount = 0;
-  const maxPages = options.maxPages ?? 5;
+  // Category-filtered sources must walk the full open-event list; the API
+  // returns far-future closes first, so a low page cap would miss near-term
+  // events entirely.
+  const maxPages = options.maxPages ?? (source.series_category ? 80 : 5);
   let lastError = null;
+
+  let seriesFilter = null;
+  if (source.series_category) {
+    const seriesRes = await fetchSeriesTickersForCategory(source.series_category, { fetcher });
+    attempts.push({
+      url: `${KALSHI_API_BASE}/series?category=${encodeURIComponent(source.series_category)}`,
+      ok: seriesRes.ok,
+      status: seriesRes.ok ? 200 : 0,
+      error: seriesRes.error,
+    });
+    if (!seriesRes.ok) {
+      return { ok: false, events: [], raw: attempts, attempts, source, error: seriesRes.error };
+    }
+    seriesFilter = seriesRes.tickers;
+  }
+
   while (pageCount < maxPages) {
     const url = cursor ? `${source.api_url}&cursor=${encodeURIComponent(cursor)}` : source.api_url;
     const res = await fetcher(url);
     attempts.push({ url, ok: res.ok, status: res.status, error: res.error });
     if (!res.ok || !res.json) { lastError = res.error || 'no JSON body'; break; }
     const pageEvents = Array.isArray(res.json.events) ? res.json.events : [];
-    for (const ev of pageEvents) events.push(ev);
+    for (const ev of pageEvents) {
+      if (seriesFilter && !seriesFilter.has(ev?.series_ticker)) continue;
+      events.push(ev);
+    }
     cursor = res.json.cursor || '';
     pageCount += 1;
     if (!cursor) break;
@@ -348,6 +391,21 @@ export function buildStrikeDisplay(market = {}) {
   }
   if (typeof market.custom_strike === 'string' && market.custom_strike.trim()) {
     tries.push({ source: 'custom_strike', text: market.custom_strike.trim() });
+  } else if (market.custom_strike && typeof market.custom_strike === 'object' && !Array.isArray(market.custom_strike)) {
+    // Mention-style markets carry the contract phrase as an object, e.g.
+    // { Word: 'Stargate' }. Only display-text keys are used — other series
+    // put opaque identifiers here (e.g. { baseball_team: '<uuid>' }), which
+    // must not become labels. This keeps each mention contract rendering its
+    // own phrase instead of falling through to the shared event title.
+    const DISPLAY_KEYS = /^(word|phrase|text|label|name|title)$/i;
+    const text = Object.entries(market.custom_strike)
+      .filter(([k, v]) => DISPLAY_KEYS.test(k) && typeof v === 'string' && v.trim())
+      .map(([, v]) => v.trim())
+      .join(' ');
+    // Display-key custom strikes are the literal contract phrase (e.g.
+    // { Word: 'MVP' }) — exempt from the ticker-shorthand heuristic, which
+    // would otherwise reject legitimate short all-caps phrases.
+    if (text) tries.push({ source: 'custom_strike', text, trusted: true });
   }
   if (market.floor_strike != null || market.cap_strike != null) {
     const f = market.floor_strike ?? '−∞';
@@ -376,7 +434,7 @@ export function buildStrikeDisplay(market = {}) {
     tries.push({ source: 'yes_sub_title', text: yesT });
   }
   for (const candidate of tries) {
-    if (!looksLikeTickerShorthand(candidate.text, ticker)) {
+    if (candidate.trusted || !looksLikeTickerShorthand(candidate.text, ticker)) {
       return { source: candidate.source, text: candidate.text, missing: false };
     }
   }

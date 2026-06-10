@@ -137,7 +137,7 @@ function resolveMentionProfile({ event = null, market = null, legacy = null } = 
   if (/\b(earnings|earnings call|quarterly results|guidance|eps|revenue|cfo|ceo|investor relations|10-k|10-q|sec filing)\b/.test(text)) {
     return { profile: EARNINGS_PROFILE, basis: 'inferred_earnings_terms' };
   }
-  if (/\b(announcer|broadcast|commentator|commentary|pregame|postgame|espn|fox sports|tnt|cbs sports|nbc sports|game broadcast)\b/.test(text)) {
+  if (/\b(announcers?|broadcast|commentators?|commentary|pregame|postgame|espn|fox sports|tnt|cbs sports|nbc sports|game broadcast)\b/.test(text)) {
     return { profile: SPORTS_ANNOUNCER_PROFILE, basis: 'inferred_broadcast_terms' };
   }
   if (/\b(president|trump|biden|vance|senate|congress|governor|mayor|election|debate|speech|rally|hearing|white house|secretary|minister|campaign|candidate)\b/.test(text)) {
@@ -649,6 +649,59 @@ function renderMarketContextNotInScore(marketInfo) {
   return lines;
 }
 
+/**
+ * Load per-market research artifacts produced by the research stage (Hermes:
+ * Codex research -> Kimi synthesis, or any manual researcher). This is the
+ * wiring between source research and the composite scorer: without it, live
+ * Kalshi markets always score layers=0/N and stay BLOCKED.
+ *
+ * Directory: state/mentions/<date>/research/*.json
+ * Accepted shapes per file:
+ *   { "market_ticker": "KX...-STAR", "layer_records": {...}, "source_ladder": {...}, ... }
+ *   { "event_ticker": "KX...", "markets": { "<market_ticker>": { "layer_records": {...}, ... } } }
+ * The per-market object is passed to the composite as the `legacy` carrier, so
+ * `layer_records`, `source_ladder`, and `mention_profile` are all honored.
+ * Pricing fields are rejected downstream by the composite core's guard.
+ *
+ * Returns Map<market_ticker, researchObject>.
+ */
+export function loadMentionResearch(stateRoot, date) {
+  const dir = resolve(stateRoot, 'mentions', date, 'research');
+  const byMarket = new Map();
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return byMarket;
+  for (const entry of readdirSync(dir)) {
+    if (!/\.json$/i.test(entry)) continue;
+    const parsed = readJsonIfExists(join(dir, entry));
+    if (!parsed || typeof parsed !== 'object') continue;
+    if (parsed.markets && typeof parsed.markets === 'object' && !Array.isArray(parsed.markets)) {
+      for (const [ticker, record] of Object.entries(parsed.markets)) {
+        if (record && typeof record === 'object') byMarket.set(ticker, record);
+      }
+    } else if (typeof parsed.market_ticker === 'string' && parsed.market_ticker) {
+      byMarket.set(parsed.market_ticker, parsed);
+    }
+  }
+  return byMarket;
+}
+
+/**
+ * Offline/agent fallback for discovery: read previously persisted (or
+ * externally captured, e.g. Firecrawl-via-Hermes) Kalshi event JSON from
+ * state/mentions/<date>/kalshi-events/. Lets the pipeline run when the live
+ * API is unreachable — an agent can drop raw event JSON files here instead.
+ */
+export function loadPersistedKalshiEvents(stateRoot, date) {
+  const dir = resolve(stateRoot, 'mentions', date, 'kalshi-events');
+  const events = [];
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return events;
+  for (const entry of readdirSync(dir)) {
+    if (!/\.json$/i.test(entry)) continue;
+    const parsed = readJsonIfExists(join(dir, entry));
+    if (parsed && typeof parsed === 'object' && parsed.event_ticker) events.push(parsed);
+  }
+  return events;
+}
+
 export function discoverMentionEvents(stateRoot, date) {
   const roots = [
     resolve(stateRoot, 'mentions', date),
@@ -673,10 +726,16 @@ export function discoverMentionEvents(stateRoot, date) {
   return events;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, research = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
-  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw }));
+  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({
+    event,
+    market: raw,
+    // Research artifacts (layer_records / source_ladder) ride the legacy
+    // carrier so the composite scorer sees source-backed evidence layers.
+    legacy: research instanceof Map ? (research.get(raw?.ticker) ?? null) : null,
+  }));
   const compositeSummary = summarizeCompositeRun(composites);
 
   // Preferred path: compact sectioned decision board (model + market + edge),
@@ -883,10 +942,22 @@ async function main() {
     windowDays: extra.windowDays,
     allowUndated: extra.allowUndated,
   });
-  const filteredEvents = discovery.events.filter(dateFilter);
+  let filteredEvents = discovery.events.filter(dateFilter);
+
+  // Fallback: when the live API yields nothing, reuse previously persisted or
+  // externally captured (e.g. Firecrawl-via-Hermes) event JSON for this date.
+  let usedPersistedFallback = false;
+  if (!filteredEvents.length) {
+    const persistedEvents = loadPersistedKalshiEvents(opts.stateRoot, opts.date).filter(dateFilter);
+    if (persistedEvents.length) {
+      filteredEvents = persistedEvents;
+      usedPersistedFallback = true;
+      console.error(`[${PACKET_TYPE}] live discovery empty (ok=${discovery.ok}); using ${persistedEvents.length} persisted kalshi-events for ${opts.date}.`);
+    }
+  }
 
   let persistedCount = 0;
-  if (filteredEvents.length) {
+  if (filteredEvents.length && !usedPersistedFallback) {
     const persisted = persistEventArtifacts({
       stateRoot: opts.stateRoot,
       sport: 'mentions',
@@ -897,6 +968,7 @@ async function main() {
   }
 
   const localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
+  const research = loadMentionResearch(opts.stateRoot, opts.date);
 
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
@@ -925,7 +997,7 @@ async function main() {
       const sourcePath = resolve(opts.stateRoot, 'mentions', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
       const inventoryName = `${opts.date}-${ticker}.inventory`;
       const inventoryPath = `${inventoryName}.txt`;
-      const built = buildKalshiEventPacket({ date: opts.date, event: ev, sourceUrl: sourcePath, inventoryPath });
+      const built = buildKalshiEventPacket({ date: opts.date, event: ev, sourceUrl: sourcePath, inventoryPath, research });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
@@ -971,7 +1043,7 @@ async function main() {
   }
 
   console.log(printDryRunSummary({ packetType: PACKET_TYPE, date: opts.date, dir, items }));
-  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${filteredEvents.length} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} allow_undated=${extra.allowUndated}`);
+  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${filteredEvents.length} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} persisted_fallback=${usedPersistedFallback} research_records=${research.size} window_days=${extra.windowDays} allow_undated=${extra.allowUndated}`);
   if (exitCode) process.exit(exitCode);
 }
 

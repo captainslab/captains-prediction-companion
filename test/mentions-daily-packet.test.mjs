@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildKalshiEventPacket } from '../scripts/packets/generate-mentions-daily.mjs';
+import { buildKalshiEventPacket, loadMentionResearch } from '../scripts/packets/generate-mentions-daily.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function strongEarningsEvent() {
   return {
@@ -171,4 +174,86 @@ test('mentions packet generator preserves forbidden pricing field guard in layer
     }),
     /forbidden pricing field "yes_bid"/i,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Research-artifact wiring: layer_records from state/mentions/<date>/research/
+// must reach the composite scorer for live Kalshi markets (2026-06-10 repair).
+// ---------------------------------------------------------------------------
+
+test('buildKalshiEventPacket merges research map records so markets score instead of staying BLOCKED', () => {
+  const event = {
+    event_ticker: 'KXTESTMENTION-26JUN10',
+    series_ticker: 'KXTESTMENTION',
+    title: 'What will the speaker say during the test hearing?',
+    markets: [
+      {
+        ticker: 'KXTESTMENTION-26JUN10-ALPHA',
+        event_ticker: 'KXTESTMENTION-26JUN10',
+        title: 'What will the speaker say during the test hearing?',
+        yes_sub_title: 'Alpha',
+        no_sub_title: 'Alpha',
+        custom_strike: { Word: 'Alpha' },
+        rules_primary: 'Resolves YES if the speaker says Alpha during the hearing.',
+        close_time: '2026-06-25T14:00:00Z',
+      },
+      {
+        ticker: 'KXTESTMENTION-26JUN10-BETA',
+        event_ticker: 'KXTESTMENTION-26JUN10',
+        title: 'What will the speaker say during the test hearing?',
+        yes_sub_title: 'Beta',
+        no_sub_title: 'Beta',
+        custom_strike: { Word: 'Beta' },
+        rules_primary: 'Resolves YES if the speaker says Beta during the hearing.',
+        close_time: '2026-06-25T14:00:00Z',
+      },
+    ],
+  };
+  const research = new Map([
+    ['KXTESTMENTION-26JUN10-ALPHA', {
+      mention_profile: 'political_mentions',
+      layer_records: {
+        baseline_relevance: { present: true, score: 90, source_basis: 'official agenda names Alpha', source_path: 'https://example.gov/agenda' },
+        event_proximity: { present: true, score: 95, source_basis: 'hearing confirmed today', source_path: 'https://example.gov/schedule' },
+        evidence_quality: { present: true, score: 85, source_basis: 'primary sources' },
+      },
+    }],
+  ]);
+
+  const built = buildKalshiEventPacket({
+    date: '2026-06-10',
+    event,
+    sourceUrl: 'state/mentions/2026-06-10/kalshi-events/KXTESTMENTION-26JUN10.json',
+    inventoryPath: '2026-06-10-KXTESTMENTION-26JUN10.inventory.txt',
+    research,
+  });
+
+  // Researched market scores; un-researched market stays BLOCKED.
+  assert.match(built.inventoryText, /KXTESTMENTION-26JUN10-ALPHA :: Alpha \| score=9\d posture=PICK layers=3\//);
+  assert.match(built.inventoryText, /\[BLOCKED\] KXTESTMENTION-26JUN10-BETA :: Beta \| score=null/);
+  // Contract labels come from the phrase, not the shared event title.
+  assert.doesNotMatch(built.inventoryText, /:: What will the speaker say/);
+  assert.equal(built.compositeSummary.scored_count, 1);
+});
+
+test('loadMentionResearch reads per-event and per-market research files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mention-research-'));
+  try {
+    const researchDir = join(dir, 'mentions', '2026-06-10', 'research');
+    mkdirSync(researchDir, { recursive: true });
+    writeFileSync(join(researchDir, 'event.json'), JSON.stringify({
+      event_ticker: 'KXTESTMENTION-26JUN10',
+      markets: { 'KXTESTMENTION-26JUN10-ALPHA': { layer_records: { baseline_relevance: { present: true, score: 80 } } } },
+    }));
+    writeFileSync(join(researchDir, 'single.json'), JSON.stringify({
+      market_ticker: 'KXTESTMENTION-26JUN10-BETA',
+      layer_records: { baseline_relevance: { present: true, score: 70 } },
+    }));
+    const map = loadMentionResearch(dir, '2026-06-10');
+    assert.equal(map.size, 2);
+    assert.ok(map.get('KXTESTMENTION-26JUN10-ALPHA'));
+    assert.ok(map.get('KXTESTMENTION-26JUN10-BETA'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
