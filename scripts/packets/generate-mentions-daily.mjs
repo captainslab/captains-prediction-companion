@@ -925,6 +925,16 @@ export function primeMentionResearch(date, options = {}) {
   return [runPacketCommand(workflow.command, workflow.argsForDate(date), { cwd: options.cwd ?? process.cwd(), runner: options.runner })];
 }
 
+export function primeMentionSourceResearch(date, options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  return [
+    runPacketCommand('node', ['scripts/mentions/collect-mentions-research.mjs', '--date', date], {
+      cwd,
+      runner: options.runner,
+    }),
+  ];
+}
+
 function parseExtraArgs(argv) {
   // Lets caller pass --allow-undated and --window-days N without breaking parsePacketArgs.
   const passthrough = [];
@@ -998,6 +1008,9 @@ async function main() {
     persistedCount = persisted.written.length;
   }
 
+  const researchPrimeAttempts = allEvents.length ? primeMentionSourceResearch(opts.date) : [];
+  const allPrimeAttempts = [...primeAttempts, ...researchPrimeAttempts];
+
   const localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
 
   let totalMarketCount = 0;
@@ -1006,7 +1019,7 @@ async function main() {
   const items = [];
 
   if (!localEvents.length && !allEvents.length) {
-    const txt = buildEmptyDayPacket(opts.date, primeAttempts, discovery, combinedStats);
+    const txt = buildEmptyDayPacket(opts.date, allPrimeAttempts, discovery, combinedStats);
     const w = writeAudit(dir, `${opts.date}-no-events`, txt, {
       event_count: 0,
       total_market_count: 0,
@@ -1015,7 +1028,7 @@ async function main() {
       window_days: extra.windowDays,
       allow_undated: extra.allowUndated,
       kalshi_discovery: { ok: discovery.ok, error: discovery.error, total_returned: discovery.events.length, window_matched: dateFilteredEvents.length, mention_events: combinedStats.mentionEvents, rejected_events: combinedStats.rejectedEvents, total_markets_scanned: combinedStats.totalMarkets, mention_markets: combinedStats.mentionMarkets, broad_events: combinedStats.broadEvents, series_events: combinedStats.seriesEvents },
-      research_prime: primeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
+      research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
     });
     items.push({ name: 'no-events', ...w });
   } else {
@@ -1053,6 +1066,7 @@ async function main() {
         composite_pricing_excluded: built.compositeSummary.pricing_excluded,
         kalshi_source_api: KALSHI_SOURCES.broad.api_url,
         kalshi_source_page: KALSHI_SOURCES.broad.page_url,
+        research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
       });
       items.push({ name: ticker, ...w });
     }
@@ -1061,7 +1075,7 @@ async function main() {
       const txt = buildLegacyEventPacket({ date: opts.date, event: ev });
       const w = writeAudit(dir, baseName, txt, {
         source_file: ev.file,
-        research_prime: primeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
+        research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
       });
       items.push({ name: baseName, ...w });
     }

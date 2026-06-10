@@ -16,7 +16,7 @@ import {
   runPacketCommand,
 } from '../scripts/packets/lib/common.mjs';
 import { primeMlbResearch, extractGames } from '../scripts/packets/generate-mlb-daily.mjs';
-import { primeMentionResearch } from '../scripts/packets/generate-mentions-daily.mjs';
+import { primeMentionResearch, primeMentionSourceResearch } from '../scripts/packets/generate-mentions-daily.mjs';
 
 test('parsePacketArgs accepts --date and --dry-run', () => {
   const opts = parsePacketArgs(['--date', '2026-05-18', '--dry-run']);
@@ -121,6 +121,18 @@ test('primeMentionResearch invokes available read-only mention workflow', () => 
   assert.equal(attempts.length, 1);
   assert.equal(attempts[0].ok, true);
   assert.deepEqual(calls[0], ['node', ['scripts/mentions/mentions-workspace.mjs', 'discover', '--date', '2026-05-18', '--live-readonly']]);
+});
+
+test('primeMentionSourceResearch invokes the source-collector CLI after discovery exists', () => {
+  const calls = [];
+  const runner = (command, args) => {
+    calls.push([command, args]);
+    return { status: 0, stdout: '', stderr: '' };
+  };
+  const attempts = primeMentionSourceResearch('2026-05-18', { runner });
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].ok, true);
+  assert.deepEqual(calls[0], ['node', ['scripts/mentions/collect-mentions-research.mjs', '--date', '2026-05-18']]);
 });
 
 test('extractGames reads MLB workflow slate_manifest games and normalizes one-packet units', () => {
