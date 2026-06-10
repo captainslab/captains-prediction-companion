@@ -1,0 +1,48 @@
+{
+  "_schema": "cpc_hermes_role_routes_v1",
+  "_description": "CPC role aliases mapped to Hermes model_aliases. Verified against captain profile config.",
+  "_verified_at": "2026-06-10T19:57:42Z",
+  "roles": {
+    "alpha_hunter": {
+      "alias": "alpha-hunter",
+      "provider": "openai-codex",
+      "model": "gpt-5.4-mini",
+      "display_name": "Alpha Hunter",
+      "firecrawl_available": true,
+      "skills": [
+        "research-source-scraping",
+        "last30days-research",
+        "self-improving-agent-skills"
+      ],
+      "toolsets": [
+        "web",
+        "browser",
+        "terminal",
+        "file",
+        "skills"
+      ]
+    },
+    "market_hunter": {
+      "alias": "market-hunter",
+      "provider": "kimi-coding",
+      "model": "kimi-k2.6",
+      "display_name": "Market Hunter",
+      "firecrawl_available": false,
+      "skills": [
+        "research-source-scraping",
+        "last30days-research"
+      ],
+      "toolsets": [
+        "web",
+        "terminal",
+        "file",
+        "skills"
+      ]
+    }
+  },
+  "hermes_invocation_pattern": "hermes chat -m {alias} -s {skills} -t {toolsets} -q '{query}'",
+  "env_fallback": {
+    "HERMES_COMMAND": "hermes",
+    "HERMES_CLI": "hermes"
+  }
+}
