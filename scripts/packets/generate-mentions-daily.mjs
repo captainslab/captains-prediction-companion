@@ -66,7 +66,13 @@ import {
 } from '../shared/decision-packet.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
-const DEFAULT_WINDOW_DAYS = 7; // forward-looking week
+// Normal cron path is today-only: window 0 keeps events whose derived date is
+// the run date. The forward-looking week scan survives behind --watchlist
+// (or an explicit --window-days N) and writes to a separate packet dir that
+// the cron sender never touches.
+export const DEFAULT_WINDOW_DAYS = 0;
+export const WATCHLIST_WINDOW_DAYS = 7;
+export const WATCHLIST_PACKET_TYPE = 'mentions-watchlist';
 const PACKET_LIMIT = 60;       // safety cap on packets emitted per run
 const PROFILE_REGISTRY = Object.freeze({
   [POLITICAL_PROFILE]: {
@@ -939,24 +945,36 @@ export function primeMentionSourceResearch(date, options = {}) {
   ];
 }
 
-function parseExtraArgs(argv) {
-  // Lets caller pass --allow-undated and --window-days N without breaking parsePacketArgs.
+export function parseExtraArgs(argv) {
+  // Lets caller pass mentions-specific flags without breaking parsePacketArgs.
   const passthrough = [];
-  const extra = { allowUndated: false, windowDays: DEFAULT_WINDOW_DAYS };
+  const extra = { allowUndated: false, windowDays: null, watchlist: false, only: null };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--allow-undated') extra.allowUndated = true;
     else if (a === '--window-days') { extra.windowDays = Number(argv[++i]); }
+    else if (a === '--watchlist') extra.watchlist = true;
+    else if (a === '--only') {
+      extra.only = String(argv[++i] ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    }
     else passthrough.push(a);
   }
-  if (!Number.isFinite(extra.windowDays)) extra.windowDays = DEFAULT_WINDOW_DAYS;
+  if (!Number.isFinite(extra.windowDays)) {
+    extra.windowDays = extra.watchlist ? WATCHLIST_WINDOW_DAYS : DEFAULT_WINDOW_DAYS;
+  }
+  // Any forward window beyond today is watchlist territory: its packets must
+  // land in the watchlist dir so the cron sender can never deliver them.
+  if (extra.windowDays > 0 || extra.allowUndated) extra.watchlist = true;
   return { passthrough, extra };
 }
 
 export async function gatherMentionEvents({
   stateRoot,
   date,
-  windowDays = DEFAULT_WINDOW_DAYS,
+  // Library default stays the forward research window: direct callers gather
+  // breadth for research/persistence. The CLI/cron path always passes its own
+  // windowDays (today-only by default — see parseExtraArgs).
+  windowDays = WATCHLIST_WINDOW_DAYS,
   allowUndated = false,
   env = process.env,
   deps = {},
@@ -1082,10 +1100,14 @@ async function main() {
   const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
   const opts = parsePacketArgs(passthrough);
   if (opts.help) {
-    console.log('Usage: node scripts/packets/generate-mentions-daily.mjs --date YYYY-MM-DD [--dry-run] [--window-days N] [--allow-undated]');
+    console.log('Usage: node scripts/packets/generate-mentions-daily.mjs --date YYYY-MM-DD [--dry-run] [--only TICKER1,TICKER2] [--watchlist] [--window-days N] [--allow-undated]');
+    console.log('  Default is today-only (window 0). --watchlist (or any --window-days > 0 /');
+    console.log(`  --allow-undated) scans the forward window and writes to ${WATCHLIST_PACKET_TYPE}/,`);
+    console.log('  which the cron sender never delivers from.');
     return;
   }
-  const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
+  const packetType = extra.watchlist ? WATCHLIST_PACKET_TYPE : PACKET_TYPE;
+  const dir = ensurePacketDir(opts.stateRoot, opts.date, packetType);
 
   const {
     allEvents,
@@ -1101,14 +1123,42 @@ async function main() {
     allowUndated: extra.allowUndated,
   });
 
-  const localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
+  let localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
+  let events = allEvents;
+
+  // Today-only guard for the normal (non-watchlist) path. Discovery already
+  // window-filters, but Alpha/manual-queue intake merges in unfiltered — those
+  // events stay persisted as research/state, they just don't get a packet (or
+  // a send) until their event date arrives.
+  if (!extra.watchlist) {
+    const todayGuard = filterByEventDate(opts.date, { windowDays: extra.windowDays, allowUndated: false });
+    const deferred = events.filter((ev) => !todayGuard(ev));
+    if (deferred.length) {
+      console.log(`[${PACKET_TYPE}] deferred ${deferred.length} non-today event(s): ${deferred.map(e => e.event_ticker).join(', ')} (watchlist scope — no packet on the cron path)`);
+    }
+    events = events.filter(todayGuard);
+  }
+
+  if (extra.only) {
+    const wanted = new Set(extra.only);
+    events = events.filter((ev) => wanted.has(ev.event_ticker));
+    localEvents = localEvents.filter((ev) => wanted.has(String(ev.parsed?.event_id || ev.name)));
+  }
 
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
   let missingStrikeTextCount = 0;
   const items = [];
 
-  if (!localEvents.length && !allEvents.length) {
+  if (extra.only && !localEvents.length && !events.length) {
+    // Incremental caller asked for specific tickers that aren't present —
+    // nothing to write, and emitting a no-events packet here would trick the
+    // sender into a spurious status message.
+    console.log(`[${PACKET_TYPE}] --only matched no events for ${opts.date} — nothing written.`);
+    return;
+  }
+
+  if (!localEvents.length && !events.length) {
     const txt = buildEmptyDayPacket(opts.date, allPrimeAttempts, discovery, combinedStats);
     const w = writeAudit(dir, `${opts.date}-no-events`, txt, {
       event_count: 0,
@@ -1124,7 +1174,7 @@ async function main() {
   } else {
     const seen = new Set();
     const researchMap = loadResearchForDate(opts.stateRoot, opts.date);
-    for (const ev of allEvents) {
+    for (const ev of events) {
       const ticker = ev?.event_ticker;
       if (!ticker || seen.has(ticker)) continue;
       seen.add(ticker);
@@ -1171,16 +1221,16 @@ async function main() {
     }
   }
 
-  const eventCount = allEvents.length + localEvents.length;
+  const eventCount = events.length + localEvents.length;
   // Guard: event_count > 0 but total_market_count === 0 -> fail (Kalshi side only).
   let exitCode = 0;
-  if (allEvents.length > 0 && totalMarketCount === 0) {
-    console.error(`[${PACKET_TYPE}] FAIL: ${allEvents.length} Kalshi events but zero markets across all of them.`);
+  if (events.length > 0 && totalMarketCount === 0) {
+    console.error(`[${PACKET_TYPE}] FAIL: ${events.length} Kalshi events but zero markets across all of them.`);
     exitCode = 2;
   }
 
-  console.log(printDryRunSummary({ packetType: PACKET_TYPE, date: opts.date, dir, items }));
-  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${dateFilteredEvents.length} mention_events=${combinedStats.mentionEvents} rejected_events=${combinedStats.rejectedEvents} total_markets_scanned=${combinedStats.totalMarkets} mention_markets=${combinedStats.mentionMarkets} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} allow_undated=${extra.allowUndated}`);
+  console.log(printDryRunSummary({ packetType, date: opts.date, dir, items }));
+  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${dateFilteredEvents.length} mention_events=${combinedStats.mentionEvents} rejected_events=${combinedStats.rejectedEvents} total_markets_scanned=${combinedStats.totalMarkets} mention_markets=${combinedStats.mentionMarkets} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} watchlist=${extra.watchlist} only=${extra.only ? extra.only.join(',') : 'none'} allow_undated=${extra.allowUndated}`);
   if (exitCode) process.exit(exitCode);
 }
 
