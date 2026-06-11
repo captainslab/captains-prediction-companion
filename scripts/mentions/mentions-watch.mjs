@@ -107,6 +107,7 @@ export async function watch({ date, stateRoot = 'state', dryRun = false, markSee
   const path = ledgerPath(stateRoot, date);
   const ledger = loadLedger(path);
 
+  console.log(`[mentions-watch] ${new Date().toISOString()} scan start date=${date}${dryRun ? ' (dry-run)' : ''}${markSeenOnly ? ' (mark-seen-only)' : ''}`);
   const candidates = await discoverCandidates({ stateRoot, env, eventsFile });
   const { fresh, seen, deferred } = selectNewTodayEvents(candidates, ledger, date);
 
