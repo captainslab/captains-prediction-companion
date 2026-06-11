@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { globSync } from 'node:fs';
 
-import { planDeliveries } from '../scripts/packets/send-packets-telegram.mjs';
+import { planDeliveries, tgSendMessage } from '../scripts/packets/send-packets-telegram.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SENDER = join(REPO, 'scripts/packets/send-packets-telegram.mjs');
@@ -117,6 +117,47 @@ test('sender dry-run on no-events day plans a single status message', () => {
   assert.match(r.stdout, /would send status: mentions-daily 2099-01-02: no events discovered/);
 });
 
+test('sender --only sends only the requested exact stem and skips future artifacts', () => {
+  const date = '2099-01-02';
+  const { root, dir } = makePacketDir(date);
+  writeFileSync(join(dir, `${date}-KXTEST-TODAY.txt`), 'today packet');
+  writeFileSync(join(dir, `${date}-KXTEST-FUTURE.txt`), 'future packet');
+  writeFileSync(join(dir, `${date}-KXTEST-TODAY.meta.json`), '{}');
+  writeFileSync(join(dir, `${date}-KXTEST-FUTURE.meta.json`), '{}');
+
+  const r = spawnSync(process.execPath, [
+    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', `${date}-KXTEST-TODAY`,
+  ], { encoding: 'utf8', cwd: REPO });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /would send .*2099-01-02-KXTEST-TODAY/);
+  assert.doesNotMatch(r.stdout, /KXTEST-FUTURE/);
+});
+
+test('sender --only with no matching packet exits 0 and logs clearly', () => {
+  const date = '2099-01-02';
+  const { root } = makePacketDir(date);
+  const r = spawnSync(process.execPath, [
+    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', `${date}-MISSING`,
+  ], { encoding: 'utf8', cwd: REPO });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /--only matched no packets — nothing to send/);
+});
+
+test('sender skips already-delivered packets via the ledger in dry-run too', () => {
+  const date = '2099-01-02';
+  const { root, dir } = makePacketDir(date);
+  const stem = `${date}-KXTEST-ONCE`;
+  writeFileSync(join(dir, `${stem}.txt`), 'packet body');
+  writeFileSync(join(dir, '.delivery-ledger.json'), JSON.stringify({ delivered: { [stem]: { utc: '2099-01-02T00:00:00Z', message_ids: [1] } } }, null, 2));
+
+  const r = spawnSync(process.execPath, [
+    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run',
+  ], { encoding: 'utf8', cwd: REPO });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /skipped_already_delivered=1/);
+  assert.doesNotMatch(r.stdout, /would send KXTEST-ONCE/);
+});
+
 test('sender exits 0 quietly when packet directory is absent', () => {
   const root = mkdtempSync(join(tmpdir(), 'send-packets-empty-'));
   const r = spawnSync(process.execPath, [
@@ -139,4 +180,50 @@ test('sender live mode without telegram env fails loudly (non-zero, stderr)', ()
   });
   assert.equal(r.status, 1);
   assert.match(r.stderr, /telegram env missing/);
+});
+
+test('tgSendMessage retries safely after Telegram 429 retry_after', async () => {
+  const oldEnv = {
+    token: process.env.TELEGRAM_BOT_TOKEN,
+    chat: process.env.TELEGRAM_CHAT_ID,
+    home: process.env.TELEGRAM_HOME_CHANNEL,
+  };
+  process.env.TELEGRAM_BOT_TOKEN = 'token';
+  process.env.TELEGRAM_CHAT_ID = 'chat';
+  delete process.env.TELEGRAM_HOME_CHANNEL;
+
+  const calls = [];
+  const sleeps = [];
+  let attempt = 0;
+  const fetchImpl = async () => {
+    attempt += 1;
+    calls.push(attempt);
+    if (attempt === 1) {
+      return {
+        status: 429,
+        json: async () => ({ ok: false, error_code: 429, parameters: { retry_after: 2 } }),
+        text: async () => '',
+      };
+    }
+    return {
+      status: 200,
+      json: async () => ({ ok: true, result: { message_id: 987 } }),
+      text: async () => '',
+    };
+  };
+
+  try {
+    const messageId = await tgSendMessage('hello', {
+      fetchImpl,
+      sleepImpl: async (ms) => { sleeps.push(ms); },
+    });
+    assert.equal(messageId, 987);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(sleeps, [3000]);
+  } finally {
+    process.env.TELEGRAM_BOT_TOKEN = oldEnv.token;
+    process.env.TELEGRAM_CHAT_ID = oldEnv.chat;
+    if (oldEnv.home == null) delete process.env.TELEGRAM_HOME_CHANNEL;
+    else process.env.TELEGRAM_HOME_CHANNEL = oldEnv.home;
+  }
 });

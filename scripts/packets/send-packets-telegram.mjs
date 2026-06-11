@@ -28,6 +28,14 @@ const dryRun = args.includes('--dry-run');
 const date = argValue('--date') || new Date().toISOString().slice(0, 10);
 const stateRoot = argValue('--state-root') || 'state';
 const packetType = argValue('--type') || 'mentions-daily';
+// --only stem1,stem2 — deliver ONLY these packet stems (e.g. 2026-06-11-KXFOO-26JUN11).
+// Incremental callers (mentions-watch) must scope sends this way so stale or
+// out-of-scope artifacts sitting in the same dir can never ride along.
+const onlyStems = (() => {
+  const v = argValue('--only');
+  if (!v) return null;
+  return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
+})();
 
 // Load env from project .env if present (same pattern as scripts/mlb/_send-due.mjs)
 function loadEnv(file) {
@@ -42,18 +50,45 @@ function loadEnv(file) {
 loadEnv('.env');
 loadEnv('.env.local');
 
-async function tgSendMessage(text) {
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const SEND_PACING_MS = 1500; // stay under Telegram's per-chat rate limit
+
+export async function tgSendMessage(text, { fetchImpl = fetch, sleepImpl = sleep } = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
   if (!token || !chat) throw new Error('telegram env missing (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)');
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
-  });
-  const j = await res.json();
-  if (!j.ok) throw new Error('telegram fail: ' + JSON.stringify(j));
-  return j.result.message_id;
+  for (let attempt = 1; ; attempt += 1) {
+    const res = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
+    });
+    let j = null;
+    let bodyText = '';
+    try {
+      j = await res.json();
+    } catch {
+      try {
+        bodyText = await res.text();
+      } catch {
+        bodyText = '';
+      }
+    }
+    if (j?.ok) return j.result.message_id;
+    const retryAfter = Number(
+      j?.parameters?.retry_after ??
+      j?.retry_after ??
+      res.headers?.get?.('retry-after') ??
+      res.headers?.get?.('Retry-After'),
+    );
+    const rateLimited = res.status === 429 || j?.error_code === 429;
+    if (rateLimited && attempt <= 3 && Number.isFinite(retryAfter)) {
+      console.log(`telegram 429: waiting ${retryAfter}s (attempt ${attempt}/3)`);
+      await sleepImpl((retryAfter + 1) * 1000);
+      continue;
+    }
+    throw new Error('telegram fail: ' + JSON.stringify(j ?? { status: res.status, body: bodyText }));
+  }
 }
 
 function chunkText(text) {
@@ -121,7 +156,16 @@ async function main() {
   }
 
   const ledger = loadLedger(ledgerPath);
-  const plan = planDeliveries(dir, date);
+  let plan = planDeliveries(dir, date);
+
+  if (onlyStems) {
+    plan = plan.filter((entry) => onlyStems.has(entry.name));
+    if (!plan.length) {
+      console.log(`${packetType} ${date}: --only matched no packets — nothing to send`);
+      return;
+    }
+  }
+
   const noEventsOnly = plan.length === 1 && plan[0].name === `${date}-no-events`;
 
   if (plan.length === 0 || noEventsOnly) {
@@ -161,6 +205,7 @@ async function main() {
     }
     const ids = [];
     for (const piece of pieces) {
+      if (ids.length || sent) await sleep(SEND_PACING_MS);
       ids.push(await tgSendMessage(piece));
     }
     ledger.delivered[entry.name] = { utc: new Date().toISOString(), message_ids: ids };

@@ -103,7 +103,15 @@ function runStep(label, cmd, args) {
   }
 }
 
-export async function watch({ date, stateRoot = 'state', dryRun = false, markSeenOnly = false, eventsFile = null, env = process.env } = {}) {
+export async function watch({
+  date,
+  stateRoot = 'state',
+  dryRun = false,
+  markSeenOnly = false,
+  eventsFile = null,
+  env = process.env,
+  runStepImpl = runStep,
+} = {}) {
   const path = ledgerPath(stateRoot, date);
   const ledger = loadLedger(path);
 
@@ -121,6 +129,7 @@ export async function watch({ date, stateRoot = 'state', dryRun = false, markSee
   }
 
   const tickers = fresh.map(e => e.event_ticker);
+  const packetStems = fresh.map((e) => `${date}-${e.event_ticker}`);
   console.log(`[mentions-watch] ${date}: ${fresh.length} new today event(s): ${tickers.join(', ')}`);
 
   const nowUtc = new Date().toISOString();
@@ -154,14 +163,19 @@ export async function watch({ date, stateRoot = 'state', dryRun = false, markSee
   // Generate packets for ONLY the new tickers (today-only default window),
   // then deliver via the idempotent sender — previously delivered packets in
   // the same dir are skipped by its delivery ledger.
-  runStep('generator', process.execPath, [
+  const generatorArgs = [
     'scripts/packets/generate-mentions-daily.mjs',
     '--date', date, '--state-root', stateRoot, '--only', tickers.join(','),
-  ]);
-  runStep('sender', process.execPath, [
+  ];
+  const senderArgs = [
     'scripts/packets/send-packets-telegram.mjs',
     '--type', PACKET_TYPE, '--date', date, '--state-root', stateRoot,
-  ]);
+    '--only', packetStems.join(','),
+  ];
+  console.log(`[mentions-watch] ${date}: generator command ${process.execPath} ${generatorArgs.join(' ')}`);
+  console.log(`[mentions-watch] ${date}: sender command ${process.execPath} ${senderArgs.join(' ')}`);
+  runStepImpl('generator', process.execPath, generatorArgs);
+  runStepImpl('sender', process.execPath, senderArgs);
 
   // Pull delivery facts back from the sender's ledger.
   const senderLedgerPath = resolve(stateRoot, 'packets', date, PACKET_TYPE, '.delivery-ledger.json');

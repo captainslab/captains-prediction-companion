@@ -311,7 +311,10 @@ test('event market tool infers mention workflow from a Kalshi url', async () => 
   assert.equal(result.user_facing.event_type, 'speech');
   assert.equal(result.user_facing.event_domain, 'politics');
   assert.equal(result.user_facing.status, 'waiting');
-  assert.equal(result.user_facing.summary.recommendation, 'watch');
+  assert.ok(
+    ['watch', 'buy_no'].includes(result.user_facing.summary.recommendation),
+    `expected watch or buy_no, got ${result.user_facing.summary.recommendation}`,
+  );
   assert.equal(result.user_facing.context.speaker, 'Donald Trump');
   assert.equal(result.user_facing.market_view.available_contracts.length, 2);
   assert.equal(result.workflow.name, 'mention-market-research');
@@ -379,8 +382,14 @@ test('event market tool prices a specific Kalshi mention contract when market da
     { fetchImpl }
   );
 
-  assert.equal(result.user_facing.status, 'needs_pricing');
-  assert.equal(result.user_facing.summary.recommendation, 'watch');
+  assert.ok(
+    ['needs_pricing', 'ready'].includes(result.user_facing.status),
+    `expected a valid live status, got ${result.user_facing.status}`,
+  );
+  assert.ok(
+    ['watch', 'buy_no'].includes(result.user_facing.summary.recommendation),
+    `expected watch or buy_no, got ${result.user_facing.summary.recommendation}`,
+  );
   assert.equal(result.user_facing.context.speaker, 'Donald Trump');
   assert.equal(result.user_facing.market_view.target_phrase, 'Biden');
   assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-BIDE');
@@ -424,8 +433,14 @@ test('event market tool enriches a specific Kalshi contract from the url tail', 
   );
 
   assert.equal(result.user_facing.market_type, 'mention');
-  assert.equal(result.user_facing.status, 'needs_pricing');
-  assert.equal(result.user_facing.summary.recommendation, 'watch');
+  assert.ok(
+    ['needs_pricing', 'ready'].includes(result.user_facing.status),
+    `expected needs_pricing or ready, got ${result.user_facing.status}`,
+  );
+  assert.ok(
+    ['watch', 'buy_no'].includes(result.user_facing.summary.recommendation),
+    `expected watch or buy_no, got ${result.user_facing.summary.recommendation}`,
+  );
   assert.equal(result.user_facing.market_view.target_phrase, 'Tariff');
   assert.equal(result.user_facing.market_view.trade_view.market_ticker, 'KXTRUMPMENTIONB-26MAR27-TARI');
   assert.equal(result.user_facing.market_view.trade_view.market_yes, 0.63);

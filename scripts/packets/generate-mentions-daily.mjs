@@ -18,6 +18,7 @@ import {
   parsePacketArgs,
   ensurePacketDir,
   writeAudit,
+  previewAudit,
   packetHeader,
   packetFooter,
   printDryRunSummary,
@@ -1107,7 +1108,12 @@ async function main() {
     return;
   }
   const packetType = extra.watchlist ? WATCHLIST_PACKET_TYPE : PACKET_TYPE;
-  const dir = ensurePacketDir(opts.stateRoot, opts.date, packetType);
+  // Dry-run must leave NO artifacts in the packet dir: anything written there
+  // is deliverable by the sender on its next pass.
+  const dir = opts.dryRun
+    ? resolve(opts.stateRoot, 'packets', opts.date, packetType)
+    : ensurePacketDir(opts.stateRoot, opts.date, packetType);
+  const audit = opts.dryRun ? previewAudit : writeAudit;
 
   const {
     allEvents,
@@ -1160,7 +1166,7 @@ async function main() {
 
   if (!localEvents.length && !events.length) {
     const txt = buildEmptyDayPacket(opts.date, allPrimeAttempts, discovery, combinedStats);
-    const w = writeAudit(dir, `${opts.date}-no-events`, txt, {
+    const w = audit(dir, `${opts.date}-no-events`, txt, {
       event_count: 0,
       total_market_count: 0,
       missing_market_count: 0,
@@ -1189,13 +1195,13 @@ async function main() {
       missingStrikeTextCount += built.missingStrikeCount;
       // Raw per-contract inventory -> audit artifact only (never the packet body).
       if (built.inventoryText) {
-        const invW = writeAudit(dir, inventoryName, built.inventoryText, {
+        const invW = audit(dir, inventoryName, built.inventoryText, {
           kind: 'raw_inventory_audit',
           event_ticker: ticker,
         });
         items.push({ name: inventoryName, ...invW });
       }
-      const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
+      const w = audit(dir, `${opts.date}-${ticker}`, built.text, {
         event_ticker: ticker,
         market_count: built.marketCount,
         missing_markets: built.missingMarkets,
@@ -1213,7 +1219,7 @@ async function main() {
     for (const ev of localEvents) {
       const baseName = `${opts.date}-${(ev.parsed?.event_id || ev.name).toString()}`;
       const txt = buildLegacyEventPacket({ date: opts.date, event: ev });
-      const w = writeAudit(dir, baseName, txt, {
+      const w = audit(dir, baseName, txt, {
         source_file: ev.file,
         research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
       });

@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -11,6 +11,7 @@ import {
   chunkForTelegram,
   ensurePacketDir,
   writeAudit,
+  previewAudit,
   TELEGRAM_SAFE_CHARS,
   NO_TRADE_FOOTER,
   runPacketCommand,
@@ -57,6 +58,21 @@ test('writeAudit writes txt + meta and chunk files when oversized', () => {
     assert.equal(meta.no_trades_placed, true);
     assert.ok(meta.chunk_count >= 2);
     assert.equal(w.chunkCount, meta.chunk_count);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('previewAudit returns deliverable paths without writing files', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'packet-preview-'));
+  try {
+    const dir = join(tmp, 'packets', '2099-01-01', 'mentions-daily');
+    const w = previewAudit(dir, 'sample', 'payload');
+    assert.equal(w.chunkCount, 1);
+    assert.equal(w.txtPath.endsWith('sample.txt'), true);
+    assert.equal(w.metaPath.endsWith('sample.meta.json'), true);
+    assert.equal(existsSync(w.txtPath), false);
+    assert.equal(existsSync(w.metaPath), false);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

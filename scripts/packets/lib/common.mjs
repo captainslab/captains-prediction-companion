@@ -80,6 +80,18 @@ export function writeAudit(dir, baseName, packetText, meta = {}) {
   return { txtPath, metaPath, chunkCount: chunks.length };
 }
 
+// Dry-run twin of writeAudit: same return shape, zero filesystem writes.
+// Callers honoring --dry-run must use this so preview runs can never leave
+// deliverable artifacts behind for a sender to pick up.
+export function previewAudit(dir, baseName, packetText) {
+  const safeBase = baseName.replace(/[^a-z0-9._-]/gi, '_').slice(0, 80);
+  return {
+    txtPath: join(dir, `${safeBase}.txt`),
+    metaPath: join(dir, `${safeBase}.meta.json`),
+    chunkCount: chunkForTelegram(packetText).length,
+  };
+}
+
 export function findExistingStateDir(stateRoot, sport, date) {
   // Best-effort: look for an existing state/<sport>/<date>/ artifact dir.
   const candidates = [

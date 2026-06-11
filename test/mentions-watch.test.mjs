@@ -14,6 +14,7 @@ import {
   loadLedger,
   saveLedger,
   ledgerPath,
+  watch,
 } from '../scripts/mentions/mentions-watch.mjs';
 import {
   parseExtraArgs,
@@ -128,6 +129,35 @@ test('new today event is planned once and duplicate run is skipped by ledger', (
   const again = runWatch(root, eventsFile, ['--dry-run']);
   assert.equal(again.status, 0, again.stderr);
   assert.match(again.stdout, /no new today events \(seen=1/);
+});
+
+test('watch hands sender exact packet stems and excludes future tickers from the send path', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-command-'));
+  const eventsFile = join(root, 'events.json');
+  writeFileSync(eventsFile, JSON.stringify([
+    ev('KXHEARINGMENTION-26JUN11'),
+    ev('KXHEARINGMENTION-26JUN12'),
+    ev('KXHEARINGMENTION-26JUN13'),
+    ev('KXHEARINGMENTION-26JUN14'),
+  ]));
+
+  const calls = [];
+  await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    runStepImpl: (label, command, args) => {
+      calls.push({ label, command, args });
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  assert.equal(calls.length, 2, 'watch should invoke generator and sender exactly once each');
+  assert.deepEqual(calls[0].args.slice(-2), ['--only', 'KXHEARINGMENTION-26JUN11'], 'generator must receive the fresh today ticker only');
+  assert.deepEqual(calls[1].args.slice(-2), ['--only', '2026-06-11-KXHEARINGMENTION-26JUN11'], 'sender must receive the exact packet stem only');
+  assert.ok(!calls[1].args.join(' ').includes('26JUN12'));
+  assert.ok(!calls[1].args.join(' ').includes('26JUN13'));
+  assert.ok(!calls[1].args.join(' ').includes('26JUN14'));
 });
 
 test('ledger round-trips the stable keys', () => {
