@@ -15,6 +15,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 import { composeBaseFundamentals } from './lib/base-fundamentals.mjs';
+import { renderArticleRefresh } from './lib/composite-article-render.mjs';
 import { composeEvidenceLedgerForGame } from './lib/evidence-ledger.mjs';
 import { composeMultiLaneCeilingBoard } from './lib/multi-lane-ceiling.mjs';
 import {
@@ -439,7 +440,7 @@ function atomicWrite(filePath, content) {
   renameSync(tmp, filePath);
 }
 
-function addRefreshWindow(planPath, artifactPath, compactPath) {
+function addRefreshWindow(planPath, artifactPath, compactPath, articlePath = null) {
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
   const windowId = `composite-refresh-${Date.now()}`;
   const window = {
@@ -449,6 +450,7 @@ function addRefreshWindow(planPath, artifactPath, compactPath) {
     status: 'rendered',
     last_artifact: artifactPath,
     compact_artifact: compactPath,
+    article_artifact: articlePath,
     delivered_idempotency_key: null,
     source: 'late-slate-composite-refresh',
   };
@@ -490,18 +492,22 @@ async function main() {
   }
 
   const text = renderCompactRefresh({ date: opts.date, results, watchGames: slate.watchGames });
+  const articleText = renderArticleRefresh({ date: opts.date, results, watchGames: slate.watchGames });
 
   const outPath    = resolve(stateDir, 'composite-refresh-verbose.txt');
   const compactPath = resolve(stateDir, 'composite-refresh-compact.txt');
+  const articlePath = resolve(stateDir, 'composite-refresh-article.txt');
 
   if (!opts.dryRun) {
     writeFileSync(outPath, text, 'utf8');
     writeFileSync(compactPath, text, 'utf8');
+    writeFileSync(articlePath, articleText, 'utf8');
     console.log(`${prefix} artifact_written=${compactPath}`);
+    console.log(`${prefix} article_written=${articlePath}`);
 
     const planPath = resolve(stateDir, 'slate-run-plan.json');
     if (existsSync(planPath)) {
-      const windowId = addRefreshWindow(planPath, outPath, compactPath);
+      const windowId = addRefreshWindow(planPath, outPath, compactPath, articlePath);
       console.log(`${prefix} report_window_added id=${windowId}`);
     } else {
       console.log(`${prefix} no slate-run-plan.json — skipping window registration`);

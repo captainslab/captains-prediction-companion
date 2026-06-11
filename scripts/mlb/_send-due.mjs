@@ -47,12 +47,13 @@ const COMPOSITE_SOURCES = new Set([
 const LOG_PATH = resolve('logs', 'mlb-prelock-delivery.log');
 
 function log(msg) {
+  console.log(msg);
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   try {
     mkdirSync(dirname(LOG_PATH), { recursive: true });
     appendFileSync(LOG_PATH, line);
   } catch {
-    // If logging fails, silently drop — do not spam cron stdout.
+    // If file logging fails, silently drop — stdout line above still lands.
   }
 }
 
@@ -126,7 +127,12 @@ for (const w of windows) {
     w.error = 'artifact_missing';
     continue;
   }
-  sendList.push({ window: w, artifactPath });
+  // Article edition (reader-facing). Pick counting + audit still use the
+  // compact artifact; the article is preferred as the delivered body.
+  const articlePath = (w.article_artifact && fs.existsSync(w.article_artifact))
+    ? w.article_artifact
+    : null;
+  sendList.push({ window: w, artifactPath, articlePath });
 }
 writePlan();
 
@@ -163,6 +169,22 @@ async function tgSendDocument(filePath, caption) {
   return j.result.message_id;
 }
 
+const TELEGRAM_SAFE_CHARS = 3900;
+
+async function tgSendMessage(text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
+  if (!token || !chat) throw new Error('telegram env missing');
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error('telegram fail: ' + JSON.stringify(j));
+  return j.result.message_id;
+}
+
 function countPicks(text) {
   let n = 0;
   for (const ln of text.split('\n')) {
@@ -174,18 +196,22 @@ function countPicks(text) {
 }
 
 const summary = [];
-for (const { window: w, artifactPath } of sendList) {
+for (const { window: w, artifactPath, articlePath } of sendList) {
   const text = fs.readFileSync(artifactPath, 'utf8');
   const clearLean = countPicks(text);
   if (clearLean === 0) {
     log(`skip ${w.cluster_id} — no picks`);
     continue;
   }
-  const mode = (artifactPath === w.compact_artifact) ? 'compact' : 'verbose';
+  const articleText = articlePath ? fs.readFileSync(articlePath, 'utf8') : null;
+  const mode = articleText
+    ? 'article'
+    : (artifactPath === w.compact_artifact) ? 'compact' : 'verbose';
   const caption = `MLB ${w.cluster_id} — ${clearLean} pick${clearLean !== 1 ? 's' : ''}`;
 
   // Forbidden-string guard: never deliver an artifact that contains pricing or legacy board labels.
-  if (hasForbiddenContent(text)) {
+  // Runs on the audit artifact AND on the article body actually delivered.
+  if (hasForbiddenContent(text) || (articleText && hasForbiddenContent(articleText))) {
     console.error(`BLOCK ${w.cluster_id} — artifact contains forbidden content (pricing/board data). Not sent.`);
     continue;
   }
@@ -193,7 +219,16 @@ for (const { window: w, artifactPath } of sendList) {
     log(`[dry-run] would send ${w.cluster_id} (${mode}) — ${clearLean} pick(s)`);
     continue;
   }
-  const id = await tgSendDocument(artifactPath, caption);
+  // Article edition goes out as a readable message when it fits; otherwise
+  // fall back to attaching it (and finally to the legacy compact document).
+  let id;
+  if (articleText && articleText.length <= TELEGRAM_SAFE_CHARS) {
+    id = await tgSendMessage(articleText);
+  } else if (articleText) {
+    id = await tgSendDocument(articlePath, caption);
+  } else {
+    id = await tgSendDocument(artifactPath, caption);
+  }
   w.status = 'sent';
   w.delivered_idempotency_key = w.idempotency_key;
   w.delivered_utc = new Date().toISOString();
