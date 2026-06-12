@@ -95,11 +95,48 @@ function marketCell(term) {
   return `${cents(mc.bid_cents)}/${cents(mc.ask_cents)} ctx-only`;
 }
 
-// Stable ranking: CPC score desc, then short term asc. Pure on input.
+// Schedule-only evidence must never read like real conviction. Proximity-only
+// rows display "scaffold" in the CPC column (raw layer score withheld) so a
+// confirmed schedule alone cannot masquerade as a 98-point edge.
+function isProximityOnly(term) {
+  return sourceLabel(term) === 'proximity-only';
+}
+
+function cpcCell(term) {
+  if (term.bucket === 'blocked/no-source') return 'n/a';
+  if (isProximityOnly(term)) return 'scaffold';
+  return maybe(term.cpc_score, 'n/a');
+}
+
+const POSTURE_RANK = Object.freeze({ NO_CLEAR_PICK: 0, WATCH: 1, LEAN: 2, EVIDENCE_LEAN: 3, PICK: 4 });
+
+// Post-cap best posture: derived from the rendered rows' final postures
+// (already WATCH-capped for proximity-only/stub terms), never from the raw
+// pre-cap composite summary.
+export function postCapBestPosture(terms) {
+  let best = 'NO_CLEAR_PICK';
+  for (const t of terms ?? []) {
+    const p = String(t.composite_posture ?? 'NO_CLEAR_PICK');
+    if ((POSTURE_RANK[p] ?? 0) > (POSTURE_RANK[best] ?? 0)) best = p;
+  }
+  return best;
+}
+
+// Stable ranking: source-backed terms first (CPC desc), then proximity-only
+// scaffolds, then blocked/no-source. Within a group: score desc, term asc.
+// Pure on input — schedule-only evidence can never outrank real evidence.
+function rankGroup(term) {
+  if (term.bucket === 'blocked/no-source') return 2;
+  if (isProximityOnly(term)) return 1;
+  return 0;
+}
+
 export function rankTerms(terms, eventTitle) {
   return terms
     .map((t) => ({ ...t, _short: shortTerm(t.full_strike_text, eventTitle) }))
     .sort((a, b) => {
+      const groupDiff = rankGroup(a) - rankGroup(b);
+      if (groupDiff !== 0) return groupDiff;
       const sa = Number.isFinite(Number(a.cpc_score)) ? Number(a.cpc_score) : -1;
       const sb = Number.isFinite(Number(b.cpc_score)) ? Number(b.cpc_score) : -1;
       if (sb !== sa) return sb - sa;
@@ -137,10 +174,12 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('');
 
-  // 1 FAST READ
+  // 1 FAST READ — posture from post-cap rendered rows, never the raw
+  // pre-cap composite summary (a proximity-only board must read WATCH).
+  const bestPosture = postCapBestPosture(ranked);
   lines.push('1. FAST READ');
   if (proximityOnly) lines.push('proximity scaffold only -- no pick.');
-  lines.push(a.fast_read || `${summary.source_backed_count ?? 0}/${summary.market_count ?? ranked.length} term(s) carry source evidence beyond event proximity; best posture ${maybe(summary.best_posture, 'NO_CLEAR_PICK')}. Research only — no trade.`);
+  lines.push(a.fast_read || `${summary.source_backed_count ?? 0}/${summary.market_count ?? ranked.length} term(s) carry source evidence beyond event proximity; best posture ${bestPosture} (post-cap). Research only — no trade.`);
   lines.push('');
 
   // 2 CPC COMPOSITE BOARD
@@ -153,7 +192,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
     lines.push(tableRow([
       String(i + 1),
       t._short,
-      maybe(t.cpc_score, 'n/a'),
+      cpcCell(t),
       maybe(t.composite_posture, 'NO_CLEAR_PICK'),
       sourceLabel(t),
       note.catalyst ?? 'MISSING',
@@ -161,7 +200,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
       marketCell(t),
     ], widths));
   });
-  lines.push('note: CPC score is source-layer conviction only. Market Context column is display-only and NEVER a score input.');
+  lines.push('note: CPC score is source-layer conviction only. "scaffold" = schedule-only evidence (raw proximity score withheld; not an edge). Market Context column is display-only and NEVER a score input.');
   lines.push('');
 
   // 3 TOP WATCH TERMS
@@ -218,7 +257,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push('8. FINAL CPC READ');
   lines.push(a.final_read || (proximityOnly
     ? 'proximity scaffold only -- no pick. No source-backed edge; watch for transcript/quote/history layers before any posture upgrade.'
-    : `Best posture ${maybe(summary.best_posture, 'NO_CLEAR_PICK')} on the board above. No trade is implied; scores are research conviction only.`));
+    : `Best posture ${bestPosture} (post-cap) on the board above. No trade is implied; scores are research conviction only.`));
   lines.push('');
 
   // Local completeness appendix: every contract's exact strike text, compact.

@@ -214,6 +214,49 @@ test('user-facing event time renders in America/Chicago', () => {
   assert.equal(shortTerm('Will Biden say it? -- Malarkey', 'Will Biden say it?'), 'Malarkey');
 });
 
+test('proximity-only rows show "scaffold", never the raw proximity score as CPC conviction', () => {
+  const input = builtInput({ sourceBacked: false }); // event_proximity score only
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const rows = text.split('3. TOP WATCH TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
+  assert.ok(rows.length >= 3);
+  for (const row of rows) {
+    assert.ok(row.includes('scaffold'), `proximity-only row relabeled: ${row}`);
+    assert.ok(!/\|\s*20\s*\|/.test(row), 'raw proximity layer score withheld from CPC column');
+    assert.ok(row.includes('WATCH'), 'posture capped at WATCH');
+  }
+  assert.ok(text.includes('"scaffold" = schedule-only evidence'));
+});
+
+test('FAST READ and FINAL CPC READ use post-cap posture from rendered rows, not pre-cap summary', () => {
+  const input = builtInput({ sourceBacked: false });
+  // simulate the pre-cap composite summary claiming LEAN (1 layer at high score)
+  input.summary = { ...input.summary, best_posture: 'LEAN', source_backed_count: 0 };
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const fastRead = text.split('2. CPC COMPOSITE BOARD')[0];
+  assert.ok(!fastRead.includes('LEAN'), 'pre-cap LEAN never surfaces in FAST READ');
+  assert.ok(fastRead.includes('best posture WATCH (post-cap)'));
+  const finalRead = text.split('8. FINAL CPC READ')[1];
+  assert.ok(!finalRead.includes('best posture LEAN'), 'pre-cap LEAN never surfaces in FINAL READ');
+});
+
+test('source-backed terms always rank above proximity-only scaffolds regardless of raw score', () => {
+  const input = builtInput({ sourceBacked: true });
+  // add a proximity-only term with an inflated raw score
+  input.terms.push({
+    full_strike_text: 'Will Biden say it? -- Aardvark',
+    short_term: 'Aardvark', cpc_score: 99, bucket: 'watch-only',
+    evidence_status: 'proximity scaffold only -- no pick',
+    layers_present: ['1/9'], composite_posture: 'WATCH',
+    missing_research_layers: [], upgrade_trigger: null,
+    market_context: { implied: null, bid_cents: null, ask_cents: null, note: 'NOT IN SCORE' },
+  });
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const rows = text.split('3. TOP WATCH TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
+  const aardvarkRank = rows.findIndex((r) => r.includes('Aardvark'));
+  assert.equal(aardvarkRank, rows.length - 1, 'scaffold ranks last despite raw score 99');
+  assert.ok(rows[aardvarkRank].includes('scaffold'));
+});
+
 test('redteam validator fails closed on garbage', () => {
   const r = validateRedteamJson([1, 2, 3]);
   assert.equal(r.ok, false);
