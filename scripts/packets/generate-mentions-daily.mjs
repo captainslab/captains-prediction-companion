@@ -1430,6 +1430,98 @@ export async function gatherMentionEvents({
   };
 }
 
+// Per-event Kalshi packet loop, extracted from main() so the blocker path is
+// directly testable. A synthesis failure for one event writes a blocker
+// artifact, lands the ticker in failedTickers, and never throws — only
+// infrastructure errors (fs, discovery) propagate to the caller.
+export async function writeKalshiEventPackets({
+  events,
+  date,
+  stateRoot,
+  dir,
+  audit,
+  dryRun = false,
+  allPrimeAttempts = [],
+  synthesizeImpl = synthesizeMentionsUserPacket,
+}) {
+  let totalMarketCount = 0;
+  let missingMarketEventCount = 0;
+  let missingStrikeTextCount = 0;
+  const items = [];
+  const failedTickers = [];
+  const seen = new Set();
+  const researchMap = loadResearchForDate(stateRoot, date);
+  for (const ev of events) {
+    const ticker = ev?.event_ticker;
+    if (!ticker || seen.has(ticker)) continue;
+    seen.add(ticker);
+    const researchEntry = researchMap.get(ticker);
+    const mergedEvent = mergeResearchIntoEvent(ev, researchEntry);
+    const sourcePath = resolve(stateRoot, 'mentions', date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
+    const inventoryName = `${date}-${ticker}.inventory`;
+    const inventoryPath = `${inventoryName}.txt`;
+    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath });
+    totalMarketCount += built.marketCount;
+    if (built.missingMarkets) missingMarketEventCount += 1;
+    missingStrikeTextCount += built.missingStrikeCount;
+    // Raw per-contract inventory -> audit artifact only (never the packet body).
+    if (built.inventoryText) {
+      const invW = audit(dir, inventoryName, built.inventoryText, {
+        kind: 'raw_inventory_audit',
+        event_ticker: ticker,
+      });
+      items.push({ name: inventoryName, ...invW });
+    }
+    let packetText = built.text;
+    let modelSynthesisInvocation = null;
+    if (!dryRun) {
+      try {
+        const synthesized = await synthesizeImpl({ input: built.synthesisInput });
+        packetText = synthesized.text;
+        modelSynthesisInvocation = synthesized.invocation;
+      } catch (err) {
+        // Per-event isolation: one bad model packet must not abort the rest.
+        // No .txt is written for this event (nothing deliverable), a blocker
+        // artifact is recorded outside the packet dir, and we continue.
+        const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+        mkdirSync(blockerDir, { recursive: true });
+        const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+        writeFileSync(blockerPath, JSON.stringify({
+          event_ticker: ticker,
+          date,
+          stage: 'model_synthesis',
+          error: err.message,
+          blocked_at_utc: new Date().toISOString(),
+          delivered: false,
+        }, null, 2));
+        console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: ${err.message} (blocker: ${blockerPath})`);
+        failedTickers.push(ticker);
+        continue;
+      }
+    }
+    const w = audit(dir, `${date}-${ticker}`, packetText, {
+      event_ticker: ticker,
+      market_count: built.marketCount,
+      missing_markets: built.missingMarkets,
+      missing_strike_text_count: built.missingStrikeCount,
+      composite_scored_count: built.compositeSummary.scored_count,
+      composite_source_backed_count: built.compositeSummary.source_backed_count,
+      composite_proximity_only_count: built.compositeSummary.proximity_only_count,
+      composite_best_posture: built.compositeSummary.best_posture,
+      composite_best_score: built.compositeSummary.best_score,
+      composite_pricing_excluded: built.compositeSummary.pricing_excluded,
+      model_synthesis_required: true,
+      model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
+      telegram_delivery_mode: 'document_txt',
+      kalshi_source_api: KALSHI_SOURCES.broad.api_url,
+      kalshi_source_page: KALSHI_SOURCES.broad.page_url,
+      research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
+    }, { writeChunks: false });
+    items.push({ name: ticker, ...w });
+  }
+  return { items, failedTickers, totalMarketCount, missingMarketEventCount, missingStrikeTextCount };
+}
+
 async function main() {
   const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
   const opts = parsePacketArgs(passthrough);
@@ -1512,76 +1604,20 @@ async function main() {
     });
     items.push({ name: 'no-events', ...w });
   } else {
-    const seen = new Set();
-    const researchMap = loadResearchForDate(opts.stateRoot, opts.date);
-    for (const ev of events) {
-      const ticker = ev?.event_ticker;
-      if (!ticker || seen.has(ticker)) continue;
-      seen.add(ticker);
-      const researchEntry = researchMap.get(ticker);
-      const mergedEvent = mergeResearchIntoEvent(ev, researchEntry);
-      const sourcePath = resolve(opts.stateRoot, 'mentions', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const inventoryName = `${opts.date}-${ticker}.inventory`;
-      const inventoryPath = `${inventoryName}.txt`;
-      const built = buildKalshiEventPacket({ date: opts.date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath });
-      totalMarketCount += built.marketCount;
-      if (built.missingMarkets) missingMarketEventCount += 1;
-      missingStrikeTextCount += built.missingStrikeCount;
-      // Raw per-contract inventory -> audit artifact only (never the packet body).
-      if (built.inventoryText) {
-        const invW = audit(dir, inventoryName, built.inventoryText, {
-          kind: 'raw_inventory_audit',
-          event_ticker: ticker,
-        });
-        items.push({ name: inventoryName, ...invW });
-      }
-      let packetText = built.text;
-      let modelSynthesisInvocation = null;
-      if (!opts.dryRun) {
-        try {
-          const synthesized = await synthesizeMentionsUserPacket({ input: built.synthesisInput });
-          packetText = synthesized.text;
-          modelSynthesisInvocation = synthesized.invocation;
-        } catch (err) {
-          // Per-event isolation: one bad model packet must not abort the rest.
-          // No .txt is written for this event (nothing deliverable), a blocker
-          // artifact is recorded outside the packet dir, and we continue.
-          const blockerDir = resolve(opts.stateRoot, 'mentions', opts.date, 'blockers');
-          mkdirSync(blockerDir, { recursive: true });
-          const blockerPath = resolve(blockerDir, `${opts.date}-${ticker}.json`);
-          writeFileSync(blockerPath, JSON.stringify({
-            event_ticker: ticker,
-            date: opts.date,
-            stage: 'model_synthesis',
-            error: err.message,
-            blocked_at_utc: new Date().toISOString(),
-            delivered: false,
-          }, null, 2));
-          console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: ${err.message} (blocker: ${blockerPath})`);
-          failedTickers.push(ticker);
-          continue;
-        }
-      }
-      const w = audit(dir, `${opts.date}-${ticker}`, packetText, {
-        event_ticker: ticker,
-        market_count: built.marketCount,
-        missing_markets: built.missingMarkets,
-        missing_strike_text_count: built.missingStrikeCount,
-        composite_scored_count: built.compositeSummary.scored_count,
-        composite_source_backed_count: built.compositeSummary.source_backed_count,
-        composite_proximity_only_count: built.compositeSummary.proximity_only_count,
-        composite_best_posture: built.compositeSummary.best_posture,
-        composite_best_score: built.compositeSummary.best_score,
-        composite_pricing_excluded: built.compositeSummary.pricing_excluded,
-        model_synthesis_required: true,
-        model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
-        telegram_delivery_mode: 'document_txt',
-        kalshi_source_api: KALSHI_SOURCES.broad.api_url,
-        kalshi_source_page: KALSHI_SOURCES.broad.page_url,
-        research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
-      }, { writeChunks: false });
-      items.push({ name: ticker, ...w });
-    }
+    const kalshiResult = await writeKalshiEventPackets({
+      events,
+      date: opts.date,
+      stateRoot: opts.stateRoot,
+      dir,
+      audit,
+      dryRun: opts.dryRun,
+      allPrimeAttempts,
+    });
+    totalMarketCount += kalshiResult.totalMarketCount;
+    missingMarketEventCount += kalshiResult.missingMarketEventCount;
+    missingStrikeTextCount += kalshiResult.missingStrikeTextCount;
+    items.push(...kalshiResult.items);
+    failedTickers.push(...kalshiResult.failedTickers);
     for (const ev of localEvents) {
       const baseName = `${opts.date}-${(ev.parsed?.event_id || ev.name).toString()}`;
       const txt = buildLegacyEventPacket({ date: opts.date, event: ev });
