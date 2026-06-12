@@ -228,6 +228,11 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
     lines.push('red-team narrative flags (advisory only, never re-scores):');
     for (const risk of redteam.narrative_risks) lines.push(`- ${risk}`);
   }
+  const xHeat = Object.entries(redteam?.x_narrative_heat ?? {});
+  if (xHeat.length) {
+    lines.push('X narrative heat (social context only — never source evidence, never a score input):');
+    for (const [term, note] of xHeat) lines.push(`- ${term}: ${note}`);
+  }
   lines.push('');
 
   // 5 MARKET CONTEXT - NOT IN SCORE

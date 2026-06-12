@@ -161,11 +161,12 @@ test('premium gate: gpt-5.5 only for flagged high-value source-backed events; ne
   assert.equal(selectAnalystTier({ summary: { market_count: 2, source_backed_count: 0, proximity_only_count: 2 }, flags: ['high_value'], env: {} }).tier, 'none');
 });
 
-test('provider routing: GPT tiers on OpenAI Codex, redteam Grok on XAI Grok OAuth', () => {
+test('provider routing: Gemini cheap, mini fallback, GPT analyst tiers on Codex, redteam Grok on XAI OAuth', () => {
   const routing = loadModelRouting();
   assert.deepEqual(
-    ['cheap', 'standard', 'premium'].map((t) => resolveTier(t, routing)).map(({ model, provider }) => ({ model, provider })),
+    ['cheap', 'cheap_fallback', 'standard', 'premium'].map((t) => resolveTier(t, routing)).map(({ model, provider }) => ({ model, provider })),
     [
+      { model: 'gemini-3.5-flash', provider: 'gemini' },
       { model: 'gpt-5.4-mini', provider: 'openai-codex' },
       { model: 'gpt-5.4', provider: 'openai-codex' },
       { model: 'gpt-5.5', provider: 'openai-codex' },
@@ -173,7 +174,7 @@ test('provider routing: GPT tiers on OpenAI Codex, redteam Grok on XAI Grok OAut
   );
   const rt = resolveTier('redteam', routing);
   assert.equal(rt.model, 'grok-4.3');
-  assert.equal(rt.provider, 'xai-grok-oauth');
+  assert.equal(rt.provider, 'xai-oauth');
   assert.equal(rt.optional, true);
 });
 
@@ -183,10 +184,18 @@ test('grok red-team is optional and cannot alter the final score', async () => {
   const off = await fetchRedteamFields({ input, env: {} });
   assert.equal(off.redteam, null);
   // enabled: returns flags but score/posture fields are stripped/ignored
-  const hostile = { trap_flags: [{ term: 'Malarkey', note: 'meme bait' }], narrative_risks: ['X hype'], cpc_score: 99, posture: 'PICK' };
+  const hostile = {
+    trap_flags: [{ term: 'Malarkey', note: 'meme bait' }],
+    narrative_risks: ['X hype'],
+    x_narrative_heat: [{ term: 'Malarkey', note: 'trending on X' }],
+    cpc_score: 99, posture: 'PICK',
+    layer_records: { direct_mention_pathway: { present: true, score: 99 } },
+  };
   const on = await fetchRedteamFields({ input, env: { MENTIONS_REDTEAM: '1' }, chatRunner: async () => ({ ok: true, parsed: hostile, status: 0 }) });
   assert.equal(on.redteam.trap_flags.Malarkey, 'meme bait');
   assert.equal('cpc_score' in on.redteam, false);
+  assert.equal('layer_records' in on.redteam, false, 'X chatter can never become a source evidence layer');
+  assert.ok(on.redteam.x_narrative_heat.Malarkey.includes('NOT source evidence'), 'X heat labeled as narrative context only');
   const base = renderMentionPacket(input, { generatedAtUtc: NOW });
   const withRt = renderMentionPacket(input, { redteam: on.redteam, generatedAtUtc: NOW });
   const scores = (t) => t.split('\n').filter((l) => /^\d+\s/.test(l.trim())).map((l) => l.split('|').slice(2, 4).join('|'));

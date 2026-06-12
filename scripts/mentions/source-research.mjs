@@ -21,7 +21,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { runTierJson } from './model-router.mjs';
+import { runCheapExtractionJson } from './model-router.mjs';
 
 export const EVIDENCE_LAYERS = Object.freeze([
   'baseline_relevance',
@@ -167,12 +167,23 @@ export function validateExtractionJson(parsed, expectedTerms = []) {
   return { ok: errors.length === 0, errors, byTerm };
 }
 
+// Extraction routing: Gemini 3.5 Flash first; schema failure/timeout/unstable
+// JSON falls back ONCE to gpt-5.4-mini under the same strict schema. Total
+// failure fails closed (no layers merge; quality stays stub/no_source).
 export async function extractEvidenceForSource({ doc, eventTitle, profile, terms, chatRunner, routing } = {}) {
   const prompt = buildBatchExtractionPrompt({ eventTitle, profile, terms, sourceUrl: doc.url, sourceText: doc.text });
-  const run = await runTierJson({ tierName: 'cheap', prompt, chatRunner, ...(routing ? { routing } : {}), source: 'mentions-source-extraction' });
-  if (!run.ok) return { ok: false, byTerm: {}, errors: ['extraction model returned no JSON'], invocation: run.invocation };
-  const validated = validateExtractionJson(run.parsed, terms);
-  return { ...validated, invocation: run.invocation };
+  const run = await runCheapExtractionJson({
+    prompt,
+    validate: (parsed) => validateExtractionJson(parsed, terms),
+    ...(chatRunner ? { chatRunner } : {}),
+    ...(routing ? { routing } : {}),
+    source: 'mentions-source-extraction',
+  });
+  if (!run.ok) {
+    const detail = run.attempts.map((a) => `${a.tier}: ${a.error}`).join(' | ');
+    return { ok: false, byTerm: {}, errors: [`extraction failed on all cheap tiers (${detail})`], invocation: run.invocation, tier: null, fallback_used: run.fallback_used, attempts: run.attempts };
+  }
+  return { ...run.validated, invocation: run.invocation, tier: run.tier, fallback_used: run.fallback_used, attempts: run.attempts };
 }
 
 // ─── orchestration ───────────────────────────────────────────────────────────
@@ -203,6 +214,8 @@ export async function runBoundedSourceResearch({
     cache_hits: 0,
     fetch_errors: 0,
     model_calls: 0,
+    fallback_calls: 0,
+    extraction_tiers: [],
     terms_batched_per_call: terms.length,
     extraction_failures: 0,
   };
@@ -218,8 +231,11 @@ export async function runBoundedSourceResearch({
       notes.push(`source unavailable: ${url} (${doc.error})`);
       continue;
     }
-    stats.model_calls += 1; // exactly one cheap call per source document
     const extraction = await extractEvidenceForSource({ doc, eventTitle, profile, terms, chatRunner, routing });
+    // one cheap call per source document, +1 only if the schema fallback fired
+    stats.model_calls += extraction.attempts?.length ?? 1;
+    if (extraction.fallback_used) stats.fallback_calls = (stats.fallback_calls ?? 0) + 1;
+    if (extraction.tier) stats.extraction_tiers = [...new Set([...(stats.extraction_tiers ?? []), extraction.tier])];
     if (!extraction.ok && Object.keys(extraction.byTerm).length === 0) {
       stats.extraction_failures += 1;
       notes.push(`extraction failed closed for ${url}: ${extraction.errors.join('; ')}`);

@@ -174,6 +174,78 @@ test('collector end-to-end: declared sources upgrade stub research to source_bac
   assert.ok(readdirSync(join(root, 'mentions', DATE, 'research-cache')).length === 1, 'fetched page cached');
 });
 
+test('Gemini cheap extraction uses the same strict schema and is preferred (no fallback when valid)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-gem-'));
+  const tiersCalled = [];
+  const chatRunner = async (prompt, opts) => {
+    tiersCalled.push(`${opts.provider}/${opts.model}`);
+    for (const t of TERMS) assert.ok(prompt.includes(t), 'same batched schema prompt');
+    return { ok: true, parsed: goodExtraction(), status: 0 };
+  };
+  const res = await runBoundedSourceResearch({
+    eventTitle: 'E', eventTicker: 'X', profile: 'political_mentions', terms: TERMS,
+    sources: ['https://example.com/a'], stateRoot: root, date: DATE, env: {},
+    fetchImpl: fakeFetch(), chatRunner,
+  });
+  assert.deepEqual(tiersCalled, ['gemini/gemini-3.5-flash'], 'Gemini preferred; no fallback fired');
+  assert.deepEqual(res.stats.extraction_tiers, ['cheap']);
+  assert.equal(res.stats.fallback_calls, 0);
+  assert.equal(res.quality, 'source_backed');
+});
+
+test('Gemini schema failure falls back to gpt-5.4-mini; total failure fails closed', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-fb-'));
+  // Gemini returns unstable JSON, mini succeeds
+  let order = [];
+  const res = await runBoundedSourceResearch({
+    eventTitle: 'E', eventTicker: 'X', profile: 'political_mentions', terms: TERMS,
+    sources: ['https://example.com/a'], stateRoot: root, date: DATE, env: {},
+    fetchImpl: fakeFetch(),
+    chatRunner: async (_p, opts) => {
+      order.push(opts.model);
+      if (opts.model === 'gemini-3.5-flash') return { ok: true, parsed: { terms: 'unstable' }, status: 0 };
+      return { ok: true, parsed: goodExtraction(), status: 0 };
+    },
+  });
+  assert.deepEqual(order, ['gemini-3.5-flash', 'gpt-5.4-mini']);
+  assert.equal(res.stats.fallback_calls, 1);
+  assert.deepEqual(res.stats.extraction_tiers, ['cheap_fallback']);
+  assert.equal(res.quality, 'source_backed', 'fallback evidence merged');
+  // both tiers fail -> closed, deterministic no_source
+  const res2 = await runBoundedSourceResearch({
+    eventTitle: 'E', eventTicker: 'X', profile: 'political_mentions', terms: TERMS,
+    sources: ['https://example.com/b'], stateRoot: root, date: DATE, env: {},
+    fetchImpl: fakeFetch(), chatRunner: async () => ({ ok: true, parsed: 'garbage', status: 0 }),
+  });
+  assert.equal(res2.quality, 'no_source');
+  assert.deepEqual(res2.byTerm, {});
+  assert.ok(res2.notes.some((n) => n.includes('failed closed')));
+});
+
+test('neither cheap model can assign CPC score/posture/price: extraction yields layer evidence only', async () => {
+  const hostile = {
+    terms: [{
+      term: 'Epstein',
+      cpc_score: 99, posture: 'PICK', price: 50,
+      layers: {
+        baseline_relevance: { present: true, score: 55, basis: 'legit basis' },
+        direct_mention_pathway: { present: true, score: 70, basis: 'quote', cpc_score: 99, posture: 'PICK' },
+      },
+    }],
+  };
+  const v = validateExtractionJson(hostile, TERMS);
+  // layer-level extra fields are not copied: output shape is fixed {present,score,basis}
+  for (const rec of Object.values(v.byTerm.Epstein)) {
+    assert.deepEqual(Object.keys(rec).sort(), ['basis', 'present', 'score']);
+  }
+  assert.equal('cpc_score' in v.byTerm.Epstein, false);
+  // and merged records carry no posture/cpc/price either
+  const merged = mergeExtractedLayers({}, v.byTerm.Epstein);
+  for (const rec of Object.values(merged)) {
+    for (const k of ['cpc_score', 'posture', 'price']) assert.equal(k in rec, false);
+  }
+});
+
 test('no declared sources -> zero fetches, zero model calls, stub quality with deterministic note', async () => {
   const root = mkdtempSync(join(tmpdir(), 'src-none-'));
   assert.deepEqual(loadDeclaredSources(root, DATE, 'KXNONE', {}), []);

@@ -19,14 +19,15 @@ import { runHermesChat } from '../../src/hermesRuntime.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROUTING_PATH = resolve(__dirname, '../../config/mentions-model-routing.json');
 
-export const TIERS = Object.freeze(['cheap', 'standard', 'premium', 'redteam']);
+export const TIERS = Object.freeze(['cheap', 'cheap_fallback', 'standard', 'premium', 'redteam']);
 
 const DEFAULT_ROUTING = Object.freeze({
   tiers: {
-    cheap: { model: 'gpt-5.4-mini', provider: 'openai-codex' },
+    cheap: { model: 'gemini-3.5-flash', provider: 'gemini' },
+    cheap_fallback: { model: 'gpt-5.4-mini', provider: 'openai-codex' },
     standard: { model: 'gpt-5.4', provider: 'openai-codex' },
     premium: { model: 'gpt-5.5', provider: 'openai-codex' },
-    redteam: { model: 'grok-4.3', provider: 'xai-grok-oauth', optional: true },
+    redteam: { model: 'grok-4.3', provider: 'xai-oauth', optional: true },
   },
   premium_gate: { require_source_backed: true, min_best_score: 68, allow_flags: ['high_value', 'public_sample', 'source_backed'] },
 });
@@ -130,13 +131,21 @@ export function emptyAnalyst() {
   };
 }
 
-// Red-team JSON: advisory flags only. Scores/postures are ignored by design,
-// so a hostile or hallucinating red-team model cannot move the CPC board.
+// Red-team JSON: advisory flags only. Grok may use X for narrative heat /
+// trap detection / live-discourse checks, but its output is narrative-social
+// CONTEXT, never source-backed evidence: scores, postures, layer records,
+// settlement-fit edits, and layout are all ignored by design, so a hostile or
+// hallucinating red-team model cannot move the CPC board or upgrade any term.
 export function validateRedteamJson(parsed) {
+  const empty = { trap_flags: {}, narrative_risks: [], x_narrative_heat: {}, public_card_angles: [] };
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { ok: false, errors: ['redteam output is not a JSON object'], value: { trap_flags: {}, narrative_risks: [] } };
+    return { ok: false, errors: ['redteam output is not a JSON object'], value: empty };
   }
-  const value = { trap_flags: {}, narrative_risks: cleanStringArray(parsed.narrative_risks, 6) };
+  const value = {
+    ...empty,
+    narrative_risks: cleanStringArray(parsed.narrative_risks, 6),
+    public_card_angles: cleanStringArray(parsed.public_card_angles, 4),
+  };
   if (Array.isArray(parsed.trap_flags)) {
     for (const flag of parsed.trap_flags.slice(0, 40)) {
       const term = cleanString(flag?.term, 80);
@@ -144,6 +153,14 @@ export function validateRedteamJson(parsed) {
       if (term && note) value.trap_flags[term] = note;
     }
   }
+  if (Array.isArray(parsed.x_narrative_heat)) {
+    for (const heat of parsed.x_narrative_heat.slice(0, 40)) {
+      const term = cleanString(heat?.term, 80);
+      const note = cleanString(heat?.note, 200);
+      if (term && note) value.x_narrative_heat[term] = `${note} [X chatter — narrative context, NOT source evidence]`;
+    }
+  }
+  // Score-lock: any score/posture/price/evidence-shaped fields are dropped.
   return { ok: true, errors: [], value };
 }
 
@@ -167,8 +184,11 @@ export function buildAnalystPrompt(input) {
 export function buildRedteamPrompt(input) {
   return [
     'You are an optional red-team reviewer for a Kalshi mentions event. Return STRICT JSON ONLY.',
-    'You cannot change scores or postures; flag traps and narrative risks only.',
-    'Schema: {"trap_flags": [{"term": string, "note": string}], "narrative_risks": [string]}',
+    'You may consult X/live discourse for narrative heat, traps, and public-card angles.',
+    'X/social chatter is narrative context only — it is NOT source-backed evidence and cannot upgrade any term.',
+    'You cannot change CPC scores, layer scores, postures, settlement fit, or packet layout; such fields are discarded.',
+    'Schema: {"trap_flags": [{"term": string, "note": string}], "narrative_risks": [string],',
+    ' "x_narrative_heat": [{"term": string, "note": string}], "public_card_angles": [string]}',
     '',
     'input_json:',
     JSON.stringify(input, null, 2),
@@ -187,6 +207,41 @@ export async function runTierJson({ tierName, prompt, routing = loadModelRouting
     invocation: { tier: tierName, provider, model, status: result?.status ?? null },
     stderr: result?.stderr ?? null,
   };
+}
+
+/**
+ * Cheap extraction with schema-gated fallback: Gemini 3.5 Flash first; if it
+ * errors, times out, returns no JSON, or its JSON fails the caller's strict
+ * schema validator, retry ONCE on gpt-5.4-mini (same prompt, same schema).
+ * Both models are extraction-only — they can never assign CPC scores,
+ * postures, prices, or layout; the validator enforces the schema either way.
+ *
+ * @param {function} validate  parsed -> { ok, byTerm|value, errors } ; a result
+ *                             with no usable content counts as failure.
+ */
+export async function runCheapExtractionJson({ prompt, validate, routing = loadModelRouting(), chatRunner = runHermesChat, source = 'mentions-source-extraction' } = {}) {
+  if (typeof validate !== 'function') throw new Error('runCheapExtractionJson requires a schema validator');
+  const attempts = [];
+  for (const tierName of ['cheap', 'cheap_fallback']) {
+    let run;
+    try {
+      run = await runTierJson({ tierName, prompt, routing, chatRunner, source });
+    } catch (err) {
+      attempts.push({ tier: tierName, invocation: null, error: err.message });
+      continue;
+    }
+    if (!run.ok) {
+      attempts.push({ tier: tierName, invocation: run.invocation, error: run.stderr || 'no JSON returned' });
+      continue;
+    }
+    const validated = validate(run.parsed);
+    const usable = validated && (Object.keys(validated.byTerm ?? validated.value ?? {}).length > 0 || validated.ok);
+    attempts.push({ tier: tierName, invocation: run.invocation, error: usable ? null : `schema validation failed: ${(validated?.errors ?? []).join('; ') || 'no usable content'}` });
+    if (usable) {
+      return { ok: true, validated, invocation: run.invocation, tier: tierName, fallback_used: tierName === 'cheap_fallback', attempts };
+    }
+  }
+  return { ok: false, validated: null, invocation: attempts.at(-1)?.invocation ?? null, tier: null, fallback_used: true, attempts };
 }
 
 // Analyst call with fail-safe fallback: any failure returns empty analyst
