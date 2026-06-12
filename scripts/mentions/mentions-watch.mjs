@@ -16,7 +16,7 @@
 // No trades. No bankroll advice. Market pricing never enters scoring
 // (enforced by mention-composite-core; the watcher never touches pricing).
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -96,8 +96,87 @@ async function discoverCandidates({ stateRoot, env, eventsFile }) {
   return candidates;
 }
 
-function runStep(label, cmd, args) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'] });
+// ─── single-run lock ──────────────────────────────────────────────────────────
+// One watcher run per date at a time. The lock holds the holder's pid; a lock
+// whose pid is no longer alive (or whose file is unreadable/too old) is stale
+// and gets recovered, so a crashed run can never wedge the cron permanently.
+
+export const DEFAULT_LOCK_STALE_MS = 60 * 60 * 1000;
+
+export function runLockPath(stateRoot, date) {
+  return resolve(stateRoot, 'mentions', date, 'watch.lock');
+}
+
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+export function acquireRunLock(path, { pid = process.pid, staleMs = DEFAULT_LOCK_STALE_MS, now = Date.now() } = {}) {
+  mkdirSync(dirname(path), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      writeFileSync(path, JSON.stringify({ pid, started_utc: new Date(now).toISOString() }), { flag: 'wx' });
+      return { acquired: true };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      let holder = null;
+      try {
+        holder = JSON.parse(readFileSync(path, 'utf8'));
+      } catch {
+        // unreadable lock -> stale
+      }
+      const age = holder?.started_utc ? now - Date.parse(holder.started_utc) : Infinity;
+      const stale = !holder || !pidAlive(holder.pid) || !(age < staleMs);
+      if (!stale) return { acquired: false, holder };
+      rmSync(path, { force: true });
+      // loop: retry the atomic create once after recovering the stale lock
+    }
+  }
+  return { acquired: false, holder: null };
+}
+
+export function releaseRunLock(path) {
+  rmSync(path, { force: true });
+}
+
+// ─── per-step timeout with process-group cleanup ─────────────────────────────
+// Each generator/sender child runs detached as its own process-group leader.
+// On timeout, spawnSync SIGKILLs the direct child; we then SIGKILL the whole
+// group so grandchildren (e.g. `hermes chat` spawned by the generator) cannot
+// outlive the step and keep running headless.
+
+export const DEFAULT_STEP_TIMEOUT_MS = 900 * 1000;
+
+export function stepTimeoutMs(env = process.env) {
+  const seconds = Number(env.MENTIONS_WATCH_STEP_TIMEOUT_SECONDS);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_STEP_TIMEOUT_MS;
+}
+
+export function runStep(label, cmd, args, { timeoutMs = stepTimeoutMs() } = {}) {
+  const r = spawnSync(cmd, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'inherit', 'inherit'],
+    detached: true,
+    timeout: timeoutMs,
+    killSignal: 'SIGKILL',
+  });
+  const timedOut = r.error?.code === 'ETIMEDOUT';
+  if ((timedOut || r.error || r.status !== 0) && r.pid) {
+    // Sweep the whole group on any failure path; harmless if already gone.
+    try { process.kill(-r.pid, 'SIGKILL'); } catch { /* group already gone */ }
+  }
+  if (timedOut) {
+    throw new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s (child process group killed)`);
+  }
+  if (r.error) {
+    throw new Error(`${label} failed to spawn: ${r.error.message}`);
+  }
   if (r.status !== 0) {
     throw new Error(`${label} exited ${r.status ?? 'signal'}`);
   }
@@ -113,6 +192,22 @@ export async function watch({
   runStepImpl = runStep,
   maxNewPerRunDefault = DEFAULT_MAX_NEW_PER_RUN,
 } = {}) {
+  // Single-run lock: overlapping cron fires exit 0 quietly instead of
+  // double-generating/double-sending. Stale locks (dead pid) are recovered.
+  const lockPath = runLockPath(stateRoot, date);
+  const lock = acquireRunLock(lockPath);
+  if (!lock.acquired) {
+    console.log(`[mentions-watch] ${date}: already running (lock held by pid ${lock.holder?.pid ?? 'unknown'} since ${lock.holder?.started_utc ?? 'unknown'}) — exit 0`);
+    return { skipped: 'already-running', fresh: [], seen: [], deferred: [], attempted: [], queued: [], succeeded: [], failed: [] };
+  }
+  try {
+    return await watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault });
+  } finally {
+    releaseRunLock(lockPath);
+  }
+}
+
+async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault }) {
   const path = ledgerPath(stateRoot, date);
   const ledger = loadLedger(path);
 
