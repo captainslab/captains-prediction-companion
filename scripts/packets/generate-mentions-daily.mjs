@@ -84,6 +84,17 @@ import {
   buildHistoryMatch,
   historyToLayerScore,
 } from '../mentions/settled-history.mjs';
+import {
+  resolveEarningsFamily,
+  loadEarningsHistory,
+  buildEarningsQuarterLayer,
+  earningsLayerToHistoricalTendency,
+} from '../mentions/earnings-quarter-history.mjs';
+import {
+  buildEarningsContextDelta,
+  postureAdjustmentHint,
+  CAPPED_MAX_POSTURE,
+} from '../mentions/earnings-context-delta.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -310,7 +321,54 @@ function firstSourceLadderInputs(...carriers) {
   return null;
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null } = {}) {
+// --- Phase 2 earnings alpha helpers (earnings_call route only) ---------------
+// Quarter history is priority-one alpha; context delta is priority-two.
+// Both are code-owned and deterministic; prices never enter either input.
+
+const POSTURE_LADDER = Object.freeze(['NO_CLEAR_PICK', 'WATCH', 'LEAN', 'EVIDENCE_LEAN', 'PICK']);
+
+function findTermKeyCaseInsensitive(keys, term) {
+  const want = asText(term).toLowerCase();
+  if (!want) return null;
+  for (const key of keys) {
+    if (asText(key).toLowerCase() === want) return key;
+  }
+  for (const key of keys) {
+    const k = asText(key).toLowerCase();
+    if (k && (want.includes(k) || k.includes(want))) return key;
+  }
+  return null;
+}
+
+// Deterministic posture adjustment from the earnings context-delta hint:
+//   upgrade        -> one rung up (requires an evidence-backed base posture)
+//   downgrade      -> one rung down (never below NO_CLEAR_PICK)
+//   upgrade_capped -> one rung up, but final posture capped at LEAN (WATCH+/LEAN)
+// Hints with sample_size < 2 never reach here (hint module returns 'none').
+function applyEarningsPostureHint(posture, hint) {
+  const rank = POSTURE_RANK[posture];
+  if (!hint || hint.direction === 'none' || !Number.isInteger(rank)) {
+    return { posture, applied: false, reason: hint?.reason ?? null };
+  }
+  if (hint.direction === 'downgrade') {
+    const next = POSTURE_LADDER[Math.max(0, rank - 1)];
+    return { posture: next, applied: next !== posture, reason: hint.reason };
+  }
+  // upgrades require an existing evidence-backed posture — never manufacture
+  // conviction from NO_CLEAR_PICK.
+  if (rank < 1) return { posture, applied: false, reason: 'upgrade hint ignored: no evidence-backed base posture' };
+  const bumped = POSTURE_LADDER[Math.min(POSTURE_LADDER.length - 1, rank + 1)];
+  if (hint.direction === 'upgrade_capped') {
+    const capped = POSTURE_RANK[bumped] > POSTURE_RANK.LEAN ? 'LEAN' : bumped;
+    const capNote = String(hint.reason ?? '').includes(CAPPED_MAX_POSTURE)
+      ? hint.reason
+      : `${hint.reason} (capped at ${CAPPED_MAX_POSTURE})`;
+    return { posture: capped, applied: capped !== posture, reason: capNote };
+  }
+  return { posture: bumped, applied: bumped !== posture, reason: hint.reason };
+}
+
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -321,6 +379,39 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     'MISSING'
   );
   let layerRecords = firstLayerRecordMap(market, event, legacy);
+
+  // Phase 2 priority-one alpha (earnings_call only): last-four-quarter per-term
+  // hit/miss history feeds historical_tendency BEFORE generic settled history
+  // and before any source/model extraction. Research-supplied layer still wins.
+  let earningsTermStats = null;
+  let earningsLfq = null;
+  let earningsDeltaEntry = null;
+  let earningsHint = null;
+  if (route?.route === 'earnings_call' && earningsQuarterLayer?.terms) {
+    const termKey = findTermKeyCaseInsensitive(Object.keys(earningsQuarterLayer.terms), targetMention);
+    if (termKey) {
+      earningsTermStats = earningsQuarterLayer.terms[termKey];
+      earningsLfq = earningsQuarterLayer.last_four_quarter_hit_rate?.[termKey] ?? null;
+      const quarterLayer = earningsLayerToHistoricalTendency(earningsQuarterLayer, termKey);
+      if (quarterLayer?.present && !(layerRecords?.historical_tendency?.present)) {
+        layerRecords = { ...(layerRecords ?? {}), historical_tendency: quarterLayer };
+      }
+    }
+  }
+  // Phase 2 priority-two alpha: prior-quarter vs current-quarter context delta
+  // (declared sources/fixtures only) produces a deterministic posture hint.
+  if (route?.route === 'earnings_call' && Array.isArray(earningsContextDelta?.terms)) {
+    earningsDeltaEntry = earningsContextDelta.terms.find(
+      (t) => findTermKeyCaseInsensitive([t.term], targetMention),
+    ) ?? null;
+    if (earningsDeltaEntry) {
+      earningsHint = postureAdjustmentHint({
+        four_quarter_hit_rate: earningsTermStats?.four_quarter_hit_rate ?? null,
+        sample_size: earningsTermStats?.sample_size ?? 0,
+        delta: earningsDeltaEntry.earnings_context_delta?.value ?? 'absent',
+      });
+    }
+  }
 
   // Settled-history alpha: price-free hit/miss records (settled YES/NO only)
   // feed the historical_tendency layer when no research-supplied record exists.
@@ -360,6 +451,21 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     postureCap = capRes.capped ? capRes.cap_reason : null;
   }
 
+  // Earnings context-delta posture adjustment runs AFTER the qualification cap
+  // and is fully code-owned/deterministic (see applyEarningsPostureHint).
+  let earningsAdjustment = null;
+  if (earningsHint) {
+    const adjusted = applyEarningsPostureHint(postureFinal, earningsHint);
+    earningsAdjustment = {
+      direction: earningsHint.direction,
+      applied: adjusted.applied,
+      from: postureFinal,
+      to: adjusted.posture,
+      reason: adjusted.reason,
+    };
+    postureFinal = adjusted.posture;
+  }
+
   return {
     market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
     profile_basis: profileResolution.basis,
@@ -374,6 +480,11 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     history_hit_rate: historyMatch?.hit_rate ?? null,
     history_match_quality_penalty: historyMatch?.match_quality_penalty ?? null,
     history_source_tickers: historyMatch?.source_tickers ?? null,
+    last_four_quarter_hit_rate: earningsLfq,
+    earnings_quarter_terms: earningsTermStats,
+    earnings_quarter_sample_size: earningsTermStats?.sample_size ?? null,
+    earnings_context_delta: earningsDeltaEntry,
+    earnings_posture_adjustment: earningsAdjustment,
     result,
     source_ladder: ladder,
     posture_final: postureFinal,
@@ -548,6 +659,39 @@ export function mentionCompositeToDecisionRow(composite) {
  * market context go to a separate audit artifact, never the packet body.
  * Returns { text, rows, inventoryText, counts } or null when no composites.
  */
+// Deterministic provenance block for earnings_call composites: last-four-quarter
+// hit/miss table (priority-one alpha) and context-delta evidence (priority-two).
+// Outcomes only — no prices anywhere in the inputs or output.
+function renderEarningsAlphaProvenance(composites) {
+  const withQuarters = composites.filter((c) => c?.earnings_quarter_terms);
+  const withDelta = composites.filter((c) => c?.earnings_context_delta);
+  if (!withQuarters.length && !withDelta.length) return null;
+  const hm = (v) => (v === true ? 'HIT' : v === false ? 'MISS' : '--');
+  const lines = ['earnings_alpha (route=earnings_call, outcomes only, prices excluded):'];
+  if (withQuarters.length) {
+    lines.push('  last_four_quarter_history (priority-one alpha):');
+    lines.push('    term                  | Q-1  | Q-2  | Q-3  | Q-4  | hit_rate | rw_rate | n');
+    for (const c of withQuarters) {
+      const t = c.earnings_quarter_terms;
+      const lfq = c.last_four_quarter_hit_rate ?? {};
+      lines.push(`    ${shortTerm(String(c.result?.target_mention ?? c.market_ticker)).padEnd(21)} | ${hm(t.q_minus_1).padEnd(4)} | ${hm(t.q_minus_2).padEnd(4)} | ${hm(t.q_minus_3).padEnd(4)} | ${hm(t.q_minus_4).padEnd(4)} | ${t.four_quarter_hit_rate == null ? 'n/a' : t.four_quarter_hit_rate.toFixed(2)}     | ${t.recency_weighted_hit_rate == null ? 'n/a' : t.recency_weighted_hit_rate.toFixed(2)}    | ${lfq.sample_size ?? t.sample_size ?? 0}`);
+    }
+  }
+  if (withDelta.length) {
+    lines.push('  context_delta (priority-two alpha, declared sources only):');
+    for (const c of withDelta) {
+      const d = c.earnings_context_delta;
+      const provSrc = (d.earnings_context_delta?.provenance ?? []).join(',') || 'none';
+      lines.push(`    ${shortTerm(String(c.result?.target_mention ?? c.market_ticker)).padEnd(21)} | delta=${d.earnings_context_delta?.value ?? 'absent'} continuity=${d.transcript_theme_continuity?.value ?? 'n/a'} qa_likelihood=${d.analyst_question_likelihood?.value ?? 'n/a'} catalyst=${d.current_quarter_catalyst?.value ?? 'n/a'} settlement_fit=${d.settlement_fit?.value ?? 'unknown'} sources=${provSrc}`);
+      if (c.earnings_posture_adjustment?.applied) {
+        const adj = c.earnings_posture_adjustment;
+        lines.push(`      posture_adjustment: ${adj.direction} ${adj.from} -> ${adj.to} (${adj.reason})`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
 export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
@@ -583,7 +727,10 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   const provenanceNote = prov?.research_route
     ? `research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`
     : null;
-  const text = [header, neutralityNote, provenanceNote, body, packetFooter()].filter(Boolean).join('\n\n');
+  // Earnings alpha provenance (earnings_call only): per-term last-four-quarter
+  // table + context-delta evidence. Additive lines — section order untouched.
+  const earningsNote = renderEarningsAlphaProvenance(composites);
+  const text = [header, neutralityNote, provenanceNote, earningsNote, body, packetFooter()].filter(Boolean).join('\n\n');
 
   // Raw per-contract inventory + market context -> audit artifact only.
   const inventoryLines = rows.map((r, i) =>
@@ -1167,10 +1314,40 @@ function mergeResearchIntoEvent(event, researchEntry) {
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
-  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw, historyRecords }));
+
+  // Phase 2 earnings alpha (earnings_call route only): the per-term quarter
+  // layer and context delta are built once per event from fixtures/cache —
+  // never from crawling — then shared by every market composite.
+  let earningsQuarterLayer = null;
+  let earningsContextDelta = null;
+  const eventRoute = resolveResearchRoute(routeEventLike({ event }));
+  if (eventRoute?.route === 'earnings_call') {
+    const family = resolveEarningsFamily(event);
+    // Use the bare strike term (yes_sub_title / custom strike word), not the
+    // full display text, so terms line up with quarter-history outcome keys.
+    const strikeTerms = marketInfo.rows
+      .map(({ raw }) => asText(raw?.yes_sub_title) || asText(raw?.custom_strike?.Word) || targetMentionFromMarket(raw))
+      .filter((t) => t && t !== 'MISSING');
+    if (family && Array.isArray(earningsQuarters) && earningsQuarters.length && strikeTerms.length) {
+      earningsQuarterLayer = buildEarningsQuarterLayer({
+        family: family.family,
+        ticker: family.ticker,
+        terms: strikeTerms,
+        quarters: earningsQuarters,
+      });
+    }
+    if (earningsContextSources && strikeTerms.length) {
+      earningsContextDelta = buildEarningsContextDelta({
+        strikeTerms,
+        declaredSources: earningsContextSources,
+      });
+    }
+  }
+
+  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw, historyRecords, earningsQuarterLayer, earningsContextDelta }));
   const compositeSummary = summarizeCompositeRun(composites);
   const prov = composites[0] ?? null;
   const researchProvenance = prov ? {
@@ -1185,6 +1362,23 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     history_hit_rate: prov.history_hit_rate ?? null,
     history_match_quality_penalty: prov.history_match_quality_penalty ?? null,
     history_source_tickers: prov.history_source_tickers ?? null,
+    last_four_quarter_hit_rate: earningsQuarterLayer?.last_four_quarter_hit_rate ?? null,
+    earnings_quarters_considered: earningsQuarterLayer?.quarters_considered ?? null,
+    earnings_context_delta: earningsContextDelta ? {
+      declared_source_keys: earningsContextDelta.declared_source_keys ?? null,
+      missing_source_keys: earningsContextDelta.missing_source_keys ?? null,
+      terms: (earningsContextDelta.terms ?? []).map((t) => ({
+        term: t.term,
+        earnings_context_delta: t.earnings_context_delta ?? null,
+        transcript_theme_continuity: t.transcript_theme_continuity ?? null,
+        analyst_question_likelihood: t.analyst_question_likelihood ?? null,
+        current_quarter_catalyst: t.current_quarter_catalyst ?? null,
+        settlement_fit: t.settlement_fit ?? null,
+      })),
+    } : null,
+    earnings_posture_adjustments: composites
+      .filter((c) => c.earnings_posture_adjustment)
+      .map((c) => ({ market_ticker: c.market_ticker, ...c.earnings_posture_adjustment })),
   } : null;
 
   // Preferred path: compact sectioned decision board (model + market + edge),
@@ -1582,7 +1776,21 @@ export async function writeKalshiEventPackets({
     const sourcePath = resolve(stateRoot, 'mentions', date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
     const inventoryName = `${date}-${ticker}.inventory`;
     const inventoryPath = `${inventoryName}.txt`;
-    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords });
+    // Phase 2 earnings alpha inputs: quarter history cache + declared context
+    // sources load from local state only (no crawling), earnings_call routes only.
+    let earningsQuarters = null;
+    let earningsContextSources = null;
+    const evRoute = resolveResearchRoute(routeEventLike({ event: mergedEvent }));
+    if (evRoute?.route === 'earnings_call') {
+      const family = resolveEarningsFamily(mergedEvent);
+      if (family?.ticker) {
+        earningsQuarters = await loadEarningsHistory({ ticker: family.ticker, stateRoot });
+        earningsContextSources = readJsonIfExists(
+          resolve(stateRoot, 'mentions', 'earnings-context', `${family.ticker}.json`),
+        );
+      }
+    }
+    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources });
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
@@ -1636,6 +1844,10 @@ export async function writeKalshiEventPackets({
       history_match_tier: built.researchProvenance?.history_match_tier ?? null,
       history_sample_size: built.researchProvenance?.history_sample_size ?? null,
       history_hit_rate: built.researchProvenance?.history_hit_rate ?? null,
+      last_four_quarter_hit_rate: built.researchProvenance?.last_four_quarter_hit_rate ?? null,
+      earnings_quarters_considered: built.researchProvenance?.earnings_quarters_considered ?? null,
+      earnings_context_delta: built.researchProvenance?.earnings_context_delta ?? null,
+      earnings_posture_adjustments: built.researchProvenance?.earnings_posture_adjustments ?? null,
       render_mode: 'deterministic_code_renderer_v1',
       model_synthesis_required: false,
       model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
