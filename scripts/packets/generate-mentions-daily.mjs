@@ -739,7 +739,31 @@ function modelOutputText(result) {
   return null;
 }
 
-function validateSynthesizedMentionPacket(text, input) {
+// Deterministic compliance appendix (option b of the full-strike requirement):
+// the narrative stays model-generated, but every contract's exact full strike
+// text — including special contracts like "Event does not qualify" — is
+// appended verbatim so no model omission can drop a strike from the packet.
+export function buildFullStrikeInventoryAppendix(input = {}) {
+  const terms = Array.isArray(input.terms) ? input.terms : [];
+  const strikes = terms
+    .map((t) => String(t.full_strike_text ?? '').trim())
+    .filter(Boolean);
+  if (!strikes.length) return '';
+  return [
+    '',
+    '--- Full Strike Inventory (exact strike text, every contract) ---',
+    ...strikes.map((s) => `- ${s}`),
+    '',
+  ].join('\n');
+}
+
+export function appendFullStrikeInventory(text, input) {
+  const appendix = buildFullStrikeInventoryAppendix(input);
+  if (!appendix) return text;
+  return `${String(text ?? '').replace(/\s+$/, '')}\n${appendix}`;
+}
+
+export function validateSynthesizedMentionPacket(text, input) {
   if (!text || !text.trim()) throw new Error('Hermes returned an empty mentions packet');
   if (input?.synthesis_rules?.all_terms_proximity_only && /source-backed composite/i.test(text)) {
     throw new Error('Hermes packet violated proximity-only labeling: used "source-backed composite"');
@@ -774,7 +798,9 @@ export async function synthesizeMentionsUserPacket({ input, chatRunner = runHerm
     const detail = result?.stderr || result?.error?.message || `status=${result?.status ?? 'unknown'}`;
     throw new Error(`Hermes default model unavailable for mentions packet synthesis: ${detail}`);
   }
-  const text = modelOutputText(result);
+  const raw = modelOutputText(result);
+  if (!raw || !raw.trim()) throw new Error('Hermes returned an empty mentions packet');
+  const text = appendFullStrikeInventory(raw, input);
   validateSynthesizedMentionPacket(text, input);
   return {
     text,
@@ -1462,6 +1488,7 @@ async function main() {
   let missingMarketEventCount = 0;
   let missingStrikeTextCount = 0;
   const items = [];
+  const failedTickers = [];
 
   if (extra.only && !localEvents.length && !events.length) {
     // Incremental caller asked for specific tickers that aren't present —
@@ -1511,9 +1538,29 @@ async function main() {
       let packetText = built.text;
       let modelSynthesisInvocation = null;
       if (!opts.dryRun) {
-        const synthesized = await synthesizeMentionsUserPacket({ input: built.synthesisInput });
-        packetText = synthesized.text;
-        modelSynthesisInvocation = synthesized.invocation;
+        try {
+          const synthesized = await synthesizeMentionsUserPacket({ input: built.synthesisInput });
+          packetText = synthesized.text;
+          modelSynthesisInvocation = synthesized.invocation;
+        } catch (err) {
+          // Per-event isolation: one bad model packet must not abort the rest.
+          // No .txt is written for this event (nothing deliverable), a blocker
+          // artifact is recorded outside the packet dir, and we continue.
+          const blockerDir = resolve(opts.stateRoot, 'mentions', opts.date, 'blockers');
+          mkdirSync(blockerDir, { recursive: true });
+          const blockerPath = resolve(blockerDir, `${opts.date}-${ticker}.json`);
+          writeFileSync(blockerPath, JSON.stringify({
+            event_ticker: ticker,
+            date: opts.date,
+            stage: 'model_synthesis',
+            error: err.message,
+            blocked_at_utc: new Date().toISOString(),
+            delivered: false,
+          }, null, 2));
+          console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: ${err.message} (blocker: ${blockerPath})`);
+          failedTickers.push(ticker);
+          continue;
+        }
       }
       const w = audit(dir, `${opts.date}-${ticker}`, packetText, {
         event_ticker: ticker,
@@ -1555,7 +1602,7 @@ async function main() {
   }
 
   console.log(printDryRunSummary({ packetType, date: opts.date, dir, items }));
-  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${dateFilteredEvents.length} mention_events=${combinedStats.mentionEvents} rejected_events=${combinedStats.rejectedEvents} total_markets_scanned=${combinedStats.totalMarkets} mention_markets=${combinedStats.mentionMarkets} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} watchlist=${extra.watchlist} only=${extra.only ? extra.only.join(',') : 'none'} allow_undated=${extra.allowUndated}`);
+  console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${dateFilteredEvents.length} mention_events=${combinedStats.mentionEvents} rejected_events=${combinedStats.rejectedEvents} total_markets_scanned=${combinedStats.totalMarkets} mention_markets=${combinedStats.mentionMarkets} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} watchlist=${extra.watchlist} only=${extra.only ? extra.only.join(',') : 'none'} allow_undated=${extra.allowUndated} synthesis_blocked=${failedTickers.length ? failedTickers.join(',') : 'none'}`);
   if (exitCode) process.exit(exitCode);
 }
 

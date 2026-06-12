@@ -8,6 +8,9 @@ import {
   synthesizeMentionsUserPacket,
   buildMentionsSynthesisPrompt,
   normalizeLayerList,
+  buildFullStrikeInventoryAppendix,
+  appendFullStrikeInventory,
+  validateSynthesizedMentionPacket,
 } from '../scripts/packets/generate-mentions-daily.mjs';
 
 function strongEarningsEvent() {
@@ -249,6 +252,70 @@ test('real generator pipeline produces a synthesis prompt without crashing on co
   assert.ok(Array.isArray(built.synthesisInput.terms[0].layers_present));
   const prompt = buildMentionsSynthesisPrompt(built.synthesisInput);
   assert.match(prompt, /layers_present:/);
+});
+
+// ─── full-strike reliability (Hunter Biden / "Event does not qualify" class) ─
+
+const HUNTER_QUALIFY_STRIKE = 'What will Hunter Biden say during This is Gavin Newsom Podcast? -- Event does not qualify';
+const HUNTER_NAMED_STRIKE = 'What will Hunter Biden say during This is Gavin Newsom Podcast? -- Trump';
+
+function hunterSynthesisInput() {
+  return {
+    packet_kind: 'mentions_watch_user_packet_v1',
+    date: '2026-06-12',
+    event: { title: 'What will Hunter Biden say during This is Gavin Newsom Podcast?' },
+    synthesis_rules: { use_full_strike_text_only: true },
+    terms: [
+      { full_strike_text: HUNTER_NAMED_STRIKE, evidence_status: 'proximity scaffold only -- no pick' },
+      { full_strike_text: HUNTER_QUALIFY_STRIKE, evidence_status: 'proximity scaffold only -- no pick' },
+    ],
+  };
+}
+
+test('full strike inventory appendix lists every strike exactly, including "Event does not qualify"', () => {
+  const appendix = buildFullStrikeInventoryAppendix(hunterSynthesisInput());
+  assert.match(appendix, /Full Strike Inventory/);
+  assert.ok(appendix.includes(`- ${HUNTER_NAMED_STRIKE}`));
+  assert.ok(appendix.includes(`- ${HUNTER_QUALIFY_STRIKE}`));
+});
+
+test('synthesis survives a model that omits "Event does not qualify" — appendix restores every full strike', async () => {
+  const input = hunterSynthesisInput();
+  const result = await synthesizeMentionsUserPacket({
+    input,
+    chatRunner: async () => ({
+      ok: true,
+      status: 0,
+      parsed: {
+        packet_text: [
+          'Event title: What will Hunter Biden say during This is Gavin Newsom Podcast?',
+          `Watch-only terms: ${HUNTER_NAMED_STRIKE} - proximity scaffold only -- no pick.`,
+          // NOTE: model dropped the "Event does not qualify" strike (the 2026-06-11 failure mode)
+          'Market Context - NOT IN SCORE: bid/ask are context only.',
+          'Research-only footer: No trades placed.',
+        ].join('\n'),
+      },
+    }),
+  });
+  assert.ok(result.text.includes(HUNTER_QUALIFY_STRIKE), 'special contract full strike must appear in final packet');
+  assert.ok(result.text.includes(HUNTER_NAMED_STRIKE));
+  assert.match(result.text, /Full Strike Inventory/);
+});
+
+test('validation still catches a missing full strike when appendix is absent', () => {
+  const input = hunterSynthesisInput();
+  const textMissing = `Some packet\n${HUNTER_NAMED_STRIKE}\nMarket Context - NOT IN SCORE\nresearch-only`;
+  assert.throws(() => validateSynthesizedMentionPacket(textMissing, input), /omitted full strike text.*Event does not qualify/);
+  const textFull = appendFullStrikeInventory(textMissing, input);
+  assert.doesNotThrow(() => validateSynthesizedMentionPacket(textFull, input));
+});
+
+test('abbreviation-only strike labels do not satisfy full-strike validation', () => {
+  const input = hunterSynthesisInput();
+  // Abbreviation-only labels ("Trump", "Event does not qualify" without the
+  // event-question prefix) must not pass as full strike text.
+  const abbrevOnly = 'Terms: Trump; Event does not qualify\nMarket Context - NOT IN SCORE\nresearch-only';
+  assert.throws(() => validateSynthesizedMentionPacket(abbrevOnly, input), /omitted full strike text/);
 });
 
 test('mention implied probability is sane for 1/2 cent prices', () => {

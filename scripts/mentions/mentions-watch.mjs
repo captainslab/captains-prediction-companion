@@ -111,6 +111,7 @@ export async function watch({
   eventsFile = null,
   env = process.env,
   runStepImpl = runStep,
+  maxNewPerRunDefault = DEFAULT_MAX_NEW_PER_RUN,
 } = {}) {
   const path = ledgerPath(stateRoot, date);
   const ledger = loadLedger(path);
@@ -125,78 +126,131 @@ export async function watch({
   }
   if (!fresh.length) {
     console.log(`[mentions-watch] ${date}: no new today events (seen=${seen.length}, watchlist=${deferred.length}) — quiet exit`);
-    return { fresh: [], seen, deferred };
-  }
-
-  const tickers = fresh.map(e => e.event_ticker);
-  const packetStems = fresh.map((e) => `${date}-${e.event_ticker}`);
-  console.log(`[mentions-watch] ${date}: ${fresh.length} new today event(s): ${tickers.join(', ')}`);
-
-  const nowUtc = new Date().toISOString();
-  for (const ev of fresh) {
-    ledger.events[ev.event_ticker] = {
-      event_ticker: ev.event_ticker,
-      event_url: ev.event_url ?? ev.url ?? null,
-      event_date: deriveEventDate(ev),
-      first_seen_utc: nowUtc,
-      packet_path: join(stateRoot, 'packets', date, PACKET_TYPE, `${date}-${ev.event_ticker}.txt`),
-      delivered_at: null,
-      delivery_message_ids: null,
-      idempotency_key: `mentions:${date}:${ev.event_ticker}`,
-    };
-  }
-
-  if (dryRun) {
-    console.log(`[mentions-watch] [dry-run] would generate + send packets for: ${tickers.join(', ')} (ledger not written)`);
-    return { fresh, seen, deferred };
+    return { fresh: [], seen, deferred, attempted: [], queued: [], succeeded: [], failed: [] };
   }
 
   if (markSeenOnly) {
-    // Backlog suppression / baseline seeding: record events as seen without
-    // generating or sending, so only events listed AFTER this point deliver.
-    for (const ev of fresh) ledger.events[ev.event_ticker].note = 'mark-seen-only (backlog suppressed, never delivered by watcher)';
+    // Backlog suppression / baseline seeding: record ALL fresh events as seen
+    // without generating or sending (bypasses the throttle on purpose), so
+    // only events listed AFTER this point deliver.
+    const nowUtc = new Date().toISOString();
+    for (const ev of fresh) {
+      ledger.events[ev.event_ticker] = {
+        event_ticker: ev.event_ticker,
+        event_url: ev.event_url ?? ev.url ?? null,
+        event_date: deriveEventDate(ev),
+        first_seen_utc: nowUtc,
+        status: 'mark-seen-only',
+        delivered_at: null,
+        delivery_message_ids: null,
+        idempotency_key: `mentions:${date}:${ev.event_ticker}`,
+        note: 'mark-seen-only (backlog suppressed, never delivered by watcher)',
+      };
+    }
     saveLedger(path, ledger);
     console.log(`[mentions-watch] ${date}: marked ${fresh.length} event(s) seen WITHOUT delivery; ledger at ${path}`);
-    return { fresh, seen, deferred };
+    return { fresh, seen, deferred, attempted: [], queued: [], succeeded: [], failed: [] };
   }
 
-  // Generate packets for ONLY the new tickers (today-only default window),
-  // then deliver via the idempotent sender — previously delivered packets in
-  // the same dir are skipped by its delivery ledger.
-  const generatorArgs = [
-    'scripts/packets/generate-mentions-daily.mjs',
-    '--date', date, '--state-root', stateRoot, '--only', tickers.join(','),
-  ];
-  const senderArgs = [
-    'scripts/packets/send-packets-telegram.mjs',
-    '--type', PACKET_TYPE, '--date', date, '--state-root', stateRoot,
-    '--only', packetStems.join(','),
-  ];
-  console.log(`[mentions-watch] ${date}: generator command ${process.execPath} ${generatorArgs.join(' ')}`);
-  console.log(`[mentions-watch] ${date}: sender command ${process.execPath} ${senderArgs.join(' ')}`);
-  runStepImpl('generator', process.execPath, generatorArgs);
-  runStepImpl('sender', process.execPath, senderArgs);
+  // Throttle: never burst-deliver a big first-run batch. Events beyond the cap
+  // are NOT touched in the ledger — they stay unseen and are picked up on the
+  // next watcher run.
+  const maxNewPerRun = Math.max(1, Number(env.MENTIONS_WATCH_MAX_NEW_PER_RUN ?? maxNewPerRunDefault) || maxNewPerRunDefault);
+  const attempted = fresh.slice(0, maxNewPerRun);
+  const queued = fresh.slice(maxNewPerRun);
+  console.log(`[mentions-watch] ${date}: ${fresh.length} new today event(s); processing ${attempted.length} this run (max_new_per_run=${maxNewPerRun})${queued.length ? `; ${queued.length} queued for next run: ${queued.map(e => e.event_ticker).join(', ')}` : ''}`);
 
-  // Pull delivery facts back from the sender's ledger.
+  if (dryRun) {
+    console.log(`[mentions-watch] [dry-run] would generate + send packets for: ${attempted.map(e => e.event_ticker).join(', ')} (ledger not written)`);
+    return { fresh, seen, deferred, attempted, queued, succeeded: [], failed: [] };
+  }
+
+  // Per-event isolation: each new event gets its own generate + validate +
+  // send cycle. One bad model packet writes a blocker artifact and the run
+  // continues; only infrastructure failures make the watcher exit nonzero.
+  const succeeded = [];
+  const failed = [];
   const senderLedgerPath = resolve(stateRoot, 'packets', date, PACKET_TYPE, '.delivery-ledger.json');
-  if (existsSync(senderLedgerPath)) {
+  for (const ev of attempted) {
+    const ticker = ev.event_ticker;
+    const stem = `${date}-${ticker}`;
+    const packetPath = resolve(stateRoot, 'packets', date, PACKET_TYPE, `${stem}.txt`);
+    const entry = {
+      event_ticker: ticker,
+      event_url: ev.event_url ?? ev.url ?? null,
+      event_date: deriveEventDate(ev),
+      first_seen_utc: new Date().toISOString(),
+      packet_path: join(stateRoot, 'packets', date, PACKET_TYPE, `${stem}.txt`),
+      status: 'pending',
+      blocker_path: null,
+      delivered_at: null,
+      delivery_message_ids: null,
+      idempotency_key: `mentions:${date}:${ticker}`,
+    };
+    ledger.events[ticker] = entry;
+
+    const generatorArgs = [
+      'scripts/packets/generate-mentions-daily.mjs',
+      '--date', date, '--state-root', stateRoot, '--only', ticker,
+    ];
+    const senderArgs = [
+      'scripts/packets/send-packets-telegram.mjs',
+      '--type', PACKET_TYPE, '--date', date, '--state-root', stateRoot,
+      '--only', stem,
+    ];
+    console.log(`[mentions-watch] ${date}: [${ticker}] generator command ${process.execPath} ${generatorArgs.join(' ')}`);
     try {
-      const delivered = JSON.parse(readFileSync(senderLedgerPath, 'utf8')).delivered ?? {};
-      for (const ev of fresh) {
-        const rec = delivered[`${date}-${ev.event_ticker}`];
-        if (rec) {
-          ledger.events[ev.event_ticker].delivered_at = rec.utc ?? null;
-          ledger.events[ev.event_ticker].delivery_message_ids = rec.message_ids ?? null;
-        }
+      runStepImpl(`generator:${ticker}`, process.execPath, generatorArgs);
+      if (!existsSync(packetPath)) {
+        throw new Error(`generator wrote no packet at ${packetPath} (packet blocked — see blocker artifact)`);
       }
-    } catch {
-      // delivery facts are best-effort; seen-state below is what guarantees idempotency
+      console.log(`[mentions-watch] ${date}: [${ticker}] sender command ${process.execPath} ${senderArgs.join(' ')}`);
+      runStepImpl(`sender:${ticker}`, process.execPath, senderArgs);
+      entry.status = 'delivered';
+      succeeded.push(ticker);
+    } catch (err) {
+      entry.status = 'blocked';
+      entry.blocker_path = writeBlockerArtifact({ stateRoot, date, ticker, error: err.message });
+      console.error(`[mentions-watch] ${date}: [${ticker}] BLOCKED (not delivered): ${err.message}; blocker at ${entry.blocker_path}`);
+      failed.push(ticker);
+      continue;
+    }
+
+    // Pull delivery facts back from the sender's ledger (best-effort).
+    if (existsSync(senderLedgerPath)) {
+      try {
+        const delivered = JSON.parse(readFileSync(senderLedgerPath, 'utf8')).delivered ?? {};
+        const rec = delivered[stem];
+        if (rec) {
+          entry.delivered_at = rec.utc ?? null;
+          entry.delivery_message_ids = rec.message_ids ?? null;
+        }
+      } catch {
+        // delivery facts are best-effort; seen-state below is what guarantees idempotency
+      }
     }
   }
 
   saveLedger(path, ledger);
-  console.log(`[mentions-watch] ${date}: processed ${fresh.length} new event(s); ledger updated at ${path}`);
-  return { fresh, seen, deferred };
+  console.log(`[mentions-watch] ${date}: processed ${attempted.length} new event(s) (delivered=${succeeded.length}, blocked=${failed.length}, queued=${queued.length}); ledger updated at ${path}`);
+  return { fresh, seen, deferred, attempted, queued, succeeded, failed };
+}
+
+export const DEFAULT_MAX_NEW_PER_RUN = 3;
+
+function writeBlockerArtifact({ stateRoot, date, ticker, error }) {
+  const dir = resolve(stateRoot, 'mentions', date, 'blockers');
+  mkdirSync(dir, { recursive: true });
+  const blockerPath = resolve(dir, `${date}-${ticker}.watch.json`);
+  writeFileSync(blockerPath, JSON.stringify({
+    event_ticker: ticker,
+    date,
+    stage: 'watch_generate_or_send',
+    error,
+    blocked_at_utc: new Date().toISOString(),
+    delivered: false,
+  }, null, 2));
+  return blockerPath;
 }
 
 async function main() {

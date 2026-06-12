@@ -15,6 +15,7 @@ import {
   saveLedger,
   ledgerPath,
   watch,
+  DEFAULT_MAX_NEW_PER_RUN,
 } from '../scripts/mentions/mentions-watch.mjs';
 import {
   parseExtraArgs,
@@ -28,6 +29,14 @@ const WATCH = join(REPO, 'scripts/mentions/mentions-watch.mjs');
 
 const DATE = '2026-06-11';
 const ev = (ticker) => ({ event_ticker: ticker, title: ticker, markets: [{ ticker: `${ticker}-T1` }] });
+
+// Simulate the real generator: write the expected packet .txt for the --only ticker.
+function fakeGeneratorWrite(root, args) {
+  const ticker = args[args.indexOf('--only') + 1];
+  const dir = join(root, 'packets', DATE, 'mentions-daily');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${DATE}-${ticker}.txt`), `packet for ${ticker}\n`);
+}
 
 // ─── today-only filter ───────────────────────────────────────────────────────
 
@@ -110,7 +119,7 @@ test('new today event is planned once and duplicate run is skipped by ledger', (
   // dry-run names exactly the one today event
   const dry = runWatch(root, eventsFile, ['--dry-run']);
   assert.equal(dry.status, 0, dry.stderr);
-  assert.match(dry.stdout, /1 new today event\(s\): KXHEARINGMENTION-26JUN11/);
+  assert.match(dry.stdout, /1 new today event\(s\); processing 1 this run/);
   assert.match(dry.stdout, /would generate \+ send packets for: KXHEARINGMENTION-26JUN11/);
   assert.ok(!dry.stdout.includes('KXLATERMENTION-26JUN12 —'), 'future event must not be planned');
 
@@ -148,6 +157,7 @@ test('watch hands sender exact packet stems and excludes future tickers from the
     eventsFile,
     runStepImpl: (label, command, args) => {
       calls.push({ label, command, args });
+      if (label.startsWith('generator:')) fakeGeneratorWrite(root, args);
       return { status: 0, stdout: '', stderr: '' };
     },
   });
@@ -158,6 +168,120 @@ test('watch hands sender exact packet stems and excludes future tickers from the
   assert.ok(!calls[1].args.join(' ').includes('26JUN12'));
   assert.ok(!calls[1].args.join(' ').includes('26JUN13'));
   assert.ok(!calls[1].args.join(' ').includes('26JUN14'));
+});
+
+// ─── per-event isolation, blocker artifacts, throttle ────────────────────────
+
+test('one failed event does not abort remaining events; blocker written; failure not delivered', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-isolation-'));
+  const eventsFile = join(root, 'events.json');
+  writeFileSync(eventsFile, JSON.stringify([
+    ev('KXAMENTION-26JUN11'),
+    ev('KXBADMENTION-26JUN11'),
+    ev('KXCMENTION-26JUN11'),
+  ]));
+
+  const calls = [];
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    runStepImpl: (label, command, args) => {
+      calls.push(label);
+      if (label === 'generator:KXBADMENTION-26JUN11') {
+        throw new Error('Hermes packet omitted full strike text: What will Hunter Biden say? -- Event does not qualify');
+      }
+      if (label.startsWith('generator:')) fakeGeneratorWrite(root, args);
+      return { status: 0 };
+    },
+  });
+
+  // run continued past the failure and processed all three events
+  assert.deepEqual(result.succeeded.sort(), ['KXAMENTION-26JUN11', 'KXCMENTION-26JUN11']);
+  assert.deepEqual(result.failed, ['KXBADMENTION-26JUN11']);
+  // sender invoked exactly once per SUCCESSFUL event, never for the failed one
+  assert.ok(calls.includes('sender:KXAMENTION-26JUN11'));
+  assert.ok(calls.includes('sender:KXCMENTION-26JUN11'));
+  assert.ok(!calls.includes('sender:KXBADMENTION-26JUN11'), 'failed event must not be sent');
+
+  const ledger = loadLedger(ledgerPath(root, DATE));
+  const bad = ledger.events['KXBADMENTION-26JUN11'];
+  assert.equal(bad.status, 'blocked');
+  assert.equal(bad.delivered_at, null, 'failed event must not be marked delivered');
+  assert.ok(bad.blocker_path && existsSync(bad.blocker_path), 'blocker artifact must exist');
+  const blocker = JSON.parse(readFileSync(bad.blocker_path, 'utf8'));
+  assert.equal(blocker.delivered, false);
+  assert.match(blocker.error, /Event does not qualify/);
+  assert.equal(ledger.events['KXAMENTION-26JUN11'].status, 'delivered');
+});
+
+test('generator failure with missing packet .txt blocks the event instead of sending', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-nopacket-'));
+  const eventsFile = join(root, 'events.json');
+  writeFileSync(eventsFile, JSON.stringify([ev('KXNOPKTMENTION-26JUN11')]));
+
+  const calls = [];
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    // generator "succeeds" (exit 0, per-event isolation inside it) but writes
+    // no .txt because synthesis was blocked — watcher must treat as failure.
+    runStepImpl: (label) => { calls.push(label); return { status: 0 }; },
+  });
+  assert.deepEqual(result.failed, ['KXNOPKTMENTION-26JUN11']);
+  assert.ok(!calls.some(c => c.startsWith('sender:')), 'no send without a packet .txt');
+});
+
+test('max-new-events throttle limits a 14-event batch and leaves the rest unseen for next run', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-throttle-'));
+  const eventsFile = join(root, 'events.json');
+  const tickers = Array.from({ length: 14 }, (_, i) => `KXBATCH${String(i).padStart(2, '0')}MENTION-26JUN11`);
+  writeFileSync(eventsFile, JSON.stringify(tickers.map(ev)));
+
+  const run = () => watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    env: { ...process.env, MENTIONS_WATCH_MAX_NEW_PER_RUN: '3' },
+    runStepImpl: (label, command, args) => {
+      if (label.startsWith('generator:')) fakeGeneratorWrite(root, args);
+      return { status: 0 };
+    },
+  });
+
+  const first = await run();
+  assert.equal(first.attempted.length, 3);
+  assert.equal(first.queued.length, 11);
+  const ledger1 = loadLedger(ledgerPath(root, DATE));
+  assert.equal(Object.keys(ledger1.events).length, 3, 'queued events stay out of the seen ledger');
+
+  // next run picks up the next slice — no event lost, no event doubled
+  const second = await run();
+  assert.equal(second.attempted.length, 3);
+  assert.equal(second.queued.length, 8);
+  const ledger2 = loadLedger(ledgerPath(root, DATE));
+  assert.equal(Object.keys(ledger2.events).length, 6);
+  assert.deepEqual(
+    second.attempted.map(e => e.event_ticker).filter(t => first.attempted.some(f => f.event_ticker === t)),
+    [], 'second run must not re-attempt first-run events',
+  );
+});
+
+test('throttle default applies without env override', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-throttle-default-'));
+  const eventsFile = join(root, 'events.json');
+  const tickers = Array.from({ length: 14 }, (_, i) => `KXDFLT${String(i).padStart(2, '0')}MENTION-26JUN11`);
+  writeFileSync(eventsFile, JSON.stringify(tickers.map(ev)));
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    dryRun: true,
+    env: { ...process.env, MENTIONS_WATCH_MAX_NEW_PER_RUN: '' },
+  });
+  assert.equal(result.attempted.length, DEFAULT_MAX_NEW_PER_RUN);
+  assert.equal(result.queued.length, 14 - DEFAULT_MAX_NEW_PER_RUN);
 });
 
 test('ledger round-trips the stable keys', () => {
