@@ -69,6 +69,15 @@ import {
   runHermesChat,
   resolveHermesCommand,
 } from '../../src/hermesRuntime.js';
+import {
+  fetchAnalystFields,
+  fetchRedteamFields,
+} from '../mentions/model-router.mjs';
+import {
+  renderMentionPacket,
+  validateRenderedPacket,
+  shortTerm,
+} from '../mentions/render-mention-packet.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -610,6 +619,8 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
   // Compact each term to only what the model needs for the article.
   const terms = rows.map((row) => ({
     full_strike_text: row.side_target,
+    short_term: shortTerm(row.side_target, s.title),
+    cpc_score: row.composite_score ?? null,
     bucket: termBucketForRow(row),
     evidence_status: evidenceStatusForRow(row),
     layers_present: normalizeLayerList(row.layers_present),
@@ -812,6 +823,45 @@ export async function synthesizeMentionsUserPacket({ input, chatRunner = runHerm
   };
 }
 
+
+/**
+ * Deterministic packet composition (current default path).
+ *
+ * Models contribute strict-JSON fields only (analyst narrative via the model
+ * router; optional red-team flags). Code validates them, falls back to empty
+ * fields on any failure, and renderMentionPacket() writes the final .txt.
+ * A model can therefore never control layout, scores, or section order, and
+ * proximity-only events never spend a model call at all.
+ */
+export async function composeMentionPacketDeterministic({
+  input,
+  env = process.env,
+  chatRunner = runHermesChat,
+  now = () => new Date().toISOString(),
+} = {}) {
+  if (!input || typeof input !== 'object') throw new Error('mentions packet compose input missing');
+  const analystRun = await fetchAnalystFields({ input, summary: input.summary ?? {}, env, chatRunner });
+  const redteamRun = await fetchRedteamFields({ input, env, chatRunner });
+  const text = renderMentionPacket(input, {
+    analyst: analystRun.analyst,
+    redteam: redteamRun.redteam,
+    generatedAtUtc: now(),
+    analystTier: analystRun.tier,
+  });
+  validateRenderedPacket(text, input);
+  return {
+    text,
+    invocation: {
+      renderer: 'renderMentionPacket (deterministic, code-owned layout)',
+      analyst_tier: analystRun.tier,
+      analyst_invocation: analystRun.invocation,
+      analyst_fallback: analystRun.fallback === true,
+      analyst_reason: analystRun.reason,
+      redteam_invocation: redteamRun.invocation,
+      redteam_reason: redteamRun.reason,
+    },
+  };
+}
 
 function firstMarketRules(event) {
   const markets = Array.isArray(event?.markets) ? event.markets : [];
@@ -1442,7 +1492,7 @@ export async function writeKalshiEventPackets({
   audit,
   dryRun = false,
   allPrimeAttempts = [],
-  synthesizeImpl = synthesizeMentionsUserPacket,
+  synthesizeImpl = composeMentionPacketDeterministic,
 }) {
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
@@ -1510,7 +1560,8 @@ export async function writeKalshiEventPackets({
       composite_best_posture: built.compositeSummary.best_posture,
       composite_best_score: built.compositeSummary.best_score,
       composite_pricing_excluded: built.compositeSummary.pricing_excluded,
-      model_synthesis_required: true,
+      render_mode: 'deterministic_code_renderer_v1',
+      model_synthesis_required: false,
       model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
       telegram_delivery_mode: 'document_txt',
       kalshi_source_api: KALSHI_SOURCES.broad.api_url,

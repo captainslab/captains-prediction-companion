@@ -1,0 +1,36 @@
+{
+  "_schema": "cpc_mentions_model_routing_v1",
+  "_description": "Model tier routing for the mentions packet pipeline. Models return strict JSON fields only; code is the final scorer, validator, renderer, and Telegram sender. Market price NEVER enters scoring.",
+  "tiers": {
+    "cheap": {
+      "model": "gpt-5.4-mini",
+      "provider": "openai-codex",
+      "provider_display": "OpenAI Codex",
+      "role": "extractor / classifier / JSON validator"
+    },
+    "standard": {
+      "model": "gpt-5.4",
+      "provider": "openai-codex",
+      "provider_display": "OpenAI Codex",
+      "role": "packet analyst for normal paid packets"
+    },
+    "premium": {
+      "model": "gpt-5.5",
+      "provider": "openai-codex",
+      "provider_display": "OpenAI Codex",
+      "role": "premium synthesis/closer — gated, never default"
+    },
+    "redteam": {
+      "model": "grok-4.3",
+      "provider": "xai-grok-oauth",
+      "provider_display": "XAI Grok OAuth",
+      "role": "optional red-team / narrative / trap / X-card reviewer (JSON only, cannot alter scores)",
+      "optional": true
+    }
+  },
+  "premium_gate": {
+    "require_source_backed": true,
+    "min_best_score": 68,
+    "allow_flags": ["high_value", "public_sample", "source_backed"]
+  }
+}
