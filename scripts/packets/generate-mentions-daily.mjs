@@ -65,6 +65,10 @@ import {
   EDGE_STATUS,
   CONFIDENCE,
 } from '../shared/decision-packet.mjs';
+import {
+  runHermesChat,
+  resolveHermesCommand,
+} from '../../src/hermesRuntime.js';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -217,9 +221,34 @@ function marketContextFromMarket(market = {}) {
   };
 }
 
+function strikeWordFromMarket(market = {}) {
+  const custom = market.custom_strike;
+  if (typeof custom === 'string' && custom.trim()) return custom.trim();
+  if (custom && typeof custom === 'object') {
+    for (const key of ['Word', 'word', 'text', 'value', 'label']) {
+      if (typeof custom[key] === 'string' && custom[key].trim()) return custom[key].trim();
+    }
+  }
+  for (const key of ['functional_strike', 'yes_sub_title', 'subtitle', 'title']) {
+    if (typeof market[key] === 'string' && market[key].trim()) return market[key].trim();
+  }
+  return null;
+}
+
+export function fullMentionStrikeText(market = {}) {
+  const title = asText(market.title);
+  const strike = strikeWordFromMarket(market);
+  if (title && strike && title !== strike) return `${title} -- ${strike}`;
+  if (title) return title;
+  if (strike) return strike;
+  const normalized = normalizeMarket(market);
+  return normalized.full_strike_display || normalized.ticker || 'MISSING';
+}
+
 function targetMentionFromMarket(market = {}) {
   const normalized = normalizeMarket(market);
   return (
+    fullMentionStrikeText(market) ||
     normalized.full_strike_display ||
     normalized.yes_sub_title ||
     normalized.functional_strike ||
@@ -314,11 +343,29 @@ function bestComposite(composites) {
   return ranked[0] ?? null;
 }
 
+function compositePresentCategories(composite) {
+  const ledger = composite?.result?.evidence_ledger;
+  if (Array.isArray(ledger)) return ledger.filter((row) => row.present).map((row) => row.category);
+  const top = composite?.result?.top_supporting_layers;
+  return Array.isArray(top) ? top.map((row) => row.category).filter(Boolean) : [];
+}
+
+function isProximityOnlyComposite(composite) {
+  const cats = compositePresentCategories(composite);
+  return cats.length === 1 && cats[0] === 'event_proximity';
+}
+
+function hasBeyondProximityEvidence(composite) {
+  return compositePresentCategories(composite).some((category) => category !== 'event_proximity');
+}
+
 function summarizeCompositeRun(composites) {
   const best = bestComposite(composites);
   return {
     market_count: composites.length,
     scored_count: composites.filter(c => c?.result?.composite_score !== null).length,
+    source_backed_count: composites.filter(hasBeyondProximityEvidence).length,
+    proximity_only_count: composites.filter(isProximityOnlyComposite).length,
     best_posture: best?.result?.posture ?? 'NO_CLEAR_PICK',
     best_score: best?.result?.composite_score ?? null,
     best_target: best?.result?.target_mention ?? null,
@@ -364,14 +411,19 @@ export function mentionCompositeToDecisionRow(composite) {
     last_price: mc.last_trade_price_cents ?? null,
     volume: mc.volume ?? null,
     open_interest: mc.open_interest ?? null,
+    price_units: 'cents',
   };
 
   const missingCats = Array.isArray(r.missing_layers) ? r.missing_layers.map((l) => l.category) : [];
   const topLayers = Array.isArray(r.top_supporting_layers) ? r.top_supporting_layers.map((l) => l.category) : [];
+  const presentCats = Array.isArray(r.evidence_ledger)
+    ? r.evidence_ledger.filter((l) => l.present).map((l) => l.category)
+    : topLayers;
   const target = r.target_mention ?? composite?.market_ticker ?? 'MISSING';
 
   // No source-backed evidence at all -> BLOCKED on the missing source layers.
   const sourceBlocked = layersPresent === 0;
+  const proximityOnly = layersPresent === 1 && presentCats.length === 1 && presentCats[0] === 'event_proximity';
   let postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
 
   // Stub cap: never allow LEAN/EVIDENCE_LEAN/PICK from stub-only research
@@ -391,7 +443,15 @@ export function mentionCompositeToDecisionRow(composite) {
     analysis = `Market priced; mention composite has 0/${layersTotal} source layers. Not a pick or a pass — research gap. Missing: ${missingCats.join(', ') || 'all source layers'}.`;
     trigger = {
       price: null,
-      event: `run mentions research for "${target}" (transcripts > quotes > context > prompt source ladder), then re-score`,
+        event: `run mentions research for "${target}" (transcripts > quotes > context > prompt source ladder), then re-score`,
+    };
+  } else if (proximityOnly) {
+    postureFinal = 'WATCH';
+    statusOverride = EDGE_STATUS.WATCH;
+    analysis = `proximity scaffold only -- no pick. Event timing exists, but transcript/history/topic/source layers are missing for "${target}". Missing: ${missingCats.join(', ') || 'source research layers'}.`;
+    trigger = {
+      price: null,
+      event: 'upgrade only after exact-source research adds transcript, direct quote, historical tendency, or topic-path evidence',
     };
   } else {
     statusOverride = MENTION_POSTURE_TO_EDGE[postureFinal] ?? EDGE_STATUS.WATCH;
@@ -444,9 +504,14 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   const summary = summarizeCompositeRun(composites);
 
   const blockedCount = rows.filter((r) => r.edge_status === EDGE_STATUS.BLOCKED).length;
-  const tldrNote = blockedCount === rows.length
+  const proximityOnlyCount = summary.proximity_only_count ?? 0;
+  const sourceBackedCount = summary.source_backed_count ?? 0;
+  const allScaffoldOrBlocked = rows.length > 0 && (proximityOnlyCount + blockedCount) === rows.length;
+  const tldrNote = allScaffoldOrBlocked
+    ? `proximity scaffold only -- no pick. ${proximityOnlyCount}/${rows.length} contract(s) have only event_proximity; ${blockedCount} blocked on missing source layers.`
+    : blockedCount === rows.length
     ? `All ${rows.length} contract(s) BLOCKED on missing source layers — research the source ladder, then re-score. No tradeable edge yet.`
-    : `${summary.scored_count}/${rows.length} contract(s) have source-backed composite; best posture ${summary.best_posture}.`;
+    : `${sourceBackedCount}/${rows.length} contract(s) have source evidence beyond event proximity; best posture ${summary.best_posture}.`;
 
   const body = renderSectionedPacket(rows, {
     tldrNote,
@@ -486,6 +551,238 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     inventoryText,
     counts: { total: rows.length, blocked: blockedCount, scored: summary.scored_count },
     compositeSummary: summary,
+  };
+}
+
+function termBucketForRow(row) {
+  const analysis = String(row.analysis ?? '').toLowerCase();
+  if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
+  if (analysis.includes('proximity scaffold only')) return 'watch-only';
+  if (row.edge_status === EDGE_STATUS.PICK || row.edge_status === EDGE_STATUS.LEAN) return 'most-likely';
+  return 'watch-only';
+}
+
+function evidenceStatusForRow(row) {
+  const analysis = String(row.analysis ?? '');
+  if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
+  if (/proximity scaffold only/i.test(analysis)) return 'proximity scaffold only -- no pick';
+  if (Array.isArray(row.top_evidence_layers) && row.top_evidence_layers.length) {
+    return `source evidence present: ${row.top_evidence_layers.map((x) => x.category ?? x.label ?? String(x)).join(', ')}`;
+  }
+  return 'missing source-backed research';
+}
+
+function compactMarketContext(row) {
+  return {
+    implied_probability: row.implied_probability,
+    yes_bid_cents: row.market_yes_bid,
+    yes_ask_cents: row.market_yes_ask,
+    last_price_cents: row.last_price,
+    volume: row.volume,
+    open_interest: row.open_interest,
+    note: 'NOT IN SCORE',
+  };
+}
+
+/**
+ * Decision rows carry layers_present in mixed shapes ("1/4" coverage strings
+ * from decision-packet, raw counts from mention-composite-core, or layer-name
+ * arrays). Normalize to an array of strings before any user-facing join.
+ */
+export function normalizeLayerList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => (typeof v === 'string' ? v : v?.category ?? v?.label ?? (v == null ? '' : String(v))))
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (!s || s === 'MISSING') return [];
+    return s.split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  if (value && typeof value === 'object') return Object.keys(value);
+  return [];
+}
+
+export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {} } = {}) {
+  const s = summarizeEvent(event);
+  const rules = firstMarketRules(event);
+  // Compact each term to only what the model needs for the article.
+  const terms = rows.map((row) => ({
+    full_strike_text: row.side_target,
+    bucket: termBucketForRow(row),
+    evidence_status: evidenceStatusForRow(row),
+    layers_present: normalizeLayerList(row.layers_present),
+    composite_posture: row.composite_posture,
+    missing_research_layers: Array.isArray(row.missing_layers)
+      ? row.missing_layers.map((l) => l.category ?? l.label ?? String(l)).slice(0, 5)
+      : [],
+    upgrade_trigger: row.trigger_event,
+    market_context: {
+      implied: row.implied_probability,
+      bid_cents: row.market_yes_bid,
+      ask_cents: row.market_yes_ask,
+      note: 'NOT IN SCORE',
+    },
+  }));
+  const nonBlocked = terms.filter((term) => term.bucket !== 'blocked/no-source');
+  const allProximityOnly = nonBlocked.length > 0 && nonBlocked.every((term) => term.evidence_status === 'proximity scaffold only -- no pick');
+
+  return {
+    packet_kind: 'mentions_watch_user_packet_v1',
+    date,
+    event: {
+      title: s.title,
+      subtitle: s.sub_title,
+      date_time: s.close,
+      settlement_source_link: event?.event_url ?? event?.url ?? `https://kalshi.com/events/${s.ticker}`,
+      rules_primary: rules.primary,
+    },
+    synthesis_rules: {
+      output_style: 'concise research article / Substack-style brief',
+      research_only: true,
+      no_trade: true,
+      one_model_call_required: true,
+      use_full_strike_text_only: true,
+      market_context_not_in_score: true,
+      all_terms_proximity_only: allProximityOnly,
+      proximity_only_label: allProximityOnly ? 'proximity scaffold only -- no pick' : null,
+      forbidden_claims_when_all_terms_proximity_only: ['source-backed composite', 'source backed composite'],
+    },
+    summary: {
+      market_count: compositeSummary.market_count ?? rows.length,
+      source_backed_count: compositeSummary.source_backed_count ?? null,
+      proximity_only_count: compositeSummary.proximity_only_count ?? null,
+      best_posture: compositeSummary.best_posture ?? null,
+    },
+    terms,
+  };
+}
+
+export function buildMentionsSynthesisPrompt(input = {}) {
+  return [
+    'You are producing the final user-facing mentions-watch packet from deterministic Kalshi/source artifacts.',
+    'Use exactly one model call: write the complete attached .txt packet now. Do not delegate, fan out, or ask for another model.',
+    'Do not mention provider names or model IDs. Do not claim a pick from market price.',
+    'Return JSON only with this schema: {"packet_text":"..."}',
+    '',
+    'Packet requirements:',
+    '- Concise research article / Substack-style brief, not YAML and not an audit dump.',
+    '- Include: Event title; Date/time; Settlement/source link if available; Plain-English setup.',
+    '- Include: Most likely mention terms; Watch-only terms; Blocked/no-source terms.',
+    '- For every listed contract, use full_strike_text exactly. Never use abbreviation-only labels.',
+    '- Include evidence status by term and missing research layers.',
+    '- Include what would upgrade or downgrade the read.',
+    '- Include a section with the exact heading "Market Context - NOT IN SCORE" (plain hyphen, exact phrase) and keep price/liquidity/volume/open interest out of scoring.',
+    '- End with a research-only/no-trades footer.',
+    '- If all non-blocked terms are proximity-only, print "proximity scaffold only -- no pick" near the top and do not use the phrase "source-backed composite".',
+    '',
+    'source_packet:',
+    formatCompactMentionsInput(input),
+  ].join('\n');
+}
+
+function formatCompactMentionsInput(input = {}) {
+  const lines = [];
+  const e = input.event || {};
+  lines.push(`Event: ${e.title || ''}`);
+  lines.push(`Date: ${e.date_time || input.date || ''}`);
+  lines.push(`Source: ${e.settlement_source_link || ''}`);
+  if (e.rules_primary) lines.push(`Rules: ${e.rules_primary}`);
+  lines.push('');
+  if (input.synthesis_rules) {
+    lines.push('Synthesis rules:');
+    Object.entries(input.synthesis_rules).forEach(([k, v]) => {
+      lines.push(`- ${k}: ${JSON.stringify(v)}`);
+    });
+    lines.push('');
+  }
+  const terms = Array.isArray(input.terms) ? input.terms : [];
+  if (terms.length) {
+    lines.push('Terms:');
+    for (const t of terms) {
+      lines.push(`- full_strike_text: ${t.full_strike_text || ''}`);
+      lines.push(`  evidence_status: ${t.evidence_status || ''}`);
+      lines.push(`  layers_present: ${normalizeLayerList(t.layers_present).join(', ')}`);
+      const missing = normalizeLayerList(t.missing_research_layers);
+      if (missing.length) lines.push(`  missing: ${missing.join(', ')}`);
+      if (t.market_context) {
+        const mc = t.market_context;
+        lines.push(`  market_context (NOT IN SCORE): bid=${mc.bid_cents ?? '-'} ask=${mc.ask_cents ?? '-'}`);
+      }
+    }
+    lines.push('');
+  }
+  const layerGaps = normalizeLayerList(input.layer_gaps);
+  if (layerGaps.length) {
+    lines.push(`Missing layers summary: ${layerGaps.join('; ')}`);
+    lines.push('');
+  }
+  lines.push('Instructions: write the packet_text JSON now.');
+  return lines.join('\n');
+}
+
+export function describeMentionsHermesInvocation(options = {}) {
+  return {
+    command: options.command ?? resolveHermesCommand(),
+    subcommand: 'chat',
+    provider_arg: 'omitted',
+    model_arg: 'omitted',
+    source: 'mentions-watch-packet-synthesis',
+    note: 'provider/model are intentionally omitted so Hermes uses its active runtime default',
+  };
+}
+
+function modelOutputText(result) {
+  if (typeof result?.parsed?.packet_text === 'string') return result.parsed.packet_text;
+  if (typeof result?.parsed?.packetText === 'string') return result.parsed.packetText;
+  return null;
+}
+
+function validateSynthesizedMentionPacket(text, input) {
+  if (!text || !text.trim()) throw new Error('Hermes returned an empty mentions packet');
+  if (input?.synthesis_rules?.all_terms_proximity_only && /source-backed composite/i.test(text)) {
+    throw new Error('Hermes packet violated proximity-only labeling: used "source-backed composite"');
+  }
+  for (const term of input?.terms ?? []) {
+    const full = String(term.full_strike_text ?? '').trim();
+    if (full && !text.includes(full)) {
+      throw new Error(`Hermes packet omitted full strike text: ${full}`);
+    }
+  }
+  if (!/Market Context\s*[-–—:(]*\s*NOT IN SCORE/i.test(text)) {
+    throw new Error('Hermes packet omitted Market Context - NOT IN SCORE section');
+  }
+  if (!/research[- ]only/i.test(text)) {
+    throw new Error('Hermes packet omitted research-only footer');
+  }
+}
+
+export async function synthesizeMentionsUserPacket({ input, chatRunner = runHermesChat } = {}) {
+  if (!input || typeof input !== 'object') throw new Error('mentions packet synthesis input missing');
+  if (typeof chatRunner !== 'function') throw new Error('mentions packet synthesis chat runner missing');
+
+  const invocation = describeMentionsHermesInvocation();
+  const prompt = buildMentionsSynthesisPrompt(input);
+  const timeoutSeconds = Number(process.env.HERMES_PACKET_SYNTHESIS_TIMEOUT_SECONDS || '420');
+  const result = await chatRunner(prompt, {
+    source: invocation.source,
+    passSessionId: true,
+    timeout: timeoutSeconds * 1000,
+  });
+  if (!result?.ok) {
+    const detail = result?.stderr || result?.error?.message || `status=${result?.status ?? 'unknown'}`;
+    throw new Error(`Hermes default model unavailable for mentions packet synthesis: ${detail}`);
+  }
+  const text = modelOutputText(result);
+  validateSynthesizedMentionPacket(text, input);
+  return {
+    text,
+    invocation: {
+      ...invocation,
+      session_id: result.sessionId ?? null,
+      status: result.status ?? 0,
+    },
   };
 }
 
@@ -758,9 +1055,19 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     inventoryPath,
   });
   if (slate) {
+    const synthesisInput = buildMentionsSynthesisInput({
+      date,
+      event,
+      rows: slate.rows,
+      sourceUrl,
+      inventoryPath,
+      compositeSummary,
+    });
     return {
       text: slate.text,
       inventoryText: slate.inventoryText,
+      rows: slate.rows,
+      synthesisInput,
       marketCount: marketInfo.marketCount,
       missingStrikeCount: marketInfo.missingStrikeCount,
       missingMarkets: marketInfo.missingMarkets,
@@ -1201,19 +1508,31 @@ async function main() {
         });
         items.push({ name: inventoryName, ...invW });
       }
-      const w = audit(dir, `${opts.date}-${ticker}`, built.text, {
+      let packetText = built.text;
+      let modelSynthesisInvocation = null;
+      if (!opts.dryRun) {
+        const synthesized = await synthesizeMentionsUserPacket({ input: built.synthesisInput });
+        packetText = synthesized.text;
+        modelSynthesisInvocation = synthesized.invocation;
+      }
+      const w = audit(dir, `${opts.date}-${ticker}`, packetText, {
         event_ticker: ticker,
         market_count: built.marketCount,
         missing_markets: built.missingMarkets,
         missing_strike_text_count: built.missingStrikeCount,
         composite_scored_count: built.compositeSummary.scored_count,
+        composite_source_backed_count: built.compositeSummary.source_backed_count,
+        composite_proximity_only_count: built.compositeSummary.proximity_only_count,
         composite_best_posture: built.compositeSummary.best_posture,
         composite_best_score: built.compositeSummary.best_score,
         composite_pricing_excluded: built.compositeSummary.pricing_excluded,
+        model_synthesis_required: true,
+        model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
+        telegram_delivery_mode: 'document_txt',
         kalshi_source_api: KALSHI_SOURCES.broad.api_url,
         kalshi_source_page: KALSHI_SOURCES.broad.page_url,
         research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
-      });
+      }, { writeChunks: false });
       items.push({ name: ticker, ...w });
     }
     for (const ev of localEvents) {

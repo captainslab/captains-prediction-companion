@@ -3,7 +3,8 @@
 //
 // Reads state/packets/<date>/<type>/ produced by the matching
 // scripts/packets/generate-<type>.mjs and delivers one message per
-// packet (pre-split .chunk-N.txt files sent in order when present).
+// packet. Mentions packets are sent as a short notice plus one .txt document;
+// other packet types may still use pre-split .chunk-N.txt files when present.
 //
 // Rules:
 //   * .inventory.txt and *.meta.json are audit artifacts — never delivered.
@@ -15,7 +16,7 @@
 //   * No trades. No bankroll advice. Sender never edits packet content.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 const TELEGRAM_SAFE_CHARS = 3500;
 
@@ -25,6 +26,7 @@ function argValue(flag) {
   return i >= 0 ? args[i + 1] : null;
 }
 const dryRun = args.includes('--dry-run');
+const force = args.includes('--force');
 const date = argValue('--date') || new Date().toISOString().slice(0, 10);
 const stateRoot = argValue('--state-root') || 'state';
 const packetType = argValue('--type') || 'mentions-daily';
@@ -53,10 +55,15 @@ loadEnv('.env.local');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const SEND_PACING_MS = 1500; // stay under Telegram's per-chat rate limit
 
-export async function tgSendMessage(text, { fetchImpl = fetch, sleepImpl = sleep } = {}) {
+function resolveTelegramEnv() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
   if (!token || !chat) throw new Error('telegram env missing (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)');
+  return { token, chat };
+}
+
+export async function tgSendMessage(text, { fetchImpl = fetch, sleepImpl = sleep } = {}) {
+  const { token, chat } = resolveTelegramEnv();
   for (let attempt = 1; ; attempt += 1) {
     const res = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -91,6 +98,45 @@ export async function tgSendMessage(text, { fetchImpl = fetch, sleepImpl = sleep
   }
 }
 
+export async function tgSendDocument(filePath, { caption = '', fetchImpl = fetch, sleepImpl = sleep } = {}) {
+  const { token, chat } = resolveTelegramEnv();
+  for (let attempt = 1; ; attempt += 1) {
+    const body = new FormData();
+    body.set('chat_id', chat);
+    if (caption) body.set('caption', caption);
+    body.set('document', new Blob([readFileSync(filePath)], { type: 'text/plain' }), basename(filePath));
+    const res = await fetchImpl(`https://api.telegram.org/bot${token}/sendDocument`, {
+      method: 'POST',
+      body,
+    });
+    let j = null;
+    let bodyText = '';
+    try {
+      j = await res.json();
+    } catch {
+      try {
+        bodyText = await res.text();
+      } catch {
+        bodyText = '';
+      }
+    }
+    if (j?.ok) return j.result.message_id;
+    const retryAfter = Number(
+      j?.parameters?.retry_after ??
+      j?.retry_after ??
+      res.headers?.get?.('retry-after') ??
+      res.headers?.get?.('Retry-After'),
+    );
+    const rateLimited = res.status === 429 || j?.error_code === 429;
+    if (rateLimited && attempt <= 3 && Number.isFinite(retryAfter)) {
+      console.log(`telegram 429: waiting ${retryAfter}s (attempt ${attempt}/3)`);
+      await sleepImpl((retryAfter + 1) * 1000);
+      continue;
+    }
+    throw new Error('telegram sendDocument fail: ' + JSON.stringify(j ?? { status: res.status, body: bodyText }));
+  }
+}
+
 function chunkText(text) {
   if (text.length <= TELEGRAM_SAFE_CHARS) return [text];
   const chunks = [];
@@ -105,9 +151,10 @@ function chunkText(text) {
   return chunks;
 }
 
-export function planDeliveries(dir, dateStr) {
+export function planDeliveries(dir, dateStr, options = {}) {
   // Returns [{ name, files }] — one entry per event packet, in stable order.
   // Audit artifacts (.inventory.txt, *.meta.json) are excluded by design.
+  const preferBaseFile = options.preferBaseFile === true;
   const all = readdirSync(dir).sort();
   const bases = all.filter((f) =>
     f.startsWith(`${dateStr}-`) &&
@@ -125,9 +172,32 @@ export function planDeliveries(dir, dateStr) {
         const nb = Number(b.match(/\.chunk-(\d+)\.txt$/)[1]);
         return na - nb;
       });
-    plan.push({ name: stem, files: chunks.length ? chunks : [base] });
+    plan.push({ name: stem, files: preferBaseFile ? [base] : (chunks.length ? chunks : [base]) });
   }
   return plan;
+}
+
+function isMentionsPacketType(type) {
+  return type === 'mentions-daily' || type === 'mentions-watchlist';
+}
+
+export function mentionsPacketNotice(packetText = '', stem = '') {
+  const eventLine = packetText
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(line => /^Event title:/i.test(line) || /^#\s*Event:/i.test(line) || /^=== .*Mentions/i.test(line));
+  const source = eventLine || stem;
+  let label = source
+    .replace(/^Event title:\s*/i, '')
+    .replace(/^#\s*Event:\s*/i, '')
+    .replace(/^===\s*/, '')
+    .replace(/\s*===\s*$/, '')
+    .replace(/^Captain Mentions\s*[—-]\s*/i, '')
+    .replace(/^Daily Decision Board:\s*/i, '')
+    .trim();
+  if (/trump/i.test(source) && /tele-rally/i.test(source)) label = 'Trump Tele-Rally';
+  if (!label) label = stem;
+  return `New mentions packet: ${label} -- attached .txt`;
 }
 
 function loadLedger(path) {
@@ -156,7 +226,7 @@ async function main() {
   }
 
   const ledger = loadLedger(ledgerPath);
-  let plan = planDeliveries(dir, date);
+  let plan = planDeliveries(dir, date, { preferBaseFile: isMentionsPacketType(packetType) });
 
   if (onlyStems) {
     plan = plan.filter((entry) => onlyStems.has(entry.name));
@@ -190,8 +260,36 @@ async function main() {
   let skipped = 0;
   for (const entry of plan) {
     if (entry.name === `${date}-no-events`) continue;
-    if (ledger.delivered[entry.name]) {
+    if (ledger.delivered[entry.name] && !force) {
       skipped += 1;
+      continue;
+    }
+    if (isMentionsPacketType(packetType)) {
+      const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
+      const filePath = join(dir, fileName);
+      const text = readFileSync(filePath, 'utf8');
+      const notice = mentionsPacketNotice(text, entry.name);
+      if (dryRun) {
+        console.log(`[dry-run] would send notice: ${notice}`);
+        console.log(`[dry-run] would send document: ${entry.name} — ${fileName}`);
+        continue;
+      }
+      if (sent) await sleep(SEND_PACING_MS);
+      const noticeId = await tgSendMessage(notice);
+      await sleep(SEND_PACING_MS);
+      const documentId = await tgSendDocument(filePath);
+      ledger.delivered[entry.name] = {
+        utc: new Date().toISOString(),
+        message_ids: [noticeId, documentId],
+        notice_message_id: noticeId,
+        document_message_id: documentId,
+        document_file: fileName,
+        delivery_mode: 'document_txt',
+        forced: force || undefined,
+      };
+      saveLedger(ledgerPath, ledger);
+      sent += 1;
+      console.log(`sent ${entry.name} — notice + 1 document (${fileName})`);
       continue;
     }
     const pieces = [];

@@ -2,7 +2,7 @@
 // No credentials. No trades. No order placement.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export const TELEGRAM_SAFE_CHARS = 3500;
@@ -50,10 +50,22 @@ export function chunkForTelegram(text, limit = TELEGRAM_SAFE_CHARS) {
   return chunks.map((c, i) => `[part ${i + 1}/${chunks.length}]\n${c.trim()}`);
 }
 
-export function writeAudit(dir, baseName, packetText, meta = {}) {
+function removeChunkArtifacts(dir, safeBase) {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir)) {
+    if (entry.startsWith(`${safeBase}.chunk-`) && entry.endsWith('.txt')) {
+      try {
+        unlinkSync(join(dir, entry));
+      } catch {}
+    }
+  }
+}
+
+export function writeAudit(dir, baseName, packetText, meta = {}, options = {}) {
   const safeBase = baseName.replace(/[^a-z0-9._-]/gi, '_').slice(0, 80);
   const txtPath = join(dir, `${safeBase}.txt`);
   const metaPath = join(dir, `${safeBase}.meta.json`);
+  const writeChunks = options.writeChunks !== false;
   writeFileSync(txtPath, packetText, 'utf8');
   const chunks = chunkForTelegram(packetText);
   writeFileSync(
@@ -72,10 +84,12 @@ export function writeAudit(dir, baseName, packetText, meta = {}) {
     ),
     'utf8',
   );
-  if (chunks.length > 1) {
+  if (chunks.length > 1 && writeChunks) {
     for (let i = 0; i < chunks.length; i += 1) {
       writeFileSync(join(dir, `${safeBase}.chunk-${i + 1}.txt`), chunks[i], 'utf8');
     }
+  } else if (!writeChunks) {
+    removeChunkArtifacts(dir, safeBase);
   }
   return { txtPath, metaPath, chunkCount: chunks.length };
 }

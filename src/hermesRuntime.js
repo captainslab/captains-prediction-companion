@@ -139,8 +139,11 @@ export function runHermesChat(query, options = {}) {
   const stderr = result.stderr ?? '';
   const parsed = extractJsonFromHermesOutput(stdout);
 
+  // Hermes CLI may exit with SIGABRT (status null) even on successful output.
+  // Trust the parsed output when status is null/0 and there's no spawn error.
+  const ok = !result.error && (result.status === 0 || result.status === null) && parsed != null;
   return {
-    ok: !result.error && result.status === 0 && parsed != null,
+    ok,
     parsed,
     stdout,
     stderr,

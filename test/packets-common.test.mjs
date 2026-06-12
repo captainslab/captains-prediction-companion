@@ -63,6 +63,21 @@ test('writeAudit writes txt + meta and chunk files when oversized', () => {
   }
 });
 
+test('writeAudit can write a single txt artifact without chunk files', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'packet-test-no-chunks-'));
+  try {
+    const dir = ensurePacketDir(tmp, '2026-05-18', 'unit-test');
+    const big = 'z'.repeat(TELEGRAM_SAFE_CHARS * 2 + 10);
+    const w = writeAudit(dir, 'single-doc', big, { delivery_mode: 'document_txt' }, { writeChunks: false });
+    const meta = JSON.parse(readFileSync(w.metaPath, 'utf8'));
+    assert.ok(meta.chunk_count >= 2);
+    assert.equal(existsSync(join(dir, 'single-doc.chunk-1.txt')), false);
+    assert.equal(existsSync(w.txtPath), true);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('previewAudit returns deliverable paths without writing files', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'packet-preview-'));
   try {

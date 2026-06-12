@@ -1,7 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildKalshiEventPacket } from '../scripts/packets/generate-mentions-daily.mjs';
+import {
+  buildKalshiEventPacket,
+  buildMentionCompositeForMarket,
+  mentionCompositeToDecisionRow,
+  synthesizeMentionsUserPacket,
+  buildMentionsSynthesisPrompt,
+  normalizeLayerList,
+} from '../scripts/packets/generate-mentions-daily.mjs';
 
 function strongEarningsEvent() {
   return {
@@ -47,6 +54,36 @@ function strongEarningsEvent() {
             present: true,
             score: 80,
             source_basis: 'SEC filing language includes PowerEdge in segment discussion',
+          },
+        },
+      },
+    ],
+  };
+}
+
+function trumpTeleRallyEvent() {
+  return {
+    event_ticker: 'KXTRUMPMENTION-26JUN11',
+    title: 'What will Trump say during his Burt Jones Tele-Rally?',
+    sub_title: 'Donald Trump - Burt Jones Tele-Rally',
+    series_ticker: 'KXTRUMPMENTION',
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTION-26JUN11-BIDE',
+        title: 'What will Donald Trump say during Burt Jones Tele-Rally?',
+        yes_sub_title: 'Biden',
+        no_sub_title: 'Biden',
+        custom_strike: { Word: 'Biden' },
+        yes_bid_dollars: '0.0100',
+        yes_ask_dollars: '0.0200',
+        last_price_dollars: '0.0200',
+        rules_primary: 'If Donald Trump says Biden as part of Burt Jones Tele-Rally, then the market resolves to Yes.',
+        mention_profile: 'political_mentions',
+        layer_records: {
+          event_proximity: {
+            present: true,
+            score: 10,
+            source_basis: 'official speech schedule confirmed',
           },
         },
       },
@@ -103,6 +140,123 @@ test('mentions daily packet keeps market context only in NOT IN SCORE section', 
   }
   // Pricing is present, but on the market half.
   assert.match(text, /market: implied=.*yes_bid=57 yes_ask=61 last=59/);
+});
+
+test('mentions daily packet uses full strike text, not abbreviation-only labels', () => {
+  const text = buildKalshiEventPacket({
+    date: '2026-06-11',
+    event: trumpTeleRallyEvent(),
+    sourceUrl: '/tmp/trump.json',
+  }).text;
+
+  assert.match(text, /KXTRUMPMENTION-26JUN11-BIDE :: What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  assert.doesNotMatch(text, /KXTRUMPMENTION-26JUN11-BIDE :: Biden(?:\n|$)/);
+});
+
+test('proximity-only mention rows are labeled scaffold-only, not source-backed composite', () => {
+  const text = buildKalshiEventPacket({
+    date: '2026-06-11',
+    event: trumpTeleRallyEvent(),
+    sourceUrl: '/tmp/trump.json',
+  }).text;
+
+  assert.match(text, /proximity scaffold only -- no pick/);
+  assert.doesNotMatch(text, /source-backed composite/i);
+});
+
+test('one-model mention synthesis uses dynamic default Hermes routing with no hardcoded provider/model', async () => {
+  const built = buildKalshiEventPacket({
+    date: '2026-06-11',
+    event: trumpTeleRallyEvent(),
+    sourceUrl: '/tmp/trump.json',
+  });
+  const fullStrike = built.synthesisInput.terms[0].full_strike_text;
+  const calls = [];
+
+  const result = await synthesizeMentionsUserPacket({
+    input: built.synthesisInput,
+    chatRunner: async (prompt, options) => {
+      calls.push({ prompt, options });
+      return {
+        ok: true,
+        status: 0,
+        sessionId: 'test-session',
+        parsed: {
+          packet_text: [
+            'Event title: What will Trump say during his Burt Jones Tele-Rally?',
+            'Date/time: 2026-06-11',
+            'Setup: proximity scaffold only -- no pick.',
+            `Watch-only terms: ${fullStrike} - proximity scaffold only -- no pick.`,
+            'Blocked/no-source terms: none.',
+            'Missing research layers: transcript, quote, historical tendency.',
+            'What would upgrade/downgrade the read: official transcript or video exact phrase.',
+            'Market Context - NOT IN SCORE: yes bid/ask are context only.',
+            'Research-only footer: No trades placed. Research-only.',
+          ].join('\n'),
+        },
+      };
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(Object.hasOwn(calls[0].options, 'provider'), false);
+  assert.equal(Object.hasOwn(calls[0].options, 'model'), false);
+  assert.equal(calls[0].options.source, 'mentions-watch-packet-synthesis');
+  assert.match(calls[0].prompt, /source_packet:/);
+  assert.equal(result.invocation.provider_arg, 'omitted');
+  assert.equal(result.invocation.model_arg, 'omitted');
+  assert.match(result.text, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+});
+
+test('normalizeLayerList tolerates every layers_present shape', () => {
+  assert.deepEqual(normalizeLayerList(['event_proximity', 'historical_tendency']), ['event_proximity', 'historical_tendency']);
+  assert.deepEqual(normalizeLayerList([{ category: 'event_proximity' }, { label: 'sec_filing_language' }]), ['event_proximity', 'sec_filing_language']);
+  assert.deepEqual(normalizeLayerList('1/4'), ['1/4']);
+  assert.deepEqual(normalizeLayerList('a, b'), ['a', 'b']);
+  assert.deepEqual(normalizeLayerList('MISSING'), []);
+  assert.deepEqual(normalizeLayerList({ event_proximity: true, historical_tendency: true }), ['event_proximity', 'historical_tendency']);
+  assert.deepEqual(normalizeLayerList(4), []);
+  assert.deepEqual(normalizeLayerList(null), []);
+  assert.deepEqual(normalizeLayerList(undefined), []);
+});
+
+test('synthesis prompt does not crash for any layers_present shape (the .join regression)', () => {
+  for (const shape of [['event_proximity'], '1/4', { event_proximity: true }, 4, null, undefined, 'MISSING']) {
+    const prompt = buildMentionsSynthesisPrompt({
+      date: '2026-06-11',
+      event: { title: 'Trump Tele-Rally' },
+      terms: [{
+        full_strike_text: 'What will Donald Trump say during Burt Jones Tele-Rally? -- Biden',
+        evidence_status: 'proximity scaffold only -- no pick',
+        layers_present: shape,
+        missing_research_layers: shape,
+      }],
+      layer_gaps: shape,
+    });
+    assert.match(prompt, /full_strike_text: What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  }
+});
+
+test('real generator pipeline produces a synthesis prompt without crashing on coverage-string layers_present', () => {
+  // End-to-end through buildKalshiEventPacket: decision rows carry
+  // layers_present as a "present/total" string; the prompt builder must
+  // normalize it rather than calling .join on a string.
+  const built = buildKalshiEventPacket({
+    date: '2026-06-11',
+    event: trumpTeleRallyEvent(),
+    sourceUrl: '/tmp/trump.json',
+  });
+  assert.ok(Array.isArray(built.synthesisInput.terms[0].layers_present));
+  const prompt = buildMentionsSynthesisPrompt(built.synthesisInput);
+  assert.match(prompt, /layers_present:/);
+});
+
+test('mention implied probability is sane for 1/2 cent prices', () => {
+  const ev = trumpTeleRallyEvent();
+  const row = mentionCompositeToDecisionRow(buildMentionCompositeForMarket({ event: ev, market: ev.markets[0] }));
+  assert.equal(row.market_yes_bid, 1);
+  assert.equal(row.market_yes_ask, 2);
+  assert.equal(row.implied_probability, 0.015);
 });
 
 test('mentions daily packet preserves all mention composite profiles', () => {

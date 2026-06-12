@@ -38,6 +38,7 @@ function strongRow(overrides = {}) {
 test('implied probability is a mid of yes bid/ask (cents or dollars accepted)', () => {
   assert.equal(impliedProbabilityFromMarket({ yes_bid: 0.50, yes_ask: 0.52 }), 0.51);
   assert.equal(impliedProbabilityFromMarket({ yes_bid: 50, yes_ask: 52 }), 0.51);
+  assert.equal(impliedProbabilityFromMarket({ yes_bid: 1, yes_ask: 2, price_units: 'cents' }), 0.015);
   assert.equal(impliedProbabilityFromMarket({ last_price: 0.40 }), 0.40);
   assert.equal(impliedProbabilityFromMarket({}), null);
 });

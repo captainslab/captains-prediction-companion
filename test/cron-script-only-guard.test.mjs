@@ -18,7 +18,12 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { globSync } from 'node:fs';
 
-import { planDeliveries, tgSendMessage } from '../scripts/packets/send-packets-telegram.mjs';
+import {
+  mentionsPacketNotice,
+  planDeliveries,
+  tgSendDocument,
+  tgSendMessage,
+} from '../scripts/packets/send-packets-telegram.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SENDER = join(REPO, 'scripts/packets/send-packets-telegram.mjs');
@@ -106,6 +111,20 @@ test('planDeliveries sends chunks in order and never audit artifacts', () => {
   assert.ok(!flat.includes('inventory'), 'inventory artifacts must never be planned for delivery');
 });
 
+test('mentions delivery plan uses one base txt document and ignores chunk artifacts', () => {
+  const date = '2099-01-01';
+  const { dir } = makePacketDir(date);
+  writeFileSync(join(dir, `${date}-KXTEST-EVENT.txt`), 'full packet');
+  writeFileSync(join(dir, `${date}-KXTEST-EVENT.chunk-2.txt`), 'part two');
+  writeFileSync(join(dir, `${date}-KXTEST-EVENT.chunk-1.txt`), 'part one');
+  writeFileSync(join(dir, `${date}-KXTEST-EVENT.inventory.txt`), 'AUDIT ONLY');
+
+  const plan = planDeliveries(dir, date, { preferBaseFile: true });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].name, `${date}-KXTEST-EVENT`);
+  assert.deepEqual(plan[0].files, [`${date}-KXTEST-EVENT.txt`]);
+});
+
 test('sender dry-run on no-events day plans a single status message', () => {
   const date = '2099-01-02';
   const { root, dir } = makePacketDir(date);
@@ -129,8 +148,30 @@ test('sender --only sends only the requested exact stem and skips future artifac
     SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', `${date}-KXTEST-TODAY`,
   ], { encoding: 'utf8', cwd: REPO });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /would send .*2099-01-02-KXTEST-TODAY/);
+  assert.match(r.stdout, /would send document: 2099-01-02-KXTEST-TODAY/);
   assert.doesNotMatch(r.stdout, /KXTEST-FUTURE/);
+});
+
+test('mentions sender dry-run sends short notice plus one txt document, not chunks', () => {
+  const date = '2099-01-02';
+  const { root, dir } = makePacketDir(date);
+  const stem = `${date}-KXTRUMPMENTION-26JUN11`;
+  writeFileSync(join(dir, `${stem}.txt`), [
+    'Event title: What will Trump say during his Burt Jones Tele-Rally?',
+    'Market Context - NOT IN SCORE',
+    'Research-only footer',
+  ].join('\n'));
+  writeFileSync(join(dir, `${stem}.chunk-1.txt`), 'old chunk');
+  writeFileSync(join(dir, `${stem}.chunk-2.txt`), 'old chunk');
+
+  const r = spawnSync(process.execPath, [
+    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', stem,
+  ], { encoding: 'utf8', cwd: REPO });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /would send notice: New mentions packet: Trump Tele-Rally -- attached \.txt/);
+  assert.match(r.stdout, /would send document: 2099-01-02-KXTRUMPMENTION-26JUN11 — 2099-01-02-KXTRUMPMENTION-26JUN11\.txt/);
+  assert.doesNotMatch(r.stdout, /message\(s\) from/);
+  assert.doesNotMatch(r.stdout, /chunk-1/);
 });
 
 test('sender --only with no matching packet exits 0 and logs clearly', () => {
@@ -226,4 +267,46 @@ test('tgSendMessage retries safely after Telegram 429 retry_after', async () => 
     if (oldEnv.home == null) delete process.env.TELEGRAM_HOME_CHANNEL;
     else process.env.TELEGRAM_HOME_CHANNEL = oldEnv.home;
   }
+});
+
+test('tgSendDocument posts a txt file via Telegram sendDocument', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'send-doc-test-'));
+  const filePath = join(root, 'packet.txt');
+  writeFileSync(filePath, 'packet body');
+  const oldEnv = {
+    token: process.env.TELEGRAM_BOT_TOKEN,
+    chat: process.env.TELEGRAM_CHAT_ID,
+    home: process.env.TELEGRAM_HOME_CHANNEL,
+  };
+  process.env.TELEGRAM_BOT_TOKEN = 'token';
+  process.env.TELEGRAM_CHAT_ID = 'chat';
+  delete process.env.TELEGRAM_HOME_CHANNEL;
+
+  try {
+    const messageId = await tgSendDocument(filePath, {
+      fetchImpl: async (url, init) => {
+        assert.match(url, /sendDocument/);
+        assert.equal(init.method, 'POST');
+        assert.ok(init.body instanceof FormData);
+        assert.equal(init.body.get('chat_id'), 'chat');
+        assert.equal(init.body.get('document').name, 'packet.txt');
+        return {
+          status: 200,
+          json: async () => ({ ok: true, result: { message_id: 321 } }),
+          text: async () => '',
+        };
+      },
+    });
+    assert.equal(messageId, 321);
+  } finally {
+    process.env.TELEGRAM_BOT_TOKEN = oldEnv.token;
+    process.env.TELEGRAM_CHAT_ID = oldEnv.chat;
+    if (oldEnv.home == null) delete process.env.TELEGRAM_HOME_CHANNEL;
+    else process.env.TELEGRAM_HOME_CHANNEL = oldEnv.home;
+  }
+});
+
+test('mentionsPacketNotice collapses the Trump tele-rally title to the required short notice', () => {
+  const notice = mentionsPacketNotice('Event title: What will Trump say during his Burt Jones Tele-Rally?', 'stem');
+  assert.equal(notice, 'New mentions packet: Trump Tele-Rally -- attached .txt');
 });

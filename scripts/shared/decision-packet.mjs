@@ -70,9 +70,11 @@ function num(value) {
  * Coerce a price-ish input to a probability in [0,1].
  * Accepts dollars (0..1), cents (1..100), or an already-normalized fraction.
  */
-function toProbability(value) {
+function toProbability(value, units = null) {
   const n = num(value);
   if (n === null) return null;
+  if (units === 'cents') return Math.max(0, Math.min(1, n / 100));
+  if (units === 'dollars') return Math.max(0, Math.min(1, n));
   if (n > 1.5) return Math.max(0, Math.min(1, n / 100)); // cents
   return Math.max(0, Math.min(1, n));                    // dollars / fraction
 }
@@ -87,9 +89,14 @@ function round1(n) {
  * — this value is for EDGE comparison only and never re-enters composite math.
  */
 export function impliedProbabilityFromMarket(market = {}) {
-  const yesBid = toProbability(market.yes_bid ?? market.yes_bid_dollars ?? market.yesBid);
-  const yesAsk = toProbability(market.yes_ask ?? market.yes_ask_dollars ?? market.yesAsk);
-  const last = toProbability(market.last_price ?? market.last_price_dollars ?? market.lastPrice);
+  const units = market.price_units === 'cents' || market.priceUnits === 'cents'
+    ? 'cents'
+    : market.price_units === 'dollars' || market.priceUnits === 'dollars'
+      ? 'dollars'
+      : null;
+  const yesBid = toProbability(market.yes_bid ?? market.yes_bid_dollars ?? market.yesBid, units);
+  const yesAsk = toProbability(market.yes_ask ?? market.yes_ask_dollars ?? market.yesAsk, units);
+  const last = toProbability(market.last_price ?? market.last_price_dollars ?? market.lastPrice, units);
   if (yesBid !== null && yesAsk !== null) return (yesBid + yesAsk) / 2;
   if (last !== null) return last;
   if (yesAsk !== null) return yesAsk;
