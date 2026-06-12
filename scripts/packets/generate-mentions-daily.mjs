@@ -78,6 +78,12 @@ import {
   validateRenderedPacket,
   shortTerm,
 } from '../mentions/render-mention-packet.mjs';
+import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
+import {
+  loadHistory,
+  buildHistoryMatch,
+  historyToLayerScore,
+} from '../mentions/settled-history.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -120,7 +126,40 @@ function lowerJoined(parts) {
   return parts.map(asText).filter(Boolean).join(' ').toLowerCase();
 }
 
+// Adapter: fold event + market + legacy text fields into the event-like shape
+// the shared route resolver expects, so generator and collector resolve the
+// same route from the same resolver (scripts/mentions/mention-route-resolver.mjs).
+function routeEventLike({ event = null, market = null, legacy = null } = {}) {
+  // Route is an EVENT-level decision: use the whole market board when the
+  // event carries one (matching the collector's view), falling back to the
+  // single market. Legacy strike terms (target_phrase) belong with markets,
+  // never event-level text — a Trump strike on a Mamdani event must not make
+  // it a Trump event.
+  const markets = Array.isArray(event?.markets) && event.markets.length
+    ? event.markets
+    : (market ? [market] : []);
+  const legacyStrike = lowerJoined([legacy?.target_phrase, legacy?.phrase, legacy?.keyword]) || null;
+  return {
+    event_ticker: event?.event_ticker ?? legacy?.event_id ?? null,
+    series_ticker: event?.series_ticker ?? null,
+    title: event?.title ?? null,
+    sub_title: lowerJoined([
+      event?.sub_title,
+      legacy?.speaker,
+      legacy?.company,
+      legacy?.entity,
+      legacy?.context,
+      legacy?.event_context,
+    ]) || null,
+    close_time: event?.close_time ?? null,
+    markets: legacyStrike ? [...markets, { title: legacyStrike }] : markets,
+  };
+}
+
 function resolveMentionProfile({ event = null, market = null, legacy = null } = {}) {
+  // Research route is resolved FIRST — before any source fetch or model
+  // extraction — and is the single shared classification authority.
+  const route = resolveResearchRoute(routeEventLike({ event, market, legacy }));
   const explicit = [
     market?.mention_profile,
     market?.mentionProfile,
@@ -137,39 +176,12 @@ function resolveMentionProfile({ event = null, market = null, legacy = null } = 
     legacy?.composite_profile,
     legacy?.profile,
   ].map(validProfile).find(Boolean);
-  if (explicit) return { profile: explicit, basis: 'explicit_profile' };
+  if (explicit) return { profile: explicit, basis: 'explicit_profile', route };
 
-  const text = lowerJoined([
-    event?.event_ticker,
-    event?.series_ticker,
-    event?.title,
-    event?.sub_title,
-    market?.ticker,
-    market?.title,
-    market?.subtitle,
-    market?.yes_sub_title,
-    market?.no_sub_title,
-    market?.rules_primary,
-    market?.rules_secondary,
-    legacy?.event_id,
-    legacy?.target_phrase,
-    legacy?.speaker,
-    legacy?.company,
-    legacy?.entity,
-    legacy?.context,
-    legacy?.event_context,
-  ]);
-
-  if (/\b(earnings|earnings call|quarterly results|guidance|eps|revenue|cfo|ceo|investor relations|10-k|10-q|sec filing)\b/.test(text)) {
-    return { profile: EARNINGS_PROFILE, basis: 'inferred_earnings_terms' };
-  }
-  if (/\b(announcer|broadcast|commentator|commentary|pregame|postgame|espn|fox sports|tnt|cbs sports|nbc sports|game broadcast)\b/.test(text)) {
-    return { profile: SPORTS_ANNOUNCER_PROFILE, basis: 'inferred_broadcast_terms' };
-  }
-  if (/\b(president|trump|biden|vance|senate|congress|governor|mayor|election|debate|speech|rally|hearing|white house|secretary|minister|campaign|candidate)\b/.test(text)) {
-    return { profile: POLITICAL_PROFILE, basis: 'inferred_political_terms' };
-  }
-  return { profile: POLITICAL_PROFILE, basis: 'default_mentions_calendar_profile' };
+  // Profile (scoring weights) derives from the research route (alpha plan)
+  // via the shared ROUTE_TO_PROFILE map — one classification authority.
+  const profile = validProfile(route.profile_key) ?? POLITICAL_PROFILE;
+  return { profile, basis: `route:${route.basis}`, route };
 }
 
 function firstLayerRecordMap(...carriers) {
@@ -298,8 +310,9 @@ function firstSourceLadderInputs(...carriers) {
   return null;
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null } = {}) {
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
+  const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
   const targetMention = market ? targetMentionFromMarket(market) : (
     asText(legacy?.target_phrase) ||
@@ -307,7 +320,25 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     asText(legacy?.keyword) ||
     'MISSING'
   );
-  const layerRecords = firstLayerRecordMap(market, event, legacy);
+  let layerRecords = firstLayerRecordMap(market, event, legacy);
+
+  // Settled-history alpha: price-free hit/miss records (settled YES/NO only)
+  // feed the historical_tendency layer when no research-supplied record exists.
+  // Empty/no-match history stays absent — never fake conviction.
+  let historyMatch = null;
+  if (route && Array.isArray(historyRecords) && historyRecords.length) {
+    historyMatch = buildHistoryMatch({
+      records: historyRecords,
+      route: route.route,
+      entity: route.entity,
+      horizon: route.horizon,
+      seriesTicker: event?.series_ticker ?? null,
+    });
+    const historyLayer = historyToLayerScore(historyMatch);
+    if (historyLayer.present && !(layerRecords?.historical_tendency?.present)) {
+      layerRecords = { ...(layerRecords ?? {}), historical_tendency: historyLayer };
+    }
+  }
   const result = composeMentionLedger({
     event: eventNameForComposite(event ?? {}, legacy),
     targetMention,
@@ -332,6 +363,17 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   return {
     market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
     profile_basis: profileResolution.basis,
+    research_route: route?.route ?? null,
+    route_basis: route?.basis ?? null,
+    route_entity: route?.entity ?? null,
+    route_horizon: route?.horizon ?? null,
+    history_match_tier: historyMatch?.match_tier ?? null,
+    history_sample_size: historyMatch?.sample_size ?? null,
+    history_hits: historyMatch?.hits ?? null,
+    history_misses: historyMatch?.misses ?? null,
+    history_hit_rate: historyMatch?.hit_rate ?? null,
+    history_match_quality_penalty: historyMatch?.match_quality_penalty ?? null,
+    history_source_tickers: historyMatch?.source_tickers ?? null,
     result,
     source_ladder: ladder,
     posture_final: postureFinal,
@@ -535,7 +577,13 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     sources: [sourcePath, KALSHI_SOURCES.mentions.page_url].filter(Boolean),
   });
   const neutralityNote = 'Mention composite is source-layer scoring only; Kalshi price/volume/OI is shown beside it for edge detection but is NEVER a composite input.';
-  const text = [header, neutralityNote, body, packetFooter()].filter(Boolean).join('\n\n');
+  // Research provenance: route + settled-history hit/miss facts (outcomes only,
+  // never prices). Deterministic line, additive — section order untouched.
+  const prov = composites[0] ?? null;
+  const provenanceNote = prov?.research_route
+    ? `research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`
+    : null;
+  const text = [header, neutralityNote, provenanceNote, body, packetFooter()].filter(Boolean).join('\n\n');
 
   // Raw per-contract inventory + market context -> audit artifact only.
   const inventoryLines = rows.map((r, i) =>
@@ -976,6 +1024,10 @@ function renderCompositeEvidence(composites) {
     lines.push(`    target_mention: ${formatMaybe(r.target_mention)}`);
     lines.push(`    profile: ${r.profile}`);
     lines.push(`    profile_basis: ${c.profile_basis}`);
+    lines.push(`    research_route: ${formatMaybe(c.research_route)}`);
+    if (c.history_match_tier && c.history_match_tier !== 'none') {
+      lines.push(`    settled_history: tier=${c.history_match_tier} n=${c.history_sample_size} hits=${c.history_hits} misses=${c.history_misses} hit_rate=${c.history_hit_rate ?? 'n/a'}`);
+    }
     lines.push(`    composite_score: ${r.composite_score === null ? 'MISSING' : r.composite_score}`);
     lines.push(`    composite_posture: ${r.posture}`);
     lines.push(`    layers_present: ${r._meta.layers_present}/${r._meta.layers_total}`);
@@ -1115,11 +1167,25 @@ function mergeResearchIntoEvent(event, researchEntry) {
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
-  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw }));
+  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw, historyRecords }));
   const compositeSummary = summarizeCompositeRun(composites);
+  const prov = composites[0] ?? null;
+  const researchProvenance = prov ? {
+    research_route: prov.research_route ?? null,
+    route_basis: prov.route_basis ?? null,
+    route_entity: prov.route_entity ?? null,
+    route_horizon: prov.route_horizon ?? null,
+    history_match_tier: prov.history_match_tier ?? null,
+    history_sample_size: prov.history_sample_size ?? null,
+    history_hits: prov.history_hits ?? null,
+    history_misses: prov.history_misses ?? null,
+    history_hit_rate: prov.history_hit_rate ?? null,
+    history_match_quality_penalty: prov.history_match_quality_penalty ?? null,
+    history_source_tickers: prov.history_source_tickers ?? null,
+  } : null;
 
   // Preferred path: compact sectioned decision board (model + market + edge),
   // raw inventory routed to a separate audit artifact.
@@ -1139,11 +1205,13 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       inventoryPath,
       compositeSummary,
     });
+    if (researchProvenance) synthesisInput.research_provenance = researchProvenance;
     return {
       text: slate.text,
       inventoryText: slate.inventoryText,
       rows: slate.rows,
       synthesisInput,
+      researchProvenance,
       marketCount: marketInfo.marketCount,
       missingStrikeCount: marketInfo.missingStrikeCount,
       missingMarkets: marketInfo.missingMarkets,
@@ -1173,6 +1241,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     missingStrikeCount: marketInfo.missingStrikeCount,
     missingMarkets: marketInfo.missingMarkets,
     compositeSummary,
+    researchProvenance,
   };
 }
 
@@ -1501,6 +1570,9 @@ export async function writeKalshiEventPackets({
   const failedTickers = [];
   const seen = new Set();
   const researchMap = loadResearchForDate(stateRoot, date);
+  // Settled-history records (price-free, outcomes only) load once per run and
+  // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
+  const historyRecords = await loadHistory({ stateRoot });
   for (const ev of events) {
     const ticker = ev?.event_ticker;
     if (!ticker || seen.has(ticker)) continue;
@@ -1510,7 +1582,7 @@ export async function writeKalshiEventPackets({
     const sourcePath = resolve(stateRoot, 'mentions', date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
     const inventoryName = `${date}-${ticker}.inventory`;
     const inventoryPath = `${inventoryName}.txt`;
-    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath });
+    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords });
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
@@ -1560,6 +1632,10 @@ export async function writeKalshiEventPackets({
       composite_best_posture: built.compositeSummary.best_posture,
       composite_best_score: built.compositeSummary.best_score,
       composite_pricing_excluded: built.compositeSummary.pricing_excluded,
+      research_route: built.researchProvenance?.research_route ?? null,
+      history_match_tier: built.researchProvenance?.history_match_tier ?? null,
+      history_sample_size: built.researchProvenance?.history_sample_size ?? null,
+      history_hit_rate: built.researchProvenance?.history_hit_rate ?? null,
       render_mode: 'deterministic_code_renderer_v1',
       model_synthesis_required: false,
       model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',

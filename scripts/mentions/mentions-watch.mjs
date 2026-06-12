@@ -29,6 +29,7 @@ import {
   deriveEventDate,
 } from '../packets/lib/kalshi-discovery.mjs';
 import { collectAlphaMentionIntake } from './alpha-intake.mjs';
+import { resolveResearchRoute } from './mention-route-resolver.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 
@@ -79,12 +80,23 @@ export function selectNewTodayEvents(candidates, ledger, date) {
   return { fresh, seen, deferred };
 }
 
+// Annotate every candidate with its research route at discovery time — BEFORE
+// any source fetch or model extraction. The generator re-resolves through the
+// same shared resolver, so collector and generator can never disagree.
+export function annotateResearchRoutes(candidates) {
+  for (const ev of candidates) {
+    if (!ev || typeof ev !== 'object') continue;
+    ev.research_route = resolveResearchRoute(ev);
+  }
+  return candidates;
+}
+
 async function discoverCandidates({ stateRoot, env, eventsFile }) {
   if (eventsFile) {
     // Test/recovery hook: read candidate events from a local JSON file
     // instead of the network. Shape: [{ event_ticker, ... }] or { events: [...] }.
     const parsed = JSON.parse(readFileSync(eventsFile, 'utf8'));
-    return Array.isArray(parsed) ? parsed : (parsed.events ?? []);
+    return annotateResearchRoutes(Array.isArray(parsed) ? parsed : (parsed.events ?? []));
   }
   const candidates = [];
   const broad = await fetchKalshiEvents('broad');
@@ -93,7 +105,7 @@ async function discoverCandidates({ stateRoot, env, eventsFile }) {
   candidates.push(...filterMentionEvents(series.events).mentionEvents);
   const alpha = await collectAlphaMentionIntake({ stateRoot, env, fallbackEvents: [] });
   candidates.push(...(alpha.events || []));
-  return candidates;
+  return annotateResearchRoutes(candidates);
 }
 
 // ─── single-run lock ──────────────────────────────────────────────────────────
@@ -274,6 +286,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
       event_ticker: ticker,
       event_url: ev.event_url ?? ev.url ?? null,
       event_date: deriveEventDate(ev),
+      research_route: ev.research_route?.route ?? null,
       first_seen_utc: new Date().toISOString(),
       packet_path: join(stateRoot, 'packets', date, PACKET_TYPE, `${stem}.txt`),
       status: 'pending',
