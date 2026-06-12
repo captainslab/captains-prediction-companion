@@ -200,3 +200,35 @@ test('watch steps are script-only (no agent CLI) and Hermes synthesis inherits d
   assert.equal(invocation.model_arg, 'omitted');
   assert.match(invocation.note, /runtime default/);
 });
+
+// ─── incremental ledger persistence (600s external kill survival) ───────────
+
+test('ledger is persisted after EACH event so an externally killed run never repeats delivered work', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mw-incremental-'));
+  const eventsFile = join(root, 'events.json');
+  writeFileSync(eventsFile, JSON.stringify([ev('KXAMENTION-26JUN11'), ev('KXBMENTION-26JUN11')]));
+
+  const seenAtSecondEvent = [];
+  await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    runStepImpl: (label, command, args) => {
+      if (label === 'generator:KXBMENTION-26JUN11') {
+        // By the time event B starts, event A's delivery must already be durable
+        // on disk — a SIGKILL here must not lose A's seen/delivered state.
+        const onDisk = loadLedger(ledgerPath(root, DATE));
+        seenAtSecondEvent.push(onDisk.events['KXAMENTION-26JUN11']?.status ?? 'missing');
+      }
+      if (label.startsWith('generator:')) {
+        const stem = `${DATE}-${args[args.indexOf('--only') + 1]}`;
+        const dir = join(root, 'packets', DATE, 'mentions-daily');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, `${stem}.txt`), 'packet');
+      }
+      return { status: 0 };
+    },
+  });
+
+  assert.deepEqual(seenAtSecondEvent, ['delivered'], 'first event must be durably recorded before the second event starts');
+});

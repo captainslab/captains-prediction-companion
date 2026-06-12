@@ -308,6 +308,9 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
       entry.blocker_path = writeBlockerArtifact({ stateRoot, date, ticker, error: err.message });
       console.error(`[mentions-watch] ${date}: [${ticker}] BLOCKED (not delivered): ${err.message}; blocker at ${entry.blocker_path}`);
       failed.push(ticker);
+      // Persist the blocked outcome immediately: an external kill (e.g. the
+      // cron runner's script timeout) right after this event must not lose it.
+      saveLedger(path, ledger);
       continue;
     }
 
@@ -324,6 +327,10 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
         // delivery facts are best-effort; seen-state below is what guarantees idempotency
       }
     }
+    // Persist after EVERY event, not just at run end: if the run is killed
+    // externally mid-batch, already-delivered events stay seen and are never
+    // re-generated or re-sent by the next run.
+    saveLedger(path, ledger);
   }
 
   saveLedger(path, ledger);
