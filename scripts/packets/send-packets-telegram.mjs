@@ -155,9 +155,12 @@ export function planDeliveries(dir, dateStr, options = {}) {
   // Returns [{ name, files }] — one entry per event packet, in stable order.
   // Audit artifacts (.inventory.txt, *.meta.json) are excluded by design.
   const preferBaseFile = options.preferBaseFile === true;
+  // Most packet types name files <date>-...; worldcup-matchday uses
+  // worldcup-<date>-... — accept either, still pinned to the requested date.
+  const prefixes = options.prefixes ?? [`${dateStr}-`, `worldcup-${dateStr}-`];
   const all = readdirSync(dir).sort();
   const bases = all.filter((f) =>
-    f.startsWith(`${dateStr}-`) &&
+    prefixes.some((p) => f.startsWith(p)) &&
     f.endsWith('.txt') &&
     !f.endsWith('.inventory.txt') &&
     !/\.chunk-\d+\.txt$/.test(f),
@@ -179,6 +182,12 @@ export function planDeliveries(dir, dateStr, options = {}) {
 
 function isMentionsPacketType(type) {
   return type === 'mentions-daily' || type === 'mentions-watchlist';
+}
+
+// Packet types delivered mentions-style: one short notice + the base .txt as
+// an attached document (never chunked text messages).
+function isDocumentPacketType(type) {
+  return isMentionsPacketType(type) || type === 'worldcup-matchday';
 }
 
 export function mentionsPacketNotice(packetText = '', stem = '') {
@@ -226,7 +235,7 @@ async function main() {
   }
 
   const ledger = loadLedger(ledgerPath);
-  let plan = planDeliveries(dir, date, { preferBaseFile: isMentionsPacketType(packetType) });
+  let plan = planDeliveries(dir, date, { preferBaseFile: isDocumentPacketType(packetType) });
 
   if (onlyStems) {
     plan = plan.filter((entry) => onlyStems.has(entry.name));
@@ -264,11 +273,13 @@ async function main() {
       skipped += 1;
       continue;
     }
-    if (isMentionsPacketType(packetType)) {
+    if (isDocumentPacketType(packetType)) {
       const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
       const filePath = join(dir, fileName);
       const text = readFileSync(filePath, 'utf8');
-      const notice = mentionsPacketNotice(text, entry.name);
+      const notice = isMentionsPacketType(packetType)
+        ? mentionsPacketNotice(text, entry.name)
+        : `New ${packetType} packet: ${entry.name} -- attached .txt`;
       if (dryRun) {
         console.log(`[dry-run] would send notice: ${notice}`);
         console.log(`[dry-run] would send document: ${entry.name} — ${fileName}`);

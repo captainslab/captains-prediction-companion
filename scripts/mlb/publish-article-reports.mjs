@@ -156,7 +156,21 @@ export function resolveTelegramEnv(env = process.env) {
   return { token, chat, chat_source: source };
 }
 
+// Load env from project .env files (same pattern as scripts/packets/
+// send-packets-telegram.mjs) so the cron wrapper needs no manual sourcing.
+function loadEnvFile(file) {
+  if (!existsSync(file)) return;
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (!m) continue;
+    const v = m[2].replace(/^['"]|['"]$/g, '');
+    if (!process.env[m[1]]) process.env[m[1]] = v;
+  }
+}
+
 function telegramEnv() {
+  loadEnvFile('.env');
+  loadEnvFile('.env.local');
   return resolveTelegramEnv();
 }
 
@@ -225,15 +239,9 @@ async function telegramSendDocument({ token, chat }, filePath, caption) {
 // --- Main pipeline ---
 
 export async function publish(opts) {
-  // Legacy article-report Telegram sends are disabled. The composite pipeline
-  // (late-slate-composite-refresh.mjs → _send-due.mjs) is the only authorized
-  // MLB Telegram delivery path. Article reports use pricing/market-only labels
-  // that must not appear in Telegram output.
-  if (opts.sendTelegram) {
-    throw new Error(
-      '[mlb-articles] --send-telegram is disabled. Use late-slate-composite-refresh.mjs for MLB Telegram delivery.',
-    );
-  }
+  // Article-report sends re-enabled 2026-06-12 (user directive): packets go
+  // out mentions-style — short caption + attached .txt document, idempotency
+  // keys in delivery-summary.json. The composite pipeline remains separate.
   const { plan, path: planPath } = loadPlan(opts.stateRoot, opts.date);
   const planGameKeys = plan.games.map((g) => g.game_key);
   if (!planGameKeys.length) throw new Error(`Plan ${planPath} has zero games.`);
@@ -363,27 +371,22 @@ async function main() {
     return;
   }
   const result = await publish(opts);
-  console.log(`[mlb-articles] date=${opts.date} games=${result.game_count} slate=${result.slate.headline}`);
-  console.log(`[mlb-articles] out_dir=${result.out_dir}`);
-  for (const g of result.games) {
-    console.log(`[mlb-articles]   game ${g.game_key}: ${g.decision}  file=${g.file}`);
-  }
-  console.log(`[mlb-articles]   slate: counts=${JSON.stringify(result.slate.counts)} file=${result.slate.file}`);
+  // Cron stdout is relayed to Telegram as the "Cronjob Response", so keep it
+  // to a short summary — packets themselves travel as .txt documents.
+  console.log(`[mlb-articles] date=${opts.date} games=${result.game_count} slate_counts=${JSON.stringify(result.slate.counts)}`);
   if (opts.sendTelegram) {
-    for (const r of result.results) {
-      if (r.sent) console.log(`[mlb-articles] sent ${r.kind} ${r.game_key ?? 'slate'} message_id=${r.message_id}`);
-      else if (r.skipped) console.log(`[mlb-articles] skipped ${r.kind} ${r.game_key ?? 'slate'} (${r.skipped})`);
-      else console.log(`[mlb-articles] FAILED ${r.kind} ${r.game_key ?? 'slate'}: ${r.error}`);
+    const sentN = result.results.filter((r) => r.sent).length;
+    const skippedN = result.results.filter((r) => r.skipped).length;
+    const failed = result.results.filter((r) => !r.sent && !r.skipped);
+    console.log(`[mlb-articles] delivered=${sentN} skipped_already_sent=${skippedN} failed=${failed.length}`);
+    for (const r of failed) {
+      console.error(`[mlb-articles] FAILED ${r.kind} ${r.game_key ?? 'slate'}: ${r.error}`);
     }
-    const anyFail = result.results.some((r) => !r.sent && !r.skipped);
-    if (anyFail) {
-      console.error('[mlb-articles] one or more deliveries failed; see results above.');
-      process.exit(2);
-    }
+    if (failed.length) process.exit(2);
   } else {
     console.log('[mlb-articles] dry-run: no Telegram send. Use --send-telegram to deliver.');
     for (const item of result.delivery_plan) {
-      const flag = item.already_sent ? '(already sent)' : '(would send)';
+      const flag = item.already_sent ? '(already sent)' : '(would send .txt document)';
       console.log(`[mlb-articles]   plan ${item.kind} ${item.game_key ?? 'slate'} ${flag} idem=${item.idem}`);
     }
   }

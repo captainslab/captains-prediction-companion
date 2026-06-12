@@ -5,4 +5,4 @@
 
 cd /home/jordan/captains-prediction-companion || exit 1
 TODAY=$(TZ=America/Chicago date +%F)
-exec node scripts/mlb/publish-article-reports.mjs --date "$TODAY"
+exec node scripts/mlb/publish-article-reports.mjs --date "$TODAY" --send-telegram
