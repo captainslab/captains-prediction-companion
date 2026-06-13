@@ -95,6 +95,14 @@ import {
   postureAdjustmentHint,
   CAPPED_MAX_POSTURE,
 } from '../mentions/earnings-context-delta.mjs';
+import {
+  buildSportsSettledHistory,
+  detectSport,
+  extractTeamsFromTitle as sportsExtractTeams,
+  extractVenueFromTitle as sportsExtractVenue,
+  filterBySport,
+} from '../mentions/sports-settled-history.mjs';
+import { buildSportsGameContext } from '../mentions/sports-game-context.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -368,7 +376,82 @@ function applyEarningsPostureHint(posture, hint) {
   return { posture: bumped, applied: bumped !== posture, reason: hint.reason };
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null } = {}) {
+// Synchronous sports settled-history builder for use in map() where records
+// are already loaded. Mirrors buildSportsSettledHistory but avoids async.
+function buildSportsSettledHistorySync({ eventTicker, seriesTicker, eventTitle, term, route, entity, horizon, allRecords }) {
+  const sport = detectSport(eventTicker, seriesTicker, eventTitle);
+  const teams = sportsExtractTeams(eventTitle);
+  const venue = sportsExtractVenue(eventTitle);
+
+  const histMatch = buildHistoryMatch({
+    records: allRecords,
+    route,
+    entity,
+    horizon,
+    seriesTicker,
+    maxSamples: 5,
+  });
+
+  const settledLayer = historyToLayerScore(histMatch);
+  const sportRecords = filterBySport(allRecords, sport);
+
+  // Inline phrase frequency and venue/team relevance (mirroring the async module)
+  const phraseFreqLayer = buildSportsPhraseFreqSync(sportRecords, term);
+  const venueTeamLayer = buildSportsVenueTeamSync(sportRecords, term, teams, venue);
+
+  return {
+    sport,
+    teams,
+    venue,
+    historyMatch: histMatch,
+    layers: {
+      settled_mentions_history: settledLayer,
+      sport_phrase_frequency: phraseFreqLayer,
+      venue_team_phrase_relevance: venueTeamLayer,
+    },
+  };
+}
+
+function buildSportsPhraseFreqSync(sportRecords, term) {
+  if (!term || !sportRecords.length) {
+    return { present: false, score: null, source_basis: 'no sport records for phrase frequency', source_path: null, detail: null, missing_note: 'no settled sports mention history available' };
+  }
+  const termLower = term.toLowerCase();
+  const matching = sportRecords.filter(r => String(r.strike_term ?? '').toLowerCase().includes(termLower) || String(r.context ?? '').toLowerCase().includes(termLower));
+  const settled = matching.filter(r => r.result === 'yes' || r.result === 'no');
+  if (settled.length < 2) {
+    return { present: false, score: null, source_basis: 'insufficient settled data for phrase frequency (n<2)', source_path: null, detail: `found ${settled.length} settled record(s) for "${term}"`, missing_note: 'insufficient settled history (n<2)' };
+  }
+  const hits = settled.filter(r => r.result === 'yes').length;
+  const rate = hits / settled.length;
+  const score = Math.max(0, Math.min(100, Math.round(100 * rate)));
+  return { present: true, score, source_basis: `sport phrase frequency: ${hits}/${settled.length} YES for "${term}"`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
+}
+
+function buildSportsVenueTeamSync(sportRecords, term, teams, venue) {
+  if (!term || (!teams.length && !venue) || !sportRecords.length) {
+    return { present: false, score: null, source_basis: 'no venue/team context for relevance scoring', source_path: null, detail: null, missing_note: 'no venue/team context' };
+  }
+  const termLower = term.toLowerCase();
+  const contextMatching = sportRecords.filter(r => {
+    const ctx = String(r.context ?? '').toLowerCase();
+    return teams.some(t => ctx.includes(t.toLowerCase())) || (venue && ctx.includes(venue.toLowerCase()));
+  });
+  if (!contextMatching.length) {
+    return { present: false, score: null, source_basis: `no settled history for teams/venue [${teams.join(', ')}]`, source_path: null, detail: null, missing_note: `no settled history for ${teams.join('/')}` };
+  }
+  const termMatching = contextMatching.filter(r => String(r.strike_term ?? '').toLowerCase().includes(termLower) || String(r.context ?? '').toLowerCase().includes(termLower));
+  const settled = termMatching.filter(r => r.result === 'yes' || r.result === 'no');
+  if (settled.length < 2) {
+    return { present: false, score: null, source_basis: 'insufficient venue/team data (n<2)', source_path: null, detail: `found ${settled.length}`, missing_note: 'n<2' };
+  }
+  const hits = settled.filter(r => r.result === 'yes').length;
+  const rate = hits / settled.length;
+  const score = Math.max(0, Math.min(100, Math.round(100 * rate)));
+  return { present: true, score, source_basis: `venue/team phrase relevance: ${hits}/${settled.length} YES for "${term}" with ${teams.join('/')}`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
+}
+
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -410,6 +493,34 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
         sample_size: earningsTermStats?.sample_size ?? 0,
         delta: earningsDeltaEntry.earnings_context_delta?.value ?? 'absent',
       });
+    }
+  }
+
+  // Phase 3: sports_announcer settled history + game context (priority-one alpha).
+  // Runs BEFORE generic settled-history and before source/model extraction.
+  let sportsHistory = null;
+  let sportsGameCtx = null;
+  if (route?.route === 'sports_announcer') {
+    if (sportsSettledResult) {
+      sportsHistory = sportsSettledResult;
+      const sportsLayers = sportsSettledResult.layers ?? {};
+      for (const [key, layer] of Object.entries(sportsLayers)) {
+        if (layer?.present && !(layerRecords?.[key]?.present)) {
+          layerRecords = { ...(layerRecords ?? {}), [key]: layer };
+        }
+      }
+      if (sportsSettledResult.layers?.settled_mentions_history?.present && !(layerRecords?.historical_tendency?.present)) {
+        layerRecords = { ...(layerRecords ?? {}), historical_tendency: sportsSettledResult.layers.settled_mentions_history };
+      }
+    }
+    if (sportsGameContextResult) {
+      sportsGameCtx = sportsGameContextResult;
+      const ctxLayers = sportsGameContextResult.layers ?? {};
+      for (const [key, layer] of Object.entries(ctxLayers)) {
+        if (layer?.present && !(layerRecords?.[key]?.present)) {
+          layerRecords = { ...(layerRecords ?? {}), [key]: layer };
+        }
+      }
     }
   }
 
@@ -485,6 +596,17 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     earnings_quarter_sample_size: earningsTermStats?.sample_size ?? null,
     earnings_context_delta: earningsDeltaEntry,
     earnings_posture_adjustment: earningsAdjustment,
+    sports_history: sportsHistory ? {
+      sport: sportsHistory.sport,
+      teams: sportsHistory.teams,
+      venue: sportsHistory.venue,
+      history_match_tier: sportsHistory.historyMatch?.match_tier ?? null,
+      history_sample_size: sportsHistory.historyMatch?.sample_size ?? null,
+      history_hits: sportsHistory.historyMatch?.hits ?? null,
+      history_misses: sportsHistory.historyMatch?.misses ?? null,
+      history_hit_rate: sportsHistory.historyMatch?.hit_rate ?? null,
+    } : null,
+    sports_game_context: sportsGameCtx?.gameContext ?? null,
     result,
     source_ladder: ladder,
     posture_final: postureFinal,
@@ -1347,7 +1469,35 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     }
   }
 
-  const composites = marketInfo.rows.map(({ raw }) => buildMentionCompositeForMarket({ event, market: raw, historyRecords, earningsQuarterLayer, earningsContextDelta }));
+  // Phase 3: sports_announcer per-market settled history + game context.
+  // Uses already-loaded historyRecords (no async needed). Game context is
+  // per-term since phrase triggers differ by strike term.
+  const composites = marketInfo.rows.map(({ raw }) => {
+    let perMarketSportsHistory = null;
+    let perMarketGameCtx = null;
+    if (eventRoute?.route === 'sports_announcer') {
+      const term = asText(raw?.yes_sub_title) || asText(raw?.custom_strike?.Word) || targetMentionFromMarket(raw);
+      if (Array.isArray(historyRecords) && historyRecords.length) {
+        perMarketSportsHistory = buildSportsSettledHistorySync({
+          eventTicker: event?.event_ticker,
+          seriesTicker: event?.series_ticker,
+          eventTitle: event?.title,
+          term,
+          route: eventRoute.route,
+          entity: eventRoute.entity,
+          horizon: eventRoute.horizon,
+          allRecords: historyRecords,
+        });
+      }
+      perMarketGameCtx = buildSportsGameContext({ event, term });
+    }
+    return buildMentionCompositeForMarket({
+      event, market: raw, historyRecords,
+      earningsQuarterLayer, earningsContextDelta,
+      sportsSettledResult: perMarketSportsHistory,
+      sportsGameContextResult: perMarketGameCtx,
+    });
+  });
   const compositeSummary = summarizeCompositeRun(composites);
   const prov = composites[0] ?? null;
   const researchProvenance = prov ? {
@@ -1379,6 +1529,8 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     earnings_posture_adjustments: composites
       .filter((c) => c.earnings_posture_adjustment)
       .map((c) => ({ market_ticker: c.market_ticker, ...c.earnings_posture_adjustment })),
+    sports_history: prov?.sports_history ?? null,
+    sports_game_context: prov?.sports_game_context ?? null,
   } : null;
 
   // Preferred path: compact sectioned decision board (model + market + edge),
