@@ -116,15 +116,21 @@ test('article: Evidence Box still contains numeric support', () => {
   assert.match(evidence, /ML:\s+(CLEAR|LEAN|WATCH|PASS)/);
 });
 
-test('article: W04-style soft-LEAN is downgraded to MARKET-ONLY LEAN without context', () => {
+test('article: W04-style soft-LEAN renders as CONTEXT WATCH without context', () => {
   const game = makeGame({ away: 'TEX', home: 'COL', gameKey: '26MAY182040TEXCOL' });
   const analysis = analyzeGame(game);
   assert.equal(analysis.final.decision, 'LEAN', 'engine should soft-LEAN this fixture');
+  // Internal engine status is unchanged; only customer-facing copy is renamed.
   assert.equal(analysis.final.decision_status, 'MARKET-ONLY LEAN');
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
-  assert.match(a.headline, /MARKET-ONLY LEAN/);
-  assert.match(a.text, /Confidence: MARKET-ONLY LEAN/);
+  assert.match(a.headline, /CONTEXT WATCH/);
+  assert.match(a.text, /Confidence: CONTEXT WATCH/);
   assert.match(a.text, /not an evidence pick/i);
+  // Customer-facing packet must never carry market-edge language and must
+  // disclose that market data is display-only.
+  assert.doesNotMatch(a.text, /MARKET-ONLY LEAN/i);
+  assert.doesNotMatch(a.headline, /MARKET-ONLY LEAN/i);
+  assert.match(a.text, /NOT IN SCORE/);
 });
 
 test('article: BOARD_ONLY game still renders useful article', () => {
@@ -151,9 +157,11 @@ test('article: slate article ranks decision statuses correctly', () => {
   const slate = buildSlateArticle({ date: '2026-05-18', items, planMeta: { date: '2026-05-18', cluster_count: 1 } });
   assert.match(slate.text, /Tier 1 — STRONG EVIDENCE LEAN/);
   assert.match(slate.text, /Tier 2 — EVIDENCE LEAN/);
-  assert.match(slate.text, /Tier 3 — MARKET-ONLY LEAN/);
+  assert.match(slate.text, /Tier 3 — CONTEXT WATCH/);
   assert.match(slate.text, /Tier 5 — NO CLEAR PICK/);
-  assert.ok(slate.counts.market_only_lean >= 1);
+  assert.doesNotMatch(slate.text, /MARKET-ONLY LEAN/i);
+  assert.match(slate.text, /NOT IN SCORE/);
+  assert.ok(slate.counts.context_watch >= 1);
   assert.ok(slate.counts.no_clear_pick >= 1);
   const idxLean = slate.ranked.findIndex((r) => r.decision === 'MARKET-ONLY LEAN');
   const idxPass = slate.ranked.findIndex((r) => r.decision === 'NO CLEAR PICK');
@@ -238,7 +246,9 @@ test('TLDR: per-game LEAN article has TLDR immediately after headline, no engine
   assert.match(tldrBlock, /Side \/ market:/);
   assert.match(tldrBlock, /Why:/);
   assert.match(tldrBlock, /Risk:/);
-  assert.match(tldrBlock, /market-only/i);
+  assert.match(tldrBlock, /CONTEXT WATCH/);
+  assert.match(tldrBlock, /NOT IN SCORE/);
+  assert.doesNotMatch(tldrBlock, /MARKET-ONLY LEAN/i);
   for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
     assert.ok(!banned.test(tldrBlock), `TLDR must not contain ${banned}`);
   }
@@ -270,7 +280,9 @@ test('TLDR: slate article has TLDR immediately after headline, no engine vocab',
   assert.ok(overviewIdx > 4, 'Slate overview must come after TLDR block');
   const tldrBlock = lines.slice(3, overviewIdx).join('\n');
   assert.match(tldrBlock, /Evidence leans/);
-  assert.match(tldrBlock, /Market-only leans/);
+  assert.match(tldrBlock, /CONTEXT WATCH/);
+  assert.match(tldrBlock, /NOT IN SCORE/);
+  assert.doesNotMatch(tldrBlock, /MARKET-ONLY LEAN/i);
   assert.match(tldrBlock, /Takeaway/);
   for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
     assert.ok(!banned.test(tldrBlock), `Slate TLDR must not contain ${banned}`);

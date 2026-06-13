@@ -45,7 +45,7 @@ const CURRENT_SOURCE_KEYS = Object.freeze([
 ]);
 export const DECLARED_SOURCE_KEYS = Object.freeze([...PRIOR_SOURCE_KEYS, ...CURRENT_SOURCE_KEYS]);
 
-const PRICE_LIKE_RE = /price|volume|liquidity|\bbid\b|\bask\b|yes_bid|no_bid|yes_ask|no_ask|odds|notional|open_interest/i;
+const PRICE_LIKE_RE = /price|volume|liquidity|\bbid\b|\bask\b|yes_bid|no_bid|yes_ask|no_ask|odds|notional|open_interest|bid_ask_spread|spread_cents|last_trade_price|implied_prob/i;
 
 function isPriceLikeKey(key) {
   return PRICE_LIKE_RE.test(String(key));

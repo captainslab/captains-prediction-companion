@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runHermesChat } from '../../src/hermesRuntime.js';
+import { stripPriceLikeFields } from './earnings-context-delta.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROUTING_PATH = resolve(__dirname, '../../config/mentions-model-routing.json');
@@ -167,6 +168,9 @@ export function validateRedteamJson(parsed) {
 // ─── prompts (JSON in, JSON out; never layout) ──────────────────────────────
 
 export function buildAnalystPrompt(input) {
+  // Price isolation: market/price-like fields are never model inputs. Strip
+  // them defensively even if a caller's input object carries them.
+  input = stripPriceLikeFields(input ?? {});
   return [
     'You are a research analyst for a Kalshi mentions event. You receive deterministic',
     'composite data as JSON. Return STRICT JSON ONLY — no prose, no markdown, no layout.',
@@ -182,6 +186,8 @@ export function buildAnalystPrompt(input) {
 }
 
 export function buildRedteamPrompt(input) {
+  // Same price isolation as the analyst prompt — see buildAnalystPrompt.
+  input = stripPriceLikeFields(input ?? {});
   return [
     'You are an optional red-team reviewer for a Kalshi mentions event. Return STRICT JSON ONLY.',
     'You may consult X/live discourse for narrative heat, traps, and public-card angles.',

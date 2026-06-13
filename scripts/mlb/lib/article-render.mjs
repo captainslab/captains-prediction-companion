@@ -137,7 +137,7 @@ function spreadConfirmation(game, favTeam) {
 function renderMarketOverview(game) {
   // Kept as a compact factual ledger inside Evidence Box (and the Game info
   // block above it). Not the lead prose.
-  const lines = ['Market overview'];
+  const lines = ['Market overview (display-only — NOT IN SCORE)'];
   const ml = game.series?.ml;
   if (!ml || !ml.markets?.length) {
     lines.push('  ML: MISSING / UNQUOTED');
@@ -216,6 +216,28 @@ function isMarketOnlyLean(status) {
   return status === DECISION_STATUSES.MARKET_ONLY_LEAN;
 }
 
+// Customer-facing label policy: the internal MARKET-ONLY LEAN status never
+// appears in packet text. It renders as CONTEXT WATCH so no copy implies a
+// market-derived edge. Market data is display-only and NOT IN SCORE.
+const CONTEXT_WATCH = 'CONTEXT WATCH';
+
+function displayStatus(status) {
+  return isMarketOnlyLean(status) ? CONTEXT_WATCH : status;
+}
+
+// Defense-in-depth: scrub any engine-vocabulary leak (engine reasons,
+// decision-process lines) out of customer-facing text.
+function scrubMarketLabel(text) {
+  return text
+    .replaceAll('MARKET-ONLY LEAN', CONTEXT_WATCH)
+    .replaceAll('Market-only leans', 'Context watches')
+    .replaceAll('market-only leans', 'context watches')
+    .replaceAll('Market-only lean', 'Context watch')
+    .replaceAll('market-only lean', 'context watch')
+    .replaceAll('market-only read', 'display-only market context (NOT IN SCORE)')
+    .replaceAll('Market-only side', 'Context side');
+}
+
 // Build the natural-language Market Read paragraph. This is the lead prose
 // of the article. It MUST stay free of repeated engine vocabulary.
 function renderMarketRead(game, mlSnap, totSnap, rfiSnap, spreadConf) {
@@ -269,7 +291,7 @@ function renderWhyPick(analysis, mlSnap, spreadConf, status) {
   }
   if ((d === 'CLEAR' || d === 'LEAN') && isMarketOnlyLean(status)) {
     const side = mlSnap?.fav?.team || 'the board side';
-    return `The board points toward ${side}, but this is not a real pick. Required MLB context is missing, so the output is capped at MARKET-ONLY LEAN.`;
+    return `The board points toward ${side}, but this is not a pick and not an edge. Required MLB context is missing, so the output is capped at ${CONTEXT_WATCH}. Market data here is display-only and NOT IN SCORE.`;
   }
   // PASS / NO CLEAR PICK
   return 'Prices, depth, spread shape, total and first-inning markets all read close to fair given what is posted. No side here is defensible without outside context this report does not pull (lineups, weather, starters, park).';
@@ -286,7 +308,7 @@ function renderBottomLine(analysis, mlSnap, status) {
   }
   if (status === DECISION_STATUSES.MARKET_ONLY_LEAN) {
     const side = mlSnap?.fav?.team || 'board side';
-    return `Call: MARKET-ONLY LEAN — ${side}. Board signal only; missing real-world context blocks an evidence pick. No trades placed, no sizing.`;
+    return `Call: ${CONTEXT_WATCH} — ${side}. Not a pick and not an edge; missing real-world context blocks an evidence pick. Market context is display-only and NOT IN SCORE. No trades placed, no sizing.`;
   }
   return 'Call: PASS — board only. Nothing actionable from the market alone. No trades placed, no sizing.';
 }
@@ -304,13 +326,17 @@ export function buildGameArticle({ date, game, analysis }) {
   const rfiSnap = rfiSnapshot(game);
   const spreadConf = spreadConfirmation(game, mlSnap?.fav?.team);
 
+  const shownLabel = displayStatus(finalLabel);
+
   const headline = finalLabel === DECISION_STATUSES.MARKET_ONLY_LEAN || isEvidenceLean(finalLabel)
-    ? `${matchup} — ${finalLabel} ${mlSnap?.fav?.team ?? ''}`.trim()
+    ? `${matchup} — ${shownLabel} ${mlSnap?.fav?.team ?? ''}`.trim()
     : `${matchup} — NO CLEAR PICK`;
 
-  const finalCallLine = finalLabel === DECISION_STATUSES.MARKET_ONLY_LEAN || isEvidenceLean(finalLabel)
-    ? `${finalLabel} on ${mlSnap?.fav?.team ?? 'favorite'} moneyline`
-    : 'PASS — board only, no defensible side';
+  const finalCallLine = isEvidenceLean(finalLabel)
+    ? `${shownLabel} on ${mlSnap?.fav?.team ?? 'favorite'} moneyline`
+    : finalLabel === DECISION_STATUSES.MARKET_ONLY_LEAN
+      ? `${shownLabel} — ${mlSnap?.fav?.team ?? 'favorite'} moneyline context only (not a pick)`
+      : 'PASS — board only, no defensible side';
 
   const lines = [];
   lines.push(headline);
@@ -326,9 +352,9 @@ export function buildGameArticle({ date, game, analysis }) {
     lines.push(`  Why: market signal and required MLB evidence point the same way.`);
   } else if (isMarketOnlyLean(finalLabel)) {
     const side = mlSnap?.fav?.team ?? 'board side';
-    lines.push(`  Call: MARKET-ONLY LEAN — ${side} moneyline.`);
-    lines.push(`  Side / market: ${side} ML`);
-    lines.push('  Why: board signal exists, but required MLB context is incomplete.');
+    lines.push(`  Call: ${CONTEXT_WATCH} — ${side} moneyline context only.`);
+    lines.push(`  Side / market: ${side} ML (context, not a pick)`);
+    lines.push('  Why: required MLB context is incomplete; no evidence edge. Market data is NOT IN SCORE.');
   } else {
     lines.push('  Call: PASS — NO CLEAR PICK.');
     lines.push('  Side / market: none — no defensible side on the board.');
@@ -354,7 +380,7 @@ export function buildGameArticle({ date, game, analysis }) {
   lines.push(`  YFRI event: ${tickers.rfi ?? 'MISSING'}`);
   lines.push('');
 
-  lines.push('Market Read');
+  lines.push('Market Read (display-only context — NOT IN SCORE)');
   lines.push('  ' + renderMarketRead(game, mlSnap, totSnap, rfiSnap, spreadConf));
   lines.push('');
 
@@ -367,7 +393,7 @@ export function buildGameArticle({ date, game, analysis }) {
   // Evidence Box: the engine-vocabulary stuff lives here. Numbers + reasons.
   lines.push('Evidence Box');
   lines.push(`  Best angle source: ${best.key} section — raw engine label ${rawLabel}`);
-  lines.push(`  Decision status: ${finalLabel}`);
+  lines.push(`  Decision status: ${shownLabel}`);
   lines.push(`  Engine reason: ${analysis.final.reason}`);
   lines.push(`  ML: ${analysis.sections.ml.decision} — ${analysis.sections.ml.reason}`);
   lines.push(`  Spread: ${analysis.sections.spread.decision} — ${analysis.sections.spread.reason}`);
@@ -422,15 +448,15 @@ export function buildGameArticle({ date, game, analysis }) {
     lines.push(`  Side / market: ${analysis.final.best_angle}`);
     lines.push(`  Confidence: ${finalLabel}`);
   } else if (isMarketOnlyLean(finalLabel)) {
-    lines.push(`  Market-only side / market: ${analysis.final.best_angle}`);
-    lines.push('  Confidence: MARKET-ONLY LEAN (not an evidence pick)');
+    lines.push(`  Context side / market: ${analysis.final.best_angle}`);
+    lines.push(`  Confidence: ${CONTEXT_WATCH} (not an evidence pick; market context NOT IN SCORE)`);
   } else {
     lines.push('  No defensible evidence-based pick at this time.');
     lines.push(`  Section postures: ML=${analysis.sections.ml.decision}, Spread=${analysis.sections.spread.decision}, Total=${analysis.sections.total.decision}, YFRI=${analysis.sections.yfri.decision}`);
   }
   lines.push('');
   lines.push('Best angle');
-  lines.push(`  Label: ${finalLabel}`);
+  lines.push(`  Label: ${shownLabel}`);
   lines.push(`  Source: ${best.key} section`);
   lines.push('');
   lines.push('Evidence');
@@ -441,16 +467,16 @@ export function buildGameArticle({ date, game, analysis }) {
   lines.push('');
   lines.push('Final call');
   lines.push('  ' + (isEvidenceLean(finalLabel) || isMarketOnlyLean(finalLabel)
-    ? `${finalLabel}: ${analysis.final.best_angle}`
+    ? `${shownLabel}: ${analysis.final.best_angle}`
     : 'NO CLEAR PICK. Board attached for review only.'));
 
-  const text = lines.join('\n');
+  const text = scrubMarketLabel(lines.join('\n'));
   return {
-    headline,
+    headline: scrubMarketLabel(headline),
     text,
-    decision: finalLabel,
+    decision: shownLabel,
     best_angle: analysis.final.best_angle,
-    reason: analysis.final.reason,
+    reason: scrubMarketLabel(analysis.final.reason ?? ''),
     game_key: game.game_key ?? null,
   };
 }
@@ -487,7 +513,7 @@ function slateBlurb(it) {
     const priceBit = (snap?.fav && snap?.dog)
       ? ` (${fav} ${fmtCents(snap.fav.yes_c)} vs ${dog} ${fmtCents(snap.dog.yes_c)})`
       : '';
-    return `${matchup}: MARKET-ONLY LEAN ${fav ?? 'board side'}${priceBit}. Not an evidence pick; real-world context is incomplete.`;
+    return `${matchup}: ${CONTEXT_WATCH} ${fav ?? 'board side'}${priceBit}. Not an evidence pick and not an edge; real-world context is incomplete. Market data shown is NOT IN SCORE.`;
   }
   if (d === 'WATCH') {
     return `${matchup}: WATCH — board has a wrinkle but nothing clean enough to call.`;
@@ -539,14 +565,14 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
     lines.push('  Evidence leans: none.');
   }
   if (marketOnly.length) {
-    lines.push('  Market-only leans:');
+    lines.push(`  ${CONTEXT_WATCH} (display-only, NOT IN SCORE):`);
     for (const r of marketOnly) {
       const snap = mlSnapshot(r._it.game);
       const fav = snap?.fav?.team ?? 'board side';
-      lines.push(`    - ${r.matchup}: ${fav} (downgraded; context incomplete)`);
+      lines.push(`    - ${r.matchup}: ${fav} (downgraded; context incomplete; not a pick)`);
     }
   } else {
-    lines.push('  Market-only leans: none.');
+    lines.push(`  ${CONTEXT_WATCH}: none.`);
   }
   if (passes.length) {
     lines.push('  Pass / no-pick:');
@@ -557,7 +583,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   if (evidenceCount) {
     lines.push(`  Takeaway: ${evidenceCount} evidence-backed read(s); no trades or sizing.`);
   } else if (marketOnly.length) {
-    lines.push(`  Takeaway: ${marketOnly.length} market-only lean(s), but no evidence picks.`);
+    lines.push(`  Takeaway: ${marketOnly.length} context watch(es), but no evidence picks. Market context is NOT IN SCORE.`);
   } else {
     lines.push('  Takeaway: no defensible side stands out.');
   }
@@ -566,7 +592,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   lines.push('Slate overview');
   lines.push(`  Date: ${date}`);
   lines.push(`  Games covered: ${items.length}`);
-  lines.push(`  STRONG EVIDENCE LEAN: ${strongs.length}   EVIDENCE LEAN: ${evidences.length}   MARKET-ONLY LEAN: ${marketOnly.length}   WATCH: ${watches.length}   NO CLEAR PICK: ${passes.length}`);
+  lines.push(`  STRONG EVIDENCE LEAN: ${strongs.length}   EVIDENCE LEAN: ${evidences.length}   ${CONTEXT_WATCH}: ${marketOnly.length}   WATCH: ${watches.length}   NO CLEAR PICK: ${passes.length}`);
   if (planMeta.cluster_count != null) lines.push(`  Plan clusters: ${planMeta.cluster_count}`);
   lines.push('');
 
@@ -579,7 +605,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
     for (const r of top) {
       const snap = mlSnapshot(r._it.game);
       const fav = snap?.fav?.team ?? 'favorite';
-      lines.push(`  ${i}. [${r.decision}] ${r.matchup} — side: ${fav}.`);
+      lines.push(`  ${i}. [${displayStatus(r.decision)}] ${r.matchup} — side: ${fav}.`);
       i++;
     }
   }
@@ -592,7 +618,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   lines.push('  Tier 2 — EVIDENCE LEAN');
   if (!evidences.length) lines.push('    (none)');
   for (const r of evidences) lines.push(`    - ${r.matchup} (${r.game_key}): ${r.best_angle}`);
-  lines.push('  Tier 3 — MARKET-ONLY LEAN');
+  lines.push(`  Tier 3 — ${CONTEXT_WATCH} (display-only context, NOT IN SCORE)`);
   if (!marketOnly.length) lines.push('    (none)');
   for (const r of marketOnly) lines.push(`    - ${r.matchup} (${r.game_key}): ${r.best_angle}`);
   lines.push('  Tier 4 — WATCH');
@@ -637,15 +663,16 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   lines.push('System caveats');
   lines.push('  No lineup, weather, park, starter form, or bullpen context was pulled.');
   lines.push('  Price, OI/liquidity, spread confirmation, and ladder behavior cannot create an evidence pick by themselves.');
-  lines.push('  Raw engine CLEAR/LEAN labels are capped at MARKET-ONLY LEAN until the required MLB evidence checklist is complete.');
+  lines.push('  All market data in this report (prices, OI, volume, movement) is display-only context and NOT IN SCORE — it is never a model, scoring, posture, or ranking input.');
+  lines.push(`  Raw engine CLEAR/LEAN labels are capped at ${CONTEXT_WATCH} until the required MLB evidence checklist is complete.`);
   lines.push('  No trades. No bankroll sizing. Research only.');
   lines.push('');
 
   lines.push('Final slate conclusion');
   if (evidenceCount === 0 && marketOnly.length === 0) {
-    lines.push('  Slate has no evidence lean and no market-only lean. Watch for new evidence or movement.');
+    lines.push('  Slate has no evidence lean and no context watch. Watch for new evidence.');
   } else if (evidenceCount === 0) {
-    lines.push(`  Slate has ${marketOnly.length} market-only lean(s), all downgraded for incomplete context.`);
+    lines.push(`  Slate has ${marketOnly.length} context watch(es), all downgraded for incomplete context; none is a pick.`);
   } else if (strongs.length) {
     lines.push(`  Slate has ${strongs.length} strong evidence lean(s); no trades or sizing.`);
   } else {
@@ -656,13 +683,13 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   const cleanRanked = ranked.map(({ _it, ...rest }) => rest);
 
   return {
-    headline,
-    text: lines.join('\n'),
+    headline: scrubMarketLabel(headline),
+    text: scrubMarketLabel(lines.join('\n')),
     ranked: cleanRanked,
     counts: {
       strong_evidence_lean: strongs.length,
       evidence_lean: evidences.length,
-      market_only_lean: marketOnly.length,
+      context_watch: marketOnly.length,
       watch: watches.length,
       no_clear_pick: passes.length,
     },
