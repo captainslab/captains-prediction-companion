@@ -31,28 +31,28 @@ export const LAYER_DEFS = Object.freeze([
   },
   {
     key:    'sport_phrase_frequency',
-    weight: 0.06,
+    weight: 0.05,
     label:  'Sport phrase frequency: how often this term appeared as YES across settled sports mention events',
   },
   {
     key:    'venue_team_phrase_relevance',
-    weight: 0.05,
+    weight: 0.04,
     label:  'Venue/team phrase relevance: team/venue/matchup-specific phrase affinity from settled history',
   },
   // --- Phase 3: game context alpha (priority-two) ---
   {
     key:    'current_game_context',
-    weight: 0.08,
+    weight: 0.07,
     label:  'Current game context: teams, venue, matchup, series/tournament state, probable lineups',
   },
   {
     key:    'sport_phrase_likelihood',
-    weight: 0.06,
+    weight: 0.05,
     label:  'Sport phrase likelihood: game-context-derived likelihood this term is mentioned',
   },
   {
     key:    'game_context_trigger',
-    weight: 0.05,
+    weight: 0.04,
     label:  'Game context trigger: rivalry, milestone, injury, or transaction forcing a mention in this game',
   },
   // --- Shared + Phase 1 layers (weights redistributed) ---
@@ -63,7 +63,7 @@ export const LAYER_DEFS = Object.freeze([
   },
   {
     key:    'event_proximity',
-    weight: 0.14,
+    weight: 0.18,
     label:  'Game/broadcast schedule proximity: confirmed air time and game start before market close',
   },
   {
@@ -88,12 +88,12 @@ export const LAYER_DEFS = Object.freeze([
   },
   {
     key:    'injury_milestone_trigger',
-    weight: 0.06,
+    weight: 0.05,
     label:  'Injury/milestone/narrative trigger: live breaking news or record-setting context forcing a mention',
   },
   {
     key:    'mention_type_likelihood',
-    weight: 0.04,
+    weight: 0.03,
     label:  'Mention-type likelihood: live in-game commentary (high certainty window) vs. pregame/postgame (moderate)',
   },
   {
