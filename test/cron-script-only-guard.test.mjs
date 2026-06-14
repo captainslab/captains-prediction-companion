@@ -168,7 +168,7 @@ test('mentions sender dry-run sends short notice plus one txt document, not chun
     SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', stem,
   ], { encoding: 'utf8', cwd: REPO });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /would send notice: New mentions packet: Trump Tele-Rally -- attached \.txt/);
+  assert.match(r.stdout, /would send notice: New CPC packet: Trump Tele-Rally -- attached \.txt/);
   assert.match(r.stdout, /would send document: 2099-01-02-KXTRUMPMENTION-26JUN11 — 2099-01-02-KXTRUMPMENTION-26JUN11\.txt/);
   assert.doesNotMatch(r.stdout, /message\(s\) from/);
   assert.doesNotMatch(r.stdout, /chunk-1/);
@@ -308,5 +308,5 @@ test('tgSendDocument posts a txt file via Telegram sendDocument', async () => {
 
 test('mentionsPacketNotice collapses the Trump tele-rally title to the required short notice', () => {
   const notice = mentionsPacketNotice('Event title: What will Trump say during his Burt Jones Tele-Rally?', 'stem');
-  assert.equal(notice, 'New mentions packet: Trump Tele-Rally -- attached .txt');
+  assert.equal(notice, 'New CPC packet: Trump Tele-Rally -- attached .txt');
 });

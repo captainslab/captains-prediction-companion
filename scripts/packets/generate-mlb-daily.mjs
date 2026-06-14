@@ -198,7 +198,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
   const header = packetHeader({
     packetType: PACKET_TYPE,
     date,
-    title: 'MLB Daily Decision Board',
+    title: 'Captain MLB — CPC Packet: Daily Slate Board',
     sources: [KALSHI_SOURCES.mlb?.page_url ?? KALSHI_SOURCES.mlb?.label, scoring.source].filter(Boolean),
   });
   const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
@@ -337,7 +337,7 @@ function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSu
   const block = renderMarketBlocks(event, { limit: 40 });
   const process = buildMlbPacketProcess({ event, marketCount: block.marketCount, artifacts });
   const header = packetHeader({
-    title: 'Captain MLB — Daily Pre-Final-Lineup Packet',
+    title: 'Captain MLB — CPC Packet: Pre-Final-Lineup',
     date,
     packetType: PACKET_TYPE,
     sources: [sourcePath, KALSHI_SOURCES.mlb.page_url, ...artifacts],
@@ -426,7 +426,7 @@ function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
     finalJudgment: 'NO CLEAR PICK.',
   });
   const header = packetHeader({
-    title: 'Captain MLB — Daily Pre-Final-Lineup Packet',
+    title: 'Captain MLB — CPC Packet: Pre-Final-Lineup',
     date,
     packetType: PACKET_TYPE,
     sources: [KALSHI_SOURCES.mlb.api_url, KALSHI_SOURCES.mlb.page_url, ...artifacts],

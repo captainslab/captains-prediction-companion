@@ -214,7 +214,7 @@ export function buildNascarRows({ event, ceiling = null }) {
       blocker = 'BLOCKED_MODEL_LAYER_MISSING: no ceiling-board composite for this driver';
       posture = 'NO_CLEAR_PICK';
       missingLayers.push('ceiling_board_composite', 'fundamentals_layers');
-      analysis = 'Market priced; ceiling model absent for this date. Rank reflects market implied only — not a model edge.';
+      analysis = 'Market priced; ceiling model absent for this date — not a model edge.';
       trigger = { price: null, event: 'run NASCAR ceiling board (scripts/nascar/nascar-workspace.mjs) for this race date' };
     }
 
@@ -328,7 +328,7 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
   const ceiling = loadNascarCeiling(artifacts);
   const built = buildNascarRows({ event, ceiling });
   const header = packetHeader({
-    title: `Captain NASCAR — Sunday Race Decision Board: ${s.title}`,
+    title: `Captain NASCAR — CPC Packet: ${s.title}`,
     date,
     packetType: PACKET_TYPE,
     sources: [sourcePath, KALSHI_SOURCES.nascar.page_url, ceiling?.source].filter(Boolean),
@@ -352,9 +352,36 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
     };
   }
 
-  const modeNote = built.mode === 'JOINED'
-    ? `Ceiling model joined for ${built.joined}/${built.marketCount} drivers (source: ${ceiling.source}). Edge = model fair win − market implied.`
-    : `NO ceiling model for this race date: ${built.marketCount} win markets ranked by market implied only and BLOCKED on the missing model. Run the NASCAR ceiling board to unlock edges.`;
+  // MARKET_ONLY mode: ceiling model absent. Render a compact event-level
+  // BLOCKED section instead of dumping 30+ individual BLOCKED driver rows.
+  // Per-driver market pricing goes to the audit inventory only.
+  if (built.mode === 'MARKET_ONLY') {
+    const body = [
+      'TLDR BOARD:',
+      '  BLOCKED_MODEL_LAYER_MISSING',
+      '',
+      '=== BLOCKED — MODEL LAYER MISSING ===',
+      `No ceiling-board composite available for this race date (${s.title}).`,
+      `Win markets discovered: ${built.marketCount}`,
+      'Next step: run NASCAR ceiling board (scripts/nascar/nascar-workspace.mjs) for this race date.',
+      'Per-driver market pricing is available in the audit inventory only.',
+      '',
+      '--- Market Context - NOT IN SCORE ---',
+      'Market data stored in audit artifact for reference; not displayed in customer packet without model layer.',
+    ].join('\n');
+    return {
+      text: [header, body, packetFooter()].join('\n\n'),
+      inventoryText: buildInventoryArtifact({ marketType: 'nascar_win', date, eventTicker: s.ticker, inventoryLines: built.rows.map((r, i) =>
+        `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | implied=${r.implied_probability} ask=${r.market_yes_ask} bid=${r.market_yes_bid} conf=${r.confidence}`),
+        meta: { mode: 'MARKET_ONLY', win_markets: built.marketCount, ceiling_source: 'MISSING' },
+      }),
+      marketCount: built.marketCount,
+      missingStrikeCount: 0,
+      missingMarkets: false,
+    };
+  }
+
+  const modeNote = `Ceiling model joined for ${built.joined}/${built.marketCount} drivers (source: ${ceiling.source}). Edge = model fair win − market implied.`;
 
   const body = renderSectionedPacket(built.rows, {
     tldrNote: modeNote,
@@ -395,7 +422,7 @@ function buildEmptyPacket({ date, artifacts, workspaceResult, discovery, matched
     finalJudgment: 'NO CLEAR PICK.',
   });
   const header = packetHeader({
-    title: 'Captain NASCAR — Sunday Morning Race-Market Packet',
+    title: 'Captain NASCAR — CPC Packet: No Events',
     date,
     packetType: PACKET_TYPE,
     sources: [KALSHI_SOURCES.nascar.api_url, KALSHI_SOURCES.nascar.page_url, ...artifacts],

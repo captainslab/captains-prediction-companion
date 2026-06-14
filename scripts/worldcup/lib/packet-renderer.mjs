@@ -23,13 +23,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 
 function header(title, date) {
   return [
-    `╔══════════════════════════════════════════════════════════════════════╗`,
-    `║  WORLD CUP DECISION BOARD  —  ${date}                          ║`,
-    `╚══════════════════════════════════════════════════════════════════════╝`,
-    ``,
-    `Packet type: ${title}`,
+    `=== Captain World Cup — CPC Packet: ${title} ===`,
+    `date: ${date}`,
+    `packet_type: worldcup-matchday`,
     `Generated: ${new Date().toISOString()}`,
-    `No trades placed by this workflow.`,
+    `No trades placed by this workflow. Research only.`,
     ``,
   ].join('\n');
 }
@@ -188,6 +186,10 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     lines.push('');
   }
 
+  // 4b. Market context note
+  lines.push(section('Market Context — NOT IN SCORE'));
+  lines.push('  All market pricing is display context only and never enters composite scoring.\n');
+
   // 5. BLOCKED / NEEDS SOURCE
   lines.push(section('5. BLOCKED / NEEDS SOURCE'));
   let blockedCount = 0;
@@ -231,7 +233,8 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   lines.push('');
 
   lines.push('─'.repeat(70));
-  lines.push('END OF PACKET');
+  lines.push('No trades placed by this workflow.');
+  lines.push('No bankroll advice. No order placement. Research only.');
   lines.push('─'.repeat(70));
 
   return lines.join('\n');

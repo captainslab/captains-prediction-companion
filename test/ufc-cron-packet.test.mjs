@@ -241,8 +241,8 @@ test('UFC packet output includes sources checked, missing inputs, research compl
 
 test('UFC packet keeps prices, volume, open interest, and line movement out of Edge Basis', () => {
   const text = buildPriceOnlyPacketText();
-  const edgeBasis = sectionBetween(text, '--- Edge Basis ---', '--- Market Context ---');
-  const marketContext = sectionBetween(text, '--- Market Context ---', 'market_watch_notes');
+  const edgeBasis = sectionBetween(text, '--- Edge Basis ---', '--- Market Context - NOT IN SCORE ---');
+  const marketContext = sectionBetween(text, '--- Market Context - NOT IN SCORE ---', 'market_watch_notes');
   for (const term of ['yes_bid', 'yes_ask', 'last_price', 'liquidity', 'volume', 'open_interest', 'line_movement']) {
     assert.doesNotMatch(edgeBasis, new RegExp(term, 'i'), `Edge Basis must not contain ${term}`);
     assert.match(marketContext, new RegExp(term, 'i'), `Market Context must contain ${term}`);

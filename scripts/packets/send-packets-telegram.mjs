@@ -184,29 +184,48 @@ function isMentionsPacketType(type) {
   return type === 'mentions-daily' || type === 'mentions-watchlist';
 }
 
-// Packet types delivered mentions-style: one short notice + the base .txt as
-// an attached document (never chunked text messages).
+// All CPC packet types are delivered as one short notice + the base .txt as
+// an attached document (never chunked text messages). This is the uniform
+// CPC customer packet delivery contract.
+const CPC_DOCUMENT_TYPES = new Set([
+  'mentions-daily',
+  'mentions-watchlist',
+  'worldcup-matchday',
+  'nascar-sunday',
+  'ufc-weekly',
+  'mlb-daily',
+]);
+
 function isDocumentPacketType(type) {
-  return isMentionsPacketType(type) || type === 'worldcup-matchday';
+  return CPC_DOCUMENT_TYPES.has(type);
 }
 
-export function mentionsPacketNotice(packetText = '', stem = '') {
+export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
   const eventLine = packetText
     .split(/\r?\n/)
     .map(line => line.trim())
-    .find(line => /^Event title:/i.test(line) || /^#\s*Event:/i.test(line) || /^=== .*Mentions/i.test(line));
+    .find(line =>
+      /^Event title:/i.test(line) ||
+      /^#\s*Event:/i.test(line) ||
+      /^=== .*CPC Packet:/i.test(line) ||
+      /^=== .*Mentions/i.test(line));
   const source = eventLine || stem;
   let label = source
     .replace(/^Event title:\s*/i, '')
     .replace(/^#\s*Event:\s*/i, '')
     .replace(/^===\s*/, '')
     .replace(/\s*===\s*$/, '')
-    .replace(/^Captain Mentions\s*[—-]\s*/i, '')
+    .replace(/^Captain\s+\w+\s*[—-]\s*/i, '')
+    .replace(/^CPC Packet:\s*/i, '')
     .replace(/^Daily Decision Board:\s*/i, '')
     .trim();
   if (/trump/i.test(source) && /tele-rally/i.test(source)) label = 'Trump Tele-Rally';
   if (!label) label = stem;
-  return `New mentions packet: ${label} -- attached .txt`;
+  return `New CPC packet: ${label} -- attached .txt`;
+}
+
+export function mentionsPacketNotice(packetText = '', stem = '') {
+  return cpcPacketCaption(packetText, stem, 'mentions');
 }
 
 function loadLedger(path) {
@@ -277,9 +296,7 @@ async function main() {
       const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
       const filePath = join(dir, fileName);
       const text = readFileSync(filePath, 'utf8');
-      const notice = isMentionsPacketType(packetType)
-        ? mentionsPacketNotice(text, entry.name)
-        : `New ${packetType} packet: ${entry.name} -- attached .txt`;
+      const notice = cpcPacketCaption(text, entry.name, packetType);
       if (dryRun) {
         console.log(`[dry-run] would send notice: ${notice}`);
         console.log(`[dry-run] would send document: ${entry.name} — ${fileName}`);

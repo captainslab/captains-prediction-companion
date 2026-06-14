@@ -115,8 +115,8 @@ function addEdgeBasisSection(lines) {
 }
 
 function addMarketContextHeader(lines) {
-  lines.push('--- Market Context ---');
-  lines.push('anti_price_statement: price, volume, open interest, and line movement are market context only; they are not edge basis.');
+  lines.push('--- Market Context - NOT IN SCORE ---');
+  lines.push('anti_price_statement: price, volume, open interest, and line movement are market context only; they are NOT IN SCORE.');
   lines.push('line_movement: MISSING (not fetched by this packet).');
 }
 
@@ -126,7 +126,7 @@ export function buildKalshiEventPacket({ event, dates, sourcePath }) {
   const process = buildUfcProcess({ event, marketCount: block.marketCount });
   const eventDate = (s.close && s.close.slice(0, 10)) || dates[0];
   const header = packetHeader({
-    title: `Captain UFC — Weekend Event Packet: ${s.title}`,
+    title: `Captain UFC — CPC Packet: ${s.title}`,
     date: eventDate,
     packetType: PACKET_TYPE,
     sources: [sourcePath, KALSHI_SOURCES.ufc.page_url],
@@ -175,7 +175,7 @@ export function buildLegacyEventPacket({ weekendDates: wd, event }) {
   const eventName = data.event_name || data.name || event.file.split('/').pop().replace(/\.json$/, '');
   const fights = data.fights || data.card || [];
   const header = packetHeader({
-    title: `Captain UFC — Weekend Event Packet (legacy): ${eventName}`,
+    title: `Captain UFC — CPC Packet: ${eventName}`,
     date: event.date,
     packetType: PACKET_TYPE,
     sources: [event.file],
@@ -233,7 +233,7 @@ export function buildEmptyPacket(date, dates, discovery) {
   });
   return (
     packetHeader({
-      title: 'Captain UFC — Weekend Event Packet',
+      title: 'Captain UFC — CPC Packet: No Events',
       date,
       packetType: PACKET_TYPE,
       sources: [KALSHI_SOURCES.ufc.api_url, KALSHI_SOURCES.ufc.page_url],
@@ -254,8 +254,8 @@ export function buildEmptyPacket(date, dates, discovery) {
       '--- Edge Basis ---',
       '- No evidence edge basis available. UFC event and fighter evidence are incomplete.',
       '',
-      '--- Market Context ---',
-      'anti_price_statement: price, volume, open interest, and line movement are market context only; they are not edge basis.',
+      '--- Market Context - NOT IN SCORE ---',
+      'anti_price_statement: price, volume, open interest, and line movement are market context only; they are NOT IN SCORE.',
       'line_movement: MISSING (no market board captured).',
       '',
       'kalshi_discovery:',
