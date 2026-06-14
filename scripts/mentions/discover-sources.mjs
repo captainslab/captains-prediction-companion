@@ -36,6 +36,10 @@ import { maxSources } from './source-research.mjs';
 export const SOURCE_STATUS = Object.freeze({
   DECLARED: 'DECLARED',
   NO_DECLARED_SOURCES: 'NO_DECLARED_SOURCES',
+  SOURCE_FETCHED: 'SOURCE_FETCHED',
+  SOURCE_FETCHED_BROWSER: 'SOURCE_FETCHED_BROWSER',
+  SOURCE_FETCH_BLOCKED_BY_SITE: 'SOURCE_FETCH_BLOCKED_BY_SITE',
+  SOURCE_FETCH_TIMEOUT: 'SOURCE_FETCH_TIMEOUT',
 });
 
 // ─── price / market host firewall ────────────────────────────────────────────

@@ -202,8 +202,10 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
         date,
         env,
         ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+        ...(deps.fallbackFetchImpl ? { fallbackFetchImpl: deps.fallbackFetchImpl } : {}),
         ...(deps.chatRunner ? { chatRunner: deps.chatRunner } : {}),
       });
+      if (sourceResearch.source_status) sourceStatus = sourceResearch.source_status;
       console.log(`[collect-mentions-research] ${eventTicker}: bounded source research ${JSON.stringify(sourceResearch.stats)}`);
     } else {
       // Explicit verified gap, not a silent stub: discovery ran and found no

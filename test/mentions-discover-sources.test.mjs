@@ -160,7 +160,7 @@ test('collector end-to-end DECLARED: discovery creates manifest, research no lon
 
   // research stats no longer null
   assert.notEqual(research.source_research_stats, null, 'source_research_stats populated');
-  assert.equal(research.source_status, SOURCE_STATUS.DECLARED);
+  assert.equal(research.source_status, SOURCE_STATUS.SOURCE_FETCHED);
   assert.equal(modelCalls, 1, 'one bounded batch call');
 
   // research-cache populated
@@ -169,9 +169,36 @@ test('collector end-to-end DECLARED: discovery creates manifest, research no lon
 
   // layer_records updated from extracted source evidence
   const mkt = research.markets.find((m) => m.keyword === 'Affordability');
+  assert.equal(mkt.source_status, SOURCE_STATUS.SOURCE_FETCHED);
   assert.equal(mkt.research_quality, 'source_backed');
   assert.equal(mkt.layer_records.direct_mention_pathway.present, true);
   assert.equal(mkt.layer_records.direct_mention_pathway.score, 77);
+});
+
+test('collector end-to-end DECLARED protected site: 403 normal fetch uses browser fallback and publishes source status', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'disc-e2e-browser-'));
+  let fallbackUrls = [];
+  const research = await buildEventResearch(HOCHUL_EVENT, 'political_mentions', {
+    stateRoot: root, date: DATE, env: {},
+    deps: {
+      fetchImpl: async () => ({ ok: false, status: 403, text: async () => 'Forbidden' }),
+      fallbackFetchImpl: async ({ url }) => {
+        fallbackUrls.push(url);
+        return { ok: true, text: 'Governor Hochul said affordability in official remarks', timedOut: false, error: null };
+      },
+      chatRunner: async () => ({
+        ok: true, status: 0,
+        parsed: { terms: [{ term: 'Affordability', layers: { direct_mention_pathway: { present: true, score: 79, basis: '"affordability" in official remarks' } } }] },
+      }),
+    },
+  });
+  assert.deepEqual(fallbackUrls, ['https://www.governor.ny.gov/'], 'fallback uses only declared URL');
+  assert.equal(research.source_status, SOURCE_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(research.source_research_stats.source_status, SOURCE_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(research.source_research_stats.fallback_attempts, 1);
+  const mkt = research.markets.find((m) => m.keyword === 'Affordability');
+  assert.equal(mkt.source_status, SOURCE_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(mkt.research_quality, 'source_backed');
 });
 
 test('collector end-to-end NO_DECLARED_SOURCES: explicit gap, null stats, no fetch, no model call', async () => {

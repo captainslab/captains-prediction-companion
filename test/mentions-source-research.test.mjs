@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -12,6 +12,7 @@ import {
   loadDeclaredSources,
   cachePathForUrl,
   maxSources,
+  SOURCE_FETCH_STATUS,
   EVIDENCE_LAYERS,
 } from '../scripts/mentions/source-research.mjs';
 import { buildEventResearch } from '../scripts/mentions/collect-mentions-research.mjs';
@@ -24,6 +25,10 @@ function fakeFetch(text = 'transcript: he discussed China and the pardon at leng
     counter.calls += 1;
     return { ok: true, status: 200, text: async () => text };
   };
+}
+
+function statusFetch(status, text = '') {
+  return async () => ({ ok: false, status, text: async () => text });
 }
 
 function goodExtraction() {
@@ -68,6 +73,108 @@ test('source cache prevents repeat fetches (second run = cache hit, zero network
   assert.equal(second.cached, true);
   assert.equal(second.text, 'some text');
   assert.ok(cachePathForUrl(root, DATE, url).includes('research-cache'));
+});
+
+test('403 normal fetch triggers bounded browser/Firecrawl fallback and caches fetched text', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-browser-ok-'));
+  const url = 'https://www.governor.ny.gov/';
+  let normalFetches = 0;
+  let fallbackFetches = 0;
+  const doc = await fetchSourceDocument({
+    url, stateRoot: root, date: DATE, env: {},
+    fetchImpl: async () => { normalFetches += 1; return { ok: false, status: 403, text: async () => 'Forbidden' }; },
+    fallbackFetchImpl: async ({ url: fallbackUrl }) => {
+      fallbackFetches += 1;
+      assert.equal(fallbackUrl, url, 'fallback receives the exact declared URL only');
+      return { ok: true, text: 'Governor transcript: affordability and New York families', timedOut: false, error: null };
+    },
+  });
+  assert.equal(normalFetches, 1, 'normal fetch remains first path');
+  assert.equal(fallbackFetches, 1, '403 triggers exactly one fallback page fetch');
+  assert.equal(doc.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(doc.fetch_method, 'firecrawl');
+  assert.equal(doc.text.includes('affordability'), true);
+  const cached = JSON.parse(readFileSync(cachePathForUrl(root, DATE, url), 'utf8'));
+  assert.equal(cached.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(cached.fetch_method, 'firecrawl');
+});
+
+test('successful browser fallback populates source_research_stats and extracted layer evidence', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-browser-stats-'));
+  const res = await runBoundedSourceResearch({
+    eventTitle: 'Governor Kathy Hochul announcement', eventTicker: 'KXH', profile: 'political_mentions',
+    terms: ['Affordability'], sources: ['https://www.governor.ny.gov/'],
+    stateRoot: root, date: DATE, env: {},
+    fetchImpl: statusFetch(403),
+    fallbackFetchImpl: async () => ({ ok: true, text: 'Governor said affordability in prepared remarks', timedOut: false, error: null }),
+    chatRunner: async () => ({
+      ok: true, status: 0,
+      parsed: { terms: [{ term: 'Affordability', layers: { direct_mention_pathway: { present: true, score: 77, basis: '"affordability" in remarks' } } }] },
+    }),
+  });
+  assert.equal(res.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(res.stats.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(res.stats.fallback_attempts, 1);
+  assert.equal(res.stats.fetched_browser, 1);
+  assert.equal(res.quality, 'source_backed');
+  assert.equal(res.byTerm.Affordability.direct_mention_pathway.score, 77);
+  assert.equal(readdirSync(join(root, 'mentions', DATE, 'research-cache')).length, 1, 'browser text cached');
+});
+
+test('failed browser fallback marks SOURCE_FETCH_BLOCKED_BY_SITE and fabricates no evidence', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-browser-block-'));
+  let modelCalls = 0;
+  const res = await runBoundedSourceResearch({
+    eventTitle: 'Governor Kathy Hochul announcement', eventTicker: 'KXH', profile: 'political_mentions',
+    terms: ['Affordability'], sources: ['https://www.governor.ny.gov/'],
+    stateRoot: root, date: DATE, env: {},
+    fetchImpl: statusFetch(403),
+    fallbackFetchImpl: async () => ({ ok: false, text: null, timedOut: false, error: 'firecrawl returned access denied' }),
+    chatRunner: async () => { modelCalls += 1; return { ok: true, parsed: { terms: [] }, status: 0 }; },
+  });
+  assert.equal(res.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCH_BLOCKED_BY_SITE);
+  assert.equal(res.stats.blocked_by_site, 1);
+  assert.equal(res.quality, 'no_source');
+  assert.deepEqual(res.byTerm, {});
+  assert.equal(modelCalls, 0, 'extraction only runs on fetched/cached text');
+  assert.ok(res.notes.some((n) => n.includes('firecrawl returned access denied')));
+});
+
+test('browser fallback never crawls extra links from fetched page', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-browser-one-page-'));
+  const calls = [];
+  const res = await runBoundedSourceResearch({
+    eventTitle: 'E', eventTicker: 'X', profile: 'political_mentions', terms: TERMS,
+    sources: ['https://official.gov/start'], stateRoot: root, date: DATE, env: {},
+    fetchImpl: statusFetch(429),
+    fallbackFetchImpl: async ({ url }) => {
+      calls.push(url);
+      return { ok: true, text: 'transcript body with link https://official.gov/next and China', timedOut: false, error: null };
+    },
+    chatRunner: async () => ({ ok: true, parsed: goodExtraction(), status: 0 }),
+  });
+  assert.deepEqual(calls, ['https://official.gov/start']);
+  assert.equal(res.stats.fallback_attempts, 1);
+  assert.equal(res.stats.sources_used, 1);
+});
+
+test('market/price URLs are rejected before normal fetch or fallback', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-market-reject-'));
+  mkdirSync(join(root, 'mentions', DATE, 'sources'), { recursive: true });
+  writeFileSync(join(root, 'mentions', DATE, 'sources', 'KXPRICE.json'), JSON.stringify({
+    urls: ['https://kalshi.com/events/KXPRICE', 'https://www.governor.ny.gov/'],
+  }));
+  assert.deepEqual(loadDeclaredSources(root, DATE, 'KXPRICE', {}), ['https://www.governor.ny.gov/']);
+  let normal = 0;
+  let fallback = 0;
+  const doc = await fetchSourceDocument({
+    url: 'https://kalshi.com/events/KXPRICE', stateRoot: root, date: DATE, env: {},
+    fetchImpl: async () => { normal += 1; return { ok: true, status: 200, text: async () => 'market page' }; },
+    fallbackFetchImpl: async () => { fallback += 1; return { ok: true, text: 'x' }; },
+  });
+  assert.equal(doc.rejected, true);
+  assert.equal(normal, 0);
+  assert.equal(fallback, 0);
 });
 
 test('source fetching is bounded: declared list capped, non-http rejected, bytes truncated', async () => {
