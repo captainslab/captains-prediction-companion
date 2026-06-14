@@ -85,7 +85,19 @@ export async function fetchSourceDocument({
     }
   }
   try {
-    const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow' });
+    const res = await fetchImpl(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
+      headers: {
+        // Official sites (e.g. *.gov) commonly 403 a header-less client.
+        // A standard browser UA is required to actually retrieve the declared
+        // source document. No cookies, no auth, read-only GET.
+        'user-agent': env.MENTIONS_RESEARCH_USER_AGENT
+          || 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'accept-language': 'en-US,en;q=0.9',
+      },
+    });
     if (!res?.ok) return { url, text: null, cached: false, error: `fetch failed: status ${res?.status ?? 'unknown'}` };
     const raw = await res.text();
     const text = String(raw).slice(0, maxSourceBytes(env));
