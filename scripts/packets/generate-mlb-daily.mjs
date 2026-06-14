@@ -332,80 +332,82 @@ export function extractGames(paths = []) {
   return out;
 }
 
-function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath }) {
+function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
   const process = buildMlbPacketProcess({ event, marketCount: block.marketCount, artifacts });
+  const hasComposite = Array.isArray(gamePicks) && gamePicks.length > 0;
+
   const header = packetHeader({
-    title: 'Captain MLB — CPC Packet: Pre-Final-Lineup',
+    title: `Captain MLB — CPC Packet: ${hasComposite ? 'Game Board' : 'Pre-Final-Lineup'}`,
     date,
     packetType: PACKET_TYPE,
     sources: [sourcePath, KALSHI_SOURCES.mlb.page_url, ...artifacts],
   });
   const lines = [];
-  lines.push('TLDR:');
-  lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: market board only; no evidence lean without starters, lineups/news, venue/weather, and matchup context.');
-  lines.push('');
-  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
-  lines.push('');
-  lines.push('research_prime:');
-  if (primeAttempts.length) {
-    for (const attempt of primeAttempts) {
-      lines.push(`  - command: ${attempt.label}`);
-      lines.push(`    status: ${attempt.ok ? 'ok' : 'MISSING'}`);
-      if (!attempt.ok) lines.push(`    error: ${attempt.error || attempt.stderr || 'command failed'}`);
-    }
-  } else {
-    lines.push('  - MISSING: no discovery command attempted');
-  }
-  lines.push('');
-  if (kalshiSummary) {
-    lines.push('kalshi_discovery:');
-    lines.push(`  source_page: ${KALSHI_SOURCES.mlb.page_url}`);
-    lines.push(`  source_api: ${KALSHI_SOURCES.mlb.api_url}`);
-    lines.push(`  reachable: ${kalshiSummary.ok ? 'yes' : 'no'}`);
-    lines.push(`  total_events: ${kalshiSummary.total}`);
-    lines.push(`  window_matched: ${kalshiSummary.matched}`);
-    if (kalshiSummary.error) lines.push(`  error: ${kalshiSummary.error}`);
+
+  if (hasComposite) {
+    const rows = gamePicks.map((p) => mlbPickToDecisionRow(p));
+    const boardRows = rows.filter((r) => r.market_type !== 'correlated_alternate');
+    const lineupPending = gamePicks.filter((p) =>
+      Array.isArray(p.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m)))).length;
+    const tldrNote = lineupPending
+      ? `Pre-lineup: ${lineupPending} pick(s) await confirmed lineups — confidence downgraded, not the board.`
+      : 'Lineups confirmed where available.';
+
+    const body = renderSectionedPacket(boardRows, {
+      tldrNote,
+      auditArtifacts: [sourcePath].filter(Boolean),
+      perSectionLimit: 14,
+    });
+    lines.push('Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.');
     lines.push('');
+    lines.push(body);
+  } else {
+    lines.push('TLDR BOARD:');
+    lines.push('  BLOCKED_MODEL_LAYER_MISSING');
+    lines.push('');
+    lines.push('=== BLOCKED — MODEL LAYER MISSING ===');
+    lines.push(`No composite scoring available for this game (${s.title}).`);
+    lines.push(`Markets discovered: ${block.marketCount}`);
+    lines.push('Next step: run MLB scoring pipeline (scripts/mlb/composite-dry-run.mjs) for this date.');
+    lines.push('Per-market pricing is available in the audit inventory only.');
+    lines.push('');
+    lines.push('--- Market Context - NOT IN SCORE ---');
+    lines.push('Market data stored in audit artifact for reference; not displayed in customer packet without model layer.');
   }
-  lines.push(`event_ticker: ${s.ticker}`);
-  lines.push(`event_title: ${s.title}`);
-  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
+
+  const inventoryLines = [];
+  inventoryLines.push(`event_ticker: ${s.ticker}`);
+  inventoryLines.push(`event_title: ${s.title}`);
+  inventoryLines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
   const evDisp = buildEventDisplay(event);
-  lines.push(`display_event_title: ${evDisp.display_event_title}`);
-  lines.push(`display_name_status: ${evDisp.display_name_status}`);
-  lines.push(`series_ticker: ${s.series}`);
-  lines.push(`market_count: ${s.marketCount}`);
-  lines.push(`close_time_utc: ${s.close}`);
-  lines.push('');
-  lines.push('markets:');
-  for (const l of block.lines) lines.push(l);
-  // Per-market display enrichment block, separate from raw market dump so the
-  // raw Kalshi text emitted above is preserved verbatim for audit.
+  inventoryLines.push(`display_event_title: ${evDisp.display_event_title}`);
+  inventoryLines.push(`display_name_status: ${evDisp.display_name_status}`);
+  inventoryLines.push(`series_ticker: ${s.series}`);
+  inventoryLines.push(`market_count: ${s.marketCount}`);
+  inventoryLines.push(`close_time_utc: ${s.close}`);
+  inventoryLines.push('');
+  inventoryLines.push('markets:');
+  for (const l of block.lines) inventoryLines.push(l);
   const rawMarkets = Array.isArray(event?.markets) ? event.markets : [];
   if (rawMarkets.length) {
-    lines.push('');
-    lines.push('market_display:');
+    inventoryLines.push('');
+    inventoryLines.push('market_display:');
     for (const raw of rawMarkets) {
       const m = normalizeMarket(raw);
       const md = buildMarketDisplay(m, evDisp);
-      lines.push(`  - market_ticker: ${m.ticker || 'MISSING'}`);
-      lines.push(`    display_market_title: ${md.display_market_title}`);
-      lines.push(`    display_yes_label: ${md.display_yes_label}`);
-      lines.push(`    display_no_label: ${md.display_no_label}`);
-      lines.push(`    display_name_status: ${md.display_name_status}`);
+      inventoryLines.push(`  - market_ticker: ${m.ticker || 'MISSING'}`);
+      inventoryLines.push(`    display_market_title: ${md.display_market_title}`);
+      inventoryLines.push(`    display_yes_label: ${md.display_yes_label}`);
+      inventoryLines.push(`    display_no_label: ${md.display_no_label}`);
+      inventoryLines.push(`    display_name_status: ${md.display_name_status}`);
     }
   }
-  lines.push('');
-  lines.push('pre_final_caveats:');
-  lines.push('  - lineups not finalized; pitching can scratch');
-  lines.push('  - totals/ML board reflects pre-lineup snapshot only');
-  lines.push('  - weather snapshots may drift before first pitch');
+
   return {
     text: header + lines.join('\n') + packetFooter(),
+    inventoryText: inventoryLines.join('\n'),
     marketCount: block.marketCount,
     missingStrikeCount: block.missingStrikeCount,
     missingMarkets: block.missingMarkets,
@@ -548,16 +550,26 @@ async function main() {
       const ticker = ev?.event_ticker;
       if (!ticker) continue;
       const sourcePath = resolve(opts.stateRoot, 'mlb', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const built = buildKalshiGamePacket({ date: opts.date, event: ev, artifacts, primeAttempts, kalshiSummary, sourcePath });
+      const gamePicks = scoring ? scoring.picks.filter((p) => p.event_ticker === ticker) : null;
+      const built = buildKalshiGamePacket({ date: opts.date, event: ev, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
+      if (built.inventoryText) {
+        const invW = writeAudit(dir, `${opts.date}-${ticker}.inventory`, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+          market_count: built.marketCount,
+        });
+        items.push({ name: `${ticker}.inventory`, ...invW });
+      }
       const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
         event_ticker: ticker,
         market_count: built.marketCount,
         missing_markets: built.missingMarkets,
         missing_strike_text_count: built.missingStrikeCount,
         artifact_count: artifacts.length,
+        has_composite: Array.isArray(gamePicks) && gamePicks.length > 0,
         kalshi_discovery: kalshiSummary,
         research_prime: primeMeta,
       });

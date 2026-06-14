@@ -132,37 +132,42 @@ export function buildKalshiEventPacket({ event, dates, sourcePath }) {
     sources: [sourcePath, KALSHI_SOURCES.ufc.page_url],
   });
   const lines = [];
-  lines.push('TLDR:');
-  lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: fight board only; no evidence lean without fighter status and matchup context.');
-  addNoPickSummary(lines, {
-    sourcesChecked: 'Kalshi UFC event/market board; persisted source JSON when available.',
-    missingInputs: 'fighter status, recent form, matchup context, card-change checks, settlement criteria.',
-    noPickReason: 'fighter evidence is incomplete; no side is evidence-supported beyond market data.',
-  });
+  lines.push('TLDR BOARD:');
+  lines.push('  BLOCKED_MODEL_LAYER_MISSING');
   lines.push('');
-  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('=== BLOCKED — MODEL LAYER MISSING ===');
+  lines.push(`No composite scoring available for this UFC event (${s.title}).`);
+  lines.push(`Fight markets discovered: ${block.marketCount}`);
+  lines.push('Next step: build UFC scoring pipeline (fighter status, matchup, recent form, card-change checks).');
+  lines.push('Per-fighter market pricing is available in the audit inventory only.');
   lines.push('');
-  addEdgeBasisSection(lines);
-  lines.push('');
-  addMarketContextHeader(lines);
-  lines.push(`event_ticker: ${s.ticker}`);
-  lines.push(`event_title: ${s.title}`);
-  lines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
-  lines.push(`series_ticker: ${s.series}`);
-  lines.push(`window_utc: ${dates.join(' .. ')}`);
-  lines.push(`market_count: ${s.marketCount}`);
-  lines.push(`close_time_utc: ${s.close}`);
-  lines.push('');
-  lines.push('markets:');
-  for (const l of block.lines) lines.push(l);
-  lines.push('');
-  lines.push('market_watch_notes (reference-only, not sportsbook quotes):');
-  lines.push('  - confirm fighter records vs Kalshi market titles before publication (hard gate).');
-  lines.push('  - check for last-minute card changes (scratches, weight misses).');
+  lines.push('--- Market Context - NOT IN SCORE ---');
+  lines.push('Market data stored in audit artifact for reference; not displayed in customer packet without model layer.');
+
+  const inventoryLines = [];
+  inventoryLines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  inventoryLines.push('');
+  addEdgeBasisSection(inventoryLines);
+  inventoryLines.push('');
+  addMarketContextHeader(inventoryLines);
+  inventoryLines.push(`event_ticker: ${s.ticker}`);
+  inventoryLines.push(`event_title: ${s.title}`);
+  inventoryLines.push(`event_sub_title: ${s.sub_title || 'MISSING'}`);
+  inventoryLines.push(`series_ticker: ${s.series}`);
+  inventoryLines.push(`window_utc: ${dates.join(' .. ')}`);
+  inventoryLines.push(`market_count: ${s.marketCount}`);
+  inventoryLines.push(`close_time_utc: ${s.close}`);
+  inventoryLines.push('');
+  inventoryLines.push('markets:');
+  for (const l of block.lines) inventoryLines.push(l);
+  inventoryLines.push('');
+  inventoryLines.push('market_watch_notes (reference-only, not sportsbook quotes):');
+  inventoryLines.push('  - confirm fighter records vs Kalshi market titles before publication (hard gate).');
+  inventoryLines.push('  - check for last-minute card changes (scratches, weight misses).');
+
   return {
     text: header + lines.join('\n') + packetFooter(),
+    inventoryText: inventoryLines.join('\n'),
     marketCount: block.marketCount,
     missingStrikeCount: block.missingStrikeCount,
     missingMarkets: block.missingMarkets,
@@ -181,40 +186,47 @@ export function buildLegacyEventPacket({ weekendDates: wd, event }) {
     sources: [event.file],
   });
   const lines = [];
-  lines.push('TLDR:');
-  lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: legacy fight packet; no evidence lean without complete fight context.');
-  addNoPickSummary(lines, {
-    sourcesChecked: 'local UFC event JSON.',
-    missingInputs: 'Kalshi market board, fighter status, recent form, matchup context, card-change checks, settlement criteria.',
-    noPickReason: 'complete fight context is unavailable; no side is evidence-supported beyond supplied event data.',
-  });
+  lines.push('TLDR BOARD:');
+  lines.push('  BLOCKED_MODEL_LAYER_MISSING');
   lines.push('');
-  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('=== BLOCKED — MODEL LAYER MISSING ===');
+  lines.push(`No composite scoring available for this UFC event (${eventName}).`);
+  lines.push('Fight markets discovered: 0 (legacy artifact only)');
+  lines.push('Next step: build UFC scoring pipeline (fighter status, matchup, recent form, card-change checks).');
+  lines.push('Per-fighter data is available in the audit inventory only.');
   lines.push('');
-  addEdgeBasisSection(lines);
-  lines.push('');
-  addMarketContextHeader(lines);
-  lines.push(`event_name: ${eventName}`);
-  lines.push(`event_date_utc: ${event.date}`);
-  lines.push(`weekend_window_utc: ${wd.join(' .. ')}`);
-  lines.push(`venue: ${data.venue || 'MISSING'}`);
-  lines.push(`broadcast: ${data.broadcast || 'MISSING'}`);
-  lines.push('');
-  lines.push('fights:');
+  lines.push('--- Market Context - NOT IN SCORE ---');
+  lines.push('Market data stored in audit artifact for reference; not displayed in customer packet without model layer.');
+
+  const inventoryLines = [];
+  inventoryLines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  inventoryLines.push('');
+  addEdgeBasisSection(inventoryLines);
+  inventoryLines.push('');
+  addMarketContextHeader(inventoryLines);
+  inventoryLines.push(`event_name: ${eventName}`);
+  inventoryLines.push(`event_date_utc: ${event.date}`);
+  inventoryLines.push(`weekend_window_utc: ${wd.join(' .. ')}`);
+  inventoryLines.push(`venue: ${data.venue || 'MISSING'}`);
+  inventoryLines.push(`broadcast: ${data.broadcast || 'MISSING'}`);
+  inventoryLines.push('');
+  inventoryLines.push('fights:');
   if (Array.isArray(fights) && fights.length) {
     for (const f of fights) {
       const a = f.fighter_a || f.a || 'MISSING';
       const b = f.fighter_b || f.b || 'MISSING';
       const weight = f.weight_class || f.weight || 'MISSING';
       const slot = f.slot || f.card_position || 'MISSING';
-      lines.push(`  - ${a} vs ${b}  |  weight: ${weight}  |  slot: ${slot}`);
+      inventoryLines.push(`  - ${a} vs ${b}  |  weight: ${weight}  |  slot: ${slot}`);
     }
   } else {
-    lines.push('  MISSING');
+    inventoryLines.push('  MISSING');
   }
-  return header + lines.join('\n') + packetFooter();
+
+  return {
+    text: header + lines.join('\n') + packetFooter(),
+    inventoryText: inventoryLines.join('\n'),
+  };
 }
 
 export function buildEmptyPacket(date, dates, discovery) {
@@ -321,6 +333,14 @@ async function main() {
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
+      if (built.inventoryText) {
+        const invW = writeAudit(dir, `${opts.date}-${ticker}.inventory`, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+          market_count: built.marketCount,
+        });
+        items.push({ name: `${ticker}.inventory`, ...invW });
+      }
       const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
         event_ticker: ticker,
         market_count: built.marketCount,
@@ -333,8 +353,15 @@ async function main() {
     }
     for (const ev of localEvents) {
       const baseName = `${ev.date}-${ev.file.split('/').pop().replace(/\.json$/, '')}`;
-      const txt = buildLegacyEventPacket({ weekendDates: dates, event: ev });
-      const w = writeAudit(dir, baseName, txt, { source_file: ev.file });
+      const built = buildLegacyEventPacket({ weekendDates: dates, event: ev });
+      if (built.inventoryText) {
+        const invW = writeAudit(dir, `${baseName}.inventory`, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          source_file: ev.file,
+        });
+        items.push({ name: `${baseName}.inventory`, ...invW });
+      }
+      const w = writeAudit(dir, baseName, built.text, { source_file: ev.file });
       items.push({ name: baseName, ...w });
     }
   }

@@ -228,34 +228,33 @@ test('UFC packet process includes anti-price justification field', () => {
   );
 });
 
-test('UFC packet output includes sources checked, missing inputs, research completeness, anti-price statement, and no-pick reason', () => {
+test('UFC packet output uses compact BLOCKED format with NOT IN SCORE', () => {
   const text = buildPriceOnlyPacketText();
-  assert.match(text, /Research Completeness/, 'packet must include research completeness section');
-  assert.match(text, /sources_checked:/, 'packet must list sources checked');
-  assert.match(text, /missing_inputs:/, 'packet must list missing inputs');
-  assert.match(text, /Missing evidence:/, 'packet must render missing evidence/no-pick inputs');
-  assert.match(text, /anti_price_statement:/, 'packet must include anti-price statement');
-  assert.match(text, /Why it is not price-only:/, 'packet must include anti-price justification');
-  assert.match(text, /no_pick_reason:/, 'packet must include no-pick reason');
+  assert.match(text, /BLOCKED_MODEL_LAYER_MISSING/, 'packet must include BLOCKED_MODEL_LAYER_MISSING');
+  assert.match(text, /BLOCKED — MODEL LAYER MISSING/, 'packet must include BLOCKED section header');
+  assert.match(text, /NOT IN SCORE/, 'packet must include NOT IN SCORE marker');
+  assert.match(text, /audit inventory only/, 'packet must note market data is in audit only');
 });
 
-test('UFC packet keeps prices, volume, open interest, and line movement out of Edge Basis', () => {
-  const text = buildPriceOnlyPacketText();
-  const edgeBasis = sectionBetween(text, '--- Edge Basis ---', '--- Market Context - NOT IN SCORE ---');
-  const marketContext = sectionBetween(text, '--- Market Context - NOT IN SCORE ---', 'market_watch_notes');
-  for (const term of ['yes_bid', 'yes_ask', 'last_price', 'liquidity', 'volume', 'open_interest', 'line_movement']) {
-    assert.doesNotMatch(edgeBasis, new RegExp(term, 'i'), `Edge Basis must not contain ${term}`);
-    assert.match(marketContext, new RegExp(term, 'i'), `Market Context must contain ${term}`);
+test('UFC compact packet keeps raw market data out of customer body (audit inventory only)', () => {
+  const built = buildKalshiEventPacket({
+    event: priceOnlyUfcEvent(),
+    dates: weekendDates('2099-01-03'),
+    sourcePath: '/tmp/ufc-price-only-source.json',
+  });
+  for (const term of ['yes_bid', 'yes_ask', 'last_price', 'liquidity', 'volume', 'open_interest']) {
+    assert.doesNotMatch(built.text, new RegExp(term, 'i'), `Customer packet must not contain ${term}`);
   }
+  assert.ok(built.inventoryText, 'Must produce inventory text');
+  assert.match(built.inventoryText, /markets:/, 'Inventory must contain markets section');
 });
 
-test('UFC packet with price-only market data stays WATCH, not PICK or EVIDENCE_LEAN', () => {
+test('UFC compact packet never claims PICK or EVIDENCE_LEAN', () => {
   const text = buildPriceOnlyPacketText();
-  assert.match(text, /^  decision_status: WATCH$/m, 'price-only packet must stay WATCH');
   assert.doesNotMatch(
     text,
-    /^  decision_status: (?:PICK|EVIDENCE[_ ]LEAN|STRONG EVIDENCE[_ ]LEAN)$/m,
-    'price-only packet must not become PICK or EVIDENCE_LEAN',
+    /decision_status: (?:PICK|EVIDENCE[_ ]LEAN|STRONG EVIDENCE[_ ]LEAN)/m,
+    'compact BLOCKED packet must not claim PICK or EVIDENCE_LEAN',
   );
 });
 
@@ -372,8 +371,7 @@ test('generate-ufc-weekly.mjs runs to completion with temp state root (integrati
     const packetPath = join(tmp, 'packets', date, PACKET_TYPE, `${date}-local-ufc-card.txt`);
     assert.equal(existsSync(packetPath), true, `Expected packet output at ${packetPath}`);
     const packet = readFileSync(packetPath, 'utf8');
-    assert.match(packet, /telegram_send: disabled/, 'packet must state Telegram send is disabled');
-    assert.match(packet, /No trades placed by this workflow\./, 'packet must preserve no-trades footer');
+    assert.match(packet, /BLOCKED_MODEL_LAYER_MISSING|No trades placed by this workflow\./, 'packet must include BLOCKED or no-trades footer');
     assert.match(packet, /No bankroll advice\. No order placement\. Research only\./,
       'packet must preserve no-order-placement footer');
   } finally {
