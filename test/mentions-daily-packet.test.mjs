@@ -95,9 +95,8 @@ function trumpTeleRallyEvent() {
 }
 
 test('mentions daily packet renders mention-composite scoring instead of WATCH-only posture', () => {
-  // Refactored to the compact sectioned decision board. Same guarantee:
-  // a source-backed composite produces an actual scored PICK row (not WATCH-only),
-  // with the composite score, posture, and layer coverage surfaced.
+  // v2 customer renderer guarantee: a source-backed composite produces a
+  // numeric CPC score and PICK posture in the canonical 8-section layout.
   const built = buildKalshiEventPacket({
     date: '2099-01-01',
     event: strongEarningsEvent(),
@@ -105,20 +104,14 @@ test('mentions daily packet renders mention-composite scoring instead of WATCH-o
   });
   const text = built.text;
 
-  // sectioned board, not the old YAML wall
-  assert.match(text, /TLDR BOARD:/);
-  assert.match(text, /TOP EDGE CANDIDATES/);
-  // composite scoring surfaced: PICK posture, real score, layer coverage
-  assert.match(text, /\[PICK\]/);
+  assert.match(text, /1\. FAST READ/);
+  assert.match(text, /2\. CPC COMPOSITE BOARD/);
   assert.match(text, /PowerEdge/);
-  assert.match(text, /score=90/);
-  assert.match(text, /posture=PICK/);
-  assert.match(text, /layers=4\/10/);
-  // why-line carries the present + missing layers
-  assert.match(text, /event_proximity=95/);
-  assert.match(text, /Missing:/);
+  assert.match(text, /\|\s*90\s*\|\s*PICK\s*\|/);
+  assert.match(text, /missing baseline_relevance/);
   // strong source-backed market is NOT downgraded to a generic WATCH-only posture
-  assert.doesNotMatch(text, /posture=WATCH/);
+  assert.doesNotMatch(text, /\|\s*90\s*\|\s*WATCH\s*\|/);
+  assert.doesNotMatch(text, /TLDR BOARD|TOP EDGE CANDIDATES/);
 });
 
 test('mentions daily packet keeps market context only in NOT IN SCORE section', () => {
@@ -129,20 +122,20 @@ test('mentions daily packet keeps market context only in NOT IN SCORE section', 
   }).text;
 
   // Explicit neutrality statement: market price is never a composite input.
-  assert.match(text, /NEVER a composite input/);
+  assert.match(text, /NEVER a score input/);
 
-  // Pricing (bid/ask/last) appears ONLY on the `market:` line, never on the
-  // `model:` / `why:` composite lines.
+  // Pricing appears only in the market context section/column, never in
+  // source-gap or trigger rationale sections.
   for (const line of text.split('\n')) {
-    const isModelLine = /^\s*(model:|why:)/.test(line);
-    if (isModelLine) {
+    const isRationaleLine = /^\s*(- upgrade:|- downgrade:|- PowerEdge: missing)/.test(line);
+    if (isRationaleLine) {
       for (const term of ['yes_bid', 'yes_ask', 'last=', 'implied=']) {
-        assert.ok(!line.includes(term), `composite line must not contain pricing token ${term}: ${line}`);
+        assert.ok(!line.includes(term), `rationale line must not contain pricing token ${term}: ${line}`);
       }
     }
   }
-  // Pricing is present, but on the market half.
-  assert.match(text, /market: implied=.*yes_bid=57 yes_ask=61 last=59/);
+  // Pricing is present only as compact context in section 5.
+  assert.match(text, /5\. MARKET CONTEXT - NOT IN SCORE[\s\S]*bid range 57c[\s\S]*ask range 61c/);
 });
 
 test('mentions daily packet uses full strike text, not abbreviation-only labels', () => {
@@ -152,63 +145,38 @@ test('mentions daily packet uses full strike text, not abbreviation-only labels'
     sourceUrl: '/tmp/trump.json',
   }).text;
 
-  assert.match(text, /KXTRUMPMENTION-26JUN11-BIDE :: What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
-  assert.doesNotMatch(text, /KXTRUMPMENTION-26JUN11-BIDE :: Biden(?:\n|$)/);
+  const board = text.split('3. TOP WATCH TERMS')[0].split('2. CPC COMPOSITE BOARD')[1];
+  assert.match(board, /\|\s*Biden\s*\|/);
+  assert.doesNotMatch(board, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  assert.match(text, /Full Strike Inventory[\s\S]*What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
 });
 
-test('proximity-only mention rows are labeled scaffold-only, not source-backed composite', () => {
+test('proximity-only mention rows are low-source capped, not source-backed composite', () => {
   const text = buildKalshiEventPacket({
     date: '2026-06-11',
     event: trumpTeleRallyEvent(),
     sourceUrl: '/tmp/trump.json',
   }).text;
 
-  assert.match(text, /proximity scaffold only -- no pick/);
+  assert.match(text, /LOW-SOURCE WATCH only -- no pick/);
+  assert.match(text, /LOW-SOURCE WATCH cap/);
   assert.doesNotMatch(text, /source-backed composite/i);
+  assert.doesNotMatch(text, /\|\s*scaffold\s*\|/i);
 });
 
-test('one-model mention synthesis uses dynamic default Hermes routing with no hardcoded provider/model', async () => {
+test('old one-model mention packet_text synthesis is disabled', async () => {
   const built = buildKalshiEventPacket({
     date: '2026-06-11',
     event: trumpTeleRallyEvent(),
     sourceUrl: '/tmp/trump.json',
   });
-  const fullStrike = built.synthesisInput.terms[0].full_strike_text;
-  const calls = [];
-
-  const result = await synthesizeMentionsUserPacket({
-    input: built.synthesisInput,
-    chatRunner: async (prompt, options) => {
-      calls.push({ prompt, options });
-      return {
-        ok: true,
-        status: 0,
-        sessionId: 'test-session',
-        parsed: {
-          packet_text: [
-            'Event title: What will Trump say during his Burt Jones Tele-Rally?',
-            'Date/time: 2026-06-11',
-            'Setup: proximity scaffold only -- no pick.',
-            `Watch-only terms: ${fullStrike} - proximity scaffold only -- no pick.`,
-            'Blocked/no-source terms: none.',
-            'Missing research layers: transcript, quote, historical tendency.',
-            'What would upgrade/downgrade the read: official transcript or video exact phrase.',
-            'Market Context - NOT IN SCORE: yes bid/ask are context only.',
-            'Research-only footer: No trades placed. Research-only.',
-          ].join('\n'),
-        },
-      };
-    },
-  });
-
-  assert.equal(calls.length, 1);
-  assert.equal(Object.hasOwn(calls[0].options, 'provider'), false);
-  assert.equal(Object.hasOwn(calls[0].options, 'model'), false);
-  assert.equal(calls[0].options.source, 'mentions-watch-packet-synthesis');
-  assert.match(calls[0].prompt, /source_packet:/);
-  assert.equal(result.invocation.provider_arg, 'omitted');
-  assert.equal(result.invocation.model_arg, 'omitted');
-  assert.match(result.text, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  await assert.rejects(
+    () => synthesizeMentionsUserPacket({
+      input: built.synthesisInput,
+      chatRunner: async () => ({ ok: true, parsed: { packet_text: 'old packet' } }),
+    }),
+    /model-written mentions packet_text synthesis is disabled/,
+  );
 });
 
 test('normalizeLayerList tolerates every layers_present shape', () => {
@@ -223,24 +191,23 @@ test('normalizeLayerList tolerates every layers_present shape', () => {
   assert.deepEqual(normalizeLayerList(undefined), []);
 });
 
-test('synthesis prompt does not crash for any layers_present shape (the .join regression)', () => {
+test('model packet_text synthesis prompt fails closed for any layers_present shape', () => {
   for (const shape of [['event_proximity'], '1/4', { event_proximity: true }, 4, null, undefined, 'MISSING']) {
-    const prompt = buildMentionsSynthesisPrompt({
+    assert.throws(() => buildMentionsSynthesisPrompt({
       date: '2026-06-11',
       event: { title: 'Trump Tele-Rally' },
       terms: [{
         full_strike_text: 'What will Donald Trump say during Burt Jones Tele-Rally? -- Biden',
-        evidence_status: 'proximity scaffold only -- no pick',
+        evidence_status: 'proximity-only source cap -- no pick',
         layers_present: shape,
         missing_research_layers: shape,
       }],
       layer_gaps: shape,
-    });
-    assert.match(prompt, /full_strike_text: What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+    }), /model-written mentions packet_text synthesis is disabled/);
   }
 });
 
-test('real generator pipeline produces a synthesis prompt without crashing on coverage-string layers_present', () => {
+test('real generator pipeline produces v2 synthesis input with coverage-string layers_present normalized', () => {
   // End-to-end through buildKalshiEventPacket: decision rows carry
   // layers_present as a "present/total" string; the prompt builder must
   // normalize it rather than calling .join on a string.
@@ -250,8 +217,8 @@ test('real generator pipeline produces a synthesis prompt without crashing on co
     sourceUrl: '/tmp/trump.json',
   });
   assert.ok(Array.isArray(built.synthesisInput.terms[0].layers_present));
-  const prompt = buildMentionsSynthesisPrompt(built.synthesisInput);
-  assert.match(prompt, /layers_present:/);
+  assert.equal(built.synthesisInput.packet_kind, 'mentions_customer_packet_v2');
+  assert.equal(built.synthesisInput.synthesis_rules.model_written_final_packet_allowed, false);
 });
 
 // ─── full-strike reliability (Hunter Biden / "Event does not qualify" class) ─
@@ -266,8 +233,8 @@ function hunterSynthesisInput() {
     event: { title: 'What will Hunter Biden say during This is Gavin Newsom Podcast?' },
     synthesis_rules: { use_full_strike_text_only: true },
     terms: [
-      { full_strike_text: HUNTER_NAMED_STRIKE, evidence_status: 'proximity scaffold only -- no pick' },
-      { full_strike_text: HUNTER_QUALIFY_STRIKE, evidence_status: 'proximity scaffold only -- no pick' },
+      { full_strike_text: HUNTER_NAMED_STRIKE, evidence_status: 'proximity-only source cap -- no pick' },
+      { full_strike_text: HUNTER_QUALIFY_STRIKE, evidence_status: 'proximity-only source cap -- no pick' },
     ],
   };
 }
@@ -279,27 +246,12 @@ test('full strike inventory appendix lists every strike exactly, including "Even
   assert.ok(appendix.includes(`- ${HUNTER_QUALIFY_STRIKE}`));
 });
 
-test('synthesis survives a model that omits "Event does not qualify" — appendix restores every full strike', async () => {
+test('model-written synthesis cannot restore omitted strikes because packet_text synthesis is disabled', async () => {
   const input = hunterSynthesisInput();
-  const result = await synthesizeMentionsUserPacket({
-    input,
-    chatRunner: async () => ({
-      ok: true,
-      status: 0,
-      parsed: {
-        packet_text: [
-          'Event title: What will Hunter Biden say during This is Gavin Newsom Podcast?',
-          `Watch-only terms: ${HUNTER_NAMED_STRIKE} - proximity scaffold only -- no pick.`,
-          // NOTE: model dropped the "Event does not qualify" strike (the 2026-06-11 failure mode)
-          'Market Context - NOT IN SCORE: bid/ask are context only.',
-          'Research-only footer: No trades placed.',
-        ].join('\n'),
-      },
-    }),
-  });
-  assert.ok(result.text.includes(HUNTER_QUALIFY_STRIKE), 'special contract full strike must appear in final packet');
-  assert.ok(result.text.includes(HUNTER_NAMED_STRIKE));
-  assert.match(result.text, /Full Strike Inventory/);
+  await assert.rejects(
+    () => synthesizeMentionsUserPacket({ input, chatRunner: async () => ({ ok: true, parsed: { packet_text: HUNTER_NAMED_STRIKE } }) }),
+    /model-written mentions packet_text synthesis is disabled/,
+  );
 });
 
 test('validation still catches a missing full strike when appendix is absent', () => {
@@ -373,12 +325,11 @@ test('mentions daily packet preserves all mention composite profiles', () => {
   }).text;
 
   // All three profile markets render in the board (profile routing preserved).
-  assert.match(text, /KXMENTIONPROFILES-POL/);
   assert.match(text, /tariff/);
-  assert.match(text, /KXMENTIONPROFILES-EARN/);
   assert.match(text, /revenue/);
-  assert.match(text, /KXMENTIONPROFILES-SPORT/);
   assert.match(text, /rivalry/);
+  assert.match(text, /CPC COMPOSITE BOARD/);
+  assert.match(text, /LOW-SOURCE WATCH cap/);
 });
 
 test('mentions packet generator preserves forbidden pricing field guard in layer records', () => {

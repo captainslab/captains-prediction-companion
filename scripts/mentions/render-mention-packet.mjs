@@ -30,6 +30,10 @@ export const SECTION_ORDER = Object.freeze([
 ]);
 
 const CENTRAL_TZ = 'America/Chicago';
+export const CUSTOMER_PACKET_CONTRACT_V2 = 'mentions_customer_packet_v2';
+export const CUSTOMER_RENDERER_ID = 'renderMentionPacket/v2';
+const LOW_SOURCE_SCORE_CAP = 39;
+const POSTURE_RANK = Object.freeze({ NO_CLEAR_PICK: 0, WATCH: 1, LEAN: 2, EVIDENCE_LEAN: 3, PICK: 4 });
 
 export function formatCentral(isoOrDate) {
   if (!isoOrDate) return 'MISSING';
@@ -80,7 +84,7 @@ function tableRow(cells, widths) {
 function sourceLabel(term) {
   const status = String(term.evidence_status ?? '');
   if (term.bucket === 'blocked/no-source') return 'blocked/no-source';
-  if (/proximity scaffold only/i.test(status)) return 'proximity-only';
+  if (/proximity scaffold only|proximity-only source cap|low-source watch only/i.test(status)) return 'proximity-only';
   const layers = (Array.isArray(term.layers_present) ? term.layers_present : [])
     .filter((l) => !/^\d+\/\d+$/.test(String(l)));
   if (layers.length) return layers.join('+').slice(0, 28);
@@ -95,20 +99,38 @@ function marketCell(term) {
   return `${cents(mc.bid_cents)}/${cents(mc.ask_cents)} ctx-only`;
 }
 
-// Schedule-only evidence must never read like real conviction. Proximity-only
-// rows display "scaffold" in the CPC column (raw layer score withheld) so a
-// confirmed schedule alone cannot masquerade as a 98-point edge.
 function isProximityOnly(term) {
   return sourceLabel(term) === 'proximity-only';
 }
 
-function cpcCell(term) {
-  if (term.bucket === 'blocked/no-source') return 'n/a';
-  if (isProximityOnly(term)) return 'scaffold';
-  return maybe(term.cpc_score, 'n/a');
+function numericScore(term) {
+  const raw = Number(term?.cpc_score);
+  const base = Number.isFinite(raw) ? Math.round(Math.max(0, Math.min(100, raw))) : 0;
+  if (term?.bucket === 'blocked/no-source') return 0;
+  if (isProximityOnly(term)) return Math.min(base, LOW_SOURCE_SCORE_CAP);
+  return base;
 }
 
-const POSTURE_RANK = Object.freeze({ NO_CLEAR_PICK: 0, WATCH: 1, LEAN: 2, EVIDENCE_LEAN: 3, PICK: 4 });
+function capReason(term) {
+  if (term?.bucket === 'blocked/no-source') return 'no usable source layers; score floor 0';
+  if (isProximityOnly(term)) {
+    const raw = Number(term?.cpc_score);
+    const rawNote = Number.isFinite(raw) && raw > LOW_SOURCE_SCORE_CAP ? ` raw=${Math.round(raw)}` : '';
+    return `LOW-SOURCE WATCH cap: event proximity only; max CPC ${LOW_SOURCE_SCORE_CAP}.${rawNote}`;
+  }
+  return 'source-backed score';
+}
+
+function renderedPosture(term) {
+  if (term?.bucket === 'blocked/no-source') return 'NO_CLEAR_PICK';
+  const posture = String(term?.composite_posture ?? 'NO_CLEAR_PICK');
+  if (isProximityOnly(term) && (POSTURE_RANK[posture] ?? 0) > POSTURE_RANK.WATCH) return 'WATCH';
+  return posture;
+}
+
+function cpcCell(term) {
+  return String(numericScore(term));
+}
 
 // Post-cap best posture: derived from the rendered rows' final postures
 // (already WATCH-capped for proximity-only/stub terms), never from the raw
@@ -116,7 +138,7 @@ const POSTURE_RANK = Object.freeze({ NO_CLEAR_PICK: 0, WATCH: 1, LEAN: 2, EVIDEN
 export function postCapBestPosture(terms) {
   let best = 'NO_CLEAR_PICK';
   for (const t of terms ?? []) {
-    const p = String(t.composite_posture ?? 'NO_CLEAR_PICK');
+    const p = renderedPosture(t);
     if ((POSTURE_RANK[p] ?? 0) > (POSTURE_RANK[best] ?? 0)) best = p;
   }
   return best;
@@ -178,7 +200,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   // pre-cap composite summary (a proximity-only board must read WATCH).
   const bestPosture = postCapBestPosture(ranked);
   lines.push('1. FAST READ');
-  if (proximityOnly) lines.push('proximity scaffold only -- no pick.');
+  if (proximityOnly) lines.push(`LOW-SOURCE WATCH only -- no pick. Proximity-only terms capped at CPC ${LOW_SOURCE_SCORE_CAP}.`);
   lines.push(a.fast_read || `${summary.source_backed_count ?? 0}/${summary.market_count ?? ranked.length} term(s) carry source evidence beyond event proximity; best posture ${bestPosture} (post-cap). Research only — no trade.`);
   lines.push('');
 
@@ -193,14 +215,14 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
       String(i + 1),
       t._short,
       cpcCell(t),
-      maybe(t.composite_posture, 'NO_CLEAR_PICK'),
+      renderedPosture(t),
       sourceLabel(t),
       note.catalyst ?? 'MISSING',
       note.settlement_fit ?? 'MISSING',
-      marketCell(t),
+      marketBoardCell(t, ranked),
     ], widths));
   });
-  lines.push('note: CPC score is source-layer conviction only. "scaffold" = schedule-only evidence (raw proximity score withheld; not an edge). Market Context column is display-only and NEVER a score input.');
+  lines.push(`note: CPC Score is deterministic source-layer conviction after caps. Proximity-only terms are capped at ${LOW_SOURCE_SCORE_CAP} and WATCH. Market Context is display-only and NEVER a score input.`);
   lines.push('');
 
   // 3 TOP WATCH TERMS
@@ -219,7 +241,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   if (low.length) {
     for (const t of low) {
       const trap = notes[t._short]?.trap_risk ?? redteam?.trap_flags?.[t._short] ?? null;
-      lines.push(`- ${t._short}: ${sourceLabel(t)}${trap ? ` | trap: ${trap}` : ''}`);
+      lines.push(`- ${t._short}: CPC Score ${numericScore(t)} | posture ${renderedPosture(t)} | cap: ${capReason(t)}${trap ? ` | trap: ${trap}` : ''}`);
     }
   } else {
     lines.push('- none');
@@ -238,9 +260,10 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   // 5 MARKET CONTEXT - NOT IN SCORE
   lines.push('5. MARKET CONTEXT - NOT IN SCORE');
   lines.push('Kalshi price/liquidity shown for validation only; excluded from all CPC scoring inputs.');
-  for (const t of ranked) {
-    const mc = t.market_context ?? {};
-    lines.push(`- ${t._short}: bid=${cents(mc.bid_cents)} ask=${cents(mc.ask_cents)} implied=${maybe(mc.implied, '-')}`);
+  if (allOneSided0100(ranked)) {
+    lines.push(`- all ${ranked.length} displayed terms show bid=0c / ask=100c; stale/one-sided/closed-looking board context only, NOT IN SCORE.`);
+  } else {
+    lines.push(`- ${marketSummary(ranked)} Volume/open interest and full contract pricing stay in the audit inventory; NOT IN SCORE.`);
   }
   lines.push('');
 
@@ -248,6 +271,13 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push('6. SOURCE GAPS');
   const gaps = (a.source_gaps?.length ? a.source_gaps : null) ?? deterministicSourceGaps(ranked);
   for (const g of gaps) lines.push(`- ${g}`);
+  const provenanceLines = Array.isArray(input.deterministic_provenance_lines)
+    ? input.deterministic_provenance_lines.filter(Boolean)
+    : [];
+  if (provenanceLines.length) {
+    lines.push('provenance (outcomes/source layers only; market prices excluded):');
+    for (const line of provenanceLines) lines.push(`- ${line}`);
+  }
   lines.push('');
 
   // 7 UPGRADE / DOWNGRADE TRIGGERS
@@ -261,7 +291,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   // 8 FINAL CPC READ
   lines.push('8. FINAL CPC READ');
   lines.push(a.final_read || (proximityOnly
-    ? 'proximity scaffold only -- no pick. No source-backed edge; watch for transcript/quote/history layers before any posture upgrade.'
+    ? `LOW-SOURCE WATCH only -- no pick. All displayed scores are capped at ${LOW_SOURCE_SCORE_CAP} until transcript/quote/history layers arrive.`
     : `Best posture ${bestPosture} (post-cap) on the board above. No trade is implied; scores are research conviction only.`));
   lines.push('');
 
@@ -271,8 +301,41 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
   lines.push('');
   lines.push('---');
+  lines.push(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`);
   lines.push('Research only. No trades. No bankroll advice. Market context is never a score input.');
   return lines.join('\n');
+}
+
+function centsNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function allOneSided0100(terms) {
+  return Array.isArray(terms)
+    && terms.length > 0
+    && terms.every((t) => centsNumber(t?.market_context?.bid_cents) === 0 && centsNumber(t?.market_context?.ask_cents) === 100);
+}
+
+function marketBoardCell(term, ranked) {
+  if (allOneSided0100(ranked)) return 'one-sided sec5';
+  return marketCell(term);
+}
+
+function numericRange(values, suffix = '') {
+  const nums = values.map(centsNumber).filter((n) => n !== null);
+  if (!nums.length) return 'MISSING';
+  const lo = Math.min(...nums);
+  const hi = Math.max(...nums);
+  return lo === hi ? `${lo}${suffix}` : `${lo}${suffix}-${hi}${suffix}`;
+}
+
+function marketSummary(terms) {
+  const bids = terms.map((t) => t?.market_context?.bid_cents);
+  const asks = terms.map((t) => t?.market_context?.ask_cents);
+  const implied = terms.map((t) => t?.market_context?.implied);
+  return `${terms.length} displayed terms; bid range ${numericRange(bids, 'c')}; ask range ${numericRange(asks, 'c')}; implied range ${numericRange(implied)}.`;
 }
 
 function deterministicSourceGaps(ranked) {
@@ -303,5 +366,10 @@ export function validateRenderedPacket(text, input) {
     if (full && !text.includes(full)) throw new Error(`rendered packet omitted full strike text: ${full}`);
   }
   if (!/research only/i.test(text)) throw new Error('rendered packet omitted research-only footer');
+  if (!text.includes(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`)) {
+    throw new Error(`rendered packet omitted ${CUSTOMER_PACKET_CONTRACT_V2} contract marker`);
+  }
+  if (/Most likely mention terms/i.test(text)) throw new Error('rendered packet leaked old Most likely mention terms scaffold format');
+  if (/\|\s*scaffold\s*\|/i.test(text)) throw new Error('rendered packet leaked scaffold in CPC column');
   return true;
 }

@@ -60,7 +60,6 @@ import {
 } from '../mentions/alpha-intake.mjs';
 import {
   buildDecisionRow,
-  renderSectionedPacket,
   buildInventoryArtifact,
   EDGE_STATUS,
   CONFIDENCE,
@@ -77,6 +76,7 @@ import {
   renderMentionPacket,
   validateRenderedPacket,
   shortTerm,
+  CUSTOMER_RENDERER_ID,
 } from '../mentions/render-mention-packet.mjs';
 import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
 import {
@@ -732,7 +732,7 @@ export function mentionCompositeToDecisionRow(composite) {
   } else if (proximityOnly) {
     postureFinal = 'WATCH';
     statusOverride = EDGE_STATUS.WATCH;
-    analysis = `proximity scaffold only -- no pick. Event timing exists, but transcript/history/topic/source layers are missing for "${target}". Missing: ${missingCats.join(', ') || 'source research layers'}.`;
+    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic/source layers are missing for "${target}". Missing: ${missingCats.join(', ') || 'source research layers'}.`;
     trigger = {
       price: null,
       event: 'upgrade only after exact-source research adds transcript, direct quote, historical tendency, or topic-path evidence',
@@ -775,10 +775,10 @@ export function mentionCompositeToDecisionRow(composite) {
 }
 
 /**
- * Build the compact, sectioned mentions decision board from the per-market
- * composites of a Kalshi mention event. Main text carries ONLY the sectioned
- * board (TLDR + sections + audit pointers). The raw contract inventory + full
- * market context go to a separate audit artifact, never the packet body.
+ * Build the customer-facing v2 mentions packet from the per-market composites
+ * of a Kalshi mention event. renderMentionPacket() is the only .txt renderer.
+ * The raw contract inventory + full market context go to a separate audit
+ * artifact, never the board rows.
  * Returns { text, rows, inventoryText, counts } or null when no composites.
  */
 // Deterministic provenance block for earnings_call composites: last-four-quarter
@@ -821,38 +821,27 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   const summary = summarizeCompositeRun(composites);
 
   const blockedCount = rows.filter((r) => r.edge_status === EDGE_STATUS.BLOCKED).length;
-  const proximityOnlyCount = summary.proximity_only_count ?? 0;
-  const sourceBackedCount = summary.source_backed_count ?? 0;
-  const allScaffoldOrBlocked = rows.length > 0 && (proximityOnlyCount + blockedCount) === rows.length;
-  const tldrNote = allScaffoldOrBlocked
-    ? `proximity scaffold only -- no pick. ${proximityOnlyCount}/${rows.length} contract(s) have only event_proximity; ${blockedCount} blocked on missing source layers.`
-    : blockedCount === rows.length
-    ? `All ${rows.length} contract(s) BLOCKED on missing source layers — research the source ladder, then re-score. No tradeable edge yet.`
-    : `${sourceBackedCount}/${rows.length} contract(s) have source evidence beyond event proximity; best posture ${summary.best_posture}.`;
-
-  const body = renderSectionedPacket(rows, {
-    tldrNote,
-    auditArtifacts: [inventoryPath, sourcePath].filter(Boolean),
-    perSectionLimit: 16,
-  });
-
-  const header = packetHeader({
-    title: `Captain Mentions — Daily Decision Board: ${s.title}`,
-    date,
-    packetType: PACKET_TYPE,
-    sources: [sourcePath, KALSHI_SOURCES.mentions.page_url].filter(Boolean),
-  });
-  const neutralityNote = 'Mention composite is source-layer scoring only; Kalshi price/volume/OI is shown beside it for edge detection but is NEVER a composite input.';
-  // Research provenance: route + settled-history hit/miss facts (outcomes only,
-  // never prices). Deterministic line, additive — section order untouched.
   const prov = composites[0] ?? null;
-  const provenanceNote = prov?.research_route
-    ? `research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`
-    : null;
-  // Earnings alpha provenance (earnings_call only): per-term last-four-quarter
-  // table + context-delta evidence. Additive lines — section order untouched.
+  const provenanceLines = [];
+  if (prov?.research_route) {
+    provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`);
+  }
   const earningsNote = renderEarningsAlphaProvenance(composites);
-  const text = [header, neutralityNote, provenanceNote, earningsNote, body, packetFooter()].filter(Boolean).join('\n\n');
+  if (earningsNote) provenanceLines.push(...earningsNote.split('\n'));
+  const synthesisInput = buildMentionsSynthesisInput({
+    date,
+    event,
+    rows,
+    sourceUrl: sourcePath,
+    inventoryPath,
+    compositeSummary: summary,
+    provenanceLines,
+  });
+  const text = renderMentionPacket(synthesisInput, {
+    generatedAtUtc: new Date().toISOString(),
+    analystTier: 'none',
+  });
+  validateRenderedPacket(text, synthesisInput);
 
   // Raw per-contract inventory + market context -> audit artifact only.
   const inventoryLines = rows.map((r, i) =>
@@ -874,6 +863,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   return {
     text,
     rows,
+    synthesisInput,
     inventoryText,
     counts: { total: rows.length, blocked: blockedCount, scored: summary.scored_count },
     compositeSummary: summary,
@@ -883,7 +873,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
 function termBucketForRow(row) {
   const analysis = String(row.analysis ?? '').toLowerCase();
   if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
-  if (analysis.includes('proximity scaffold only')) return 'watch-only';
+  if (analysis.includes('low-source watch only')) return 'watch-only';
   if (row.edge_status === EDGE_STATUS.PICK || row.edge_status === EDGE_STATUS.LEAN) return 'most-likely';
   return 'watch-only';
 }
@@ -891,7 +881,7 @@ function termBucketForRow(row) {
 function evidenceStatusForRow(row) {
   const analysis = String(row.analysis ?? '');
   if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
-  if (/proximity scaffold only/i.test(analysis)) return 'proximity scaffold only -- no pick';
+  if (/LOW-SOURCE WATCH only/i.test(analysis)) return 'proximity-only source cap -- no pick';
   if (Array.isArray(row.top_evidence_layers) && row.top_evidence_layers.length) {
     return `source evidence present: ${row.top_evidence_layers.map((x) => x.category ?? x.label ?? String(x)).join(', ')}`;
   }
@@ -930,7 +920,7 @@ export function normalizeLayerList(value) {
   return [];
 }
 
-export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {} } = {}) {
+export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [] } = {}) {
   const s = summarizeEvent(event);
   const rules = firstMarketRules(event);
   // Compact each term to only what the model needs for the article.
@@ -954,10 +944,10 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     },
   }));
   const nonBlocked = terms.filter((term) => term.bucket !== 'blocked/no-source');
-  const allProximityOnly = nonBlocked.length > 0 && nonBlocked.every((term) => term.evidence_status === 'proximity scaffold only -- no pick');
+  const allProximityOnly = nonBlocked.length > 0 && nonBlocked.every((term) => term.evidence_status === 'proximity-only source cap -- no pick');
 
   return {
-    packet_kind: 'mentions_watch_user_packet_v1',
+    packet_kind: 'mentions_customer_packet_v2',
     date,
     event: {
       title: s.title,
@@ -970,11 +960,11 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       output_style: 'concise research article / Substack-style brief',
       research_only: true,
       no_trade: true,
-      one_model_call_required: true,
+      model_written_final_packet_allowed: false,
       use_full_strike_text_only: true,
       market_context_not_in_score: true,
       all_terms_proximity_only: allProximityOnly,
-      proximity_only_label: allProximityOnly ? 'proximity scaffold only -- no pick' : null,
+      proximity_only_label: allProximityOnly ? 'LOW-SOURCE WATCH only -- no pick' : null,
       forbidden_claims_when_all_terms_proximity_only: ['source-backed composite', 'source backed composite'],
     },
     summary: {
@@ -983,71 +973,13 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       proximity_only_count: compositeSummary.proximity_only_count ?? null,
       best_posture: compositeSummary.best_posture ?? null,
     },
+    deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
     terms,
   };
 }
 
 export function buildMentionsSynthesisPrompt(input = {}) {
-  return [
-    'You are producing the final user-facing mentions-watch packet from deterministic Kalshi/source artifacts.',
-    'Use exactly one model call: write the complete attached .txt packet now. Do not delegate, fan out, or ask for another model.',
-    'Do not mention provider names or model IDs. Do not claim a pick from market price.',
-    'Return JSON only with this schema: {"packet_text":"..."}',
-    '',
-    'Packet requirements:',
-    '- Concise research article / Substack-style brief, not YAML and not an audit dump.',
-    '- Include: Event title; Date/time; Settlement/source link if available; Plain-English setup.',
-    '- Include: Most likely mention terms; Watch-only terms; Blocked/no-source terms.',
-    '- For every listed contract, use full_strike_text exactly. Never use abbreviation-only labels.',
-    '- Include evidence status by term and missing research layers.',
-    '- Include what would upgrade or downgrade the read.',
-    '- Include a section with the exact heading "Market Context - NOT IN SCORE" (plain hyphen, exact phrase) and keep price/liquidity/volume/open interest out of scoring.',
-    '- End with a research-only/no-trades footer.',
-    '- If all non-blocked terms are proximity-only, print "proximity scaffold only -- no pick" near the top and do not use the phrase "source-backed composite".',
-    '',
-    'source_packet:',
-    formatCompactMentionsInput(input),
-  ].join('\n');
-}
-
-function formatCompactMentionsInput(input = {}) {
-  const lines = [];
-  const e = input.event || {};
-  lines.push(`Event: ${e.title || ''}`);
-  lines.push(`Date: ${e.date_time || input.date || ''}`);
-  lines.push(`Source: ${e.settlement_source_link || ''}`);
-  if (e.rules_primary) lines.push(`Rules: ${e.rules_primary}`);
-  lines.push('');
-  if (input.synthesis_rules) {
-    lines.push('Synthesis rules:');
-    Object.entries(input.synthesis_rules).forEach(([k, v]) => {
-      lines.push(`- ${k}: ${JSON.stringify(v)}`);
-    });
-    lines.push('');
-  }
-  const terms = Array.isArray(input.terms) ? input.terms : [];
-  if (terms.length) {
-    lines.push('Terms:');
-    for (const t of terms) {
-      lines.push(`- full_strike_text: ${t.full_strike_text || ''}`);
-      lines.push(`  evidence_status: ${t.evidence_status || ''}`);
-      lines.push(`  layers_present: ${normalizeLayerList(t.layers_present).join(', ')}`);
-      const missing = normalizeLayerList(t.missing_research_layers);
-      if (missing.length) lines.push(`  missing: ${missing.join(', ')}`);
-      if (t.market_context) {
-        const mc = t.market_context;
-        lines.push(`  market_context (NOT IN SCORE): bid=${mc.bid_cents ?? '-'} ask=${mc.ask_cents ?? '-'}`);
-      }
-    }
-    lines.push('');
-  }
-  const layerGaps = normalizeLayerList(input.layer_gaps);
-  if (layerGaps.length) {
-    lines.push(`Missing layers summary: ${layerGaps.join('; ')}`);
-    lines.push('');
-  }
-  lines.push('Instructions: write the packet_text JSON now.');
-  return lines.join('\n');
+  throw new Error('model-written mentions packet_text synthesis is disabled; use renderMentionPacket/v2 with JSON-only analyst fields');
 }
 
 export function describeMentionsHermesInvocation(options = {}) {
@@ -1059,12 +991,6 @@ export function describeMentionsHermesInvocation(options = {}) {
     source: 'mentions-watch-packet-synthesis',
     note: 'provider/model are intentionally omitted so Hermes uses its active runtime default',
   };
-}
-
-function modelOutputText(result) {
-  if (typeof result?.parsed?.packet_text === 'string') return result.parsed.packet_text;
-  if (typeof result?.parsed?.packetText === 'string') return result.parsed.packetText;
-  return null;
 }
 
 // Deterministic compliance appendix (option b of the full-strike requirement):
@@ -1111,33 +1037,7 @@ export function validateSynthesizedMentionPacket(text, input) {
 }
 
 export async function synthesizeMentionsUserPacket({ input, chatRunner = runHermesChat } = {}) {
-  if (!input || typeof input !== 'object') throw new Error('mentions packet synthesis input missing');
-  if (typeof chatRunner !== 'function') throw new Error('mentions packet synthesis chat runner missing');
-
-  const invocation = describeMentionsHermesInvocation();
-  const prompt = buildMentionsSynthesisPrompt(input);
-  const timeoutSeconds = Number(process.env.HERMES_PACKET_SYNTHESIS_TIMEOUT_SECONDS || '420');
-  const result = await chatRunner(prompt, {
-    source: invocation.source,
-    passSessionId: true,
-    timeout: timeoutSeconds * 1000,
-  });
-  if (!result?.ok) {
-    const detail = result?.stderr || result?.error?.message || `status=${result?.status ?? 'unknown'}`;
-    throw new Error(`Hermes default model unavailable for mentions packet synthesis: ${detail}`);
-  }
-  const raw = modelOutputText(result);
-  if (!raw || !raw.trim()) throw new Error('Hermes returned an empty mentions packet');
-  const text = appendFullStrikeInventory(raw, input);
-  validateSynthesizedMentionPacket(text, input);
-  return {
-    text,
-    invocation: {
-      ...invocation,
-      session_id: result.sessionId ?? null,
-      status: result.status ?? 0,
-    },
-  };
+  throw new Error('model-written mentions packet_text synthesis is disabled; customer packets must be rendered by renderMentionPacket/v2');
 }
 
 
@@ -1169,7 +1069,7 @@ export async function composeMentionPacketDeterministic({
   return {
     text,
     invocation: {
-      renderer: 'renderMentionPacket (deterministic, code-owned layout)',
+      renderer: CUSTOMER_RENDERER_ID,
       analyst_tier: analystRun.tier,
       analyst_invocation: analystRun.invocation,
       analyst_fallback: analystRun.fallback === true,
@@ -1410,6 +1310,61 @@ function loadResearchForDate(stateRoot, date) {
   return map;
 }
 
+function uniqueResolved(paths) {
+  const out = [];
+  const seen = new Set();
+  for (const p of paths) {
+    const r = resolve(p);
+    if (seen.has(r)) continue;
+    seen.add(r);
+    out.push(r);
+  }
+  return out;
+}
+
+function localOnlyDiscoveryStats(events) {
+  const marketCount = events.reduce((sum, ev) => sum + (Array.isArray(ev.markets) ? ev.markets.length : 0), 0);
+  return {
+    totalEvents: events.length,
+    mentionEvents: events.length,
+    rejectedEvents: 0,
+    totalMarkets: marketCount,
+    mentionMarkets: marketCount,
+    broadEvents: 0,
+    seriesEvents: 0,
+  };
+}
+
+function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = [] } = {}) {
+  const roots = uniqueResolved(stateRoots.length ? stateRoots : ['state']);
+  const events = [];
+  const loaded = [];
+  const missing = [];
+  for (const ticker of tickers) {
+    let found = null;
+    for (const root of roots) {
+      const eventPath = resolve(root, 'mentions', date, 'kalshi-events', `${ticker}.json`);
+      const event = readJsonIfExists(eventPath);
+      if (!event?.event_ticker) continue;
+      const researchEntry = loadResearchForDate(root, date).get(ticker);
+      found = {
+        event: mergeResearchIntoEvent(event, researchEntry),
+        root,
+        eventPath,
+        researchPath: resolve(root, 'mentions', date, 'research', `${ticker}.json`),
+      };
+      break;
+    }
+    if (found) {
+      events.push(found.event);
+      loaded.push({ ticker, root: found.root, eventPath: found.eventPath, researchPath: found.researchPath });
+    } else {
+      missing.push(ticker);
+    }
+  }
+  return { events, loaded, missing, roots };
+}
+
 function mergeResearchIntoEvent(event, researchEntry) {
   if (!researchEntry) return event;
   const cloned = { ...event };
@@ -1533,8 +1488,8 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     sports_game_context: prov?.sports_game_context ?? null,
   } : null;
 
-  // Preferred path: compact sectioned decision board (model + market + edge),
-  // raw inventory routed to a separate audit artifact.
+  // Preferred path: v2 customer renderer; raw inventory routed to a separate
+  // audit artifact.
   const slate = buildMentionSlatePacket({
     date,
     event,
@@ -1543,20 +1498,12 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     inventoryPath,
   });
   if (slate) {
-    const synthesisInput = buildMentionsSynthesisInput({
-      date,
-      event,
-      rows: slate.rows,
-      sourceUrl,
-      inventoryPath,
-      compositeSummary,
-    });
-    if (researchProvenance) synthesisInput.research_provenance = researchProvenance;
+    if (researchProvenance) slate.synthesisInput.research_provenance = researchProvenance;
     return {
       text: slate.text,
       inventoryText: slate.inventoryText,
       rows: slate.rows,
-      synthesisInput,
+      synthesisInput: slate.synthesisInput,
       researchProvenance,
       marketCount: marketInfo.marketCount,
       missingStrikeCount: marketInfo.missingStrikeCount,
@@ -1959,6 +1906,10 @@ export async function writeKalshiEventPackets({
     if (!dryRun) {
       try {
         const synthesized = await synthesizeImpl({ input: built.synthesisInput });
+        if (synthesized?.invocation?.renderer !== CUSTOMER_RENDERER_ID) {
+          throw new Error('customer mentions packet compose did not return renderMentionPacket/v2 contract');
+        }
+        validateRenderedPacket(synthesized.text, built.synthesisInput);
         packetText = synthesized.text;
         modelSynthesisInvocation = synthesized.invocation;
       } catch (err) {
@@ -2000,7 +1951,8 @@ export async function writeKalshiEventPackets({
       earnings_quarters_considered: built.researchProvenance?.earnings_quarters_considered ?? null,
       earnings_context_delta: built.researchProvenance?.earnings_context_delta ?? null,
       earnings_posture_adjustments: built.researchProvenance?.earnings_posture_adjustments ?? null,
-      render_mode: 'deterministic_code_renderer_v1',
+      render_mode: 'deterministic_code_renderer_v2',
+      renderer_contract: CUSTOMER_RENDERER_ID,
       model_synthesis_required: false,
       model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
       telegram_delivery_mode: 'document_txt',
@@ -2008,7 +1960,7 @@ export async function writeKalshiEventPackets({
       kalshi_source_page: KALSHI_SOURCES.broad.page_url,
       research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
     }, { writeChunks: false });
-    items.push({ name: ticker, ...w });
+    items.push({ name: ticker, ...w, previewText: dryRun ? packetText : null });
   }
   return { items, failedTickers, totalMarketCount, missingMarketEventCount, missingStrikeTextCount };
 }
@@ -2031,19 +1983,93 @@ async function main() {
     : ensurePacketDir(opts.stateRoot, opts.date, packetType);
   const audit = opts.dryRun ? previewAudit : writeAudit;
 
-  const {
-    allEvents,
-    combinedStats,
-    discovery,
-    dateFilteredEvents,
-    persistedCount,
-    allPrimeAttempts,
-  } = await gatherMentionEvents({
-    stateRoot: opts.stateRoot,
-    date: opts.date,
-    windowDays: extra.windowDays,
-    allowUndated: extra.allowUndated,
-  });
+  let allEvents;
+  let combinedStats;
+  let discovery;
+  let dateFilteredEvents;
+  let persistedCount;
+  let allPrimeAttempts;
+  let localOnlyLoad = null;
+
+  if (extra.only?.length) {
+    localOnlyLoad = loadExactMentionEventsFromArtifacts({
+      date: opts.date,
+      tickers: extra.only,
+      stateRoots: [opts.stateRoot, 'state'],
+    });
+    if (localOnlyLoad.events.length) {
+      allEvents = localOnlyLoad.events;
+      combinedStats = localOnlyDiscoveryStats(allEvents);
+      discovery = {
+        ok: true,
+        events: allEvents,
+        source: {
+          label: 'local-only-artifact-fast-path',
+          api_url: '(skipped live discovery for --only local artifact)',
+          page_url: KALSHI_SOURCES.broad.page_url,
+        },
+        error: localOnlyLoad.missing.length
+          ? `missing local artifact(s): ${localOnlyLoad.missing.join(',')}`
+          : null,
+      };
+      dateFilteredEvents = allEvents;
+      persistedCount = 0;
+      allPrimeAttempts = [{
+        ok: true,
+        skipped: true,
+        label: `--only local artifact fast path (${localOnlyLoad.loaded.map((x) => x.ticker).join(',')})`,
+        status: 0,
+        stderr: '',
+        error: null,
+      }];
+      console.log(`[${PACKET_TYPE}] --only local artifact fast path loaded ${localOnlyLoad.loaded.length}/${extra.only.length}: ${localOnlyLoad.loaded.map((x) => `${x.ticker}@${x.root}`).join(', ')}`);
+      if (localOnlyLoad.missing.length) {
+        console.error(`[${PACKET_TYPE}] --only local artifact fast path missing: ${localOnlyLoad.missing.join(', ')} (live discovery skipped; fail closed)`);
+      }
+    }
+  }
+
+  if (!allEvents) {
+    if (extra.only?.length) {
+      allEvents = [];
+      combinedStats = localOnlyDiscoveryStats([]);
+      discovery = {
+        ok: false,
+        events: [],
+        source: {
+          label: 'local-only-artifact-fast-path',
+          api_url: '(skipped live discovery for --only local artifact miss)',
+          page_url: KALSHI_SOURCES.broad.page_url,
+        },
+        error: `missing local artifact(s): ${extra.only.join(',')}`,
+      };
+      dateFilteredEvents = [];
+      persistedCount = 0;
+      allPrimeAttempts = [{
+        ok: false,
+        skipped: true,
+        label: '--only local artifact fast path',
+        status: 0,
+        stderr: discovery.error,
+        error: discovery.error,
+      }];
+      console.error(`[${PACKET_TYPE}] --only matched no local artifacts for ${opts.date}: ${extra.only.join(', ')} (live discovery skipped; fail closed)`);
+    } else {
+      ({
+        allEvents,
+        combinedStats,
+        discovery,
+        dateFilteredEvents,
+        persistedCount,
+        allPrimeAttempts,
+      } = await gatherMentionEvents({
+        stateRoot: opts.stateRoot,
+        date: opts.date,
+        windowDays: extra.windowDays,
+        allowUndated: extra.allowUndated,
+      }));
+    }
+  }
 
   let localEvents = discoverMentionEvents(opts.stateRoot, opts.date);
   let events = allEvents;
@@ -2110,13 +2136,8 @@ async function main() {
     items.push(...kalshiResult.items);
     failedTickers.push(...kalshiResult.failedTickers);
     for (const ev of localEvents) {
-      const baseName = `${opts.date}-${(ev.parsed?.event_id || ev.name).toString()}`;
-      const txt = buildLegacyEventPacket({ date: opts.date, event: ev });
-      const w = audit(dir, baseName, txt, {
-        source_file: ev.file,
-        research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
-      });
-      items.push({ name: baseName, ...w });
+      const label = (ev.parsed?.event_id || ev.name).toString();
+      console.log(`[${PACKET_TYPE}] skipped legacy local artifact ${label}: old local renderer is internal-only; customer packets require Kalshi event + renderMentionPacket/v2`);
     }
   }
 
@@ -2129,6 +2150,14 @@ async function main() {
   }
 
   console.log(printDryRunSummary({ packetType, date: opts.date, dir, items }));
+  if (opts.dryRun && extra.only) {
+    for (const item of items) {
+      if (!item.previewText) continue;
+      console.log(`[dry-run] preview_begin ${item.name}`);
+      console.log(item.previewText);
+      console.log(`[dry-run] preview_end ${item.name}`);
+    }
+  }
   console.log(`[${PACKET_TYPE}] summary event_count=${eventCount} kalshi_window_matched=${dateFilteredEvents.length} mention_events=${combinedStats.mentionEvents} rejected_events=${combinedStats.rejectedEvents} total_markets_scanned=${combinedStats.totalMarkets} mention_markets=${combinedStats.mentionMarkets} total_market_count=${totalMarketCount} packets_written=${items.length} missing_market_count=${missingMarketEventCount} missing_strike_text_count=${missingStrikeTextCount} persisted=${persistedCount} window_days=${extra.windowDays} watchlist=${extra.watchlist} only=${extra.only ? extra.only.join(',') : 'none'} allow_undated=${extra.allowUndated} synthesis_blocked=${failedTickers.length ? failedTickers.join(',') : 'none'}`);
   if (exitCode) process.exit(exitCode);
 }

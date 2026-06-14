@@ -123,6 +123,18 @@ test('market prices are excluded from score inputs (composite core throws on pri
   assert.deepEqual(scores(text1), scores(text2));
 });
 
+test('all 0/100 market context is summarized once, not spammed by row', () => {
+  const input = builtInput({ sourceBacked: false });
+  for (const t of input.terms) {
+    t.market_context = { bid_cents: 0, ask_cents: 100, implied: 0.5, note: 'NOT IN SCORE' };
+  }
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const section5 = text.split('6. SOURCE GAPS')[0].split('5. MARKET CONTEXT - NOT IN SCORE')[1];
+  assert.match(section5, /all 3 displayed terms show bid=0c \/ ask=100c/);
+  assert.equal((section5.match(/bid=0c/g) ?? []).length, 1, '0/100 context summarized once');
+  assert.match(text.split('3. TOP WATCH TERMS')[0], /one-sided sec5/);
+});
+
 test('missing model fields fall back safely to MISSING/deterministic text', () => {
   const input = builtInput({ sourceBacked: true });
   const { value, ok } = validateAnalystJson({});
@@ -150,7 +162,7 @@ test('proximity-only packet renders with NO model call (no GPT-5.5, no analyst a
   });
   assert.equal(calls, 0, 'no model invoked for proximity-only event');
   assert.equal(composed.invocation.analyst_tier, 'none');
-  assert.ok(composed.text.includes('proximity scaffold only -- no pick'));
+  assert.ok(composed.text.includes('LOW-SOURCE WATCH only -- no pick'));
 });
 
 test('premium gate: gpt-5.5 only for flagged high-value source-backed events; never every event', () => {
@@ -223,17 +235,19 @@ test('user-facing event time renders in America/Chicago', () => {
   assert.equal(shortTerm('Will Biden say it? -- Malarkey', 'Will Biden say it?'), 'Malarkey');
 });
 
-test('proximity-only rows show "scaffold", never the raw proximity score as CPC conviction', () => {
+test('proximity-only rows show capped numeric CPC scores, never scaffold text', () => {
   const input = builtInput({ sourceBacked: false }); // event_proximity score only
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   const rows = text.split('3. TOP WATCH TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
   assert.ok(rows.length >= 3);
   for (const row of rows) {
-    assert.ok(row.includes('scaffold'), `proximity-only row relabeled: ${row}`);
-    assert.ok(!/\|\s*20\s*\|/.test(row), 'raw proximity layer score withheld from CPC column');
+    const cpc = Number(row.split('|')[2].trim());
+    assert.ok(Number.isFinite(cpc), `CPC score must be numeric: ${row}`);
+    assert.ok(cpc <= 39, `proximity-only CPC score capped low: ${row}`);
+    assert.ok(!row.includes('scaffold'), `proximity-only row leaked scaffold text: ${row}`);
     assert.ok(row.includes('WATCH'), 'posture capped at WATCH');
   }
-  assert.ok(text.includes('"scaffold" = schedule-only evidence'));
+  assert.ok(text.includes('LOW-SOURCE WATCH cap'));
 });
 
 test('FAST READ and FINAL CPC READ use post-cap posture from rendered rows, not pre-cap summary', () => {
@@ -248,13 +262,13 @@ test('FAST READ and FINAL CPC READ use post-cap posture from rendered rows, not 
   assert.ok(!finalRead.includes('best posture LEAN'), 'pre-cap LEAN never surfaces in FINAL READ');
 });
 
-test('source-backed terms always rank above proximity-only scaffolds regardless of raw score', () => {
+test('source-backed terms always rank above proximity-only capped rows regardless of raw score', () => {
   const input = builtInput({ sourceBacked: true });
   // add a proximity-only term with an inflated raw score
   input.terms.push({
     full_strike_text: 'Will Biden say it? -- Aardvark',
     short_term: 'Aardvark', cpc_score: 99, bucket: 'watch-only',
-    evidence_status: 'proximity scaffold only -- no pick',
+    evidence_status: 'proximity-only source cap -- no pick',
     layers_present: ['1/9'], composite_posture: 'WATCH',
     missing_research_layers: [], upgrade_trigger: null,
     market_context: { implied: null, bid_cents: null, ask_cents: null, note: 'NOT IN SCORE' },
@@ -262,8 +276,9 @@ test('source-backed terms always rank above proximity-only scaffolds regardless 
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   const rows = text.split('3. TOP WATCH TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
   const aardvarkRank = rows.findIndex((r) => r.includes('Aardvark'));
-  assert.equal(aardvarkRank, rows.length - 1, 'scaffold ranks last despite raw score 99');
-  assert.ok(rows[aardvarkRank].includes('scaffold'));
+  assert.equal(aardvarkRank, rows.length - 1, 'proximity-only row ranks last despite raw score 99');
+  assert.match(rows[aardvarkRank], /\|\s*39\s*\|/);
+  assert.ok(!rows[aardvarkRank].includes('scaffold'));
 });
 
 test('redteam validator fails closed on garbage', () => {

@@ -8,6 +8,7 @@ import {
   writeKalshiEventPackets,
   synthesizeMentionsUserPacket,
   buildKalshiEventPacket,
+  composeMentionPacketDeterministic,
 } from '../scripts/packets/generate-mentions-daily.mjs';
 import { writeAudit, previewAudit } from '../scripts/packets/lib/common.mjs';
 
@@ -47,35 +48,30 @@ function compliantPacketText(event) {
   return [
     `Event title: ${event.title}`,
     `Date/time: ${DATE}`,
-    'Setup: proximity scaffold only -- no pick.',
-    `Watch-only terms: ${fullStrike} - proximity scaffold only -- no pick.`,
+    'Setup: LOW-SOURCE WATCH only -- no pick.',
+    `Watch-only terms: ${fullStrike} - LOW-SOURCE WATCH only -- no pick.`,
     'Market Context - NOT IN SCORE: bid/ask context only.',
     'Research-only footer: No trades placed. Research-only.',
   ].join('\n');
 }
 
 function violatingPacketText(event) {
-  // Forbidden claim for a proximity-only event: "source-backed composite".
+  // Old model-written layout: no renderMentionPacket/v2 contract.
   return `${compliantPacketText(event)}\nThis is a source-backed composite read.`;
 }
 
 function makeSynthesizeImpl(textByTicker, calls = []) {
-  return ({ input }) => {
+  return async ({ input }) => {
     calls.push(input.event.title);
     const ticker = (input.event.title.match(/\[(.+)\]/) || [])[1];
-    return synthesizeMentionsUserPacket({
-      input,
-      chatRunner: async () => ({
-        ok: true,
-        status: 0,
-        sessionId: 'test-session',
-        parsed: { packet_text: textByTicker(ticker) },
-      }),
-    });
+    if (ticker === 'KXWCMENTION-26JUN12CANBIH') {
+      return { text: textByTicker(ticker), invocation: { renderer: 'legacy-model-packet_text' } };
+    }
+    return composeMentionPacketDeterministic({ input, env: {}, now: () => '2026-06-12T18:00:00.000Z' });
   };
 }
 
-test('proximity-only "source-backed composite" violation becomes a blocker artifact, not a crash, and later events still produce packets', async () => {
+test('old model packet_text synthesis becomes a blocker artifact, not final customer layout, and later events still produce packets', async () => {
   const root = mkdtempSync(join(tmpdir(), 'mentions-blocker-'));
   const dir = resolve(root, 'packets', DATE, 'mentions-daily');
   mkdirSync(dir, { recursive: true });
@@ -102,13 +98,20 @@ test('proximity-only "source-backed composite" violation becomes a blocker artif
   const blocker = JSON.parse(readFileSync(blockerPath, 'utf8'));
   assert.equal(blocker.delivered, false);
   assert.equal(blocker.stage, 'model_synthesis');
-  assert.match(blocker.error, /proximity-only labeling.*source-backed composite/);
+  assert.match(blocker.error, /renderMentionPacket\/v2 contract/);
 
   // No deliverable .txt for the blocked event; the good event's packet exists.
   assert.ok(!existsSync(resolve(dir, `${DATE}-${badTicker}.txt`)), 'blocked event must not get a deliverable packet');
   assert.ok(existsSync(resolve(dir, `${DATE}-${goodTicker}.txt`)), 'later event must still be written');
   assert.ok(result.items.some((it) => it.name === goodTicker));
   assert.ok(!result.items.some((it) => it.name === badTicker));
+});
+
+test('synthesizeMentionsUserPacket fails closed for customer-facing packet_text synthesis', async () => {
+  await assert.rejects(
+    () => synthesizeMentionsUserPacket({ input: {}, chatRunner: async () => ({ ok: true, parsed: { packet_text: 'old' } }) }),
+    /model-written mentions packet_text synthesis is disabled/,
+  );
 });
 
 test('failedTickers is always initialized: success-only run returns an empty list', async () => {

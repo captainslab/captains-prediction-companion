@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { gatherMentionEvents } from '../scripts/packets/generate-mentions-daily.mjs';
+
+const REPO = resolve(import.meta.dirname, '..');
 
 function writeJson(path, value) {
   mkdirSync(join(path, '..'), { recursive: true });
@@ -166,4 +169,45 @@ test('research prime runs after persistence', async () => {
   assert.ok(persistIdx >= 0, 'persistence happened');
   assert.ok(sourceResearchIdx >= 0, 'source research happened');
   assert.ok(sourceResearchIdx > persistIdx, 'source research runs after persistence');
+});
+
+test('CLI --only dry-run uses local artifacts before live discovery and prints v2 preview', () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-cli-only-'));
+  const date = '2099-01-06';
+  const ticker = 'KXLOCALMENTION-99JAN06';
+  const eventDir = join(stateRoot, 'mentions', date, 'kalshi-events');
+  mkdirSync(eventDir, { recursive: true });
+  writeFileSync(join(eventDir, `${ticker}.json`), `${JSON.stringify({
+    event_ticker: ticker,
+    title: 'What will Local Speaker say?',
+    sub_title: 'Local fixture',
+    series_ticker: 'KXLOCALMENTION',
+    markets: [{
+      ticker: `${ticker}-TEST`,
+      title: 'What will Local Speaker say?',
+      yes_sub_title: 'Test',
+      custom_strike: { Word: 'Test' },
+      yes_bid_dollars: '0.00',
+      yes_ask_dollars: '1.00',
+      rules_primary: 'If Local Speaker says Test, resolves Yes.',
+      mention_profile: 'political_mentions',
+      layer_records: {
+        event_proximity: { present: true, score: 20, source_basis: 'local fixture schedule' },
+      },
+    }],
+  })}\n`);
+
+  const res = spawnSync(process.execPath, [
+    'scripts/packets/generate-mentions-daily.mjs',
+    '--date', date,
+    '--dry-run',
+    '--state-root', stateRoot,
+    '--only', ticker,
+  ], { cwd: REPO, encoding: 'utf8', timeout: 10_000 });
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /--only local artifact fast path loaded 1\/1/);
+  assert.match(res.stdout, /preview_begin KXLOCALMENTION-99JAN06/);
+  assert.match(res.stdout, /2\. CPC COMPOSITE BOARD/);
+  assert.match(res.stdout, /renderer_contract: mentions_customer_packet_v2/);
 });
