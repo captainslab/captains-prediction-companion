@@ -192,21 +192,49 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     declaredSourceUrls = declared;
     if (declared.length) {
       sourceStatus = SOURCE_STATUS.DECLARED;
-      sourceResearch = await (deps.runBoundedSourceResearch ?? runBoundedSourceResearch)({
-        eventTitle: event.title || '',
-        eventTicker,
-        profile,
-        terms: allKeywords,
-        sources: declared,
-        stateRoot,
-        date,
-        env,
-        ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
-        ...(deps.fallbackFetchImpl ? { fallbackFetchImpl: deps.fallbackFetchImpl } : {}),
-        ...(deps.chatRunner ? { chatRunner: deps.chatRunner } : {}),
-      });
-      if (sourceResearch.source_status) sourceStatus = sourceResearch.source_status;
-      console.log(`[collect-mentions-research] ${eventTicker}: bounded source research ${JSON.stringify(sourceResearch.stats)}`);
+      try {
+        sourceResearch = await (deps.runBoundedSourceResearch ?? runBoundedSourceResearch)({
+          eventTitle: event.title || '',
+          eventTicker,
+          profile,
+          terms: allKeywords,
+          sources: declared,
+          stateRoot,
+          date,
+          env,
+          ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+          ...(deps.fallbackFetchImpl ? { fallbackFetchImpl: deps.fallbackFetchImpl } : {}),
+          ...(deps.chatRunner ? { chatRunner: deps.chatRunner } : {}),
+        });
+        if (sourceResearch.source_status) sourceStatus = sourceResearch.source_status;
+        console.log(`[collect-mentions-research] ${eventTicker}: bounded source research ${JSON.stringify(sourceResearch.stats)}`);
+      } catch (err) {
+        sourceResearch = {
+          byTerm: {},
+          stats: {
+            sources_declared: declared.length,
+            sources_used: 0,
+            fetched: 0,
+            fetched_browser: 0,
+            cache_hits: 0,
+            fetch_errors: 1,
+            fetch_timeouts: 0,
+            blocked_by_site: 0,
+            fallback_attempts: 0,
+            fallback_page_cap: 0,
+            model_calls: 0,
+            fallback_calls: 0,
+            extraction_tiers: [],
+            terms_batched_per_call: allKeywords.length,
+            extraction_failures: 0,
+            source_health_paths: [],
+          },
+          quality: 'no_source',
+          notes: [`bounded source research failed closed: ${err.message}`],
+          source_status: SOURCE_STATUS.DECLARED,
+        };
+        console.error(`[collect-mentions-research] ${eventTicker}: bounded source research failed closed: ${err.message}`);
+      }
     } else {
       // Explicit verified gap, not a silent stub: discovery ran and found no
       // usable official source URL for this event.

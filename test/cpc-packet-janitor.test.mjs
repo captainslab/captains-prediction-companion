@@ -12,6 +12,7 @@ import {
   inspectPacketFile,
   validatePacketText,
 } from '../scripts/cron/cpc-packet-janitor.mjs';
+import { fetchSourceDocument } from '../scripts/mentions/source-research.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const JANITOR = join(REPO, 'scripts/cron/cpc-packet-janitor.mjs');
@@ -36,6 +37,18 @@ function writePacket(root, rel, text = cleanPacket()) {
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, text, 'utf8');
   return p;
+}
+
+async function makeProducerCacheHit({ root, date, url, text = 'cache-only source text' }) {
+  let fetchCalls = 0;
+  const fetchImpl = async () => {
+    fetchCalls += 1;
+    return { ok: true, status: 200, text: async () => text };
+  };
+  const first = await fetchSourceDocument({ url, stateRoot: root, date, env: {}, fetchImpl });
+  const second = await fetchSourceDocument({ url, stateRoot: root, date, env: {}, fetchImpl });
+  assert.equal(fetchCalls, 1, 'producer fetch should hit the network once and then reuse cache');
+  return { first, second };
 }
 
 test('strips cron wrapper and validates remaining packet as repaired copy', () => {
@@ -339,25 +352,45 @@ test('source manifests do not require per-game join keys', () => {
   }
 });
 
-test('cache-only disclosure is downgraded to a warning', () => {
+test('cache-only disclosure is downgraded to a warning', async () => {
   const root = tempRoot();
   try {
     const date = '2099-01-16';
-    const file = writePacket(root, `packets/${date}/mlb-daily/packet.txt`, cleanPacket('cache-only source coverage disclosed in packet text.'));
-    const healthDir = join(root, 'mlb', date, 'discovery');
-    mkdirSync(healthDir, { recursive: true });
-    writeFileSync(join(healthDir, 'stats_adapter.json'), JSON.stringify({
-      from_cache: true,
-      records: [{ matched_game_pk: 824434 }],
-    }));
+    const file = writePacket(root, `packets/${date}/mentions-daily/packet.txt`, cleanPacket('cache-only source coverage disclosed in packet text.'));
+    const url = 'https://example.com/producer-cache-warning';
+    await makeProducerCacheHit({ root, date, url });
     const result = inspectPacketFile(file, {
       stateRoot: root,
       date,
-      packetType: 'mlb-daily',
+      packetType: 'mentions-daily',
       requireSourceHealth: true,
     });
     assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_WARNING);
     assert.ok(result.warnings.some((warn) => warn.code === 'FETCH_CACHE_ONLY'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('mentions source-health artifacts under research are discovered by Janitor', async () => {
+  const root = tempRoot();
+  try {
+    const date = '2099-01-15';
+    const file = writePacket(root, `packets/${date}/mentions-daily/packet.txt`);
+    await makeProducerCacheHit({
+      root,
+      date,
+      url: 'https://official.gov/transcript',
+    });
+    const result = inspectPacketFile(file, {
+      stateRoot: root,
+      date,
+      packetType: 'mentions-daily',
+      requireSourceHealth: true,
+    });
+    assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
+    assert.ok(result.source_health.some((entry) => entry.path.endsWith('.source-health.json')));
+    assert.ok(result.source_health.some((entry) => entry.code === 'FETCH_CACHE_ONLY'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -453,22 +486,20 @@ test('numeric volume 403 is not classified as auth blocked', () => {
   }
 });
 
-test('FETCH_CACHE_ONLY is detected when source health lacks live fetch coverage disclosure', () => {
+test('FETCH_CACHE_ONLY is detected when source health lacks live fetch coverage disclosure', async () => {
   const root = tempRoot();
   try {
     const date = '2099-01-12';
-    const file = writePacket(root, `packets/${date}/mlb-daily/packet.txt`);
-    const healthDir = join(root, 'mlb', date, 'discovery');
-    mkdirSync(healthDir, { recursive: true });
-    writeFileSync(join(healthDir, 'stats_adapter.json'), JSON.stringify({
-      generated_utc: new Date().toISOString(),
-      from_cache: true,
-      records: [{ matched_game_pk: 824434 }],
-    }));
+    const file = writePacket(root, `packets/${date}/mentions-daily/packet.txt`);
+    await makeProducerCacheHit({
+      root,
+      date,
+      url: 'https://example.com/producer-cache-block',
+    });
     const result = inspectPacketFile(file, {
       stateRoot: root,
       date,
-      packetType: 'mlb-daily',
+      packetType: 'mentions-daily',
       requireSourceHealth: true,
     });
     assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);

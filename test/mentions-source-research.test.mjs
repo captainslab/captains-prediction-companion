@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
+  firecrawlCliFetch,
   fetchSourceDocument,
   runBoundedSourceResearch,
   validateExtractionJson,
   mergeExtractedLayers,
   loadDeclaredSources,
   cachePathForUrl,
+  sourceHealthPathForUrl,
   maxSources,
   SOURCE_FETCH_STATUS,
   EVIDENCE_LAYERS,
@@ -29,6 +31,18 @@ function fakeFetch(text = 'transcript: he discussed China and the pardon at leng
 
 function statusFetch(status, text = '') {
   return async () => ({ ok: false, status, text: async () => text });
+}
+
+function makeExecFileSequence(responses) {
+  let calls = 0;
+  const execFileImpl = (_cmd, _args, _opts, cb) => {
+    const response = responses[Math.min(calls, responses.length - 1)];
+    calls += 1;
+    const err = response?.error ?? new Error(response?.message ?? 'firecrawl failure');
+    if (response?.killed != null) err.killed = response.killed;
+    cb(err, response?.stdout ?? '', response?.stderr ?? '');
+  };
+  return { execFileImpl, getCalls: () => calls };
 }
 
 function goodExtraction() {
@@ -68,10 +82,17 @@ test('source cache prevents repeat fetches (second run = cache hit, zero network
   const url = 'https://example.com/page';
   const first = await fetchSourceDocument({ url, stateRoot: root, date: DATE, env: {}, fetchImpl });
   const second = await fetchSourceDocument({ url, stateRoot: root, date: DATE, env: {}, fetchImpl });
+  const cached = JSON.parse(readFileSync(cachePathForUrl(root, DATE, url), 'utf8'));
   assert.equal(counter.calls, 1, 'network fetched exactly once');
   assert.equal(first.cached, false);
   assert.equal(second.cached, true);
   assert.equal(second.text, 'some text');
+  assert.equal(second.source_health.provider, 'cache');
+  assert.equal(second.source_health.from_cache, true);
+  assert.equal(second.source_health.cache_only, true);
+  assert.equal(second.source_health.disclosure_required, true);
+  assert.equal(second.source_health.generated_utc, cached.fetched_at_utc);
+  assert.equal(second.source_health.generated_utc, first.source_health.generated_utc);
   assert.ok(cachePathForUrl(root, DATE, url).includes('research-cache'));
 });
 
@@ -97,6 +118,164 @@ test('403 normal fetch triggers bounded browser/Firecrawl fallback and caches fe
   const cached = JSON.parse(readFileSync(cachePathForUrl(root, DATE, url), 'utf8'));
   assert.equal(cached.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCHED_BROWSER);
   assert.equal(cached.fetch_method, 'firecrawl');
+});
+
+test('Firecrawl 402 marks credits exhausted and does not loop retries', async () => {
+  const { execFileImpl, getCalls } = makeExecFileSequence([
+    { stderr: '402 Payment Required: insufficient credits' },
+  ]);
+  const res = await firecrawlCliFetch({
+    url: 'https://example.com/transcript',
+    env: {},
+    execFileImpl,
+    sleepImpl: async () => {},
+    maxRetries: 4,
+  });
+  assert.equal(getCalls(), 1, '402 is fail-closed immediately');
+  assert.equal(res.ok, false);
+  assert.equal(res.error_code, 'FETCH_CREDIT_EXHAUSTED');
+  assert.equal(res.status, 'exhausted');
+  assert.equal(res.retry_count, 0);
+  assert.equal(res.attempts.length, 1);
+});
+
+test('Firecrawl 429 retries with backoff before manual fallback succeeds', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-fc-429-'));
+  const sleepCalls = [];
+  const { execFileImpl, getCalls } = makeExecFileSequence([
+    { stderr: '429 Too Many Requests\nRetry-After: 0.01' },
+    { stderr: '429 Too Many Requests\nRetry-After: 0.01' },
+    { stderr: '429 Too Many Requests\nRetry-After: 0.01' },
+  ]);
+  const doc = await fetchSourceDocument({
+    url: 'https://official.gov/transcript',
+    stateRoot: root,
+    date: DATE,
+    env: {},
+    fetchImpl: statusFetch(403),
+    fallbackFetchImpl: async ({ url }) => firecrawlCliFetch({
+      url,
+      env: {},
+      execFileImpl,
+      sleepImpl: async (ms) => { sleepCalls.push(ms); },
+      maxRetries: 2,
+    }),
+    manualFallbackImpl: async ({ url }) => ({
+      ok: true,
+      text: `manual browser transcript for ${url}`,
+      timedOut: false,
+      error: null,
+    }),
+    sleepImpl: async () => {},
+  });
+  assert.equal(getCalls(), 3, '429 firecrawl retry budget is capped');
+  assert.equal(sleepCalls.length, 2, 'backoff happens between retry attempts');
+  assert.equal(doc.fetch_method, 'manual');
+  assert.equal(doc.source_status, SOURCE_FETCH_STATUS.SOURCE_FETCHED_BROWSER);
+  assert.equal(doc.source_health.provider, 'browser_manual');
+  assert.equal(doc.source_health.fallback_used, true);
+  assert.equal(doc.source_health.disclosure_required, false);
+  assert.equal(doc.source_health.attempts.some((attempt) => attempt.error_code === 'FETCH_RATE_LIMITED'), true);
+  assert.equal(readFileSync(doc.source_health_path, 'utf8').includes('browser_manual'), true);
+});
+
+test('5xx failures cap retries and then fall back cleanly', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-5xx-'));
+  let directCalls = 0;
+  let fallbackCalls = 0;
+  const doc = await fetchSourceDocument({
+    url: 'https://official.gov/transcript',
+    stateRoot: root,
+    date: DATE,
+    env: { MENTIONS_RESEARCH_PROVIDER_MAX_RETRIES: '1' },
+    fetchImpl: async () => {
+      directCalls += 1;
+      return { ok: false, status: 503, text: async () => 'service unavailable' };
+    },
+    fallbackFetchImpl: async () => {
+      fallbackCalls += 1;
+      return { ok: false, text: null, timedOut: false, error: 'fallback exhausted' };
+    },
+    sleepImpl: async () => {},
+  });
+  assert.equal(directCalls, 2, '503 retries are capped');
+  assert.equal(fallbackCalls, 1, '503 falls through to fallback once');
+  assert.equal(doc.text, null);
+  assert.equal(doc.source_health.error_code, 'FETCH_PROVIDER_EXHAUSTED');
+  assert.equal(doc.source_health.provider, 'firecrawl');
+  assert.equal(doc.source_health.attempts.filter((attempt) => attempt.provider === 'direct').length, 2);
+});
+
+test('cache hits require disclosure and keep source health explicit', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-cache-disclose-'));
+  const url = 'https://example.com/cache-only';
+  const first = await fetchSourceDocument({
+    url,
+    stateRoot: root,
+    date: DATE,
+    env: {},
+    fetchImpl: fakeFetch('cache-disclosed source text'),
+  });
+  const second = await fetchSourceDocument({
+    url,
+    stateRoot: root,
+    date: DATE,
+    env: {},
+    fetchImpl: fakeFetch('should not be used'),
+  });
+  assert.equal(first.cached, false);
+  assert.equal(second.cached, true);
+  assert.equal(second.source_health.provider, 'cache');
+  assert.equal(second.source_health.disclosure_required, true);
+  assert.equal(second.source_health.text_cached, true);
+  assert.equal(second.source_health.from_cache, true);
+  assert.equal(second.source_health.cache_only, true);
+  assert.equal(second.source_health.attempts[0].cache_status, 'hit');
+  assert.equal(second.source_health_path, sourceHealthPathForUrl(root, DATE, url));
+});
+
+test('all providers failing yields no_source and keeps the required layer fail-closed', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-all-fail-'));
+  const res = await runBoundedSourceResearch({
+    eventTitle: 'Official transcript',
+    eventTicker: 'KXFAIL',
+    profile: 'political_mentions',
+    terms: ['Affordability'],
+    sources: ['https://official.gov/transcript'],
+    stateRoot: root,
+    date: DATE,
+    env: { MENTIONS_RESEARCH_PROVIDER_MAX_RETRIES: '0' },
+    fetchImpl: async () => ({ ok: false, status: 503, text: async () => 'service unavailable' }),
+    fallbackFetchImpl: async () => ({ ok: false, text: null, timedOut: false, error: 'fallback exhausted' }),
+    sleepImpl: async () => {},
+  });
+  assert.equal(res.quality, 'no_source');
+  assert.deepEqual(res.byTerm, {});
+  assert.ok(res.notes.some((n) => n.includes('source unavailable')));
+});
+
+test('optional source research failure is caught and packet assembly keeps going', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'src-optional-fail-'));
+  const event = {
+    event_ticker: 'KXOPT-26JUN12',
+    title: 'What will Governor Hochul say during the announcement?',
+    markets: [
+      { ticker: 'KXOPT-26JUN12-FOO', custom_strike: { Word: 'Affordability' }, close_time: '2026-06-12T22:00:00Z' },
+    ],
+  };
+  const research = await buildEventResearch(event, 'political_mentions', {
+    stateRoot: root,
+    date: DATE,
+    env: {},
+    deps: {
+      loadDeclaredSources: () => ['https://official.gov/transcript'],
+      runBoundedSourceResearch: async () => { throw new Error('provider chain exploded'); },
+    },
+  });
+  assert.equal(research.markets.length, 1);
+  assert.equal(research.markets[0].research_quality, 'stub');
+  assert.equal(research.source_status, 'DECLARED');
+  assert.ok(research.source_research_stats);
 });
 
 test('successful browser fallback populates source_research_stats and extracted layer evidence', async () => {
