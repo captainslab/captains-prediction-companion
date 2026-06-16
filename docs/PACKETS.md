@@ -5,6 +5,8 @@ the model's view and the market's price side by side so a human can spot edge in
 under a minute. Every market type (MLB, NASCAR, mentions/politics) renders the
 same shape from the shared renderer in `scripts/shared/decision-packet.mjs`.
 
+For delivery QC before Telegram, see [Packet Janitor](./PACKET_JANITOR.md).
+
 ## Anatomy
 
 A packet has a TLDR line followed by five sections:

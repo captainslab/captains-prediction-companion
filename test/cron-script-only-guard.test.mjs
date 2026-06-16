@@ -211,7 +211,18 @@ test('sender exits 0 quietly when packet directory is absent', () => {
 test('sender live mode without telegram env fails loudly (non-zero, stderr)', () => {
   const date = '2099-01-04';
   const { root, dir } = makePacketDir(date);
-  writeFileSync(join(dir, `${date}-KXTEST-EVENT.txt`), 'packet body');
+  writeFileSync(join(dir, `${date}-KXTEST-EVENT.txt`), [
+    '=== CPC Packet: Test Event ===',
+    'generated_utc: 2099-01-04T00:00:00Z',
+    'Market Context - NOT IN SCORE.',
+    'Research only. No trades.',
+  ].join('\n'));
+  mkdirSync(join(root, 'mentions', date, 'sources'), { recursive: true });
+  writeFileSync(join(root, 'mentions', date, 'sources', 'event.json'), JSON.stringify({
+    generated_utc: new Date().toISOString(),
+    event_ticker: 'KXTEST-EVENT',
+    records: [{ ticker: 'KXTEST-EVENT' }],
+  }));
   const r = spawnSync(process.execPath, [
     SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root,
   ], {

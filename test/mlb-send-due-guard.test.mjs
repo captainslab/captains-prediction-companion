@@ -339,6 +339,8 @@ test('_send-due skips window already delivered for current idempotency_key', () 
       '',
       '★ PICK  NYY@KC     →  NYY  (diff: +14)',
       '  ↳ reason.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
     ].join('\n'));
     writePlan(root, date, [{
       cluster_id: 'composite-refresh',
@@ -401,6 +403,8 @@ test('_send-due --dry-run exits 0 without telegram env', () => {
       '',
       '★ PICK  NYY@KC     →  NYY  (diff: +14)',
       '  ↳ reason.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
     ].join('\n'));
     writePlan(root, date, [{
       cluster_id: 'composite-refresh',

@@ -17,6 +17,10 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import {
+  DELIVERY_VERDICTS,
+  inspectPacketFile,
+} from '../cron/cpc-packet-janitor.mjs';
 
 const TELEGRAM_SAFE_CHARS = 3500;
 
@@ -244,6 +248,20 @@ function saveLedger(path, ledger) {
   renameSync(tmp, path);
 }
 
+function ensureLedgerFile(path, ledger) {
+  if (existsSync(path)) return;
+  saveLedger(path, {
+    ...ledger,
+    schema: 'cpc_packet_delivery_ledger_v1',
+    created_utc: new Date().toISOString(),
+    delivered: ledger.delivered ?? {},
+  });
+}
+
+function janitorAlert(entryName, janitor) {
+  return `JANITOR_BLOCKED ${entryName}: ${janitor.errors?.[0]?.code ?? 'PACKET_QC_FAILED'}`;
+}
+
 async function main() {
   const dir = resolve(stateRoot, 'packets', date, packetType);
   const ledgerPath = join(dir, '.delivery-ledger.json');
@@ -254,6 +272,7 @@ async function main() {
   }
 
   const ledger = loadLedger(ledgerPath);
+  if (!dryRun) ensureLedgerFile(ledgerPath, ledger);
   let plan = planDeliveries(dir, date, { preferBaseFile: isDocumentPacketType(packetType) });
 
   if (onlyStems) {
@@ -295,36 +314,74 @@ async function main() {
     if (isDocumentPacketType(packetType)) {
       const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
       const filePath = join(dir, fileName);
-      const text = readFileSync(filePath, 'utf8');
+      const janitor = dryRun ? null : inspectPacketFile(filePath, {
+        date,
+        stateRoot,
+        packetType,
+        ledgerPath,
+        idempotencyKey: entry.name,
+        requireLedger: true,
+        requireSourceHealth: true,
+        documentDelivery: true,
+        force,
+      });
+      if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+        console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        continue;
+      }
+      const deliveryPath = janitor?.repaired_path ?? filePath;
+      const deliveryName = basename(deliveryPath);
+      const text = readFileSync(deliveryPath, 'utf8');
       const notice = cpcPacketCaption(text, entry.name, packetType);
       if (dryRun) {
         console.log(`[dry-run] would send notice: ${notice}`);
-        console.log(`[dry-run] would send document: ${entry.name} — ${fileName}`);
+        console.log(`[dry-run] would send document: ${entry.name} — ${deliveryName}`);
         continue;
       }
       if (sent) await sleep(SEND_PACING_MS);
       const noticeId = await tgSendMessage(notice);
       await sleep(SEND_PACING_MS);
-      const documentId = await tgSendDocument(filePath);
+      const documentId = await tgSendDocument(deliveryPath);
       ledger.delivered[entry.name] = {
         utc: new Date().toISOString(),
         message_ids: [noticeId, documentId],
         notice_message_id: noticeId,
         document_message_id: documentId,
-        document_file: fileName,
+        document_file: deliveryName,
         delivery_mode: 'document_txt',
+        janitor_verdict: janitor.verdict,
+        janitor_sidecar: janitor.sidecar_path,
+        janitor_repaired_path: janitor.repaired_path ?? undefined,
         forced: force || undefined,
       };
       saveLedger(ledgerPath, ledger);
       sent += 1;
-      console.log(`sent ${entry.name} — notice + 1 document (${fileName})`);
+      console.log(`sent ${entry.name} — notice + 1 document (${deliveryName}) janitor=${janitor.verdict}`);
       continue;
     }
     const pieces = [];
     for (const f of entry.files) {
-      const text = readFileSync(join(dir, f), 'utf8');
+      const filePath = join(dir, f);
+      const janitor = dryRun ? null : inspectPacketFile(filePath, {
+        date,
+        stateRoot,
+        packetType,
+        ledgerPath,
+        idempotencyKey: entry.name,
+        requireLedger: true,
+        requireSourceHealth: true,
+        documentDelivery: false,
+        force,
+      });
+      if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+        console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        continue;
+      }
+      const deliveryPath = janitor?.repaired_path ?? filePath;
+      const text = readFileSync(deliveryPath, 'utf8');
       pieces.push(...chunkText(text));
     }
+    if (!pieces.length) continue;
     if (dryRun) {
       console.log(`[dry-run] would send ${entry.name} — ${pieces.length} message(s) from ${entry.files.join(', ')}`);
       continue;
