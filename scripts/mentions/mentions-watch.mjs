@@ -59,12 +59,56 @@ export function saveLedger(path, ledger) {
   renameSync(tmp, path);
 }
 
-// Pure: split candidate events into { fresh, seen, deferred } for the date.
+function parsePositiveInt(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+function isTerminalSeenEntry(entry) {
+  return Boolean(entry?.delivered_at) || entry?.status === 'mark-seen-only' || entry?.status === 'held';
+}
+
+function normalizeHeldEntries(ledger, maxRetryAttempts) {
+  const held = [];
+  for (const [ticker, entry] of Object.entries(ledger.events ?? {})) {
+    if (!entry || typeof entry !== 'object' || isTerminalSeenEntry(entry)) continue;
+    const attempts = Number(entry.attempts ?? 0);
+    if (attempts < maxRetryAttempts) continue;
+    entry.status = 'held';
+    entry.held_reason = entry.held_reason ?? `attempts ${attempts} reached max ${maxRetryAttempts}`;
+    held.push(ticker);
+  }
+  return held;
+}
+
+function buildLedgerEntry({ ev, date, stateRoot, existingEntry, nowUtc }) {
+  const ticker = ev.event_ticker;
+  const packetStem = `${date}-${ticker}`;
+  return {
+    ...(existingEntry ?? {}),
+    event_ticker: ticker,
+    event_url: ev.event_url ?? ev.url ?? existingEntry?.event_url ?? null,
+    event_date: deriveEventDate(ev) ?? existingEntry?.event_date ?? null,
+    research_route: ev.research_route?.route ?? existingEntry?.research_route ?? null,
+    first_seen_utc: existingEntry?.first_seen_utc ?? nowUtc,
+    packet_path: existingEntry?.packet_path ?? join(stateRoot, 'packets', date, PACKET_TYPE, `${packetStem}.txt`),
+    status: 'pending',
+    blocker_path: null,
+    delivered_at: existingEntry?.delivered_at ?? null,
+    delivery_message_ids: existingEntry?.delivery_message_ids ?? null,
+    idempotency_key: existingEntry?.idempotency_key ?? `mentions:${date}:${ticker}`,
+    attempts: Number(existingEntry?.attempts ?? 0) + 1,
+    held_reason: null,
+  };
+}
+
+// Pure: split candidate events into { fresh, seen, deferred, retryable } for the date.
 export function selectNewTodayEvents(candidates, ledger, date) {
   const todayGuard = filterByEventDate(date, { windowDays: 0, allowUndated: false });
   const fresh = [];
   const seen = [];
   const deferred = [];
+  const retryable = [];
   const dedup = new Set();
   for (const ev of candidates) {
     const ticker = ev?.event_ticker;
@@ -74,10 +118,18 @@ export function selectNewTodayEvents(candidates, ledger, date) {
       deferred.push(ev);
       continue;
     }
-    if (ledger.events[ticker]) seen.push(ev);
-    else fresh.push(ev);
+    const entry = ledger.events?.[ticker];
+    if (!entry) {
+      fresh.push(ev);
+      continue;
+    }
+    if (isTerminalSeenEntry(entry)) {
+      seen.push(ev);
+      continue;
+    }
+    retryable.push(ev);
   }
-  return { fresh, seen, deferred };
+  return { fresh, seen, deferred, retryable };
 }
 
 // Annotate every candidate with its research route at discovery time — BEFORE
@@ -210,7 +262,7 @@ export async function watch({
   const lock = acquireRunLock(lockPath);
   if (!lock.acquired) {
     console.log(`[mentions-watch] ${date}: already running (lock held by pid ${lock.holder?.pid ?? 'unknown'} since ${lock.holder?.started_utc ?? 'unknown'}) — exit 0`);
-    return { skipped: 'already-running', fresh: [], seen: [], deferred: [], attempted: [], queued: [], succeeded: [], failed: [] };
+    return { skipped: 'already-running', fresh: [], seen: [], deferred: [], retryable: [], attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: [] };
   }
   try {
     return await watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault });
@@ -222,18 +274,25 @@ export async function watch({
 async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault }) {
   const path = ledgerPath(stateRoot, date);
   const ledger = loadLedger(path);
+  const maxNewPerRun = parsePositiveInt(env.MENTIONS_WATCH_MAX_NEW_PER_RUN, maxNewPerRunDefault);
+  const maxRetryPerRun = parsePositiveInt(env.MENTIONS_WATCH_MAX_RETRY_PER_RUN, DEFAULT_MAX_RETRY_PER_RUN);
+  const maxRetryAttempts = parsePositiveInt(env.MENTIONS_WATCH_MAX_RETRY_ATTEMPTS, DEFAULT_MAX_RETRY_ATTEMPTS);
+  const normalizedHeld = normalizeHeldEntries(ledger, maxRetryAttempts);
+  if (normalizedHeld.length && !dryRun) {
+    saveLedger(path, ledger);
+  }
 
   console.log(`[mentions-watch] ${new Date().toISOString()} scan start date=${date}${dryRun ? ' (dry-run)' : ''}${markSeenOnly ? ' (mark-seen-only)' : ''}`);
   const candidates = await discoverCandidates({ stateRoot, env, eventsFile });
-  const { fresh, seen, deferred } = selectNewTodayEvents(candidates, ledger, date);
+  const { fresh, seen, deferred, retryable } = selectNewTodayEvents(candidates, ledger, date);
 
   if (deferred.length) {
     const sample = deferred.slice(0, 8).map(e => `${e.event_ticker}(${deriveEventDate(e) ?? 'undated'})`).join(', ');
     console.log(`[mentions-watch] ${date}: ${deferred.length} non-today event(s) excluded (past/future/undated), e.g. ${sample}`);
   }
-  if (!fresh.length) {
+  if (!fresh.length && !retryable.length) {
     console.log(`[mentions-watch] ${date}: no new today events (seen=${seen.length}, watchlist=${deferred.length}) — quiet exit`);
-    return { fresh: [], seen, deferred, attempted: [], queued: [], succeeded: [], failed: [] };
+    return { fresh: [], seen, deferred, retryable: [], attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: normalizedHeld };
   }
 
   if (markSeenOnly) {
@@ -256,20 +315,25 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
     }
     saveLedger(path, ledger);
     console.log(`[mentions-watch] ${date}: marked ${fresh.length} event(s) seen WITHOUT delivery; ledger at ${path}`);
-    return { fresh, seen, deferred, attempted: [], queued: [], succeeded: [], failed: [] };
+    return { fresh, seen, deferred, retryable, attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: normalizedHeld };
   }
 
   // Throttle: never burst-deliver a big first-run batch. Events beyond the cap
   // are NOT touched in the ledger — they stay unseen and are picked up on the
   // next watcher run.
-  const maxNewPerRun = Math.max(1, Number(env.MENTIONS_WATCH_MAX_NEW_PER_RUN ?? maxNewPerRunDefault) || maxNewPerRunDefault);
   const attempted = fresh.slice(0, maxNewPerRun);
   const queued = fresh.slice(maxNewPerRun);
+  const retried = retryable.slice(0, maxRetryPerRun);
+  const retryQueued = retryable.slice(maxRetryPerRun);
   console.log(`[mentions-watch] ${date}: ${fresh.length} new today event(s); processing ${attempted.length} this run (max_new_per_run=${maxNewPerRun})${queued.length ? `; ${queued.length} queued for next run: ${queued.map(e => e.event_ticker).join(', ')}` : ''}`);
+  if (retryable.length) {
+    console.log(`[mentions-watch] ${date}: ${retryable.length} retryable event(s); processing ${retried.length} this run (max_retry_per_run=${maxRetryPerRun}, max_retry_attempts=${maxRetryAttempts})${retryQueued.length ? `; ${retryQueued.length} queued for next run: ${retryQueued.map(e => e.event_ticker).join(', ')}` : ''}`);
+  }
 
   if (dryRun) {
-    console.log(`[mentions-watch] [dry-run] would generate + send packets for: ${attempted.map(e => e.event_ticker).join(', ')} (ledger not written)`);
-    return { fresh, seen, deferred, attempted, queued, succeeded: [], failed: [] };
+    const dryTargets = [...attempted.map((ev) => ev.event_ticker), ...retried.map((ev) => ev.event_ticker)];
+    console.log(`[mentions-watch] [dry-run] would generate + send packets for: ${dryTargets.join(', ')} (ledger not written)`);
+    return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded: [], failed: [], held: normalizedHeld };
   }
 
   // Per-event isolation: each new event gets its own generate + validate +
@@ -277,25 +341,25 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   // continues; only infrastructure failures make the watcher exit nonzero.
   const succeeded = [];
   const failed = [];
+  const held = [...normalizedHeld];
   const senderLedgerPath = resolve(stateRoot, 'packets', date, PACKET_TYPE, '.delivery-ledger.json');
-  for (const ev of attempted) {
+  const work = [
+    ...attempted.map((ev) => ({ ev, kind: 'fresh' })),
+    ...retried.map((ev) => ({ ev, kind: 'retryable' })),
+  ];
+  for (const { ev } of work) {
     const ticker = ev.event_ticker;
+    const existingEntry = ledger.events[ticker];
+    if (existingEntry?.delivered_at) {
+      continue;
+    }
     const stem = `${date}-${ticker}`;
     const packetPath = resolve(stateRoot, 'packets', date, PACKET_TYPE, `${stem}.txt`);
-    const entry = {
-      event_ticker: ticker,
-      event_url: ev.event_url ?? ev.url ?? null,
-      event_date: deriveEventDate(ev),
-      research_route: ev.research_route?.route ?? null,
-      first_seen_utc: new Date().toISOString(),
-      packet_path: join(stateRoot, 'packets', date, PACKET_TYPE, `${stem}.txt`),
-      status: 'pending',
-      blocker_path: null,
-      delivered_at: null,
-      delivery_message_ids: null,
-      idempotency_key: `mentions:${date}:${ticker}`,
-    };
+    const entry = buildLedgerEntry({ ev, date, stateRoot, existingEntry, nowUtc: new Date().toISOString() });
+    entry.status = 'pending';
+    entry.held_reason = null;
     ledger.events[ticker] = entry;
+    saveLedger(path, ledger);
 
     const generatorArgs = [
       'scripts/packets/generate-mentions-daily.mjs',
@@ -315,12 +379,17 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
       console.log(`[mentions-watch] ${date}: [${ticker}] sender command ${process.execPath} ${senderArgs.join(' ')}`);
       runStepImpl(`sender:${ticker}`, process.execPath, senderArgs);
       entry.status = 'delivered';
+      entry.held_reason = null;
       succeeded.push(ticker);
     } catch (err) {
-      entry.status = 'blocked';
+      entry.status = entry.attempts >= maxRetryAttempts ? 'held' : 'blocked';
+      entry.held_reason = entry.status === 'held' ? `attempts ${entry.attempts} reached max ${maxRetryAttempts}` : null;
       entry.blocker_path = writeBlockerArtifact({ stateRoot, date, ticker, error: err.message });
-      console.error(`[mentions-watch] ${date}: [${ticker}] BLOCKED (not delivered): ${err.message}; blocker at ${entry.blocker_path}`);
+      console.error(`[mentions-watch] ${date}: [${ticker}] ${entry.status.toUpperCase()} (not delivered): ${err.message}; blocker at ${entry.blocker_path}`);
       failed.push(ticker);
+      if (entry.status === 'held') {
+        held.push(ticker);
+      }
       // Persist the blocked outcome immediately: an external kill (e.g. the
       // cron runner's script timeout) right after this event must not lose it.
       saveLedger(path, ledger);
@@ -347,11 +416,13 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   }
 
   saveLedger(path, ledger);
-  console.log(`[mentions-watch] ${date}: processed ${attempted.length} new event(s) (delivered=${succeeded.length}, blocked=${failed.length}, queued=${queued.length}); ledger updated at ${path}`);
-  return { fresh, seen, deferred, attempted, queued, succeeded, failed };
+  console.log(`[mentions-watch] ${date}: processed ${work.length} event(s) (delivered=${succeeded.length}, blocked=${failed.length}, held=${held.length}, queued=${queued.length}, retryQueued=${retryQueued.length}); ledger updated at ${path}`);
+  return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded, failed, held };
 }
 
 export const DEFAULT_MAX_NEW_PER_RUN = 3;
+export const DEFAULT_MAX_RETRY_PER_RUN = 2;
+export const DEFAULT_MAX_RETRY_ATTEMPTS = 3;
 
 function writeBlockerArtifact({ stateRoot, date, ticker, error }) {
   const dir = resolve(stateRoot, 'mentions', date, 'blockers');

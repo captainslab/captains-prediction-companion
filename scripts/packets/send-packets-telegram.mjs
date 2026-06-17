@@ -42,6 +42,14 @@ const onlyStems = (() => {
   if (!v) return null;
   return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
 })();
+// --exclude stem1,stem2 — drop these stems from the final delivery plan.
+// This is applied after --only so callers can pass a narrow allow-list and
+// then carve out a manual hold list without changing the delivery ledger.
+const excludeStems = (() => {
+  const v = argValue('--exclude');
+  if (!v) return null;
+  return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
+})();
 
 // Load env from project .env if present (same pattern as scripts/mlb/_send-due.mjs)
 function loadEnv(file) {
@@ -184,6 +192,18 @@ export function planDeliveries(dir, dateStr, options = {}) {
   return plan;
 }
 
+export function filterDeliveryPlan(plan, { onlyStems = null, excludeStems = null } = {}) {
+  return plan.filter((entry) => {
+    if (onlyStems && !onlyStems.has(entry.name)) return false;
+    if (excludeStems && excludeStems.has(entry.name)) return false;
+    return true;
+  });
+}
+
+export function filterAlreadyDeliveredPlan(plan, ledger, { force = false } = {}) {
+  return plan.filter((entry) => force || !ledger.delivered[entry.name]);
+}
+
 function isMentionsPacketType(type) {
   return type === 'mentions-daily' || type === 'mentions-watchlist';
 }
@@ -275,8 +295,8 @@ async function main() {
   if (!dryRun) ensureLedgerFile(ledgerPath, ledger);
   let plan = planDeliveries(dir, date, { preferBaseFile: isDocumentPacketType(packetType) });
 
-  if (onlyStems) {
-    plan = plan.filter((entry) => onlyStems.has(entry.name));
+  if (onlyStems || excludeStems) {
+    plan = filterDeliveryPlan(plan, { onlyStems, excludeStems });
     if (!plan.length) {
       console.log(`${packetType} ${date}: --only matched no packets — nothing to send`);
       return;
@@ -302,6 +322,8 @@ async function main() {
     console.log(`${packetType} ${date}: sent no-events status`);
     return;
   }
+
+  plan = filterAlreadyDeliveredPlan(plan, ledger, { force });
 
   let sent = 0;
   let skipped = 0;

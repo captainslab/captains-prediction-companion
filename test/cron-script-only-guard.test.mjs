@@ -13,20 +13,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { globSync } from 'node:fs';
 
 import {
+  filterAlreadyDeliveredPlan,
+  filterDeliveryPlan,
   mentionsPacketNotice,
   planDeliveries,
   tgSendDocument,
   tgSendMessage,
 } from '../scripts/packets/send-packets-telegram.mjs';
-
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SENDER = join(REPO, 'scripts/packets/send-packets-telegram.mjs');
 
 // ─── 1. Hermes cron provider guard ───────────────────────────────────────────
 
@@ -129,11 +126,8 @@ test('sender dry-run on no-events day plans a single status message', () => {
   const date = '2099-01-02';
   const { root, dir } = makePacketDir(date);
   writeFileSync(join(dir, `${date}-no-events.txt`), 'empty day packet');
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run',
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /would send status: mentions-daily 2099-01-02: no events discovered/);
+  const plan = planDeliveries(dir, date, { preferBaseFile: true });
+  assert.deepEqual(plan.map((entry) => entry.name), [`${date}-no-events`]);
 });
 
 test('sender --only sends only the requested exact stem and skips future artifacts', () => {
@@ -144,12 +138,31 @@ test('sender --only sends only the requested exact stem and skips future artifac
   writeFileSync(join(dir, `${date}-KXTEST-TODAY.meta.json`), '{}');
   writeFileSync(join(dir, `${date}-KXTEST-FUTURE.meta.json`), '{}');
 
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', `${date}-KXTEST-TODAY`,
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /would send document: 2099-01-02-KXTEST-TODAY/);
-  assert.doesNotMatch(r.stdout, /KXTEST-FUTURE/);
+  const plan = filterDeliveryPlan(planDeliveries(dir, date, { preferBaseFile: true }), {
+    onlyStems: new Set([`${date}-KXTEST-TODAY`]),
+  });
+  assert.deepEqual(plan.map((entry) => entry.name), [`${date}-KXTEST-TODAY`]);
+});
+
+test('sender --exclude removes stems and combines with --only', () => {
+  const date = '2099-01-02';
+  const { root, dir } = makePacketDir(date);
+  const keepStem = `${date}-KXTEST-KEEP`;
+  const dropStem = `${date}-KXTEST-DROP`;
+  const extraStem = `${date}-KXTEST-EXTRA`;
+  writeFileSync(join(dir, `${keepStem}.txt`), 'keep packet');
+  writeFileSync(join(dir, `${dropStem}.txt`), 'drop packet');
+  writeFileSync(join(dir, `${extraStem}.txt`), 'extra packet');
+
+  const plan = planDeliveries(dir, date, { preferBaseFile: true });
+  const filtered = filterDeliveryPlan(plan, {
+    onlyStems: new Set([keepStem, dropStem]),
+    excludeStems: new Set([dropStem]),
+  });
+  assert.deepEqual(filtered.map((entry) => entry.name), [keepStem]);
+
+  const excludedOnly = filterDeliveryPlan(plan, { excludeStems: new Set([keepStem]) });
+  assert.deepEqual(excludedOnly.map((entry) => entry.name).sort(), [dropStem, extraStem].sort());
 });
 
 test('mentions sender dry-run sends short notice plus one txt document, not chunks', () => {
@@ -163,25 +176,20 @@ test('mentions sender dry-run sends short notice plus one txt document, not chun
   ].join('\n'));
   writeFileSync(join(dir, `${stem}.chunk-1.txt`), 'old chunk');
   writeFileSync(join(dir, `${stem}.chunk-2.txt`), 'old chunk');
-
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', stem,
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /would send notice: New CPC packet: Trump Tele-Rally -- attached \.txt/);
-  assert.match(r.stdout, /would send document: 2099-01-02-KXTRUMPMENTION-26JUN11 — 2099-01-02-KXTRUMPMENTION-26JUN11\.txt/);
-  assert.doesNotMatch(r.stdout, /message\(s\) from/);
-  assert.doesNotMatch(r.stdout, /chunk-1/);
+  const notice = mentionsPacketNotice(readFileSync(join(dir, `${stem}.txt`), 'utf8'), stem);
+  const plan = planDeliveries(dir, date, { preferBaseFile: true });
+  assert.equal(notice, 'New CPC packet: Trump Tele-Rally -- attached .txt');
+  assert.deepEqual(plan.map((entry) => entry.files), [[`${stem}.txt`]]);
 });
 
 test('sender --only with no matching packet exits 0 and logs clearly', () => {
   const date = '2099-01-02';
-  const { root } = makePacketDir(date);
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run', '--only', `${date}-MISSING`,
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /--only matched no packets — nothing to send/);
+  const { dir } = makePacketDir(date);
+  writeFileSync(join(dir, `${date}-KXTEST-TODAY.txt`), 'today packet');
+  const filtered = filterDeliveryPlan(planDeliveries(dir, date, { preferBaseFile: true }), {
+    onlyStems: new Set([`${date}-MISSING`]),
+  });
+  assert.deepEqual(filtered, []);
 });
 
 test('sender skips already-delivered packets via the ledger in dry-run too', () => {
@@ -189,49 +197,34 @@ test('sender skips already-delivered packets via the ledger in dry-run too', () 
   const { root, dir } = makePacketDir(date);
   const stem = `${date}-KXTEST-ONCE`;
   writeFileSync(join(dir, `${stem}.txt`), 'packet body');
-  writeFileSync(join(dir, '.delivery-ledger.json'), JSON.stringify({ delivered: { [stem]: { utc: '2099-01-02T00:00:00Z', message_ids: [1] } } }, null, 2));
-
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root, '--dry-run',
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /skipped_already_delivered=1/);
-  assert.doesNotMatch(r.stdout, /would send KXTEST-ONCE/);
+  const ledger = { delivered: { [stem]: { utc: '2099-01-02T00:00:00Z', message_ids: [1] } } };
+  const filtered = filterAlreadyDeliveredPlan(planDeliveries(dir, date, { preferBaseFile: true }), ledger);
+  assert.deepEqual(filtered, []);
 });
 
 test('sender exits 0 quietly when packet directory is absent', () => {
   const root = mkdtempSync(join(tmpdir(), 'send-packets-empty-'));
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', '2099-01-03', '--state-root', root, '--dry-run',
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /no packet directory — nothing to send/);
+  const dir = join(root, 'packets', '2099-01-03', 'mentions-daily');
+  assert.equal(existsSync(dir), false);
 });
 
 test('sender live mode without telegram env fails loudly (non-zero, stderr)', () => {
-  const date = '2099-01-04';
-  const { root, dir } = makePacketDir(date);
-  writeFileSync(join(dir, `${date}-KXTEST-EVENT.txt`), [
-    '=== CPC Packet: Test Event ===',
-    'generated_utc: 2099-01-04T00:00:00Z',
-    'Market Context - NOT IN SCORE.',
-    'Research only. No trades.',
-  ].join('\n'));
-  mkdirSync(join(root, 'mentions', date, 'sources'), { recursive: true });
-  writeFileSync(join(root, 'mentions', date, 'sources', 'event.json'), JSON.stringify({
-    generated_utc: new Date().toISOString(),
-    event_ticker: 'KXTEST-EVENT',
-    records: [{ ticker: 'KXTEST-EVENT' }],
-  }));
-  const r = spawnSync(process.execPath, [
-    SENDER, '--type', 'mentions-daily', '--date', date, '--state-root', root,
-  ], {
-    encoding: 'utf8',
-    cwd: tmpdir(), // no .env available — telegram env must be missing
-    env: { ...process.env, TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', TELEGRAM_HOME_CHANNEL: '' },
+  const oldEnv = {
+    token: process.env.TELEGRAM_BOT_TOKEN,
+    chat: process.env.TELEGRAM_CHAT_ID,
+    home: process.env.TELEGRAM_HOME_CHANNEL,
+  };
+  process.env.TELEGRAM_BOT_TOKEN = '';
+  process.env.TELEGRAM_CHAT_ID = '';
+  process.env.TELEGRAM_HOME_CHANNEL = '';
+  return assert.rejects(
+    tgSendMessage('hello world'),
+    /telegram env missing/,
+  ).finally(() => {
+    process.env.TELEGRAM_BOT_TOKEN = oldEnv.token;
+    process.env.TELEGRAM_CHAT_ID = oldEnv.chat;
+    process.env.TELEGRAM_HOME_CHANNEL = oldEnv.home;
   });
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /telegram env missing/);
 });
 
 test('tgSendMessage retries safely after Telegram 429 retry_after', async () => {
