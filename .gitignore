@@ -105,5 +105,7 @@ state/ufc/
 state/mlb/
 state/nascar/
 state/worldcup/
+state/goals/
+state/janitor/
 
 scratch/
