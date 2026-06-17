@@ -1365,6 +1365,92 @@ function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = 
   return { events, loaded, missing, roots };
 }
 
+export async function resolveOnlyMentionEvents({
+  stateRoot,
+  date,
+  tickers = [],
+  windowDays = WATCHLIST_WINDOW_DAYS,
+  allowUndated = false,
+  env = process.env,
+  deps = {},
+} = {}) {
+  const stateRoots = deps.stateRoots ?? [stateRoot, 'state'];
+  const loadExactMentionEventsFromArtifactsImpl = deps.loadExactMentionEventsFromArtifacts || loadExactMentionEventsFromArtifacts;
+  const gatherMentionEventsImpl = deps.gatherMentionEvents || ((args) => gatherMentionEvents({
+    ...args,
+    deps: deps.gatherDeps ?? {},
+  }));
+
+  const localOnlyLoad = loadExactMentionEventsFromArtifactsImpl({
+    date,
+    tickers,
+    stateRoots,
+  });
+  const hasAllRequestedArtifacts = tickers.length > 0
+    && localOnlyLoad.loaded.length === tickers.length
+    && localOnlyLoad.missing.length === 0;
+
+  if (hasAllRequestedArtifacts) {
+    return {
+      mode: 'fast-path',
+      localOnlyLoad,
+      allEvents: localOnlyLoad.events,
+      combinedStats: localOnlyDiscoveryStats(localOnlyLoad.events),
+      discovery: {
+        ok: true,
+        events: localOnlyLoad.events,
+        source: {
+          label: 'local-only-artifact-fast-path',
+          api_url: '(skipped live discovery for --only local artifact)',
+          page_url: KALSHI_SOURCES.broad.page_url,
+        },
+        error: null,
+      },
+      dateFilteredEvents: localOnlyLoad.events,
+      persistedCount: 0,
+      allPrimeAttempts: [{
+        ok: true,
+        skipped: true,
+        label: `--only local artifact fast path (${localOnlyLoad.loaded.map((x) => x.ticker).join(',')})`,
+        status: 0,
+        stderr: '',
+        error: null,
+      }],
+      loadedAfterGather: localOnlyLoad.loaded,
+      missingAfterGather: [],
+      gathered: null,
+    };
+  }
+
+  const gathered = await gatherMentionEventsImpl({
+    stateRoot,
+    date,
+    windowDays,
+    allowUndated,
+    env,
+    deps: deps.gatherDeps ?? {},
+  });
+  const reloaded = loadExactMentionEventsFromArtifactsImpl({
+    date,
+    tickers,
+    stateRoots,
+  });
+
+  return {
+    mode: 'self-heal',
+    localOnlyLoad,
+    gathered,
+    allEvents: reloaded.events,
+    combinedStats: gathered.combinedStats,
+    discovery: gathered.discovery,
+    dateFilteredEvents: reloaded.events,
+    persistedCount: gathered.persistedCount,
+    allPrimeAttempts: gathered.allPrimeAttempts,
+    loadedAfterGather: reloaded.loaded,
+    missingAfterGather: reloaded.missing,
+  };
+}
+
 function mergeResearchIntoEvent(event, researchEntry) {
   if (!researchEntry) return event;
   const cloned = { ...event };
@@ -1992,83 +2078,43 @@ async function main() {
   let localOnlyLoad = null;
 
   if (extra.only?.length) {
-    localOnlyLoad = loadExactMentionEventsFromArtifacts({
+    const onlyResolution = await resolveOnlyMentionEvents({
+      stateRoot: opts.stateRoot,
       date: opts.date,
       tickers: extra.only,
-      stateRoots: [opts.stateRoot, 'state'],
+      windowDays: extra.windowDays,
+      allowUndated: extra.allowUndated,
     });
-    if (localOnlyLoad.events.length) {
-      allEvents = localOnlyLoad.events;
-      combinedStats = localOnlyDiscoveryStats(allEvents);
-      discovery = {
-        ok: true,
-        events: allEvents,
-        source: {
-          label: 'local-only-artifact-fast-path',
-          api_url: '(skipped live discovery for --only local artifact)',
-          page_url: KALSHI_SOURCES.broad.page_url,
-        },
-        error: localOnlyLoad.missing.length
-          ? `missing local artifact(s): ${localOnlyLoad.missing.join(',')}`
-          : null,
-      };
-      dateFilteredEvents = allEvents;
-      persistedCount = 0;
-      allPrimeAttempts = [{
-        ok: true,
-        skipped: true,
-        label: `--only local artifact fast path (${localOnlyLoad.loaded.map((x) => x.ticker).join(',')})`,
-        status: 0,
-        stderr: '',
-        error: null,
-      }];
+    localOnlyLoad = onlyResolution.localOnlyLoad;
+    allEvents = onlyResolution.allEvents;
+    combinedStats = onlyResolution.combinedStats;
+    discovery = onlyResolution.discovery;
+    dateFilteredEvents = onlyResolution.dateFilteredEvents;
+    persistedCount = onlyResolution.persistedCount;
+    allPrimeAttempts = onlyResolution.allPrimeAttempts;
+
+    if (onlyResolution.mode === 'fast-path') {
       console.log(`[${PACKET_TYPE}] --only local artifact fast path loaded ${localOnlyLoad.loaded.length}/${extra.only.length}: ${localOnlyLoad.loaded.map((x) => `${x.ticker}@${x.root}`).join(', ')}`);
-      if (localOnlyLoad.missing.length) {
-        console.error(`[${PACKET_TYPE}] --only local artifact fast path missing: ${localOnlyLoad.missing.join(', ')} (live discovery skipped; fail closed)`);
+    } else {
+      console.log(`[${PACKET_TYPE}] --only local artifacts missing; gathered and reloaded ${onlyResolution.loadedAfterGather.length}/${extra.only.length}: ${onlyResolution.loadedAfterGather.map((x) => `${x.ticker}@${x.root}`).join(', ')}`);
+      if (onlyResolution.missingAfterGather.length) {
+        console.error(`[${PACKET_TYPE}] --only still missing after gather: ${onlyResolution.missingAfterGather.join(', ')} (fail closed)`);
       }
     }
-  }
-
-  if (!allEvents) {
-    if (extra.only?.length) {
-      allEvents = [];
-      combinedStats = localOnlyDiscoveryStats([]);
-      discovery = {
-        ok: false,
-        events: [],
-        source: {
-          label: 'local-only-artifact-fast-path',
-          api_url: '(skipped live discovery for --only local artifact miss)',
-          page_url: KALSHI_SOURCES.broad.page_url,
-        },
-        error: `missing local artifact(s): ${extra.only.join(',')}`,
-      };
-      dateFilteredEvents = [];
-      persistedCount = 0;
-      allPrimeAttempts = [{
-        ok: false,
-        skipped: true,
-        label: '--only local artifact fast path',
-        status: 0,
-        stderr: discovery.error,
-        error: discovery.error,
-      }];
-      console.error(`[${PACKET_TYPE}] --only matched no local artifacts for ${opts.date}: ${extra.only.join(', ')} (live discovery skipped; fail closed)`);
-    } else {
-      ({
-        allEvents,
-        combinedStats,
-        discovery,
-        dateFilteredEvents,
-        persistedCount,
-        allPrimeAttempts,
-      } = await gatherMentionEvents({
-        stateRoot: opts.stateRoot,
-        date: opts.date,
-        windowDays: extra.windowDays,
-        allowUndated: extra.allowUndated,
-      }));
-    }
+  } else {
+    ({
+      allEvents,
+      combinedStats,
+      discovery,
+      dateFilteredEvents,
+      persistedCount,
+      allPrimeAttempts,
+    } = await gatherMentionEvents({
+      stateRoot: opts.stateRoot,
+      date: opts.date,
+      windowDays: extra.windowDays,
+      allowUndated: extra.allowUndated,
+    }));
   }
 
   let localEvents = discoverMentionEvents(opts.stateRoot, opts.date);

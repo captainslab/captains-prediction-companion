@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { gatherMentionEvents } from '../scripts/packets/generate-mentions-daily.mjs';
+import { resolveOnlyMentionEvents } from '../scripts/packets/generate-mentions-daily.mjs';
 
 const REPO = resolve(import.meta.dirname, '..');
 
@@ -15,6 +16,21 @@ function writeJson(path, value) {
 
 function makeEvent(ticker) {
   return { event_ticker: ticker, title: `Will ${ticker} be mentioned?`, markets: [{ ticker: `${ticker}-A`, title: 'Yes' }] };
+}
+
+function writeOnlyArtifacts(stateRoot, date, event) {
+  const eventDir = join(stateRoot, 'mentions', date, 'kalshi-events');
+  const researchDir = join(stateRoot, 'mentions', date, 'research');
+  mkdirSync(eventDir, { recursive: true });
+  mkdirSync(researchDir, { recursive: true });
+  writeFileSync(join(eventDir, `${event.event_ticker}.json`), `${JSON.stringify(event, null, 2)}\n`);
+  writeFileSync(join(researchDir, `${event.event_ticker}.json`), `${JSON.stringify({
+    event_ticker: event.event_ticker,
+    markets: event.markets.map((market) => ({
+      market_ticker: market.ticker,
+      layer_records: market.layer_records ?? {},
+    })),
+  }, null, 2)}\n`);
 }
 
 const passThroughFilter = (events) => ({
@@ -169,6 +185,111 @@ test('research prime runs after persistence', async () => {
   assert.ok(persistIdx >= 0, 'persistence happened');
   assert.ok(sourceResearchIdx >= 0, 'source research happened');
   assert.ok(sourceResearchIdx > persistIdx, 'source research runs after persistence');
+});
+
+test('--only fast path uses existing artifacts and never gathers', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-gen-only-fast-'));
+  const date = '2099-01-06';
+  const ticker = 'KXFASTONLY-99JAN06';
+  const event = makeEvent(ticker);
+  event.markets[0].layer_records = {
+    event_proximity: { present: true, score: 80, source_basis: 'local fixture schedule' },
+    historical_tendency: { present: true, score: 70, source_basis: 'local fixture research' },
+  };
+  writeOnlyArtifacts(stateRoot, date, event);
+
+  let gatherCalls = 0;
+  const result = await resolveOnlyMentionEvents({
+    stateRoot,
+    date,
+    tickers: [ticker],
+    deps: {
+      gatherMentionEvents: async () => {
+        gatherCalls += 1;
+        throw new Error('gather should not run for the fast path');
+      },
+    },
+  });
+
+  assert.equal(gatherCalls, 0);
+  assert.equal(result.mode, 'fast-path');
+  assert.deepEqual(result.allEvents.map((e) => e.event_ticker), [ticker]);
+  assert.equal(result.missingAfterGather.length, 0);
+  assert.equal(result.discovery.source.label, 'local-only-artifact-fast-path');
+});
+
+test('--only missing local artifacts triggers gather and reloads the requested ticker', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-gen-only-heal-'));
+  const date = '2099-01-07';
+  const ticker = 'KXHEALONLY-99JAN07';
+  const event = makeEvent(ticker);
+  event.markets[0].layer_records = {
+    event_proximity: { present: true, score: 85, source_basis: 'discovery stub' },
+    historical_tendency: { present: true, score: 90, source_basis: 'research stub' },
+  };
+
+  let gatherCalls = 0;
+  const result = await resolveOnlyMentionEvents({
+    stateRoot,
+    date,
+    tickers: [ticker],
+    deps: {
+      gatherMentionEvents: async ({ stateRoot: gatherRoot, date: gatherDate }) => {
+        gatherCalls += 1;
+        writeOnlyArtifacts(gatherRoot, gatherDate, event);
+        return {
+          combinedStats: { totalEvents: 1, mentionEvents: 1, rejectedEvents: 0, totalMarkets: 1, mentionMarkets: 1, broadEvents: 1, seriesEvents: 0 },
+          discovery: {
+            ok: true,
+            events: [event],
+            source: { label: 'stub-discovery', api_url: 'stub://api', page_url: 'stub://page' },
+            error: null,
+          },
+          dateFilteredEvents: [event],
+          persistedCount: 1,
+          allPrimeAttempts: [{ ok: true, skipped: false, label: 'stub-prime', status: 0, stderr: '', error: null }],
+        };
+      },
+    },
+  });
+
+  assert.equal(gatherCalls, 1);
+  assert.equal(result.mode, 'self-heal');
+  assert.deepEqual(result.allEvents.map((e) => e.event_ticker), [ticker]);
+  assert.deepEqual(result.loadedAfterGather.map((x) => x.ticker), [ticker]);
+  assert.deepEqual(result.missingAfterGather, []);
+  assert.equal(result.discovery.source.label, 'stub-discovery');
+});
+
+test('--only stays fail-closed when gather still does not persist the requested ticker', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-gen-only-block-'));
+  const date = '2099-01-08';
+  const ticker = 'KXBLOCKONLY-99JAN08';
+
+  const result = await resolveOnlyMentionEvents({
+    stateRoot,
+    date,
+    tickers: [ticker],
+    deps: {
+      gatherMentionEvents: async () => ({
+        combinedStats: { totalEvents: 0, mentionEvents: 0, rejectedEvents: 0, totalMarkets: 0, mentionMarkets: 0, broadEvents: 0, seriesEvents: 0 },
+        discovery: {
+          ok: true,
+          events: [],
+          source: { label: 'stub-discovery', api_url: 'stub://api', page_url: 'stub://page' },
+          error: null,
+        },
+        dateFilteredEvents: [],
+        persistedCount: 0,
+        allPrimeAttempts: [{ ok: true, skipped: false, label: 'stub-prime', status: 0, stderr: '', error: null }],
+      }),
+    },
+  });
+
+  assert.equal(result.mode, 'self-heal');
+  assert.deepEqual(result.allEvents, []);
+  assert.deepEqual(result.missingAfterGather, [ticker]);
+  assert.equal(result.loadedAfterGather.length, 0);
 });
 
 test('CLI --only dry-run uses local artifacts before live discovery and prints v2 preview', () => {
