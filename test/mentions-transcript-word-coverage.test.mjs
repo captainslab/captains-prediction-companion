@@ -92,6 +92,43 @@ test('buildStrikeCoverage records misses, hit rates, and source-backed flags', (
   assert.equal(summary.source_backed_strikes + summary.low_source_strikes, STRIKES.length);
 });
 
+// Generalization proof: a NON-Kroger earnings-mention event runs through the
+// exact same pure buildStrikeCoverage path with no code change. Different
+// company (Nike), different strikes, different transcript prose.
+const NKE_Q = `
+Operator: Welcome to the NIKE, Inc. earnings call. We drove strong demand for
+Jordan Brand and reignited momentum in running. Direct and digital grew while we
+cleared excess inventory. Tariffs pressured gross margin. We expanded our women's
+business and saw China stabilize.
+`;
+
+test('buildStrikeCoverage generalizes to a non-Kroger earnings event', () => {
+  const strikes = [
+    { ticker: 'KXEARNINGSMENTIONNKE-26JUN26-JORD', strike: 'Jordan' },
+    { ticker: 'KXEARNINGSMENTIONNKE-26JUN26-TARI', strike: 'Tariff' },
+    { ticker: 'KXEARNINGSMENTIONNKE-26JUN26-CHIN', strike: 'China' },
+    { ticker: 'KXEARNINGSMENTIONNKE-26JUN26-METAV', strike: 'Metaverse' },
+    { ticker: 'KXEARNINGSMENTIONNKE-26JUN26-AI', strike: 'AI / Artificial Intelligence' },
+  ];
+  const sources = [
+    { label: 'NKE-Qx', quarter: 'Qx', source_type: 'transcript', source_url: 'https://x/nke', text: NKE_Q },
+  ];
+  const { rows, summary } = buildStrikeCoverage({ strikes, sources });
+
+  // Hits and misses both recorded for a company never hardcoded anywhere.
+  assert.equal(rows.find((r) => r.strike === 'Jordan').source_backed, true);
+  assert.equal(rows.find((r) => r.strike === 'Tariff').source_backed, true);
+  assert.equal(rows.find((r) => r.strike === 'China').source_backed, true);
+  assert.equal(rows.find((r) => r.strike === 'Metaverse').source_backed, false);
+  assert.equal(rows.find((r) => r.strike === 'AI / Artificial Intelligence').last_4q_transcript_hits, 0);
+
+  assert.equal(summary.strike_count, strikes.length);
+  assert.equal(summary.source_backed_strikes, 3);
+  assert.equal(summary.low_source_strikes, 2);
+  assert.ok(rows.every((r) => r.needs_fresh_source_fetch === true && r.prior_board_seen === false));
+  assert.equal(assertNoPriceFields({ rows, summary }), true);
+});
+
 test('assertNoPriceFields throws on price-shaped keys', () => {
   assert.throws(() => assertNoPriceFields({ yes_bid: 5 }), /forbidden price-shaped key/);
   assert.equal(assertNoPriceFields({ strike: 'Ocado', hit: true }), true);

@@ -16,7 +16,7 @@
 // The new piece is deterministic prior-transcript word coverage
 // (transcript-word-coverage.mjs), used because no prior Kalshi board exists.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -277,8 +277,69 @@ function renderMarkdown(a, ladder) {
   return L.join('\n');
 }
 
+// --- CLI parameterization (earnings-family generalization) ---------------
+// Defaults to the Kroger canary so the morning command stays unchanged. Any
+// other earnings-mention event runs through the SAME pure coverage path by
+// passing --series-ticker/--event-ticker/--slug (or --event-url) plus a
+// declared --sources-file (JSON array of {label,quarter,source_type,source_url}).
+function argValue(args, flag) {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : null;
+}
+
+// Parse a Kalshi market URL into { eventTicker, seriesTicker }. The event
+// ticker is the final path segment; the series ticker is its date-prefixed
+// stem (KXEARNINGSMENTIONKR-26JUN18 -> KXEARNINGSMENTIONKR).
+function parseEventUrl(url) {
+  try {
+    const segs = new URL(url).pathname.split('/').filter(Boolean);
+    const eventTicker = segs[segs.length - 1] || null;
+    const seriesTicker = eventTicker ? eventTicker.split('-')[0] : null;
+    return { eventTicker, seriesTicker };
+  } catch {
+    return { eventTicker: null, seriesTicker: null };
+  }
+}
+
+function loadSourcesFile(path) {
+  const parsed = JSON.parse(readFileSync(resolve(path), 'utf8'));
+  const list = Array.isArray(parsed) ? parsed : parsed.sources;
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new Error(`--sources-file ${path} must contain a non-empty JSON array of source objects`);
+  }
+  for (const s of list) {
+    if (!s || !s.source_url || !s.source_type) {
+      throw new Error(`--sources-file ${path} entries require source_url and source_type`);
+    }
+  }
+  return list;
+}
+
+function parseCliOptions(argv) {
+  const args = argv.slice(2);
+  const fromUrl = argValue(args, '--event-url');
+  const urlParts = fromUrl ? parseEventUrl(fromUrl) : { eventTicker: null, seriesTicker: null };
+  const opts = {};
+  const eventTicker = argValue(args, '--event-ticker') ?? urlParts.eventTicker;
+  const seriesTicker = argValue(args, '--series-ticker') ?? urlParts.seriesTicker;
+  const slug = argValue(args, '--slug') ?? (eventTicker ? eventTicker.toLowerCase() : null);
+  const stateRoot = argValue(args, '--state-root');
+  const sourcesFile = argValue(args, '--sources-file');
+  if (eventTicker) opts.eventTicker = eventTicker;
+  if (seriesTicker) opts.seriesTicker = seriesTicker;
+  if (slug) opts.slug = slug;
+  if (stateRoot) opts.stateRoot = stateRoot;
+  if (sourcesFile) opts.sources = loadSourcesFile(sourcesFile);
+  return opts;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  runAudit()
+  if (process.argv.includes('--help')) {
+    console.log('Usage: node scripts/mentions/alpha-labs-source-audit.mjs [--event-url URL | --series-ticker S --event-ticker E] [--slug SLUG] [--sources-file sources.json] [--state-root state]');
+    console.log('Defaults to the Kroger canary (KXEARNINGSMENTIONKR-26JUN18) when no flags are given.');
+    process.exit(0);
+  }
+  runAudit(parseCliOptions(process.argv))
     .then(({ jsonPath, mdPath, artifact }) => {
       console.log(`[alpha-labs] ${artifact.determination}: ${artifact.coverage_summary.source_backed_strikes}/${artifact.coverage_summary.strike_count} source-backed`);
       console.log(`[alpha-labs] json: ${jsonPath}`);
