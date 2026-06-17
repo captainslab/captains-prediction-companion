@@ -29,6 +29,20 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
+import {
+  buildScoreEngineProjection,
+  buildYrfiProjection,
+  buildKsProjection,
+  buildHrProjection,
+} from '../mlb/lib/projection-contracts.mjs';
+import {
+  describeMoneyline,
+  describeTotal,
+  describeTeamRuns,
+  describeYrfi,
+  describeKs,
+  describeHr,
+} from '../mlb/lib/projection-language.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 import {
   buildDecisionRow,
@@ -332,6 +346,57 @@ export function extractGames(paths = []) {
   return out;
 }
 
+// Projection-FIRST read for one game. Renders what the MODEL layer projects
+// (win prob, total/team runs, YRFI, Ks, HR) through the price-isolated
+// projection contracts + language — NEVER a board line or an over/under call.
+//
+// Inputs are derived ONLY from confirmation gaps (lineup/roof/weather), never
+// from market price, odds, or board shape. We do NOT fabricate projection
+// outputs: with no model outputs available the contracts return blocked /
+// provisional, and the language layer states that honestly. This is the wire
+// that lets real model outputs flow the moment they exist.
+export function buildProjectionFirstBlock({ date, gamePicks = [] } = {}) {
+  const picks = Array.isArray(gamePicks) ? gamePicks : [];
+  const as_of = `${date || 'unknown-date'}T00:00:00Z`;
+  const game_id = String(picks[0]?.matched_game_pk ?? picks[0]?.event_ticker ?? 'unknown');
+
+  // Team names: parse "Away at Home" from the pick's game string when present.
+  let away = 'Away';
+  let home = 'Home';
+  const gameStr = picks.find((p) => typeof p?.game === 'string' && / at /.test(p.game))?.game;
+  if (gameStr) {
+    const [a, h] = gameStr.split(' at ');
+    if (a?.trim()) away = a.trim();
+    if (h?.trim()) home = h.trim();
+  }
+
+  // Confirmation-derived status — NOT price-derived.
+  const allMissing = picks.flatMap((p) => (Array.isArray(p.missing_confirmations) ? p.missing_confirmations : []));
+  const lineup_status = picks.length ? (allMissing.some((m) => /lineup/i.test(String(m))) ? 'unconfirmed' : 'confirmed') : null;
+  const weather_status = picks.length ? (allMissing.some((m) => /roof|weather/i.test(String(m))) ? 'partial' : 'complete') : null;
+
+  // Park identity is the matched game (display/identity only, no roof assumed).
+  const park = picks[0]?.matched_game_pk != null ? { id: String(picks[0].matched_game_pk), roof: null } : null;
+  const common = { game_id, as_of, lineup_status, weather_status };
+
+  const score = buildScoreEngineProjection({ ...common, inputs: { park }, outputs: null });
+  const yrfi = buildYrfiProjection({ ...common, inputs: { park }, outputs: null });
+  const ks = buildKsProjection({ game_id, as_of, lineup_status, inputs: {}, outputs: null });
+  const hr = buildHrProjection({ game_id, as_of, lineup_status, weather_status, inputs: { park }, outputs: null });
+
+  return [
+    '--- PROJECTION-FIRST READ (model layer, market-free) ---',
+    describeMoneyline(score, { home_team: home, away_team: away }),
+    describeTotal(score),
+    describeTeamRuns(score, 'home', home),
+    describeTeamRuns(score, 'away', away),
+    describeYrfi(yrfi),
+    describeKs(ks),
+    describeHr(hr),
+    'Projection layer only — model outputs feed this read; no market signal does.',
+  ];
+}
+
 function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
@@ -376,6 +441,10 @@ function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSu
     lines.push('--- Market Context - NOT IN SCORE ---');
     lines.push('Market data stored in audit artifact for reference; not displayed in customer packet without model layer.');
   }
+
+  // Projection-first read: model-layer language (not board-derived), every game.
+  lines.push('');
+  for (const l of buildProjectionFirstBlock({ date, gamePicks })) lines.push(l);
 
   const inventoryLines = [];
   inventoryLines.push(`event_ticker: ${s.ticker}`);
