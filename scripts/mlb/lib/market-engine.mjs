@@ -33,7 +33,10 @@
 //      count as ladder evidence — illiquid asks fabricate inversions.
 
 import { parseMarketTickerTeam, MLB_TEAM_BY_ABBREV } from '../../packets/lib/mlb-teams.mjs';
-import { evaluateDecisionProcess, MARKET_TYPES } from '../../shared/decision-process.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, DECISION_STATUSES } from '../../shared/decision-process.mjs';
+import { composeBaseFundamentals } from './base-fundamentals.mjs';
+import { composeEvidenceLedgerForGame } from './evidence-ledger.mjs';
+import { buildFundamentalEnvelopes, buildLayerRecords } from '../source-adapters/research-agent-adapter.mjs';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -185,7 +188,310 @@ export function softLeanMl(mlMarkets, spreadBuckets, eventTeams) {
   return {
     side: favTeam,
     evidence: { gap, oiRatio: Number.isFinite(oiRatio) ? Math.round(oiRatio * 10) / 10 : 'inf', favOi, dogOi, spreadConfirm },
-    reason: `Soft ML LEAN ${favTeam}: gap ${gap}¢ (${favAsk}¢ vs ${dogAsk}¢), OI ratio ${Number.isFinite(oiRatio) ? oiRatio.toFixed(1) : '∞'}x (${favOi.toFixed(0)} vs ${dogOi.toFixed(0)}), spread confirms (${spreadConfirm}). No external context modeled.`,
+    reason: `Soft ML LEAN ${favTeam}: gap ${gap}¢ (${favAsk}¢ vs ${dogAsk}¢), OI ratio ${Number.isFinite(oiRatio) ? oiRatio.toFixed(1) : '∞'}x (${favOi.toFixed(0)} vs ${dogOi.toFixed(0)}), spread confirms (${spreadConfirm}).`,
+  };
+}
+
+function maybeNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const text = String(value).trim();
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const n = Number(match[0]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeLineupStatus(status) {
+  const raw = String(status ?? '').toLowerCase();
+  if (!raw) return null;
+  if (raw.includes('confirmed') || raw.includes('boxscore')) return 'confirmed';
+  if (raw.includes('pending')) return 'pending';
+  if (raw.includes('incomplete')) return 'incomplete';
+  return raw;
+}
+
+function mapPitcherSplits(pitcher) {
+  if (!pitcher) return null;
+  return {
+    park: pitcher.at_park ? {
+      era: pitcher.at_park.era ?? null,
+      fip: null,
+      hr9: null,
+      games: pitcher.at_park.gs ?? null,
+      source_path: pitcher.at_park.source_path ?? null,
+    } : null,
+    vsOpponent: pitcher.vs_opponent ? {
+      era: pitcher.vs_opponent.era ?? null,
+      fip: null,
+      kPct: null,
+      wins: null,
+      losses: null,
+      games: pitcher.vs_opponent.ip ?? null,
+      span: pitcher.vs_opponent.span ?? null,
+      source_path: pitcher.vs_opponent.source_path ?? null,
+    } : null,
+  };
+}
+
+function buildCompositeInputFromGame(game) {
+  const stats = game?.stats_record ?? null;
+  const weather = game?.weather_record ?? null;
+  const context = game?.context_record ?? null;
+  const starters = game?.starters ?? null;
+  const recentForm = game?.recent_form ?? null;
+  const bullpen = game?.bullpen_context ?? null;
+  const matchup = game?.matchup_context ?? null;
+  if (!(stats || weather || context || starters || recentForm || bullpen || matchup)) return null;
+
+  const temperature = maybeNumber(weather?.temperature ?? weather?.temperatureF);
+  const wind = maybeNumber(weather?.wind_speed ?? weather?.windMph);
+  const precip = maybeNumber(weather?.precipitation_risk ?? weather?.precipRisk);
+  const lineupStatus = normalizeLineupStatus(context?.lineup_status ?? game?.lineup_status ?? game?.lineup_notes);
+
+  return {
+    game_pk: game?.game_pk ?? stats?.game_pk ?? null,
+    away_team: game?.away_full ?? game?.away ?? stats?.away_team ?? null,
+    home_team: game?.home_full ?? game?.home ?? stats?.home_team ?? null,
+    away_pitcher: starters?.away ?? stats?.away_pitcher ?? null,
+    home_pitcher: starters?.home ?? stats?.home_pitcher ?? null,
+    away_team_stats: recentForm?.away ?? stats?.away_team_stats ?? null,
+    home_team_stats: recentForm?.home ?? stats?.home_team_stats ?? null,
+    away_bullpen: bullpen?.away ?? stats?.away_bullpen ?? null,
+    home_bullpen: bullpen?.home ?? stats?.home_bullpen ?? null,
+    away_lineup: { status: lineupStatus, ilHealth: null },
+    home_lineup: { status: lineupStatus, ilHealth: null },
+    away_pitcher_splits: mapPitcherSplits(starters?.away ?? stats?.away_pitcher ?? null),
+    home_pitcher_splits: mapPitcherSplits(starters?.home ?? stats?.home_pitcher ?? null),
+    away_lineup_handedness: matchup?.away_handedness ?? stats?.away_lineup_handedness ?? null,
+    home_lineup_handedness: matchup?.home_handedness ?? stats?.home_lineup_handedness ?? null,
+    away_bullpen_fatigue: bullpen?.away ? { recentLoadPct: bullpen.away.recentLoadPct ?? null, keyRelieverAvailable: null } : null,
+    home_bullpen_fatigue: bullpen?.home ? { recentLoadPct: bullpen.home.recentLoadPct ?? null, keyRelieverAvailable: null } : null,
+    park: { factor: 100, name: weather?.venue ?? game?.venue ?? stats?.venue ?? null },
+    weather: {
+      temperatureF: temperature,
+      windMph: wind,
+      precipRisk: precip,
+    },
+    venue: weather?.venue ?? game?.venue ?? stats?.venue ?? null,
+  };
+}
+
+function pickTopEvidenceRows(ledger, limit = 3) {
+  return (ledger?.evidence_ledger ?? [])
+    .filter((row) => row.present && row.value != null)
+    .filter((row) => [
+      'starting_pitcher_signal',
+      'recent_form',
+      'season_form',
+      'park_weather_context',
+      'lineup_injury_state',
+      'bullpen_fatigue_availability',
+      'lineup_handedness_matchup',
+      'pitcher_at_this_park',
+      'pitcher_vs_this_opponent',
+      'matchup_splits',
+      'game_volatility_context',
+    ].includes(row.category))
+    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+    .slice(0, limit);
+}
+
+function summarizeLayer({ source, status, detail, note, availability }) {
+  return {
+    source,
+    status,
+    detail: detail ?? null,
+    note: note ?? null,
+    availability: availability ?? status,
+  };
+}
+
+export function buildNonMarketContextBundle(game) {
+  const input = buildCompositeInputFromGame(game);
+  if (!input) return null;
+
+  const envelopes = buildFundamentalEnvelopes(input);
+  const fundamentals = composeBaseFundamentals({
+    game: {
+      game_pk: game.game_pk ?? null,
+      away_team: input.away_team ?? game.away_full ?? game.away ?? null,
+      home_team: input.home_team ?? game.home_full ?? game.home ?? null,
+    },
+    envelopes,
+  });
+  const layers = buildLayerRecords(input);
+  const ledger = composeEvidenceLedgerForGame({
+    game: {
+      game_pk: game.game_pk ?? null,
+      away_team: input.away_team ?? game.away_full ?? game.away ?? null,
+      home_team: input.home_team ?? game.home_full ?? game.home ?? null,
+    },
+    awaySide: fundamentals.away,
+    homeSide: fundamentals.home,
+    awaySeasonForm: layers.away.seasonForm ?? null,
+    homeSeasonForm: layers.home.seasonForm ?? null,
+    awayRecentForm: layers.away.recentForm ?? null,
+    homeRecentForm: layers.home.recentForm ?? null,
+    awayPitcherSignal: layers.away.pitcherSignal ?? null,
+    homePitcherSignal: layers.home.pitcherSignal ?? null,
+    awayPitcherAtPark: layers.away.pitcherAtPark ?? null,
+    homePitcherAtPark: layers.home.pitcherAtPark ?? null,
+    awayPitcherVsOpponent: layers.away.pitcherVsOpponent ?? null,
+    homePitcherVsOpponent: layers.home.pitcherVsOpponent ?? null,
+    parkWeatherRecord: layers.away.parkWeather ?? null,
+    awayMatchupSplits: layers.away.matchupSplits ?? null,
+    homeMatchupSplits: layers.home.matchupSplits ?? null,
+    awayLineupInjury: layers.away.lineupInjury ?? null,
+    homeLineupInjury: layers.home.lineupInjury ?? null,
+    awayBullpenFatigue: layers.away.bullpenFatigue ?? null,
+    homeBullpenFatigue: layers.home.bullpenFatigue ?? null,
+    awayLineupHandedness: layers.away.lineupHandedness ?? null,
+    homeLineupHandedness: layers.home.lineupHandedness ?? null,
+    gameVolatilityRecord: layers.away.gameVolatility ?? null,
+    umpireBiasRecord: layers.away.umpireBias ?? null,
+  });
+
+  const awayScore = ledger.away?.composite_score ?? null;
+  const homeScore = ledger.home?.composite_score ?? null;
+  const supportSide = awayScore != null && homeScore != null
+    ? (awayScore > homeScore ? 'away' : homeScore > awayScore ? 'home' : null)
+    : null;
+  const supportMargin = supportSide ? Math.abs(awayScore - homeScore) : null;
+  const supportTeam = supportSide === 'away'
+    ? (game.away_full || game.away || ledger.away?.team_name || null)
+    : supportSide === 'home'
+      ? (game.home_full || game.home || ledger.home?.team_name || null)
+      : null;
+  const topEvidence = supportSide === 'away'
+    ? pickTopEvidenceRows(ledger.away)
+    : supportSide === 'home'
+      ? pickTopEvidenceRows(ledger.home)
+      : [];
+  const topEvidenceText = topEvidence.length
+    ? topEvidence.map((row) => `${row.category}: ${row.detail ?? row.source_basis ?? 'n/a'}`).join('; ')
+    : 'No non-market layer supplied a tested side advantage.';
+  const supportReason = supportSide && supportMargin != null
+    ? `Non-market evidence supports ${supportTeam} via ${topEvidenceText}`
+    : 'No tested non-market side support cleared the context gate.';
+
+  const startersPresent = Boolean(game.starters?.away || game.starters?.home);
+  const lineupStatus = normalizeLineupStatus(input.away_lineup.status ?? input.home_lineup.status);
+  const injuriesPresent = Boolean(game.injuries?.length || game.injury_status || game.context_record?.key_injuries?.length);
+  const weatherRecord = game.weather_record ?? null;
+  const contextWeather = game.context_record?.weather_from_mlb_feed ?? null;
+  const roofStatus = String(
+    weatherRecord?.roof_status
+    ?? weatherRecord?.roof_type
+    ?? game.context_record?.venue_roof_type
+    ?? game.context_record?.roof_type
+    ?? '',
+  ).toLowerCase();
+  const tempComplete = maybeNumber(weatherRecord?.temperature ?? weatherRecord?.temperatureF) != null
+    && maybeNumber(weatherRecord?.wind_speed ?? weatherRecord?.windMph) != null
+    && maybeNumber(weatherRecord?.precipitation_risk ?? weatherRecord?.precipRisk) != null;
+  const explicitWeatherUnavailable = Boolean(
+    game.context_record?.weather_status === 'unavailable'
+    || (contextWeather && typeof contextWeather === 'object' && Object.keys(contextWeather).length === 0 && !weatherRecord),
+  );
+  const weatherStatus = tempComplete
+    ? 'complete'
+    : roofStatus.includes('dome') || roofStatus.includes('retractable') || roofStatus.includes('open_air')
+      ? 'indoor/roof'
+      : explicitWeatherUnavailable
+        ? 'unavailable'
+        : weatherRecord || contextWeather
+        ? 'partial'
+        : 'missing';
+  const recentFormStatus = game.recent_form?.away && game.recent_form?.home
+    ? 'complete'
+    : game.recent_form
+      ? 'partial'
+      : 'missing';
+  const bullpenStatus = game.bullpen_context?.away && game.bullpen_context?.home
+    ? ((game.bullpen_context.away.recentLoadPct != null && game.bullpen_context.home.recentLoadPct != null) ? 'complete' : 'partial')
+    : game.bullpen_context
+      ? 'partial'
+      : 'missing';
+  const matchupStatus = game.matchup_context?.away_handedness || game.matchup_context?.home_handedness
+    ? 'partial'
+    : (game.starters?.away?.vs_opponent || game.starters?.home?.vs_opponent)
+      ? 'partial'
+      : 'missing';
+
+  const contextProvenance = {
+    starters: summarizeLayer({
+      source: ['stats_adapter', 'mlb_official_adapter'],
+      status: startersPresent
+        ? (game.starters?.away?.era != null && game.starters?.home?.era != null ? 'complete' : 'partial')
+        : 'missing',
+      detail: startersPresent
+        ? `${game.starters?.away?.name ?? 'away TBD'} vs ${game.starters?.home?.name ?? 'home TBD'}`
+        : 'No starters sourced.',
+    }),
+    lineup: summarizeLayer({
+      source: 'context_adapter',
+      status: lineupStatus === 'confirmed' ? 'complete' : lineupStatus === 'pending' ? 'partial' : (lineupStatus ?? 'missing'),
+      detail: lineupStatus ? `lineup_status=${lineupStatus}` : 'No lineup status sourced.',
+    }),
+    injuries: summarizeLayer({
+      source: 'context_adapter',
+      status: injuriesPresent
+        ? (game.injuries?.length ? 'complete' : 'partial')
+        : (game.injury_status ? 'unavailable' : 'missing'),
+      detail: game.injury_status ? `injury_status=${game.injury_status}` : 'No injury news sourced.',
+    }),
+    weather: summarizeLayer({
+      source: ['weather_adapter', 'context_adapter'],
+      status: weatherStatus,
+      detail: weatherRecord
+        ? `${weatherRecord.temperature ?? 'n/a'}F, wind ${weatherRecord.wind_speed ?? 'n/a'}, precip ${weatherRecord.precipitation_risk ?? 'n/a'}`
+        : 'No weather record sourced.',
+      note: weatherRecord?.weather_note ?? null,
+      availability: weatherRecord?.roof_status ?? weatherRecord?.roof_type ?? null,
+    }),
+    recent_form: summarizeLayer({
+      source: 'stats_adapter',
+      status: recentFormStatus,
+      detail: game.recent_form
+        ? `${game.away ?? 'away'} ${game.recent_form.away?.wins ?? '?'}-${game.recent_form.away?.losses ?? '?'} vs ${game.home ?? 'home'} ${game.recent_form.home?.wins ?? '?'}-${game.recent_form.home?.losses ?? '?'}`
+        : 'No recent form sourced.',
+    }),
+    bullpen: summarizeLayer({
+      source: 'stats_adapter',
+      status: bullpenStatus,
+      detail: game.bullpen_context
+        ? `${game.away ?? 'away'} ERA ${game.bullpen_context.away?.era ?? '?'} / ${game.home ?? 'home'} ERA ${game.bullpen_context.home?.era ?? '?'}`
+        : 'No bullpen context sourced.',
+      availability: game.stats_record?.away_bullpen?.unavailable_fields?.includes('recentLoadPct') || game.stats_record?.home_bullpen?.unavailable_fields?.includes('recentLoadPct')
+        ? 'partial'
+        : bullpenStatus,
+    }),
+    matchup_model: summarizeLayer({
+      source: 'stats_adapter',
+      status: matchupStatus,
+      detail: game.matchup_context
+        ? 'Lineup handedness split sourced.'
+        : (game.starters?.away?.vs_opponent || game.starters?.home?.vs_opponent)
+          ? 'Pitcher vs-opponent split sourced.'
+          : 'No matchup model context sourced.',
+    }),
+  };
+
+  return {
+    fundamentals,
+    ledger,
+    support_side: supportSide,
+    support_team: supportTeam,
+    support_margin: supportMargin,
+    support_reason: supportReason,
+    overall_data_quality: fundamentals.overall_data_quality,
+    allowed_max_posture: fundamentals.allowed_max_posture,
+    provenance: contextProvenance,
+    side_scores: {
+      away: awayScore,
+      home: homeScore,
+    },
   };
 }
 
@@ -646,6 +952,132 @@ export function analyzeYfri(markets) {
   };
 }
 
+const FAMILY_COVERAGE_STATUSES = Object.freeze({
+  NON_MARKET_COMPOSITE_READY: 'NON_MARKET_COMPOSITE_READY',
+  BOARD_ANALYZER_ONLY: 'BOARD_ANALYZER_ONLY',
+  BLOCKED_MODEL_LAYER_MISSING: 'BLOCKED_MODEL_LAYER_MISSING',
+  PARTIAL_NEEDS_PATCH: 'PARTIAL_NEEDS_PATCH',
+});
+
+function hasNonMarketContext(bundle) {
+  const provenance = bundle?.provenance ?? null;
+  if (!provenance) return false;
+  return Object.values(provenance).some((layer) => layer?.status && layer.status !== 'missing');
+}
+
+function familyCoverageLine(name, status, detail) {
+  return `${name}: ${status}${detail ? ` — ${detail}` : ''}`;
+}
+
+function coverageDetailForModel(status, hasContext) {
+  if (status === DECISION_STATUSES.EVIDENCE_LEAN || status === DECISION_STATUSES.STRONG_EVIDENCE_LEAN) {
+    return 'true non-market composite is ready';
+  }
+  if (hasContext) {
+    return 'some non-market context is sourced, but the composite is not ready yet';
+  }
+  return 'display-only board read; no non-market composite exists';
+}
+
+export function buildMarketFamilyCoverage(game, analysis = null) {
+  const final = analysis?.final ?? {};
+  const contextBundle = final.context_bundle ?? null;
+  const hasContext = hasNonMarketContext(contextBundle);
+  const mlMarkets = game?.series?.ml?.markets ?? [];
+  const spreadMarkets = game?.series?.spread?.markets ?? [];
+  const totalMarkets = game?.series?.total?.markets ?? [];
+  const yfriMarkets = game?.series?.rfi?.markets ?? [];
+  const ksMarkets = game?.series?.ks?.markets ?? [];
+  const hrMarkets = game?.series?.hr?.markets ?? [];
+  const mlReady = final.decision_status === DECISION_STATUSES.EVIDENCE_LEAN
+    || final.decision_status === DECISION_STATUSES.STRONG_EVIDENCE_LEAN;
+
+  const mlStatus = !mlMarkets.length
+    ? FAMILY_COVERAGE_STATUSES.BLOCKED_MODEL_LAYER_MISSING
+    : mlReady
+      ? FAMILY_COVERAGE_STATUSES.NON_MARKET_COMPOSITE_READY
+      : hasContext
+        ? FAMILY_COVERAGE_STATUSES.PARTIAL_NEEDS_PATCH
+        : FAMILY_COVERAGE_STATUSES.BOARD_ANALYZER_ONLY;
+
+  const boardOnlyStatus = (markets) => (markets.length
+    ? FAMILY_COVERAGE_STATUSES.BOARD_ANALYZER_ONLY
+    : FAMILY_COVERAGE_STATUSES.BLOCKED_MODEL_LAYER_MISSING);
+
+  const families = {
+    ml: {
+      status: mlStatus,
+      label: 'ML/game-side',
+      detail: coverageDetailForModel(mlReady ? DECISION_STATUSES.EVIDENCE_LEAN : final.decision_status, hasContext),
+      board_only: mlStatus !== FAMILY_COVERAGE_STATUSES.NON_MARKET_COMPOSITE_READY,
+      modeled: mlStatus === FAMILY_COVERAGE_STATUSES.NON_MARKET_COMPOSITE_READY,
+    },
+    spread: {
+      status: boardOnlyStatus(spreadMarkets),
+      label: 'Spread',
+      detail: spreadMarkets.length
+        ? 'spread ladder analyzer only; display-only board context, not a non-market composite'
+        : 'spread markets missing; no board analyzer to render',
+      board_only: Boolean(spreadMarkets.length),
+      modeled: false,
+    },
+    total: {
+      status: boardOnlyStatus(totalMarkets),
+      label: 'Total',
+      detail: totalMarkets.length
+        ? 'total ladder analyzer only; display-only board context, not a non-market composite'
+        : 'total markets missing; no board analyzer to render',
+      board_only: Boolean(totalMarkets.length),
+      modeled: false,
+    },
+    yfri: {
+      status: boardOnlyStatus(yfriMarkets),
+      label: 'YFRI/NRFI',
+      detail: yfriMarkets.length
+        ? 'first-inning board analyzer only; display-only board context, not a non-market composite'
+        : 'first-inning market missing; no board analyzer to render',
+      board_only: Boolean(yfriMarkets.length),
+      modeled: false,
+    },
+    ks: {
+      status: boardOnlyStatus(ksMarkets),
+      label: 'Ks props',
+      detail: ksMarkets.length
+        ? 'K ladder analyzer only; display-only board context, not a non-market composite'
+        : 'K markets missing; no board analyzer to render',
+      board_only: Boolean(ksMarkets.length),
+      modeled: false,
+    },
+    hr: {
+      status: boardOnlyStatus(hrMarkets),
+      label: 'HR props',
+      detail: hrMarkets.length
+        ? 'HR ladder analyzer only; display-only board context, not a non-market composite'
+        : 'HR markets missing; no board analyzer to render',
+      board_only: Boolean(hrMarkets.length),
+      modeled: false,
+    },
+  };
+
+  const hasFullCoverage = Object.values(families).every((family) => family.status === FAMILY_COVERAGE_STATUSES.NON_MARKET_COMPOSITE_READY);
+  const coverageMode = hasFullCoverage ? 'FULL' : 'LIMITED';
+  const summary = [
+    familyCoverageLine(families.ml.label, families.ml.status, families.ml.detail),
+    familyCoverageLine(families.spread.label, families.spread.status, families.spread.detail),
+    familyCoverageLine(families.total.label, families.total.status, families.total.detail),
+    familyCoverageLine(families.yfri.label, families.yfri.status, families.yfri.detail),
+    familyCoverageLine(families.ks.label, families.ks.status, families.ks.detail),
+    familyCoverageLine(families.hr.label, families.hr.status, families.hr.detail),
+  ].join('; ');
+
+  return {
+    mode: coverageMode,
+    has_full_coverage: hasFullCoverage,
+    families,
+    summary,
+  };
+}
+
 // ---- whole-game aggregation -------------------------------------------------
 
 export function analyzeGame(game) {
@@ -658,6 +1090,7 @@ export function analyzeGame(game) {
   const ksAwayAnalysis = analyzeKs(game.series.ks?.markets || [], game.away, gameMeta);
   const ksHomeAnalysis = analyzeKs(game.series.ks?.markets || [], game.home, gameMeta);
   const yfriAnalysis = analyzeYfri(game.series.rfi?.markets || []);
+  const contextBundle = buildNonMarketContextBundle(game);
 
   // Soft-LEAN promotion: if ML is PASS, check liquidity+spread confirmation.
   // K/HR are intentionally NOT promoted — they require external context gates.
@@ -702,6 +1135,32 @@ export function analyzeGame(game) {
     bestSource = gameLeans[0].name;
   }
 
+  const marketSideTeam = mlAnalysis.side ?? null;
+  const supportTeam = contextBundle?.support_team ?? null;
+  const supportMatchesMarket = Boolean(
+    contextBundle?.support_side
+    && contextBundle.support_margin != null
+    && contextBundle.support_margin >= 5
+    && contextBundle.overall_data_quality === 'ok'
+    && marketSideTeam
+    && (
+      (contextBundle.support_side === 'away' && marketSideTeam === (game.away ?? game.away_full))
+      || (contextBundle.support_side === 'home' && marketSideTeam === (game.home ?? game.home_full))
+    ),
+  );
+  const marketSignalReason = gameLeans.length
+    ? gameLeans[0].sec.reason
+    : gameClears.length
+      ? gameClears[0].sec.reason
+      : 'No game-level CLEAR/LEAN from board structure.';
+
+  if (finalDecision === 'CLEAR' || finalDecision === 'LEAN') {
+    finalReason = supportMatchesMarket
+      ? contextBundle.support_reason
+      : 'Board signal only, not evidence, not a pick.';
+    bestAngle = finalReason;
+  }
+
   // Prop watchlist: HR/K CLEAR/LEAN entries are demoted to WATCH-tier alerts.
   // They never count toward game-level CLEAR/LEAN totals or the slate
   // headline. They surface as "MARKET ANOMALY" reads requiring further gates.
@@ -720,9 +1179,21 @@ export function analyzeGame(game) {
   }
 
   const hasMarketBoard = Object.values(game.series || {}).some((series) => Array.isArray(series?.markets) && series.markets.length > 0);
-  const hasLineupNews = Boolean(game.lineups || game.lineup_notes || game.injuries || game.injury_notes || game.news_context);
-  const hasVenueContext = Boolean(game.weather || game.venue || game.park_context || game.weather_context);
-  const hasRecentMatchup = Boolean(game.recent_form || game.matchup_context || game.bullpen_context || game.history_context);
+  const hasLineupNews = Boolean(
+    (contextBundle?.provenance?.lineup?.status && contextBundle.provenance.lineup.status !== 'missing')
+      || (contextBundle?.provenance?.injuries?.status && contextBundle.provenance.injuries.status !== 'missing')
+      || game.lineups || game.lineup_notes || game.injuries || game.injury_notes || game.news_context,
+  );
+  const hasVenueContext = Boolean(
+    (contextBundle?.provenance?.weather?.status && contextBundle.provenance.weather.status !== 'missing')
+      || game.weather || game.venue || game.park_context || game.weather_context,
+  );
+  const hasRecentMatchup = Boolean(
+    (contextBundle?.provenance?.recent_form?.status && contextBundle.provenance.recent_form.status !== 'missing')
+      || (contextBundle?.provenance?.matchup_model?.status && contextBundle.provenance.matchup_model.status !== 'missing')
+      || (contextBundle?.provenance?.bullpen?.status && contextBundle.provenance.bullpen.status !== 'missing')
+      || game.recent_form || game.matchup_context || game.bullpen_context || game.history_context,
+  );
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
     rawDecision: finalDecision,
@@ -732,26 +1203,35 @@ export function analyzeGame(game) {
       venue_context: hasVenueContext,
       recent_form_matchup: hasRecentMatchup,
       market_board_context: hasMarketBoard,
-      evidence_supported_side: hasLineupNews && hasVenueContext && hasRecentMatchup && gameClearLean.length > 0,
+      evidence_supported_side: supportMatchesMarket,
     },
     hasMarketSignal: gameClearLean.length > 0,
-    topEvidence: gameClearLean.length ? [finalReason] : [],
-    marketSignalText: gameClearLean.length ? finalReason : 'No game-level CLEAR/LEAN from board structure.',
+    topEvidence: finalDecision === 'CLEAR' || finalDecision === 'LEAN'
+      ? [finalReason]
+      : [],
+    marketSignalText: gameClearLean.length ? marketSignalReason : 'No game-level CLEAR/LEAN from board structure.',
     verifiedFacts: [
       game.away && game.home ? `${game.away} at ${game.home}` : null,
-      hasLineupNews ? 'Lineup/news context supplied.' : null,
-      hasVenueContext ? 'Venue/weather/park context supplied.' : null,
-      hasRecentMatchup ? 'Recent form/matchup context supplied.' : null,
+      contextBundle?.support_team ? `Non-market context reviewed: ${contextBundle.support_reason}` : null,
+      hasLineupNews ? `Lineup/news provenance: ${contextBundle?.provenance?.lineup?.status ?? 'missing'}` : null,
+      hasVenueContext ? `Venue/weather provenance: ${contextBundle?.provenance?.weather?.status ?? 'missing'}` : null,
+      hasRecentMatchup ? `Recent-form/matchup provenance: ${contextBundle?.provenance?.recent_form?.status ?? 'missing'}` : null,
     ].filter(Boolean),
     settlementRules: 'MLB game settlement rules not independently pulled by this report.',
     inference: (finalDecision === 'CLEAR' || finalDecision === 'LEAN')
-      ? 'Board signal only unless lineup, starter, venue, and matchup context are all checked.'
+      ? (supportMatchesMarket
+        ? 'Non-market evidence and board signal agree on the same side.'
+        : 'Board signal only unless lineup, starter, venue, and matchup context are all checked.')
       : 'No board signal strong enough to elevate.',
     skepticReview: hasLineupNews && hasVenueContext && hasRecentMatchup
-      ? 'Context inputs present; still requires skeptic review before publication.'
+      ? (supportMatchesMarket
+        ? 'Context inputs present and non-market support cleared the gate.'
+        : 'Context inputs present, but they did not test into the same side as the market signal.')
       : 'MISSING: report does not pull lineup, starter, venue/weather, or recent form context.',
     finalJudgment: (finalDecision === 'CLEAR' || finalDecision === 'LEAN')
-      ? 'Downgrade raw CLEAR/LEAN to MARKET-ONLY LEAN until real-world MLB context supports the same side.'
+      ? (supportMatchesMarket
+        ? `Real-world MLB context supports ${supportTeam}; market signal stays display-only.`
+        : 'Downgrade raw CLEAR/LEAN to MARKET-ONLY LEAN until real-world MLB context supports the same side.')
       : 'NO CLEAR PICK.',
     wouldChangeView: [
       'Confirmed lineups and starters support the same side.',
@@ -759,6 +1239,17 @@ export function analyzeGame(game) {
       'Board signal disappears or contradicts updated domain context.',
     ],
   });
+  const coverage = buildMarketFamilyCoverage(game, {
+    final: {
+      decision_status: process.decisionStatus,
+      context_bundle: contextBundle,
+    },
+  });
+  if (finalDecision === 'NO CLEAR PICK') {
+    finalReason = coverage.mode === 'LIMITED'
+      ? 'Limited coverage: only the ML/game-side family has a modeled composite; spread, total, YFRI/NRFI, Ks, and HR remain board-only or blocked.'
+      : finalReason;
+  }
 
   return {
     sections: {
@@ -776,10 +1267,13 @@ export function analyzeGame(game) {
       decision_status: process.decisionStatus,
       decision_process: process,
       reason: finalReason,
+      market_reason: marketSignalReason,
       best_angle: bestAngle,
       best_source: bestSource,
       game_pick_decision: finalDecision,
       prop_watchlist: propAlerts,
+      context_bundle: contextBundle,
+      coverage,
     },
     clear_lean_count: gameClearLean.length, // game-level only
     prop_alert_count: propAlerts.length,

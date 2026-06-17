@@ -5,6 +5,7 @@ import {
   analyzeHr, analyzeKs, analyzeYfri, analyzeGame, findLadderInversion,
   _internal,
 } from '../scripts/mlb/lib/market-engine.mjs';
+import { DECISION_STATUSES } from '../scripts/shared/decision-process.mjs';
 
 const m = (overrides = {}) => ({
   ticker: 'X-Y', yes_ask_dollars: 0.5, no_ask_dollars: 0.5,
@@ -253,9 +254,12 @@ test('analyzeGame: no clear/lean across all sections → final NO CLEAR PICK', (
   const out = analyzeGame(game);
   assert.equal(out.final.decision, 'NO CLEAR PICK');
   assert.equal(out.clear_lean_count, 0);
+  assert.equal(out.final.coverage.mode, 'LIMITED');
+  assert.equal(out.final.coverage.families.ml.status, 'BOARD_ANALYZER_ONLY');
+  assert.equal(out.final.coverage.families.yfri.status, 'BOARD_ANALYZER_ONLY');
 });
 
-test('analyzeGame: ML arb makes final CLEAR and best_angle includes evidence', () => {
+test('analyzeGame: ML arb stays board-only without non-market support', () => {
   const game = {
     away: 'SF', home: 'AZ',
     series: {
@@ -269,7 +273,16 @@ test('analyzeGame: ML arb makes final CLEAR and best_angle includes evidence', (
   };
   const out = analyzeGame(game);
   assert.equal(out.final.decision, 'CLEAR');
-  assert.match(out.final.best_angle, /arb/i);
+  assert.equal(out.final.decision_status, DECISION_STATUSES.MARKET_ONLY_LEAN);
+  assert.match(out.final.reason, /board signal only, not evidence, not a pick/i);
+  assert.match(out.final.best_angle, /board signal only, not evidence, not a pick/i);
+  assert.equal(out.final.coverage.mode, 'LIMITED');
+  assert.equal(out.final.coverage.families.ml.status, 'BOARD_ANALYZER_ONLY');
+  assert.equal(out.final.coverage.families.spread.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(out.final.coverage.families.total.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(out.final.coverage.families.yfri.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(out.final.coverage.families.ks.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(out.final.coverage.families.hr.status, 'BLOCKED_MODEL_LAYER_MISSING');
 });
 
 test('analyzeGame: W01 Phillies 25¢ inversion shape no longer emits CLEAR', () => {
@@ -403,7 +416,7 @@ test('soft-LEAN: stale ML quotes do not trigger promotion', () => {
   assert.notEqual(out.sections.ml.decision, 'LEAN');
 });
 
-test('soft-LEAN: final game rollup prefers soft-LEAN over blanket NO CLEAR PICK', () => {
+test('soft-LEAN: final game rollup preserves board-only rollup without evidence support', () => {
   const game = {
     away: 'MIL', home: 'CHC',
     series: {
@@ -419,7 +432,11 @@ test('soft-LEAN: final game rollup prefers soft-LEAN over blanket NO CLEAR PICK'
   };
   const out = analyzeGame(game);
   assert.equal(out.final.decision, 'LEAN');
-  assert.match(out.final.best_angle, /Soft ML LEAN CHC/);
+  assert.equal(out.final.decision_status, DECISION_STATUSES.MARKET_ONLY_LEAN);
+  assert.match(out.sections.ml.reason, /Soft ML LEAN CHC/);
+  assert.match(out.final.best_angle, /board signal only, not evidence, not a pick/i);
+  assert.equal(out.final.coverage.families.ml.status, 'BOARD_ANALYZER_ONLY');
+  assert.equal(out.final.coverage.families.spread.status, 'BOARD_ANALYZER_ONLY');
 });
 
 // ---- Game-pick vs prop-watchlist separation -------------------------------
