@@ -12,6 +12,8 @@
 // HARD RULE: this module never reads or emits price/bid/ask/volume/liquidity/
 // open-interest. Inputs are strike phrases and transcript prose only.
 
+import { joinMentionHistoryCoverage } from './settled-history.mjs';
+
 const FORBIDDEN_PATTERN = /price|bid|ask|volume|liquidity|interest|spread|notional|odds/i;
 
 function escapeRegex(s) {
@@ -83,10 +85,21 @@ export function matchStrikeInText(strikePhrase, text) {
  * For each strike, computes per-source HIT/MISS, a quarter hit count over
  * transcript sources, and a deterministic prior_transcript_word_match record.
  * Misses are recorded, never skipped (the Costco regression guard).
+ *
+ * History join (opt-in, route-neutral): when `history` records are supplied,
+ * the hardwired prior-board assumption (prior_board_seen=false / all-zero /
+ * needs_fresh_source_fetch=true) is replaced per strike by real settled hit/
+ * miss/ambiguous counts from joinMentionHistoryCoverage. When no history is
+ * supplied, the prior no-board path is preserved byte-for-byte (Kroger canary).
+ * History matching is term-only and never consults price fields.
  */
-export function buildStrikeCoverage({ strikes = [], sources = [] } = {}) {
+export function buildStrikeCoverage({ strikes = [], sources = [], history = [], historyOptions = {} } = {}) {
   const transcriptSources = sources.filter((s) => s.source_type === 'transcript');
-  const rows = strikes.map(({ ticker, strike }) => {
+  const historyCoverage = (Array.isArray(history) && history.length)
+    ? joinMentionHistoryCoverage({ strikes, history, ...historyOptions })
+    : null;
+  const rows = strikes.map(({ ticker, strike }, idx) => {
+    const h = historyCoverage ? historyCoverage.rows[idx] : null;
     const perSource = sources.map((s) => {
       const m = matchStrikeInText(strike, s.text);
       return {
@@ -102,25 +115,34 @@ export function buildStrikeCoverage({ strikes = [], sources = [] } = {}) {
     const transcriptHits = perSource.filter((p) => p.source_type === 'transcript' && p.hit).length;
     const transcriptN = transcriptSources.length;
     const anyOfficialHit = perSource.some((p) => p.source_type !== 'transcript' && p.hit);
+    // History fields: when a real settled-history join exists for this strike,
+    // use its counts; otherwise fall back to the verified-no-prior-board path.
+    const priorBoardSeen = h ? h.prior_board_seen : false;
+    const needsFreshSourceFetch = h ? h.needs_fresh_source_fetch : true;
+    const historyReason = h
+      ? h.reason
+      : 'no prior Kalshi board for KXEARNINGSMENTIONKR (settled=0, closed=0); coverage from prior earnings-call transcripts';
     return {
       ticker,
       strike,
       patterns: termPatterns(strike).map((p) => p.regex.source),
-      // No prior Kalshi board exists for this series (verified live); stored
-      // history is structurally unavailable, so every strike needs a fresh
-      // source fetch — which this transcript coverage provides.
-      prior_board_seen: false,
-      resolved_yes: 0,
-      resolved_no: 0,
-      ednq: 0,
-      ambiguous: 0,
-      unresolved: 0,
+      // No prior Kalshi board exists for this series unless a history join is
+      // supplied; without it stored history is structurally unavailable, so
+      // every strike needs a fresh source fetch — which transcript coverage
+      // provides.
+      prior_board_seen: priorBoardSeen,
+      resolved_yes: h ? h.resolved_yes : 0,
+      resolved_no: h ? h.resolved_no : 0,
+      ednq: h ? h.ednq : 0,
+      ambiguous: h ? h.ambiguous : 0,
+      unresolved: h ? h.unresolved : 0,
+      ...(h ? { history_status: h.history_status, history_confidence: h.history_confidence, matching_history_count: h.matching_history_count } : {}),
       last_4q_transcript_hits: transcriptHits,
       last_4q_transcript_quarters: transcriptN,
       last_4q_transcript_hit_rate: transcriptN ? transcriptHits / transcriptN : null,
       official_document_hit: anyOfficialHit,
-      needs_fresh_source_fetch: true,
-      reason: 'no prior Kalshi board for KXEARNINGSMENTIONKR (settled=0, closed=0); coverage from prior earnings-call transcripts',
+      needs_fresh_source_fetch: needsFreshSourceFetch,
+      reason: historyReason,
       per_source: perSource,
       source_backed: transcriptHits > 0 || anyOfficialHit,
     };
@@ -132,6 +154,10 @@ export function buildStrikeCoverage({ strikes = [], sources = [] } = {}) {
     total_sources: sources.length,
     source_backed_strikes: rows.filter((r) => r.source_backed).length,
     low_source_strikes: rows.filter((r) => !r.source_backed).length,
+    ...(historyCoverage ? {
+      history_covered_strikes: historyCoverage.summary.history_covered_strikes,
+      confident_history_strikes: historyCoverage.summary.confident_history_strikes,
+    } : {}),
   };
   return { rows, summary };
 }

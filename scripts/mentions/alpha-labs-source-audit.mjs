@@ -23,7 +23,7 @@ import { pathToFileURL } from 'node:url';
 import { KALSHI_API_BASE, defaultFetcher, normalizeMarket } from '../packets/lib/kalshi-discovery.mjs';
 import { fetchSettledMarketsForSeries } from './ingest-settled-history.mjs';
 import { evaluateSourceLadder, renderSourceLadder } from './source-ladder.mjs';
-import { assertNoForbiddenFields } from './settled-history.mjs';
+import { assertNoForbiddenFields, loadHistory } from './settled-history.mjs';
 import { buildStrikeCoverage, assertNoPriceFields } from './transcript-word-coverage.mjs';
 
 const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0';
@@ -137,7 +137,16 @@ export async function runAudit({
   const usableTranscripts = fetchedSources.filter((s) => s.source_type === 'transcript' && s.fetch_ok);
   const usableOfficial = fetchedSources.filter((s) => s.source_type === 'official_release' && s.fetch_ok);
 
-  const coverage = buildStrikeCoverage({ strikes: board.strikes, sources: fetchedSources.filter((s) => s.fetch_ok) });
+  // Real historical Kalshi hit/miss coverage from the price-free settled store
+  // (route-neutral term join). Empty for series with no prior board (Kroger),
+  // which preserves the verified no-prior-board path exactly.
+  const historyRecords = await loadHistory({ stateRoot, seriesTicker });
+
+  const coverage = buildStrikeCoverage({
+    strikes: board.strikes,
+    sources: fetchedSources.filter((s) => s.fetch_ok),
+    history: historyRecords,
+  });
 
   // Reuse the source ladder to classify evidence trust for the event.
   const ladder = evaluateSourceLadder({
@@ -187,8 +196,12 @@ export async function runAudit({
       settled_count: history.settled_count,
       closed_count: history.closed_count,
       prior_board_count: history.settled_count + history.closed_count,
+      stored_history_records: historyRecords.length,
+      history_covered_strikes: coverage.summary.history_covered_strikes ?? 0,
       errors: history.errors,
-      note: 'No prior settled/closed Kalshi board exists for this series; stored-history coverage is structurally unavailable.',
+      note: historyRecords.length
+        ? 'Prior settled-history records joined into strike coverage (route-neutral term match; price-free).'
+        : 'No prior settled/closed Kalshi board exists for this series; stored-history coverage is structurally unavailable.',
     },
     sources: fetchedSources.map(({ text, ...rest }) => rest),
     source_ladder: {

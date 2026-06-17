@@ -336,6 +336,205 @@ export function buildHistoryMatch({
 }
 
 /**
+ * normalizeStrikeKey — pure, deterministic, route-neutral.
+ *
+ * Collapse any strike phrase / settlement strike_term to a comparable key:
+ * lowercase, non-alphanumeric runs → single space, trimmed. Never reads or
+ * emits price/bid/ask/volume/etc. — it only sees the term text.
+ *
+ *   "SNAP / Food Stamp" -> "snap   food stamp" pieces; see strikeMatchKeys
+ *   "GLP-1"             -> "glp 1"
+ *   "tariff"           -> "tariff"
+ */
+export function normalizeStrikeKey(term) {
+  return String(term ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Candidate match keys for one current strike. Slash-alternatives each become a
+// key (so "SNAP / Food Stamp" matches a prior board strike of either "SNAP" or
+// "Food Stamp"), plus the whole-phrase key as a fallback.
+function strikeMatchKeys(strikePhrase) {
+  const phrase = String(strikePhrase ?? '');
+  const parts = phrase.includes('/') ? phrase.split('/') : [phrase];
+  const keys = new Set();
+  for (const p of parts) {
+    const k = normalizeStrikeKey(p);
+    if (k) keys.add(k);
+  }
+  const whole = normalizeStrikeKey(phrase);
+  if (whole) keys.add(whole);
+  return keys;
+}
+
+function settlementOf(rec) {
+  const s = rec?.settlement_result;
+  if (SETTLEMENT_RESULTS.includes(s)) return s;
+  const r = rec?.result;
+  if (r === 'yes') return 'resolved_yes';
+  if (r === 'no') return 'resolved_no';
+  return 'unresolved';
+}
+
+function toMs(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : null;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * joinMentionHistoryCoverage — pure, deterministic, route-neutral primitive.
+ *
+ * Joins current-board strikes against prior SANITIZED settled-history records
+ * (the price-free store produced by sanitizeSettledRecord) and reports, per
+ * strike, how the historical Kalshi board actually resolved. This replaces the
+ * hardwired "prior_board_seen=false / all-zero / needs_fresh=true" assumption
+ * with real hit/miss/ambiguous counts whenever history exists.
+ *
+ * Matching is term-only and deterministic (normalizeStrikeKey). It NEVER reads
+ * price/bid/ask/volume/open-interest — those fields are not consulted and never
+ * appear in the output rows. Optional route/entity/horizon metadata acts as an
+ * additional filter (lenient: a record passes if it lacks the field), so any
+ * submarket — earnings, political, sports, TV — flows through unchanged.
+ *
+ * @param {object} opts
+ * @param {Array<{ticker,strike}>} opts.strikes       current-board strikes
+ * @param {Array<object>}          opts.history        prior sanitized records
+ * @param {string|null} opts.route                     optional route filter
+ * @param {string|null} opts.entity                    optional entity filter
+ * @param {string|null} opts.horizon                   optional horizon filter
+ * @param {string|number|Date|null} opts.now           reference "now" (default Date.now)
+ * @param {number} opts.staleAfterDays                 resolved history older than
+ *                                                     this is stale (default 400)
+ * @param {number} opts.ambiguousThreshold             soft/total ratio at/above
+ *                                                     which a strike is treated as
+ *                                                     ambiguous-heavy (default 0.5)
+ * @param {boolean} opts.includeMatchedTickers         attach bounded, price-free
+ *                                                     matched market_ticker list
+ *
+ * Per-strike output row keys: ticker, strike, prior_board_seen, resolved_yes,
+ * resolved_no, ednq, ambiguous, unresolved, matching_history_count,
+ * history_status, history_confidence, needs_fresh_source_fetch, reason.
+ */
+export function joinMentionHistoryCoverage({
+  strikes = [],
+  history = [],
+  route = null,
+  entity = null,
+  horizon = null,
+  now = null,
+  staleAfterDays = 400,
+  ambiguousThreshold = 0.5,
+  includeMatchedTickers = false,
+} = {}) {
+  const nowMs = toMs(now) ?? Date.now();
+  const metaPass = (rec) => {
+    if (route != null && rec.route != null && rec.route !== route) return false;
+    if (entity != null && rec.entity != null && rec.entity !== entity) return false;
+    if (horizon != null && rec.horizon != null && rec.horizon !== horizon) return false;
+    return true;
+  };
+  const usable = (Array.isArray(history) ? history : []).filter(metaPass);
+
+  const rows = (Array.isArray(strikes) ? strikes : []).map(({ ticker, strike }) => {
+    const keys = strikeMatchKeys(strike);
+    const matched = usable.filter((rec) => keys.has(normalizeStrikeKey(rec.strike_term)));
+
+    const counts = { resolved_yes: 0, resolved_no: 0, ednq: 0, ambiguous: 0, unresolved: 0 };
+    let newestResolvedMs = null;
+    for (const rec of matched) {
+      const s = settlementOf(rec);
+      counts[s] += 1;
+      if (s === 'resolved_yes' || s === 'resolved_no') {
+        const ms = toMs(rec.event_date);
+        if (ms != null && (newestResolvedMs == null || ms > newestResolvedMs)) newestResolvedMs = ms;
+      }
+    }
+
+    const matchingCount = matched.length;
+    const resolvedCount = counts.resolved_yes + counts.resolved_no;
+    const softCount = counts.ednq + counts.ambiguous + counts.unresolved;
+    const freshResolved =
+      resolvedCount > 0 && newestResolvedMs != null && (nowMs - newestResolvedMs) <= staleAfterDays * DAY_MS;
+    const ambiguousHeavy = matchingCount > 0 && softCount / matchingCount >= ambiguousThreshold;
+
+    let historyStatus;
+    let historyConfidence;
+    let needsFresh;
+    let reason;
+    if (matchingCount === 0) {
+      historyStatus = 'no_history';
+      historyConfidence = 'none';
+      needsFresh = true;
+      reason = 'no prior settled board matched this strike; fresh source fetch required';
+    } else if (resolvedCount === 0) {
+      historyStatus = 'unresolved_only';
+      historyConfidence = 'none';
+      needsFresh = true;
+      reason = `prior board matched ${matchingCount} record(s) but none resolved yes/no (ednq/ambiguous/unresolved); fresh source fetch required`;
+    } else if (ambiguousHeavy) {
+      historyStatus = 'ambiguous_heavy';
+      historyConfidence = 'low';
+      needsFresh = true;
+      reason = `prior board mostly soft outcomes (${softCount}/${matchingCount} ednq/ambiguous/unresolved); fresh source fetch required`;
+    } else if (!freshResolved) {
+      historyStatus = 'stale';
+      historyConfidence = 'low';
+      needsFresh = true;
+      reason = `resolved history present (${counts.resolved_yes}Y/${counts.resolved_no}N) but older than ${staleAfterDays}d; fresh source fetch required`;
+    } else {
+      historyStatus = 'resolved_fresh';
+      historyConfidence = 'high';
+      needsFresh = false;
+      reason = `confident resolved history (${counts.resolved_yes}Y/${counts.resolved_no}N) within ${staleAfterDays}d; no fresh source fetch required`;
+    }
+
+    const row = {
+      ticker: ticker ?? null,
+      strike: strike ?? null,
+      prior_board_seen: matchingCount > 0,
+      resolved_yes: counts.resolved_yes,
+      resolved_no: counts.resolved_no,
+      ednq: counts.ednq,
+      ambiguous: counts.ambiguous,
+      unresolved: counts.unresolved,
+      matching_history_count: matchingCount,
+      history_status: historyStatus,
+      history_confidence: historyConfidence,
+      needs_fresh_source_fetch: needsFresh,
+      reason,
+    };
+    if (includeMatchedTickers) {
+      row.matched_history_tickers = matched
+        .map((r) => r.market_ticker)
+        .filter((t) => typeof t === 'string' && t.length > 0)
+        .slice(0, 10);
+    }
+    return row;
+  });
+
+  const summary = {
+    strike_count: rows.length,
+    history_covered_strikes: rows.filter((r) => r.prior_board_seen).length,
+    confident_history_strikes: rows.filter((r) => r.history_status === 'resolved_fresh').length,
+    needs_fresh_source_fetch_strikes: rows.filter((r) => r.needs_fresh_source_fetch).length,
+    total_history_records: usable.length,
+  };
+
+  const out = { rows, summary };
+  // Defense in depth: nothing price-shaped may ride out of the join.
+  assertNoForbiddenFields(out, 'joinMentionHistoryCoverage output');
+  return out;
+}
+
+/**
  * historyToLayerScore — convert a match into a historical_tendency layer
  * record compatible with composeMentionLedger (mention-composite-core).
  */

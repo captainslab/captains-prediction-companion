@@ -13,6 +13,8 @@ import {
   loadHistory,
   buildHistoryMatch,
   historyToLayerScore,
+  joinMentionHistoryCoverage,
+  normalizeStrikeKey,
 } from '../scripts/mentions/settled-history.mjs';
 import { composeMentionLedger } from '../scripts/mentions/mention-composite-core.mjs';
 
@@ -293,6 +295,151 @@ test('historyToLayerScore output passes mention-composite-core pricing guard', (
   });
   assert.equal(result.evidence_ledger[0].present, true);
   assert.equal(result.evidence_ledger[0].value, layer.score);
+});
+
+// --- joinMentionHistoryCoverage (route-neutral history coverage join) -------
+
+// Fixture history records for an earnings-mention series with a prior board.
+// event_date is recent relative to the fixed NOW below.
+const NOW = '2026-06-15T00:00:00Z';
+function hrec(overrides = {}) {
+  return {
+    market_ticker: 'MK',
+    event_ticker: 'KXEARNINGSMENTIONACME-26MAR10',
+    series_ticker: 'KXEARNINGSMENTIONACME',
+    strike_term: 'tariff',
+    settlement_result: 'resolved_yes',
+    result: 'yes',
+    event_date: '2026-06-10T23:00:00Z',
+    route: 'earnings_mentions',
+    entity: 'acme',
+    horizon: 'event',
+    ...overrides,
+  };
+}
+
+test('normalizeStrikeKey collapses case, slashes, hyphens deterministically', () => {
+  assert.equal(normalizeStrikeKey('GLP-1'), 'glp 1');
+  assert.equal(normalizeStrikeKey('Tariff'), 'tariff');
+  assert.equal(normalizeStrikeKey('  SNAP  '), 'snap');
+});
+
+test('joinMentionHistoryCoverage joins resolved_yes/resolved_no history into strike rows', () => {
+  const strikes = [
+    { ticker: 'T-TARI', strike: 'Tariff' },
+    { ticker: 'T-AI', strike: 'AI / Artificial Intelligence' },
+  ];
+  const history = [
+    hrec({ market_ticker: 'A', strike_term: 'tariff', settlement_result: 'resolved_yes', result: 'yes' }),
+    hrec({ market_ticker: 'B', strike_term: 'tariff', settlement_result: 'resolved_no', result: 'no' }),
+    hrec({ market_ticker: 'C', strike_term: 'Artificial Intelligence', settlement_result: 'resolved_yes', result: 'yes' }),
+  ];
+  const { rows, summary } = joinMentionHistoryCoverage({ strikes, history, now: NOW });
+
+  const tari = rows.find((r) => r.strike === 'Tariff');
+  assert.equal(tari.prior_board_seen, true);
+  assert.equal(tari.resolved_yes, 1);
+  assert.equal(tari.resolved_no, 1);
+  assert.equal(tari.matching_history_count, 2);
+
+  // slash-alternative joins on either side of the "/"
+  const ai = rows.find((r) => r.strike === 'AI / Artificial Intelligence');
+  assert.equal(ai.prior_board_seen, true);
+  assert.equal(ai.resolved_yes, 1);
+
+  assert.equal(summary.history_covered_strikes, 2);
+});
+
+test('joinMentionHistoryCoverage: ednq/ambiguous/unresolved do not become confident history', () => {
+  const strikes = [{ ticker: 'T-X', strike: 'Buyback' }];
+  const history = [
+    hrec({ market_ticker: 'A', strike_term: 'buyback', settlement_result: 'ednq', result: null }),
+    hrec({ market_ticker: 'B', strike_term: 'buyback', settlement_result: 'ambiguous', result: null }),
+    hrec({ market_ticker: 'C', strike_term: 'buyback', settlement_result: 'unresolved', result: null }),
+  ];
+  const { rows } = joinMentionHistoryCoverage({ strikes, history, now: NOW });
+  const x = rows[0];
+  assert.equal(x.prior_board_seen, true);
+  assert.equal(x.resolved_yes, 0);
+  assert.equal(x.resolved_no, 0);
+  assert.equal(x.ednq, 1);
+  assert.equal(x.ambiguous, 1);
+  assert.equal(x.unresolved, 1);
+  assert.equal(x.history_status, 'unresolved_only');
+  assert.notEqual(x.history_confidence, 'high');
+  assert.equal(x.needs_fresh_source_fetch, true); // soft outcomes never confident
+});
+
+test('joinMentionHistoryCoverage: fresh resolved history marks needs_fresh_source_fetch=false', () => {
+  const strikes = [{ ticker: 'T-TARI', strike: 'Tariff' }];
+  const history = [
+    hrec({ market_ticker: 'A', strike_term: 'tariff', settlement_result: 'resolved_yes', result: 'yes', event_date: '2026-06-10T00:00:00Z' }),
+    hrec({ market_ticker: 'B', strike_term: 'tariff', settlement_result: 'resolved_no', result: 'no', event_date: '2026-06-01T00:00:00Z' }),
+  ];
+  const { rows } = joinMentionHistoryCoverage({ strikes, history, now: NOW, staleAfterDays: 400 });
+  assert.equal(rows[0].history_status, 'resolved_fresh');
+  assert.equal(rows[0].history_confidence, 'high');
+  assert.equal(rows[0].needs_fresh_source_fetch, false);
+
+  // same records but stale relative to a far-future NOW → fresh fetch required
+  const stale = joinMentionHistoryCoverage({ strikes, history, now: '2030-01-01T00:00:00Z', staleAfterDays: 400 });
+  assert.equal(stale.rows[0].history_status, 'stale');
+  assert.equal(stale.rows[0].needs_fresh_source_fetch, true);
+});
+
+test('joinMentionHistoryCoverage: new/no-history strikes still require fresh source fetch', () => {
+  const strikes = [
+    { ticker: 'T-TARI', strike: 'Tariff' },
+    { ticker: 'T-NEW', strike: 'Brand New Topic' },
+  ];
+  const history = [hrec({ market_ticker: 'A', strike_term: 'tariff', settlement_result: 'resolved_yes', result: 'yes' })];
+  const { rows } = joinMentionHistoryCoverage({ strikes, history, now: NOW });
+  const fresh = rows.find((r) => r.strike === 'Brand New Topic');
+  assert.equal(fresh.prior_board_seen, false);
+  assert.equal(fresh.matching_history_count, 0);
+  assert.equal(fresh.history_status, 'no_history');
+  assert.equal(fresh.needs_fresh_source_fetch, true);
+});
+
+test('joinMentionHistoryCoverage: price-like fields in history are never read into coverage rows', () => {
+  const strikes = [{ ticker: 'T-TARI', strike: 'Tariff' }];
+  // Deliberately dirty fixtures carrying price-shaped keys. The join must never
+  // surface them; assertNoForbiddenFields on the output must not throw.
+  const history = [
+    { ...hrec({ market_ticker: 'A', strike_term: 'tariff', settlement_result: 'resolved_yes', result: 'yes' }), yes_bid: 62, volume: 9000, open_interest: 12, last_price: 63 },
+    { ...hrec({ market_ticker: 'B', strike_term: 'tariff', settlement_result: 'resolved_no', result: 'no' }), liquidity: 5000, spread_cents: 2 },
+  ];
+  const out = joinMentionHistoryCoverage({ strikes, history, now: NOW });
+  const json = JSON.stringify(out);
+  assert.equal(FORBIDDEN_SCAN.test(json), false, `forbidden field surfaced: ${json}`);
+  assert.doesNotMatch(json, /yes_bid|open_interest|last_price|liquidity|"volume"|spread/);
+  assert.doesNotThrow(() => assertNoForbiddenFields(out, 'join output'));
+  // counts still correct despite dirty input
+  assert.equal(out.rows[0].resolved_yes, 1);
+  assert.equal(out.rows[0].resolved_no, 1);
+});
+
+test('joinMentionHistoryCoverage: non-earnings route metadata passes through without hardwire', () => {
+  const strikes = [{ ticker: 'KXTRUMPMENTION-X', strike: 'tariff' }];
+  const history = [
+    rec({ market_ticker: 'A', strike_term: 'tariff', result: 'yes', settlement_result: 'resolved_yes', route: 'political_mentions', entity: 'trump', horizon: 'weekly', event_date: '2026-06-10' }),
+    rec({ market_ticker: 'B', strike_term: 'tariff', result: 'no', settlement_result: 'resolved_no', route: 'political_mentions', entity: 'trump', horizon: 'weekly', event_date: '2026-06-08' }),
+  ];
+  const { rows } = joinMentionHistoryCoverage({
+    strikes, history, route: 'political_mentions', entity: 'trump', horizon: 'weekly', now: NOW,
+  });
+  assert.equal(rows[0].prior_board_seen, true);
+  assert.equal(rows[0].resolved_yes, 1);
+  assert.equal(rows[0].resolved_no, 1);
+  assert.equal(rows[0].history_status, 'resolved_fresh');
+  assert.equal(rows[0].needs_fresh_source_fetch, false);
+
+  // metadata filter excludes records from a different route
+  const otherRoute = joinMentionHistoryCoverage({
+    strikes, history, route: 'sports_mentions', now: NOW,
+  });
+  assert.equal(otherRoute.rows[0].prior_board_seen, false);
+  assert.equal(otherRoute.rows[0].history_status, 'no_history');
 });
 
 test('penalty math: same_family 1.0 → 85, broader 1.0 → 70', () => {

@@ -129,6 +129,55 @@ test('buildStrikeCoverage generalizes to a non-Kroger earnings event', () => {
   assert.equal(assertNoPriceFields({ rows, summary }), true);
 });
 
+// Integration: buildStrikeCoverage joins real settled history when supplied,
+// and otherwise preserves the verified no-prior-board path byte-for-byte.
+test('buildStrikeCoverage joins real history counts when history records are supplied', () => {
+  const strikes = [
+    { ticker: 'KXEARNINGSMENTIONACME-OCAD', strike: 'Ocado' },
+    { ticker: 'KXEARNINGSMENTIONACME-TARI', strike: 'Tariff' },
+  ];
+  const sources = [
+    { label: 'Q4', quarter: 'Q4', source_type: 'transcript', source_url: 'https://x/q4', text: FIXTURE_Q4 },
+  ];
+  const history = [
+    { market_ticker: 'A', strike_term: 'ocado', settlement_result: 'resolved_yes', result: 'yes', event_date: '2026-06-10T00:00:00Z' },
+    { market_ticker: 'B', strike_term: 'ocado', settlement_result: 'resolved_no', result: 'no', event_date: '2026-06-01T00:00:00Z' },
+  ];
+  const { rows, summary } = buildStrikeCoverage({
+    strikes,
+    sources,
+    history,
+    historyOptions: { now: '2026-06-15T00:00:00Z', staleAfterDays: 400 },
+  });
+
+  const ocado = rows.find((r) => r.strike === 'Ocado');
+  assert.equal(ocado.prior_board_seen, true);
+  assert.equal(ocado.resolved_yes, 1);
+  assert.equal(ocado.resolved_no, 1);
+  assert.equal(ocado.matching_history_count, 2);
+  assert.equal(ocado.history_status, 'resolved_fresh');
+  assert.equal(ocado.needs_fresh_source_fetch, false); // confident fresh history
+
+  const tari = rows.find((r) => r.strike === 'Tariff');
+  assert.equal(tari.prior_board_seen, false); // no matching history
+  assert.equal(tari.needs_fresh_source_fetch, true);
+
+  assert.equal(summary.history_covered_strikes, 1);
+  assert.equal(assertNoPriceFields({ rows, summary }), true);
+});
+
+test('buildStrikeCoverage with no history preserves prior no-board path exactly', () => {
+  const sources = [
+    { label: 'Q4', quarter: 'Q4', source_type: 'transcript', source_url: 'https://x/q4', text: FIXTURE_Q4 },
+  ];
+  const { rows, summary } = buildStrikeCoverage({ strikes: STRIKES, sources });
+  assert.ok(rows.every((r) => r.prior_board_seen === false && r.needs_fresh_source_fetch === true));
+  assert.ok(rows.every((r) => r.resolved_yes === 0 && r.resolved_no === 0));
+  // no history fields leak in when history is absent
+  assert.ok(rows.every((r) => !('history_status' in r) && !('matching_history_count' in r)));
+  assert.equal('history_covered_strikes' in summary, false);
+});
+
 test('assertNoPriceFields throws on price-shaped keys', () => {
   assert.throws(() => assertNoPriceFields({ yes_bid: 5 }), /forbidden price-shaped key/);
   assert.equal(assertNoPriceFields({ strike: 'Ocado', hit: true }), true);
