@@ -16,9 +16,12 @@ import {
 } from '../scripts/shared/decision-process.mjs';
 import {
   buildKalshiEventPacket,
+  buildCompositeCard,
   PACKET_TYPE,
   weekendDates,
 } from '../scripts/packets/generate-ufc-weekly.mjs';
+import { renderUfcPacket } from '../scripts/ufc/lib/packet-renderer.mjs';
+import { renderUfcModelScores } from '../scripts/ufc/lib/model-score-matrix.mjs';
 
 // ─── 1. Cron expression: Saturday 9:00 AM server time ─────────────────────
 
@@ -256,6 +259,72 @@ test('UFC compact packet never claims PICK or EVIDENCE_LEAN', () => {
     /decision_status: (?:PICK|EVIDENCE[_ ]LEAN|STRONG EVIDENCE[_ ]LEAN)/m,
     'compact BLOCKED packet must not claim PICK or EVIDENCE_LEAN',
   );
+});
+
+test('UFC composite path keeps raw prices out of the customer packet', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'ufc-cron-composite-'));
+  try {
+    const cacheDir = join(tempDir, 'ufc', 'sources');
+    mkdirSync(cacheDir, { recursive: true });
+    const fighterA = { slpm: 5.1, str_acc: 56, sapm: 3.2, str_def: 59, td_avg: 2.1, td_acc: 49, td_def: 73, sub_avg: 0.7, height: '5\' 11"', reach: 73, stance: 'Switch', record: { wins: 13, losses: 2, draws: 0 }, fights: [{ result: 'win', method: 'KO/TKO' }] };
+    const fighterB = { slpm: 2.7, str_acc: 39, sapm: 5.1, str_def: 42, td_avg: 0.7, td_acc: 28, td_def: 44, sub_avg: 0.2, height: '5\' 8"', reach: 68, stance: 'Orthodox', record: { wins: 8, losses: 5, draws: 0 }, fights: [{ result: 'loss', method: 'U-DEC' }] };
+    writeFileSync(join(cacheDir, 'alpha.json'), JSON.stringify({ stats: fighterA }), 'utf8');
+    writeFileSync(join(cacheDir, 'beta.json'), JSON.stringify({ stats: fighterB }), 'utf8');
+
+    const winner = priceOnlyUfcEvent();
+    winner.markets[0].yes_sub_title = 'Alpha';
+    winner.markets[0].no_sub_title = 'Beta';
+    winner.markets[0].ticker = 'KXUFCFIGHT-99JAN03ALPBET-ALPHA';
+    winner.markets.push({
+      ticker: 'KXUFCFIGHT-99JAN03ALPBET-BETA',
+      event_ticker: winner.event_ticker,
+      title: 'Will Beta beat Alpha?',
+      subtitle: 'Beta',
+      yes_sub_title: 'Beta',
+      no_sub_title: 'Alpha',
+      yes_bid_dollars: '0.55',
+      yes_ask_dollars: '0.58',
+      no_bid_dollars: '0.42',
+      no_ask_dollars: '0.45',
+      last_price_dollars: '0.56',
+      liquidity_dollars: '1200.00',
+      volume_fp: '150',
+      open_interest_fp: '80',
+      close_time: '2099-01-03T23:00:00Z',
+      expected_expiration_time: '2099-01-03T23:00:00Z',
+    });
+    const composite = buildCompositeCard({
+      kalshiEvents: [winner],
+      allLaneEvents: [
+        winner,
+        { event_ticker: 'KXUFCMOV-99JAN03ALPBET', title: 'Alpha vs Beta: Method of Victory', markets: [{ ticker: 'MOV' }] },
+        { event_ticker: 'KXUFCDISTANCE-99JAN03ALPBET', title: 'Alpha vs Beta: To Go The Distance', markets: [{ ticker: 'DIST' }] },
+        { event_ticker: 'KXUFCVICROUND-99JAN03ALPBET', title: 'Alpha vs Beta: Round of Victory', markets: [{ ticker: 'VIC' }] },
+        { event_ticker: 'KXUFCROUNDS-99JAN03ALPBET', title: 'Alpha vs Beta: Round of Finish', markets: [{ ticker: 'ROF' }] },
+        { event_ticker: 'KXUFCMOF-99JAN03ALPBET', title: 'Alpha vs Beta: Method of Finish', markets: [{ ticker: 'MOF' }] },
+      ],
+      cacheDir,
+      date: '2099-01-03',
+    });
+
+    const packetText = renderUfcPacket({
+      cardTitle: composite.cardTitle,
+      date: '2099-01-03',
+      card: { fights: composite.fights },
+      sources: ['UFCStats.com'],
+    });
+    const matrixText = renderUfcModelScores({
+      cardTitle: composite.cardTitle,
+      date: '2099-01-03',
+      card: { fights: composite.fights },
+    });
+
+    assert.match(packetText, /captured lanes:/);
+    assert.doesNotMatch(packetText, /bid=|ask=|last=|vol=/);
+    assert.doesNotMatch(matrixText, /bid=|ask=|last=|vol=/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('UFC packet TLDR note denies evidence lean without fighter context', () => {
