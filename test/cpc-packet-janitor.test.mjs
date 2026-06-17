@@ -372,25 +372,44 @@ test('cache-only disclosure is downgraded to a warning', async () => {
   }
 });
 
-test('mentions source-health artifacts under research are discovered by Janitor', async () => {
+test('mentions source-health artifacts under research are isolated from blocker artifacts', async () => {
   const root = tempRoot();
   try {
     const date = '2099-01-15';
     const file = writePacket(root, `packets/${date}/mentions-daily/packet.txt`);
-    await makeProducerCacheHit({
-      root,
-      date,
+    const now = new Date().toISOString();
+    const researchDir = join(root, 'mentions', date, 'research');
+    mkdirSync(researchDir, { recursive: true });
+    writeFileSync(join(researchDir, 'event.source-health.json'), JSON.stringify({
+      schema: 'mentions_source_health_v1',
       url: 'https://official.gov/transcript',
-    });
+      generated_utc: now,
+      checked_at_utc: now,
+      provider: 'firecrawl',
+      status: 'ok',
+      http_status: 200,
+      error_code: null,
+      retry_count: 0,
+      cache_status: 'live',
+      used_in_score: false,
+      required: true,
+      fallback_used: false,
+      disclosure_required: false,
+      source_status: 'SOURCE_FETCHED',
+      fetch_method: 'normal',
+      text_cached: true,
+      records: [{ event_ticker: 'KXWCMENTION-26JUN12USAMEX' }],
+    }));
+    mkdirSync(join(root, 'mentions', date, 'blockers'), { recursive: true });
+    writeFileSync(join(root, 'mentions', date, 'blockers', 'event.watch.json'), JSON.stringify({ reason: 'FETCH_SOURCE_MISSING' }));
     const result = inspectPacketFile(file, {
       stateRoot: root,
       date,
       packetType: 'mentions-daily',
       requireSourceHealth: true,
     });
-    assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
-    assert.ok(result.source_health.some((entry) => entry.path.endsWith('.source-health.json')));
-    assert.ok(result.source_health.some((entry) => entry.code === 'FETCH_CACHE_ONLY'));
+    assert.equal(result.verdict, DELIVERY_VERDICTS.SEND_ALLOWED);
+    assert.equal(result.errors.some((err) => err.code === 'FETCH_SOURCE_MISSING'), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -538,8 +557,9 @@ test('sender live path prevents Telegram env lookup when janitor blocks', () => 
       encoding: 'utf8',
       env: { ...process.env, TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', TELEGRAM_HOME_CHANNEL: '' },
     });
-    assert.equal(result.status, 0, result.stderr);
+    assert.notEqual(result.status, 0, result.stderr);
     assert.match(result.stderr, /JANITOR_BLOCKED/);
+    assert.match(result.stderr, /janitor blocked sole packet/i);
     assert.doesNotMatch(result.stderr + result.stdout, /telegram env missing/);
   } finally {
     rmSync(root, { recursive: true, force: true });

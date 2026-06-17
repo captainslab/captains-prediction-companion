@@ -11,6 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -190,6 +191,42 @@ test('sender --only with no matching packet exits 0 and logs clearly', () => {
     onlyStems: new Set([`${date}-MISSING`]),
   });
   assert.deepEqual(filtered, []);
+});
+
+test('sender fails closed when janitor blocks the only candidate packet', () => {
+  const date = '2099-01-04';
+  const { root, dir } = makePacketDir(date);
+  const stem = `${date}-KXTEST-BLOCKED`;
+  writeFileSync(join(dir, `${stem}.txt`), [
+    'Event title: Example blocked packet',
+    'Date/time: 2099-01-04',
+    'Setup: LOW-SOURCE WATCH only -- no pick.',
+    `Watch-only terms: ${stem} - LOW-SOURCE WATCH only -- no pick.`,
+    'Market Context - NOT IN SCORE: bid/ask context only.',
+    'Research-only footer: No trades placed. Research-only.',
+  ].join('\n'));
+
+  const fetchStub = join(root, 'fetch-stub.cjs');
+  writeFileSync(fetchStub, 'global.fetch = async () => { throw new Error("network should not be called after janitor block"); };\n');
+
+  const result = spawnSync(process.execPath, [
+    '--require', fetchStub,
+    join(process.cwd(), 'scripts/packets/send-packets-telegram.mjs'),
+    '--date', date,
+    '--state-root', root,
+    '--type', 'mentions-daily',
+  ], {
+    env: {
+      ...process.env,
+      TELEGRAM_BOT_TOKEN: 'token',
+      TELEGRAM_CHAT_ID: 'chat',
+    },
+    encoding: 'utf8',
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /janitor blocked sole packet/i);
+  assert.equal(result.stdout.includes('delivered='), false);
 });
 
 test('sender skips already-delivered packets via the ledger in dry-run too', () => {

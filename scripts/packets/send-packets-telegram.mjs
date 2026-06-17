@@ -327,6 +327,7 @@ async function main() {
 
   let sent = 0;
   let skipped = 0;
+  const blockedEntries = [];
   for (const entry of plan) {
     if (entry.name === `${date}-no-events`) continue;
     if (ledger.delivered[entry.name] && !force) {
@@ -349,6 +350,7 @@ async function main() {
       });
       if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
         console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        blockedEntries.push(entry.name);
         continue;
       }
       const deliveryPath = janitor?.repaired_path ?? filePath;
@@ -397,6 +399,7 @@ async function main() {
       });
       if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
         console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        blockedEntries.push(entry.name);
         continue;
       }
       const deliveryPath = janitor?.repaired_path ?? filePath;
@@ -417,6 +420,9 @@ async function main() {
     saveLedger(ledgerPath, ledger);
     sent += 1;
     console.log(`sent ${entry.name} — ${ids.length} message(s)`);
+  }
+  if (plan.length === 1 && blockedEntries.length === 1 && sent === 0) {
+    throw new Error(`janitor blocked sole packet ${blockedEntries[0]}`);
   }
   console.log(`${packetType} ${date}: delivered=${sent} skipped_already_delivered=${skipped} total_packets=${plan.length}`);
 }

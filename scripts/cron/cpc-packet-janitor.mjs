@@ -283,7 +283,7 @@ function discoverSourceHealthPaths(context) {
   } else if (sport === 'mentions') {
     paths.push(...listJsonFiles(resolve(stateRoot, 'mentions', date, 'sources')));
     paths.push(...listJsonFiles(resolve(stateRoot, 'mentions', date, 'research')));
-    paths.push(...listJsonFiles(resolve(stateRoot, 'mentions', date, 'blockers')));
+    // Blocker artifacts are delivery outcomes, not source-health inputs.
   }
   return [...new Set(paths)].filter((p) => existsSync(p));
 }
