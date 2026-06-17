@@ -151,6 +151,56 @@ test('detects entertainment_reality route', () => {
   assert.equal(res.route, 'entertainment_reality');
 });
 
+test('detects fed_agency route (FOMC/Powell/testimony)', () => {
+  const event = fixture({
+    event_ticker: 'KXFEDMENTION-26JUN18',
+    series_ticker: 'KXFEDMENTION',
+    title: 'What will Powell say during FOMC testimony?',
+    markets: [{ title: 'Mentions "inflation"', rules_primary: 'Resolves YES if the Fed chair says inflation during the FOMC press conference.' }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.equal(res.route, 'fed_agency');
+  assert.equal(res.profile_key, 'political_mentions');
+  assert.equal(res.basis, 'fed_agency_terms');
+});
+
+test('detects debate_hearing route (debate/hearing/witness/candidate, non-Trump)', () => {
+  const event = fixture({
+    event_ticker: 'KXDEBATEMENTION-26JUN20',
+    series_ticker: 'KXDEBATEMENTION',
+    title: 'What will the candidates say during the primary debate?',
+    markets: [{ title: 'Mentions "economy"', rules_primary: 'Resolves YES if a witness or candidate says economy during the hearing.' }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.equal(res.route, 'debate_hearing');
+  assert.equal(res.profile_key, 'political_mentions');
+  assert.equal(res.basis, 'debate_hearing_terms');
+});
+
+test('detects topic_most_mentioned route (most-mentioned/word-bank/topic-count)', () => {
+  const event = fixture({
+    event_ticker: 'KXTOPICMENTION-26JUN21',
+    series_ticker: 'KXTOPICMENTION',
+    title: 'Which topic will be mentioned most this period?',
+    markets: [{ title: 'Most mentioned word', rules_primary: 'Resolves YES for the word from the word bank said the most times.' }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.equal(res.route, 'topic_most_mentioned');
+  assert.equal(res.profile_key, 'political_mentions');
+  assert.equal(res.basis, 'topic_most_mentioned_terms');
+});
+
+test('Trump + debate still routes trump_event, not debate_hearing (new routes keep trump stable)', () => {
+  const event = fixture({
+    event_ticker: 'KXTRUMPMENTION-26JUN22',
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Trump say during the debate?',
+    markets: [{ title: 'Mentions "crooked"', close_time: isoDaysOut(10) }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.equal(res.route, 'trump_event');
+});
+
 test('default fallback is political_general', () => {
   const event = fixture({
     event_ticker: 'KXMYSTERYMENTION-26JUN12',
@@ -172,11 +222,14 @@ test('ROUTE_TO_PROFILE maps exactly as specced and covers all routes', () => {
     trump_monthly: 'political_mentions',
     talk_show_media: 'political_mentions',
     entertainment_reality: 'political_mentions',
+    fed_agency: 'political_mentions',
+    debate_hearing: 'political_mentions',
+    topic_most_mentioned: 'political_mentions',
   });
   for (const route of RESEARCH_ROUTES) {
     assert.ok(Object.hasOwn(ROUTE_TO_PROFILE, route), `missing mapping for ${route}`);
   }
-  assert.equal(RESEARCH_ROUTES.length, 8);
+  assert.equal(RESEARCH_ROUTES.length, 11);
 });
 
 test('resolver is deterministic for identical input', () => {

@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
   HISTORY_FORBIDDEN_FIELDS,
+  assertNoForbiddenFields,
   sanitizeSettledRecord,
   historyStorePath,
   ingestSettledMarkets,
@@ -73,6 +74,84 @@ test('sanitizeSettledRecord strips pricing fields, keeps result/strike/date', ()
   assert.equal(out.series_ticker, 'KXTRUMPMENTION');
   assert.equal(out.route, 'political_mentions');
   assert.equal(out.entity, 'trump');
+});
+
+test('sanitizeSettledRecord maps result -> settlement_result (yes/no/void/missing)', () => {
+  assert.equal(sanitizeSettledRecord(rawMarket({ result: 'yes' })).settlement_result, 'resolved_yes');
+  assert.equal(sanitizeSettledRecord(rawMarket({ result: 'no' })).settlement_result, 'resolved_no');
+  assert.equal(sanitizeSettledRecord(rawMarket({ result: 'void' })).settlement_result, 'ednq');
+  assert.equal(sanitizeSettledRecord(rawMarket({ result: '' })).settlement_result, 'unresolved');
+
+  // result (yes/no/null) compatibility is preserved alongside settlement_result
+  const yes = sanitizeSettledRecord(rawMarket({ result: 'yes' }));
+  assert.equal(yes.result, 'yes');
+  const voided = sanitizeSettledRecord(rawMarket({ result: 'void' }));
+  assert.equal(voided.result, null);
+});
+
+test('sanitizeSettledRecord honors explicit settlement_result override', () => {
+  const out = sanitizeSettledRecord(rawMarket({ result: 'yes' }), { settlement_result: 'ambiguous' });
+  assert.equal(out.settlement_result, 'ambiguous');
+  assert.equal(out.result, 'yes');
+});
+
+test('sanitizeSettledRecord persists optional price-free proof/source/speaker/window fields', () => {
+  const out = sanitizeSettledRecord(rawMarket(), {
+    route: 'fed_agency',
+    market_url: 'https://kalshi.com/markets/KXTRUMPMENTION',
+    proof_url: 'https://www.c-span.org/clip/12345',
+    proof_source_named: 'C-SPAN',
+    eligible_speaker_set: ['Trump', 'Vance'],
+    source_scope: 'rally_broadcast',
+    event_window_start: '2026-06-10T18:00:00Z',
+    event_window_end: '2026-06-10T20:00:00Z',
+    speaker: 'Donald Trump',
+    rules_snapshot_hash: 'sha256:abc123',
+  });
+  assert.equal(out.market_url, 'https://kalshi.com/markets/KXTRUMPMENTION');
+  assert.equal(out.proof_url, 'https://www.c-span.org/clip/12345');
+  assert.equal(out.proof_source_named, 'C-SPAN');
+  assert.deepEqual(out.eligible_speaker_set, ['Trump', 'Vance']);
+  assert.equal(out.source_scope, 'rally_broadcast');
+  assert.equal(out.event_window_start, '2026-06-10T18:00:00Z');
+  assert.equal(out.event_window_end, '2026-06-10T20:00:00Z');
+  assert.equal(out.speaker, 'Donald Trump');
+  assert.equal(out.rules_snapshot_hash, 'sha256:abc123');
+});
+
+test('sanitizeSettledRecord strips forbidden pricing fields recursively from nested optional values', () => {
+  const out = sanitizeSettledRecord(rawMarket(), {
+    eligible_speaker_set: [
+      { name: 'Trump', volume: 999, last_price: 50 },
+      { name: 'Vance', odds: { yes_bid: 12, open_interest: 7 } },
+    ],
+    source_scope: { label: 'broadcast', liquidity: 1000, spread: 3 },
+  });
+  const json = JSON.stringify(out);
+  assert.equal(FORBIDDEN_SCAN.test(json), false, `forbidden field survived: ${json}`);
+  assert.doesNotMatch(json, /yes_bid|open_interest|last_price|liquidity|"volume"|"spread"/);
+  // non-forbidden siblings survive recursive sanitize
+  assert.equal(out.eligible_speaker_set[0].name, 'Trump');
+  assert.equal(out.eligible_speaker_set[1].name, 'Vance');
+  assert.equal(out.source_scope.label, 'broadcast');
+  // assertNoForbiddenFields must not throw on the produced record
+  assert.doesNotThrow(() => assertNoForbiddenFields(out, 'test record'));
+});
+
+test('ingestSettledMarkets output is deterministic except updated_utc timestamp', async () => {
+  const tmpA = await fs.mkdtemp(path.join(os.tmpdir(), 'settled-det-a-'));
+  const tmpB = await fs.mkdtemp(path.join(os.tmpdir(), 'settled-det-b-'));
+  const markets = [rawMarket(), rawMarket({ ticker: 'KX-2', result: 'no', yes_sub_title: 'border', title: 'border?' })];
+  const meta = { route: 'fed_agency', entity: 'trump', speaker: 'Donald Trump', proof_source_named: 'C-SPAN' };
+
+  const a = await ingestSettledMarkets({ rawMarkets: markets, eventMeta: meta, stateRoot: tmpA });
+  const b = await ingestSettledMarkets({ rawMarkets: markets, eventMeta: meta, stateRoot: tmpB });
+  assert.deepEqual(a.records, b.records);
+
+  const ca = JSON.parse(await fs.readFile(a.path, 'utf8'));
+  const cb = JSON.parse(await fs.readFile(b.path, 'utf8'));
+  assert.deepEqual(ca.records, cb.records);
+  assert.equal('updated_utc' in ca, true);
 });
 
 test('sanitizeSettledRecord throws when a forbidden field is requested explicitly', () => {

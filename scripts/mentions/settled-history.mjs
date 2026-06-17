@@ -37,6 +37,58 @@ function normalizeResult(raw) {
   return null;
 }
 
+// Framework-grade settlement taxonomy. `result` (yes/no/null) is kept for
+// backward compatibility; settlement_result is the richer, comparable label.
+export const SETTLEMENT_RESULTS = Object.freeze([
+  'resolved_yes', 'resolved_no', 'ednq', 'ambiguous', 'unresolved',
+]);
+
+// Optional, price-free fields copied through when present. Pulled from
+// eventMeta first, then the raw market. Values are deep-sanitized so no
+// forbidden key can ride in via a nested object/array.
+const OPTIONAL_PRICE_FREE_FIELDS = Object.freeze([
+  'market_url',
+  'source_url',
+  'proof_url',
+  'proof_source_named',
+  'eligible_speaker_set',
+  'source_scope',
+  'event_window_start',
+  'event_window_end',
+  'speaker',
+  'rules_snapshot_hash',
+]);
+
+function normalizeSettlementResult(rawMarket, eventMeta) {
+  const explicit = eventMeta?.settlement_result;
+  if (typeof explicit === 'string' && SETTLEMENT_RESULTS.includes(explicit)) {
+    return explicit;
+  }
+  const r = normalizeResult(rawMarket);
+  if (r === 'yes') return 'resolved_yes';
+  if (r === 'no') return 'resolved_no';
+  const raw = String(rawMarket?.result ?? rawMarket?.settlement ?? '').toLowerCase().trim();
+  if (raw === 'void' || raw === 'voided' || raw === 'cancelled' || raw === 'canceled') return 'ednq';
+  if (raw === 'ednq' || raw === 'no_contest') return 'ednq';
+  if (raw === 'ambiguous' || raw === 'disputed') return 'ambiguous';
+  return 'unresolved';
+}
+
+// Recursively strip any forbidden key (price/bid/ask/volume/liquidity/etc.)
+// from a value, walking objects and arrays. Non-container values pass through.
+function deepSanitize(value) {
+  if (Array.isArray(value)) return value.map(deepSanitize);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (isForbiddenKey(k)) continue;
+      out[k] = deepSanitize(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 /**
  * sanitizeSettledRecord — pure.
  *
@@ -69,11 +121,23 @@ export function sanitizeSettledRecord(rawMarket, eventMeta = {}) {
     category:      e.category ?? m.category ?? null,
     strike_term:   m.yes_sub_title ?? m.subtitle ?? m.custom_strike ?? m.title ?? null,
     result:        normalizeResult(m),
+    settlement_result: normalizeSettlementResult(m, e),
     route:         e.route ?? null,
     entity:        e.entity ?? null,
     horizon:       e.horizon ?? null,
     context:       [e.event_title ?? null, m.title ?? null].filter(Boolean).join(' — ') || null,
   };
+
+  // Optional, price-free enrichment fields: copied through only when present
+  // (eventMeta wins over the raw market). Deep-sanitized so a forbidden key
+  // nested inside an accepted value (e.g. eligible_speaker_set entries) can
+  // never survive.
+  for (const field of OPTIONAL_PRICE_FREE_FIELDS) {
+    let v = e[field];
+    if (v === undefined) v = m[field];
+    if (v === undefined || v === null) continue;
+    record[field] = deepSanitize(v);
+  }
 
   // Recursive defense: nothing forbidden may survive (whitelist construction
   // above means this should never trip, but verify anyway).

@@ -16,6 +16,9 @@ export const RESEARCH_ROUTES = Object.freeze([
   'trump_monthly',
   'talk_show_media',
   'entertainment_reality',
+  'fed_agency',
+  'debate_hearing',
+  'topic_most_mentioned',
 ]);
 
 export const ROUTE_TO_PROFILE = Object.freeze({
@@ -27,6 +30,10 @@ export const ROUTE_TO_PROFILE = Object.freeze({
   trump_monthly:         'political_mentions',
   talk_show_media:       'political_mentions',
   entertainment_reality: 'political_mentions',
+  // New routes reuse existing scoring profiles (no new profile surface).
+  fed_agency:            'political_mentions',
+  debate_hearing:        'political_mentions',
+  topic_most_mentioned:  'political_mentions',
 });
 
 // Reserved policy hook for future Trump Truth Social history work. Not used
@@ -48,6 +55,12 @@ const SPORTS_RE = /\b(announcer|commentator|commentary|pregame|postgame|espn|fox
 const TALK_SHOW_RE = /\b(talk show|late night|tonight show|podcast|interview|press briefing|snl|saturday night live|kimmel|fallon|colbert|rogan|the view|meet the press)\b/;
 const ENTERTAINMENT_RE = /\b(reality tv|reality show|bachelor|bachelorette|survivor|big brother|love island|award show|oscars|academy awards|grammys|emmys)\b/;
 const POLITICAL_RE = /\b(president|trump|biden|vance|senate|congress|governor|mayor|election|debate|speech|rally|hearing|white house|secretary|minister|campaign|candidate)\b/;
+// Fed / central-bank / agency-testimony context. Subject-level, not a strike.
+const FED_RE = /\b(fed|fomc|federal reserve|jerome powell|powell|rate decision|rate hike|rate cut|interest rate decision|treasury secretary|central bank)\b/;
+// Debate / hearing / witness / candidate context (non-Trump political events).
+const DEBATE_HEARING_RE = /\b(debate|hearing|witness(?:es)?|candidates?|testif(?:y|ies|ied|ying)|congressional hearing|town hall)\b/;
+// "Most mentioned" / word-bank / topic-count market structure.
+const TOPIC_MOST_RE = /\b(mentioned most|most mentioned|mention(?:ed)? the most|said the most|most said|most frequent|word bank|topic count|how many times|mention count)\b/;
 const TRUMP_RE = /\btrump\b/;
 const WEEKLY_RE = /\bweek(ly)?\b/;
 const MONTHLY_RE = /\bmonth(ly)?\b/;
@@ -137,6 +150,12 @@ export function resolveResearchRoute(event, { now } = {}) {
   if (SPORTS_RE.test(text)) {
     return result('sports_announcer', 'broadcast_terms', { close_window_days: windowDays, horizon: 'event' });
   }
+  // Fed/FOMC/agency-testimony context routes before Trump so a Powell/FOMC
+  // event is never mistaken for a generic political event. (No existing Trump
+  // fixture carries Fed terms, so Trump routing stays stable.)
+  if (FED_RE.test(text)) {
+    return result('fed_agency', 'fed_agency_terms', { close_window_days: windowDays, horizon: 'event' });
+  }
 
   // Trump routing keys off the EVENT subject (ticker/series/title/subtitle),
   // never market strikes/rules: "Will Mamdani say 'Trump'?" is a Mamdani
@@ -165,11 +184,21 @@ export function resolveResearchRoute(event, { now } = {}) {
     return result('trump_event', 'trump_event_default', { entity: 'trump', horizon: 'event', close_window_days: windowDays });
   }
 
+  // Debate/hearing/witness/candidate — checked AFTER the Trump block so a
+  // "Trump debate" event keeps its trump_* route, but generic debates/hearings
+  // get the more specific route instead of falling through to political_general.
+  if (DEBATE_HEARING_RE.test(text)) {
+    return result('debate_hearing', 'debate_hearing_terms', { close_window_days: windowDays, horizon: 'event' });
+  }
   if (TALK_SHOW_RE.test(text)) {
     return result('talk_show_media', 'talk_show_terms', { close_window_days: windowDays, horizon: 'event' });
   }
   if (ENTERTAINMENT_RE.test(text)) {
     return result('entertainment_reality', 'entertainment_terms', { close_window_days: windowDays, horizon: 'event' });
+  }
+  // "Most mentioned" / word-bank / topic-count market structure.
+  if (TOPIC_MOST_RE.test(text)) {
+    return result('topic_most_mentioned', 'topic_most_mentioned_terms', { close_window_days: windowDays, horizon: null });
   }
   if (POLITICAL_RE.test(text)) {
     return result('political_general', 'political_terms', { close_window_days: windowDays, horizon: null });
