@@ -1,0 +1,43 @@
+{
+  "_schema": "cpc_mentions_model_routing_v1",
+  "_description": "Model tier routing for the mentions packet pipeline. Models return strict JSON fields only; code is the final scorer, validator, renderer, and Telegram sender. Market price NEVER enters scoring.",
+  "tiers": {
+    "cheap": {
+      "model": "gemini-3.5-flash",
+      "provider": "gemini",
+      "provider_display": "Gemini (Hermes)",
+      "role": "preferred batch extractor / classifier over fetched source text (strict JSON, same schema as fallback)"
+    },
+    "cheap_fallback": {
+      "model": "gpt-5.4-mini",
+      "provider": "openai-codex",
+      "provider_display": "OpenAI Codex",
+      "role": "extractor fallback when Gemini fails schema validation, times out, or returns unstable JSON"
+    },
+    "standard": {
+      "model": "gpt-5.4",
+      "provider": "openai-codex",
+      "provider_display": "OpenAI Codex",
+      "role": "packet analyst for normal paid packets"
+    },
+    "premium": {
+      "model": "gpt-5.5",
+      "provider": "openai-codex",
+      "provider_display": "OpenAI Codex",
+      "role": "premium synthesis/closer — gated, never default"
+    },
+    "redteam": {
+      "model": "grok-4.3",
+      "provider": "xai-oauth",
+      "provider_display": "XAI Grok OAuth",
+      "role": "optional red-team / narrative heat / trap / X-card / live-discourse reviewer (strict JSON only; X chatter is narrative context, never source-backed evidence; cannot alter CPC scores, layer scores, postures, settlement fit, or layout)",
+      "optional": true,
+      "x_access": true
+    }
+  },
+  "premium_gate": {
+    "require_source_backed": true,
+    "min_best_score": 68,
+    "allow_flags": ["high_value", "public_sample", "source_backed"]
+  }
+}

@@ -86,7 +86,7 @@ test('mention composite WITH source layers -> scored row, not blocked, market se
   assert.ok(Number(row.layers_present.split('/')[0]) > 0, 'source layers counted');
 });
 
-test('mentions slate packet: sectioned board, composite+market together, raw inventory audit-only', () => {
+test('mentions slate packet: v2 CPC board, compact customer text, raw inventory audit-only', () => {
   const ev = mentionEvent();
   const composites = ev.markets.map((m) => buildMentionCompositeForMarket({ event: ev, market: m }));
   const packet = buildMentionSlatePacket({
@@ -98,24 +98,23 @@ test('mentions slate packet: sectioned board, composite+market together, raw inv
   });
   assert.ok(packet, 'packet built');
 
-  // sectioned board present
-  assert.match(packet.text, /TLDR BOARD:/);
-  assert.match(packet.text, /TOP EDGE CANDIDATES/);
-  assert.match(packet.text, /BLOCKED \/ NEEDS SOURCE/);
-  assert.match(packet.text, /AUDIT ARTIFACTS/);
+  // v2 customer sections present; old shared board headings absent.
+  assert.match(packet.text, /1\. FAST READ/);
+  assert.match(packet.text, /2\. CPC COMPOSITE BOARD/);
+  assert.match(packet.text, /5\. MARKET CONTEXT - NOT IN SCORE/);
+  assert.match(packet.text, /renderer_contract: mentions_customer_packet_v2/);
+  assert.doesNotMatch(packet.text, /TLDR BOARD|TOP EDGE CANDIDATES/);
 
-  // composite AND market fields appear together
-  assert.match(packet.text, /model: fair=/);
-  assert.match(packet.text, /market: implied=/);
-  // source_ladder MISSING surfaced as actionable BLOCKED, not a dead end
-  assert.match(packet.text, /BLOCKED_SOURCE_LAYER_MISSING/);
+  // Composite score and market context are both shown, but score stays numeric.
+  assert.match(packet.text, /\|\s*0\s*\|\s*NO_CLEAR_PICK\s*\|/);
+  assert.match(packet.text, /bid range 27c-91c; ask range 32c-92c/);
 
   // raw contract inventory is audit-only
   assert.equal(looksLikeRawInventoryDump(packet.text), false);
   assert.ok(looksLikeRawInventoryDump(packet.inventoryText), 'inventory artifact is the raw dump');
 
   // neutrality statement present
-  assert.match(packet.text, /NEVER a composite input/);
+  assert.match(packet.text, /NEVER a score input/);
   assert.equal(packet.counts.total, 2);
   assert.equal(packet.counts.blocked, 2);
 });

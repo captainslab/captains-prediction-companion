@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { buildGameArticle, buildSlateArticle } from '../scripts/mlb/lib/article-render.mjs';
 import { analyzeGame } from '../scripts/mlb/lib/market-engine.mjs';
 import { buildReportText } from '../scripts/mlb/pre-lock-report.mjs';
-import { loadPlan, publish, resolveTelegramEnv } from '../scripts/mlb/publish-article-reports.mjs';
+import { gatherGames, loadPlan, publish, resolveTelegramEnv } from '../scripts/mlb/publish-article-reports.mjs';
 
 // Build a minimal joined-game fixture in the shape analyzeGame expects.
 function makeGame({ away = 'TEX', home = 'COL', gameKey = '26MAY182040TEXCOL', mlGap = 'big', spreadConfirm = true, weakProps = true } = {}) {
@@ -70,6 +70,7 @@ test('article: per-game article renders required sections', () => {
   // New article-style sections
   assert.ok(a.text.includes('Final Call'));
   assert.ok(a.text.includes('Market Read'));
+  assert.ok(a.text.includes('Market-family coverage'));
   assert.ok(a.text.match(/Why This Side|Why No Pick/));
   assert.ok(a.text.includes('Evidence Box'));
   assert.ok(a.text.includes('Risk Notes'));
@@ -113,18 +114,95 @@ test('article: Evidence Box still contains numeric support', () => {
   assert.match(evidence, /\d+¢/);
   // engine vocabulary is allowed (and expected) here
   assert.match(evidence, /Engine reason:/);
-  assert.match(evidence, /ML:\s+(CLEAR|LEAN|WATCH|PASS)/);
+  assert.match(evidence, /Coverage mode:\s+LIMITED/);
+  assert.match(evidence, /ML:\s+BOARD_ANALYZER_ONLY/);
 });
 
-test('article: W04-style soft-LEAN is downgraded to MARKET-ONLY LEAN without context', () => {
+test('article: W04-style soft-LEAN renders as CONTEXT WATCH without context', () => {
   const game = makeGame({ away: 'TEX', home: 'COL', gameKey: '26MAY182040TEXCOL' });
   const analysis = analyzeGame(game);
   assert.equal(analysis.final.decision, 'LEAN', 'engine should soft-LEAN this fixture');
+  // Internal engine status is unchanged; only customer-facing copy is renamed.
   assert.equal(analysis.final.decision_status, 'MARKET-ONLY LEAN');
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
-  assert.match(a.headline, /MARKET-ONLY LEAN/);
-  assert.match(a.text, /Confidence: MARKET-ONLY LEAN/);
-  assert.match(a.text, /not an evidence pick/i);
+  assert.match(a.headline, /CONTEXT WATCH/);
+  assert.match(a.text, /Confidence: CONTEXT WATCH/);
+  assert.match(a.text, /board signal only, not evidence, not a pick/i);
+  // Customer-facing packet must never carry market-edge language and must
+  // disclose that market data is display-only.
+  assert.doesNotMatch(a.text, /MARKET-ONLY LEAN/i);
+  assert.doesNotMatch(a.headline, /MARKET-ONLY LEAN/i);
+  assert.match(a.text, /NOT IN SCORE/);
+});
+
+test('article: ML-only modeled packet stays limited coverage and never reads like full-model no-pick', () => {
+  const game = {
+    away: 'MIL',
+    home: 'CHC',
+    away_full: 'Milwaukee Brewers',
+    home_full: 'Chicago Cubs',
+    game_key: '26MAY18LIMIT',
+    start_ct: '2026-05-18 15:40 CT',
+    start_utc: '2026-05-18T20:40:00.000Z',
+    starters: {
+      away: { name: 'Brett Smither', era: 3.21, hand: 'R' },
+      home: { name: 'Cory Hart', era: 3.08, hand: 'L' },
+    },
+    recent_form: {
+      away: { wins: 24, losses: 18, last10: '6-4', ops: '.742' },
+      home: { wins: 26, losses: 16, last10: '7-3', ops: '.761' },
+    },
+    bullpen_context: {
+      away: { era: 3.72, recentLoadPct: 47 },
+      home: { era: 3.11, recentLoadPct: 52 },
+    },
+    weather: {
+      temperature: 71,
+      wind_speed: 6,
+      wind_direction: 'out to CF',
+      precipitation_risk: 4,
+      roof_status: 'open',
+    },
+    venue: 'Wrigley Field',
+    lineup_notes: 'lineup confirmed',
+    injuries: [],
+    series: {
+      ml: {
+        event_ticker: 'KXMLBGAME-26MAY18LIMIT',
+        market_count: 2,
+        markets: [
+          { ticker: 'KXMLBGAME-26MAY18LIMIT-MIL', yes_ask_dollars: 0.33, no_ask_dollars: 0.69, yes_bid_dollars: 0.31, no_bid_dollars: 0.67, open_interest_fp: 124000, volume_fp: 1000 },
+          { ticker: 'KXMLBGAME-26MAY18LIMIT-CHC', yes_ask_dollars: 0.69, no_ask_dollars: 0.33, yes_bid_dollars: 0.67, no_bid_dollars: 0.31, open_interest_fp: 432000, volume_fp: 1200 },
+        ],
+      },
+      spread: { markets: [] },
+      total: { markets: [] },
+      hr: { markets: [] },
+      ks: { markets: [] },
+      rfi: { markets: [] },
+    },
+  };
+  const analysis = analyzeGame(game);
+  assert.notEqual(analysis.final.decision, 'NO CLEAR PICK');
+  assert.ok(['MARKET-ONLY LEAN', 'EVIDENCE LEAN'].includes(analysis.final.decision_status));
+  assert.equal(analysis.final.coverage.mode, 'LIMITED');
+  assert.ok(['NON_MARKET_COMPOSITE_READY', 'PARTIAL_NEEDS_PATCH'].includes(analysis.final.coverage.families.ml.status));
+  assert.equal(analysis.final.coverage.families.spread.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(analysis.final.coverage.families.total.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(analysis.final.coverage.families.yfri.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(analysis.final.coverage.families.ks.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  assert.equal(analysis.final.coverage.families.hr.status, 'BLOCKED_MODEL_LAYER_MISSING');
+  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  assert.match(a.headline, /CONTEXT WATCH|EVIDENCE LEAN/);
+  assert.match(a.text, /Coverage mode: LIMITED/);
+  assert.match(a.text, /ML: (NON_MARKET_COMPOSITE_READY|PARTIAL_NEEDS_PATCH)/);
+  assert.match(a.text, /Spread: BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(a.text, /Total: BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(a.text, /YFRI: BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(a.text, /HR props: BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(a.text, /K props: BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(a.text, /limited coverage/);
+  assert.doesNotMatch(a.text, /all-market|full coverage|every family modeled/i);
 });
 
 test('article: BOARD_ONLY game still renders useful article', () => {
@@ -132,6 +210,8 @@ test('article: BOARD_ONLY game still renders useful article', () => {
   const analysis = analyzeGame(game);
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
   assert.match(a.headline, /NO CLEAR PICK/);
+  assert.match(a.text, /limited coverage/);
+  assert.match(a.text, /Coverage mode: LIMITED/);
   assert.match(a.text, /No defensible evidence-based pick/);
   assert.match(a.text, /Market overview/);
 });
@@ -140,8 +220,8 @@ test('article: weak HR/K do NOT appear as notable promotions', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
   const a = buildGameArticle({ date: '2026-05-18', game, analysis });
-  assert.match(a.text, /HR props: no CLEAR\/LEAN promotion/);
-  assert.match(a.text, /K props: no CLEAR\/LEAN promotion/);
+  assert.match(a.text, /HR props: BOARD_ANALYZER_ONLY/);
+  assert.match(a.text, /K props: BOARD_ANALYZER_ONLY/);
 });
 
 test('article: slate article ranks decision statuses correctly', () => {
@@ -151,13 +231,105 @@ test('article: slate article ranks decision statuses correctly', () => {
   const slate = buildSlateArticle({ date: '2026-05-18', items, planMeta: { date: '2026-05-18', cluster_count: 1 } });
   assert.match(slate.text, /Tier 1 — STRONG EVIDENCE LEAN/);
   assert.match(slate.text, /Tier 2 — EVIDENCE LEAN/);
-  assert.match(slate.text, /Tier 3 — MARKET-ONLY LEAN/);
-  assert.match(slate.text, /Tier 5 — NO CLEAR PICK/);
-  assert.ok(slate.counts.market_only_lean >= 1);
+  assert.match(slate.text, /Tier 3 — CONTEXT WATCH/);
+  assert.match(slate.text, /Tier 5 — ML\/game-side NO CLEAR PICK/);
+  assert.doesNotMatch(slate.text, /MARKET-ONLY LEAN/i);
+  assert.match(slate.text, /NOT IN SCORE/);
+  assert.ok(slate.counts.context_watch >= 1);
   assert.ok(slate.counts.no_clear_pick >= 1);
   const idxLean = slate.ranked.findIndex((r) => r.decision === 'MARKET-ONLY LEAN');
   const idxPass = slate.ranked.findIndex((r) => r.decision === 'NO CLEAR PICK');
   assert.ok(idxLean < idxPass);
+});
+
+test('article: slate game-by-game rows use non-market reasons for evidence leans and no-picks', () => {
+  const mkAnalysis = (status, bestAngle, contextBundle) => ({
+    final: {
+      decision: status === 'NO CLEAR PICK' ? 'PASS' : 'LEAN',
+      decision_status: status,
+      decision_process: { decisionStatus: status, checkedItems: [], whyNotPriceOnly: [], evidenceReady: status !== 'NO CLEAR PICK' },
+      best_angle: bestAngle,
+      reason: bestAngle,
+      prop_watchlist: status === 'NO CLEAR PICK'
+        ? [{ kind: 'HR', name: 'Example Batter', raw_decision: 'CLEAR', decision: 'WATCH', reason: 'HR ladder anomaly.' }]
+        : [],
+      context_bundle: contextBundle,
+    },
+    sections: { ml: { decision: 'PASS', reason: 'n/a' }, spread: { decision: 'PASS', reason: 'n/a' }, total: { decision: 'PASS', reason: 'n/a' }, yfri: { decision: 'PASS', reason: 'n/a' } },
+  });
+
+  const evidenceContext = {
+    support_team: 'LAD',
+    support_reason: 'Non-market evidence supports LAD via starters, recent form, bullpen, weather/park, and lineup/injury.',
+    provenance: {
+      starters: { status: 'complete' },
+      recent_form: { status: 'complete' },
+      bullpen: { status: 'complete' },
+      weather: { status: 'complete' },
+      lineup: { status: 'partial' },
+      injuries: { status: 'complete' },
+      matchup_model: { status: 'partial' },
+    },
+  };
+  const noPickContext = {
+    support_reason: 'No tested non-market side support cleared the context gate.',
+    support_side: 'away',
+    support_team: 'DET',
+    support_margin: 4,
+    side_scores: { away: 50, home: 46 },
+    ledger: {
+      away: { evidence_ledger: [
+        { category: 'starting_pitcher_signal', present: true, value: 72 },
+        { category: 'season_form', present: true, value: 48 },
+        { category: 'recent_form', present: true, value: 51 },
+        { category: 'bullpen_fatigue_availability', present: true, value: 49 },
+        { category: 'park_weather_context', present: true, value: 55 },
+      ] },
+      home: { evidence_ledger: [
+        { category: 'starting_pitcher_signal', present: true, value: 55 },
+        { category: 'season_form', present: true, value: 62 },
+        { category: 'recent_form', present: true, value: 60 },
+        { category: 'bullpen_fatigue_availability', present: true, value: 66 },
+        { category: 'park_weather_context', present: true, value: 55 },
+      ] },
+    },
+    provenance: {
+      starters: { status: 'complete' },
+      recent_form: { status: 'complete' },
+      bullpen: { status: 'complete' },
+      weather: { status: 'complete' },
+      lineup: { status: 'missing' },
+      injuries: { status: 'missing' },
+      matchup_model: { status: 'complete' },
+    },
+  };
+
+  const items = [
+    {
+      game: { away: 'LAD', home: 'CWS', away_full: 'Los Angeles Dodgers', home_full: 'Chicago White Sox', series: {} },
+      analysis: mkAnalysis('EVIDENCE LEAN', 'Non-market evidence supports LAD via starters, recent form, bullpen, weather/park, and lineup/injury.', evidenceContext),
+    },
+    {
+      game: { away: 'DET', home: 'CLE', away_full: 'Detroit Tigers', home_full: 'Cleveland Guardians', series: {} },
+      analysis: mkAnalysis('NO CLEAR PICK', 'NO CLEAR PICK', noPickContext),
+    },
+  ];
+  const slate = buildSlateArticle({ date: '2026-05-18', items, planMeta: {} });
+  assert.match(slate.text, /LAD @ CWS: EVIDENCE LEAN LAD — Non-market evidence supports LAD via starters, recent form, bullpen, weather\/park, and lineup\/injury\./);
+  assert.match(slate.text, /DET @ CLE: ML\/game-side NO CLEAR PICK \(limited coverage\) — leading side DET by 4 pts; supports DET: starter; opposes: season form CLE, recent form CLE, bullpen CLE; cancels: weather\/park; partial\/missing: lineup missing, injuries missing; support margin 4 below 5-point evidence threshold\./);
+  assert.match(slate.text, /Market-family coverage/);
+  assert.match(slate.text, /Coverage mode: LIMITED/);
+  assert.match(slate.text, /ML\/game-side: composite DET 50 vs CLE 46; BLOCKED_MODEL_LAYER_MISSING — no ML market to model\./);
+  assert.match(slate.text, /Spread: BLOCKED_MODEL_LAYER_MISSING — spread markets missing; no board analyzer to render\./);
+  assert.match(slate.text, /Total: BLOCKED_MODEL_LAYER_MISSING — total markets missing; no board analyzer to render\./);
+  assert.match(slate.text, /YFRI\/NRFI: BLOCKED_MODEL_LAYER_MISSING — first-inning market missing; no board analyzer to render\./);
+  assert.match(slate.text, /Ks props: BLOCKED_MODEL_LAYER_MISSING — K markets missing; no K board analyzer to render\./);
+  assert.match(slate.text, /HR props: BLOCKED_MODEL_LAYER_MISSING — HR markets missing; no HR board analyzer to render\./);
+  assert.doesNotMatch(slate.text, /NO CLEAR PICK .*no side cleared the evidence threshold\./);
+  assert.doesNotMatch(slate.text, /moneyline, spread, total and first-inning do not justify/);
+  assert.doesNotMatch(slate.text, /mph mph|injury injury/);
+  assert.doesNotMatch(slate.text, /Market signal and required evidence point the same way\./);
+  assert.doesNotMatch(slate.text, /\b\d+¢ vs \d+¢\b/);
 });
 
 test('article: weak props do not dominate slate prop section', () => {
@@ -195,6 +367,14 @@ test('publisher: dry-run writes per-game + slate + delivery summary, idempotency
   const loaded = loadPlan(tmp, date);
   assert.equal(loaded.plan.date, date);
   assert.equal(loaded.plan.games.length, 1);
+});
+
+test('publisher: no-refresh cached join keeps all available planned games', async () => {
+  const { plan } = loadPlan('state', '2026-06-13');
+  const keys = plan.games.map((g) => g.game_key);
+  const games = await gatherGames('2026-06-13', keys, { useCache: true, stateRoot: 'state' });
+  assert.equal(games.length, keys.length);
+  assert.deepEqual(new Set(games.map((g) => g.game_key)), new Set(keys));
 });
 
 // --- Telegram env fallback ---
@@ -238,7 +418,9 @@ test('TLDR: per-game LEAN article has TLDR immediately after headline, no engine
   assert.match(tldrBlock, /Side \/ market:/);
   assert.match(tldrBlock, /Why:/);
   assert.match(tldrBlock, /Risk:/);
-  assert.match(tldrBlock, /market-only/i);
+  assert.match(tldrBlock, /CONTEXT WATCH/);
+  assert.match(tldrBlock, /NOT IN SCORE/);
+  assert.doesNotMatch(tldrBlock, /MARKET-ONLY LEAN/i);
   for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
     assert.ok(!banned.test(tldrBlock), `TLDR must not contain ${banned}`);
   }
@@ -251,8 +433,9 @@ test('TLDR: PASS / NO CLEAR PICK game shows pass language', () => {
   const lines = a.text.split('\n');
   assert.strictEqual(lines[3], 'TLDR');
   const tldrBlock = lines.slice(3, 9).join('\n');
-  assert.match(tldrBlock, /PASS/);
   assert.match(tldrBlock, /NO CLEAR PICK/);
+  assert.match(tldrBlock, /limited coverage/);
+  assert.doesNotMatch(tldrBlock, /\bPASS\b/);
   for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
     assert.ok(!banned.test(tldrBlock), `TLDR must not contain ${banned}`);
   }
@@ -270,7 +453,9 @@ test('TLDR: slate article has TLDR immediately after headline, no engine vocab',
   assert.ok(overviewIdx > 4, 'Slate overview must come after TLDR block');
   const tldrBlock = lines.slice(3, overviewIdx).join('\n');
   assert.match(tldrBlock, /Evidence leans/);
-  assert.match(tldrBlock, /Market-only leans/);
+  assert.match(tldrBlock, /CONTEXT WATCH/);
+  assert.match(tldrBlock, /NOT IN SCORE/);
+  assert.doesNotMatch(tldrBlock, /MARKET-ONLY LEAN/i);
   assert.match(tldrBlock, /Takeaway/);
   for (const banned of [/soft[- ]?lean/i, /\bgap\b/i, /OI ratio/i, /\bgate\b/i, /market-internal/i]) {
     assert.ok(!banned.test(tldrBlock), `Slate TLDR must not contain ${banned}`);

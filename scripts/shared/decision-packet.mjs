@@ -453,7 +453,7 @@ export function renderSectionedPacket(rows = [], options = {}) {
   if (headline) {
     lines.push(`  headline: [${headline.edge_status}] ${fmt(headline.market_ticker)} ${fmt(headline.side_target)} (${headline.edge_cents_or_pp === null ? 'edge MISSING' : `${headline.edge_cents_or_pp >= 0 ? '+' : ''}${headline.edge_cents_or_pp}pp`})`);
   }
-  lines.push('  legend: edge_status PICK>LEAN>FADE>WATCH>BLOCKED>PASS; edge = model fair − market implied (pp). Market price is NEVER a composite input.');
+  lines.push('  legend: edge_status PICK>LEAN>FADE>WATCH>BLOCKED>PASS; edge = model fair − market implied (pp). Market Context — NOT IN SCORE.');
   lines.push('');
 
   const section = (title, arr, { showEmpty = true, note = null } = {}) => {

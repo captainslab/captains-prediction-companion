@@ -11,13 +11,19 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Import existing source adapters
 import { buildEarningsLayerRecords } from './source-adapters/earnings-calendar-stub.mjs';
 import { buildPoliticalLayerRecords } from './source-adapters/political-schedule-stub.mjs';
 import { buildSportsBroadcastLayerRecords } from './source-adapters/sports-broadcast-stub.mjs';
 import { collectEarningsResearch } from './source-adapters/earnings-research-collector.mjs';
+import {
+  loadDeclaredSources,
+  runBoundedSourceResearch,
+  mergeExtractedLayers,
+} from './source-research.mjs';
+import { ensureSourcesManifest, SOURCE_STATUS } from './discover-sources.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -52,7 +58,7 @@ function lowerJoined(parts) {
   return parts.map(asText).filter(Boolean).join(' ').toLowerCase();
 }
 
-function inferProfile(event) {
+export function inferProfile(event) {
   const text = lowerJoined([
     event?.event_ticker,
     event?.series_ticker,
@@ -148,9 +154,95 @@ async function webSearch(query) {
 // ---------------------------------------------------------------------------
 // Build research JSON for a single event
 // ---------------------------------------------------------------------------
-async function buildEventResearch(event, profile) {
+async function buildEventResearch(event, profile, { stateRoot = resolve('state'), date = null, env = process.env, deps = {} } = {}) {
   const eventTicker = event.event_ticker;
   const markets = event.markets || [];
+
+  // Bounded source research, once per EVENT: declared URLs only (capped),
+  // cached by URL hash, one cheap-tier batch extraction per source document
+  // covering every keyword in a single strict-JSON call. No declared sources
+  // -> zero fetches, zero model calls, adapters/stubs stand as-is.
+  const allKeywords = markets
+    .map(m => m.custom_strike?.Word || m.yes_sub_title || m.no_sub_title)
+    .filter(Boolean)
+    .filter(k => k !== 'Event does not qualify');
+  let sourceResearch = { byTerm: {}, stats: null, quality: 'stub', notes: [] };
+  let sourceStatus = SOURCE_STATUS.NO_DECLARED_SOURCES;
+  let declaredSourceUrls = [];
+  if (date && allKeywords.length) {
+    // Discovery step: ensure a bounded declared-source manifest exists for this
+    // event BEFORE research runs. Idempotent — never clobbers a human-authored
+    // sources/<TICKER>.json. Mines official URLs from the Kalshi resolution
+    // rules (route-aware), rejecting any price/market host.
+    let manifest = null;
+    try {
+      const ensured = (deps.ensureSourcesManifest ?? ensureSourcesManifest)(event, {
+        profile,
+        stateRoot,
+        date,
+        env,
+      });
+      manifest = ensured.manifest;
+      sourceStatus = manifest?.status ?? SOURCE_STATUS.NO_DECLARED_SOURCES;
+    } catch (err) {
+      console.error(`[collect-mentions-research] ${eventTicker}: source discovery failed: ${err.message}`);
+    }
+
+    const declared = (deps.loadDeclaredSources ?? loadDeclaredSources)(stateRoot, date, eventTicker, env);
+    declaredSourceUrls = declared;
+    if (declared.length) {
+      sourceStatus = SOURCE_STATUS.DECLARED;
+      try {
+        sourceResearch = await (deps.runBoundedSourceResearch ?? runBoundedSourceResearch)({
+          eventTitle: event.title || '',
+          eventTicker,
+          profile,
+          terms: allKeywords,
+          sources: declared,
+          stateRoot,
+          date,
+          env,
+          ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+          ...(deps.fallbackFetchImpl ? { fallbackFetchImpl: deps.fallbackFetchImpl } : {}),
+          ...(deps.chatRunner ? { chatRunner: deps.chatRunner } : {}),
+        });
+        if (sourceResearch.source_status) sourceStatus = sourceResearch.source_status;
+        console.log(`[collect-mentions-research] ${eventTicker}: bounded source research ${JSON.stringify(sourceResearch.stats)}`);
+      } catch (err) {
+        sourceResearch = {
+          byTerm: {},
+          stats: {
+            sources_declared: declared.length,
+            sources_used: 0,
+            fetched: 0,
+            fetched_browser: 0,
+            cache_hits: 0,
+            fetch_errors: 1,
+            fetch_timeouts: 0,
+            blocked_by_site: 0,
+            fallback_attempts: 0,
+            fallback_page_cap: 0,
+            model_calls: 0,
+            fallback_calls: 0,
+            extraction_tiers: [],
+            terms_batched_per_call: allKeywords.length,
+            extraction_failures: 0,
+            source_health_paths: [],
+          },
+          quality: 'no_source',
+          notes: [`bounded source research failed closed: ${err.message}`],
+          source_status: SOURCE_STATUS.DECLARED,
+        };
+        console.error(`[collect-mentions-research] ${eventTicker}: bounded source research failed closed: ${err.message}`);
+      }
+    } else {
+      // Explicit verified gap, not a silent stub: discovery ran and found no
+      // usable official source URL for this event.
+      sourceStatus = SOURCE_STATUS.NO_DECLARED_SOURCES;
+      sourceResearch.notes.push('NO_DECLARED_SOURCES: source discovery found no official source URL for this event (no live research performed)');
+      console.log(`[collect-mentions-research] ${eventTicker}: NO_DECLARED_SOURCES (no official source URL discovered)`);
+    }
+  }
 
   const marketResearches = [];
 
@@ -251,11 +343,25 @@ async function buildEventResearch(event, profile) {
       };
     }
 
+    // Merge batch-extracted evidence (fills missing layers only; adapter
+    // evidence and pricing exclusion are untouched).
+    const extracted = sourceResearch.byTerm[keyword];
+    if (extracted && Object.keys(extracted).length) {
+      layerRecords = mergeExtractedLayers(layerRecords, extracted);
+      researchQuality = 'source_backed';
+    } else if (researchQuality === 'stub' && (sourceResearch.stats?.sources_used ?? 0) > 0) {
+      // Sources were consulted but yielded nothing for this term: that is a
+      // verified gap (no_source), not an unattempted stub.
+      researchQuality = 'no_source';
+    }
+
     marketResearches.push({
       market_ticker: marketTicker,
       keyword,
       profile,
       research_quality: researchQuality,
+      source_status: sourceStatus,
+      research_gap_notes: extracted && Object.keys(extracted).length ? [] : sourceResearch.notes,
       layer_records: layerRecords,
       source_ladder_inputs: sourceLadderInputs,
       rules_primary: market.rules_primary || null,
@@ -269,9 +375,14 @@ async function buildEventResearch(event, profile) {
     profile,
     produced_at: new Date().toISOString(),
     produced_by: 'collect-mentions-research.mjs',
+    source_status: sourceStatus,
+    declared_source_urls: declaredSourceUrls,
+    source_research_stats: sourceResearch.stats,
     markets: marketResearches,
   };
 }
+
+export { buildEventResearch };
 
 // ---------------------------------------------------------------------------
 // Main
@@ -309,7 +420,7 @@ async function main() {
     }
 
     const profile = inferProfile(event);
-    const research = await buildEventResearch(event, profile);
+    const research = await buildEventResearch(event, profile, { stateRoot, date: opts.date });
     totalMarkets += research.markets.length;
 
     const outPath = join(researchDir, `${event.event_ticker}.json`);
@@ -321,7 +432,9 @@ async function main() {
   console.log(`[collect-mentions-research] DONE events=${written} markets=${totalMarkets} research_dir=${researchDir}`);
 }
 
-main().catch(err => {
-  console.error(`[collect-mentions-research] ERROR: ${err.message}`);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch(err => {
+    console.error(`[collect-mentions-research] ERROR: ${err.message}`);
+    process.exit(1);
+  });
+}

@@ -83,15 +83,21 @@ export const KALSHI_SOURCES = Object.freeze({
 export async function defaultFetcher(url, options = {}) {
   const maxRetries = options.maxRetries ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 1000;
+  const timeoutMs = options.timeoutMs ?? Number(process.env.KALSHI_FETCH_TIMEOUT_MS || '15000');
   let lastError = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const controller = options.signal ? null : new AbortController();
+    const timeout = controller && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
     try {
       const res = await fetch(url, {
         method: 'GET',
         headers: { accept: 'application/json' },
-        signal: options.signal,
+        signal: options.signal ?? controller?.signal,
       });
       const text = await res.text();
+      if (timeout) clearTimeout(timeout);
       let json = null;
       try { json = JSON.parse(text); } catch {}
       // Retry on transient errors: 404, 429, 5xx
@@ -105,6 +111,7 @@ export async function defaultFetcher(url, options = {}) {
       }
       return { ok: res.ok, status: res.status, json, error: res.ok ? null : `HTTP ${res.status}` };
     } catch (err) {
+      if (timeout) clearTimeout(timeout);
       lastError = err.message || String(err);
       if (attempt < maxRetries - 1) {
         const delay = baseDelayMs * (2 ** attempt);

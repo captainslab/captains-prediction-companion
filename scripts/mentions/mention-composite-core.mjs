@@ -30,6 +30,9 @@ const FORBIDDEN_SCORING_FIELDS = Object.freeze([
   'volume', 'open_interest', 'line_movement',
   'kalshi_ask', 'kalshi_bid',
   'yes_bid_cents', 'yes_ask_cents',
+  'last_price', 'last_trade_price', 'last_trade_price_cents',
+  'price_cents', 'implied_probability', 'implied_prob',
+  'bid_ask_spread', 'spread_cents', 'movement',
 ]);
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -55,14 +58,20 @@ function scoreToPosture(score, layersPresent) {
   return 'NO_CLEAR_PICK';
 }
 
-function assertNoPricingInLayer(key, rec) {
+function assertNoPricingInLayer(key, rec, trail = []) {
   if (!rec || typeof rec !== 'object') return;
-  for (const f of FORBIDDEN_SCORING_FIELDS) {
-    if (f in rec && rec[f] !== null && rec[f] !== undefined) {
-      throw new Error(
-        `Layer "${key}" contains forbidden pricing field "${f}". ` +
-        `Market data must never enter scoring. Pass pricing via market_context only.`
-      );
+  for (const [field, value] of Object.entries(rec)) {
+    for (const f of FORBIDDEN_SCORING_FIELDS) {
+      if (field === f && value !== null && value !== undefined) {
+        const where = trail.length ? `${trail.join('.')}.` : '';
+        throw new Error(
+          `Layer "${key}" contains forbidden pricing field "${where}${field}". ` +
+          `Market data must never enter scoring. Pass pricing via market_context only.`
+        );
+      }
+    }
+    if (value && typeof value === 'object') {
+      assertNoPricingInLayer(key, value, [...trail, field]);
     }
   }
 }
@@ -204,4 +213,23 @@ export function composeMentionLedger({
       pricing_excluded: true,
     },
   };
+}
+
+// Back-compat wrapper for older isolation tests and callers that still supply
+// a `layers` bag instead of explicit layerDefs/layerRecords. The pricing guard
+// still runs on every layer record before any composite work happens.
+export function computeMentionComposite(input = {}) {
+  const layers = input?.layers;
+  if (layers && typeof layers === 'object' && !Array.isArray(layers)) {
+    for (const [key, rec] of Object.entries(layers)) {
+      assertNoPricingInLayer(key, rec);
+    }
+    if ((!input.layerDefs || !input.layerRecords) && Object.keys(layers).length > 0) {
+      const keys = Object.keys(layers);
+      const layerDefs = keys.map((key) => ({ key, weight: 1 / keys.length, label: key }));
+      const layerRecords = Object.fromEntries(keys.map((key) => [key, layers[key]]));
+      return composeMentionLedger({ ...input, layerDefs, layerRecords });
+    }
+  }
+  return composeMentionLedger(input);
 }

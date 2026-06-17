@@ -5,9 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 
 import {
   selectNewTodayEvents,
@@ -24,9 +22,6 @@ import {
   WATCHLIST_PACKET_TYPE,
 } from '../scripts/packets/generate-mentions-daily.mjs';
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const WATCH = join(REPO, 'scripts/mentions/mentions-watch.mjs');
-
 const DATE = '2026-06-11';
 const ev = (ticker) => ({ event_ticker: ticker, title: ticker, markets: [{ ticker: `${ticker}-T1` }] });
 
@@ -36,6 +31,16 @@ function fakeGeneratorWrite(root, args) {
   const dir = join(root, 'packets', DATE, 'mentions-daily');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${DATE}-${ticker}.txt`), `packet for ${ticker}\n`);
+}
+
+function fakeSenderWrite(root, args) {
+  const stem = args[args.indexOf('--only') + 1];
+  const dir = join(root, 'packets', DATE, 'mentions-daily');
+  mkdirSync(dir, { recursive: true });
+  const ledgerPath = join(dir, '.delivery-ledger.json');
+  const ledger = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) : { delivered: {} };
+  ledger.delivered[stem] = { utc: '2026-06-11T12:00:00Z', message_ids: [1, 2] };
+  writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2));
 }
 
 // ─── today-only filter ───────────────────────────────────────────────────────
@@ -56,15 +61,43 @@ test('today-only filter keeps same-day tickers and excludes future/past/undated'
   );
 });
 
-test('seen/delivered event is skipped; unseen today event is fresh exactly once', () => {
-  const ledger = { events: { 'KXHEARINGMENTION-26JUN11': { delivered_at: '2026-06-11T12:00:00Z' } } };
+test('delivered_at, mark-seen-only, and held entries are seen while blocked entries are retryable', () => {
+  const ledger = {
+    events: {
+      'KXDELIVEREDMENTION-26JUN11': { delivered_at: '2026-06-11T12:00:00Z', status: 'delivered' },
+      'KXMARKSEENMENTION-26JUN11': { status: 'mark-seen-only', delivered_at: null },
+      'KXHELDMENTION-26JUN11': { status: 'held', delivered_at: null },
+      'KXBLOCKEDMENTION-26JUN11': { status: 'blocked', delivered_at: null, attempts: 1 },
+    },
+  };
   const { fresh, seen } = selectNewTodayEvents([
-    ev('KXHEARINGMENTION-26JUN11'),
-    ev('KXHEARINGMENTION-26JUN11'), // duplicate listing must not double-count
-    ev('KXMELANIAMENTION-26JUN11'),
+    ev('KXDELIVEREDMENTION-26JUN11'),
+    ev('KXMARKSEENMENTION-26JUN11'),
+    ev('KXHELDMENTION-26JUN11'),
+    ev('KXBLOCKEDMENTION-26JUN11'),
+    ev('KXFRESHMENTION-26JUN11'),
+    ev('KXBLOCKEDMENTION-26JUN11'),
   ], ledger, DATE);
-  assert.deepEqual(fresh.map(e => e.event_ticker), ['KXMELANIAMENTION-26JUN11']);
-  assert.deepEqual(seen.map(e => e.event_ticker), ['KXHEARINGMENTION-26JUN11']);
+  assert.deepEqual(fresh.map(e => e.event_ticker), ['KXFRESHMENTION-26JUN11']);
+  assert.deepEqual(seen.map(e => e.event_ticker).sort(), [
+    'KXDELIVEREDMENTION-26JUN11',
+    'KXHELDMENTION-26JUN11',
+    'KXMARKSEENMENTION-26JUN11',
+  ]);
+  assert.deepEqual(ledger.events['KXBLOCKEDMENTION-26JUN11'].status, 'blocked');
+});
+
+test('seen/retryable split keeps duplicates stable for retryable ledger entries', () => {
+  const ledger = {
+    events: {
+      'KXRETRYMENTION-26JUN11': { status: 'pending', delivered_at: null, attempts: 1 },
+    },
+  };
+  const { retryable } = selectNewTodayEvents([
+    ev('KXRETRYMENTION-26JUN11'),
+    ev('KXRETRYMENTION-26JUN11'),
+  ], ledger, DATE);
+  assert.deepEqual(retryable.map(e => e.event_ticker), ['KXRETRYMENTION-26JUN11']);
 });
 
 // ─── generator defaults / watchlist isolation ────────────────────────────────
@@ -94,38 +127,47 @@ test('--only parses ticker list for incremental generation', () => {
 
 // ─── watcher end-to-end via --events-file (no network, no sends) ─────────────
 
-function runWatch(root, eventsFile, extraArgs = []) {
-  return spawnSync(process.execPath, [
-    WATCH, '--date', DATE, '--state-root', root, '--events-file', eventsFile, ...extraArgs,
-  ], { encoding: 'utf8', cwd: REPO });
-}
-
-test('no-event run exits 0 quietly with only a local log line', () => {
+test('no-event run exits 0 quietly with only a local log line', async () => {
   const root = mkdtempSync(join(tmpdir(), 'mentions-watch-test-'));
   const eventsFile = join(root, 'events.json');
   writeFileSync(eventsFile, JSON.stringify([ev('KXFUTUREMENTION-26JUN13')]));
-  const r = runWatch(root, eventsFile);
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /no new today events .* quiet exit/);
-  assert.equal(r.stderr.trim(), '');
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    env: {},
+  });
+  assert.deepEqual(result.fresh, []);
+  assert.deepEqual(result.retryable, []);
+  assert.deepEqual(result.seen, []);
+  assert.deepEqual(result.deferred.map((e) => e.event_ticker), ['KXFUTUREMENTION-26JUN13']);
   assert.ok(!existsSync(ledgerPath(root, DATE)), 'quiet run must not create a ledger');
 });
 
-test('new today event is planned once and duplicate run is skipped by ledger', () => {
+test('new today event is planned once and duplicate run is skipped by ledger', async () => {
   const root = mkdtempSync(join(tmpdir(), 'mentions-watch-test-'));
   const eventsFile = join(root, 'events.json');
   writeFileSync(eventsFile, JSON.stringify([ev('KXHEARINGMENTION-26JUN11'), ev('KXLATERMENTION-26JUN12')]));
 
-  // dry-run names exactly the one today event
-  const dry = runWatch(root, eventsFile, ['--dry-run']);
-  assert.equal(dry.status, 0, dry.stderr);
-  assert.match(dry.stdout, /1 new today event\(s\); processing 1 this run/);
-  assert.match(dry.stdout, /would generate \+ send packets for: KXHEARINGMENTION-26JUN11/);
-  assert.ok(!dry.stdout.includes('KXLATERMENTION-26JUN12 —'), 'future event must not be planned');
+  const dry = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    dryRun: true,
+    env: {},
+  });
+  assert.deepEqual(dry.attempted.map((e) => e.event_ticker), ['KXHEARINGMENTION-26JUN11']);
+  assert.deepEqual(dry.retryable, []);
 
   // mark-seen-only records it durably without delivering
-  const seed = runWatch(root, eventsFile, ['--mark-seen-only']);
-  assert.equal(seed.status, 0, seed.stderr);
+  const seed = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    markSeenOnly: true,
+    env: {},
+  });
+  assert.deepEqual(seed.fresh.map((e) => e.event_ticker), ['KXHEARINGMENTION-26JUN11']);
   const ledger = loadLedger(ledgerPath(root, DATE));
   const rec = ledger.events['KXHEARINGMENTION-26JUN11'];
   assert.ok(rec, 'ledger entry written');
@@ -135,9 +177,15 @@ test('new today event is planned once and duplicate run is skipped by ledger', (
   assert.ok(!ledger.events['KXLATERMENTION-26JUN12'], 'future event never enters the seen ledger');
 
   // second run: same event is now seen -> quiet exit, nothing planned
-  const again = runWatch(root, eventsFile, ['--dry-run']);
-  assert.equal(again.status, 0, again.stderr);
-  assert.match(again.stdout, /no new today events \(seen=1/);
+  const again = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    dryRun: true,
+    env: {},
+  });
+  assert.deepEqual(again.fresh, []);
+  assert.deepEqual(again.seen.map((e) => e.event_ticker), ['KXHEARINGMENTION-26JUN11']);
 });
 
 test('watch hands sender exact packet stems and excludes future tickers from the send path', async () => {
@@ -168,6 +216,92 @@ test('watch hands sender exact packet stems and excludes future tickers from the
   assert.ok(!calls[1].args.join(' ').includes('26JUN12'));
   assert.ok(!calls[1].args.join(' ').includes('26JUN13'));
   assert.ok(!calls[1].args.join(' ').includes('26JUN14'));
+});
+
+test('retry batch respects max retry per run and attempts cap moves exhausted entries to held', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-retry-'));
+  const eventsFile = join(root, 'events.json');
+  writeFileSync(eventsFile, JSON.stringify([
+    ev('KXFRESHMENTION-26JUN11'),
+    ev('KXRETRYONCE-26JUN11'),
+    ev('KXRETRYWAIT-26JUN11'),
+  ]));
+
+  const ledgerDir = join(root, 'mentions', DATE);
+  mkdirSync(ledgerDir, { recursive: true });
+  writeFileSync(ledgerPath(root, DATE), JSON.stringify({
+    events: {
+      'KXRETRYONCE-26JUN11': { status: 'blocked', delivered_at: null, attempts: 2, first_seen_utc: '2026-06-11T00:00:00Z' },
+      'KXRETRYWAIT-26JUN11': { status: 'blocked', delivered_at: null, attempts: 1, first_seen_utc: '2026-06-11T00:00:00Z' },
+    },
+  }, null, 2));
+
+  const calls = [];
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    env: {
+      ...process.env,
+      MENTIONS_WATCH_MAX_NEW_PER_RUN: '1',
+      MENTIONS_WATCH_MAX_RETRY_PER_RUN: '1',
+      MENTIONS_WATCH_MAX_RETRY_ATTEMPTS: '3',
+    },
+    runStepImpl: (label, command, args) => {
+      calls.push(label);
+      if (label === 'generator:KXFRESHMENTION-26JUN11') fakeGeneratorWrite(root, args);
+      if (label === 'sender:KXFRESHMENTION-26JUN11') fakeSenderWrite(root, args);
+      if (label === 'generator:KXRETRYONCE-26JUN11') throw new Error('packet synthesis blocked');
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  assert.deepEqual(result.attempted.map(e => e.event_ticker), ['KXFRESHMENTION-26JUN11']);
+  assert.deepEqual(result.retried.map(e => e.event_ticker), ['KXRETRYONCE-26JUN11']);
+  assert.deepEqual(result.retryQueued.map(e => e.event_ticker), ['KXRETRYWAIT-26JUN11']);
+  assert.ok(calls.includes('generator:KXFRESHMENTION-26JUN11'));
+  assert.ok(calls.includes('sender:KXFRESHMENTION-26JUN11'));
+  assert.ok(calls.includes('generator:KXRETRYONCE-26JUN11'));
+  assert.ok(!calls.includes('generator:KXRETRYWAIT-26JUN11'));
+
+  const ledger = loadLedger(ledgerPath(root, DATE));
+  assert.equal(ledger.events['KXRETRYONCE-26JUN11'].status, 'held');
+  assert.equal(ledger.events['KXRETRYONCE-26JUN11'].attempts, 3);
+  assert.match(ledger.events['KXRETRYONCE-26JUN11'].held_reason, /attempts 3 reached max 3/);
+  assert.equal(ledger.events['KXRETRYWAIT-26JUN11'].status, 'blocked');
+});
+
+test('delivered_at prevents resend and regeneration for ledgered events', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-delivered-'));
+  const eventsFile = join(root, 'events.json');
+  writeFileSync(eventsFile, JSON.stringify([ev('KXDELIVEREDONCE-26JUN11')]));
+  mkdirSync(join(root, 'mentions', DATE), { recursive: true });
+  writeFileSync(ledgerPath(root, DATE), JSON.stringify({
+    events: {
+      'KXDELIVEREDONCE-26JUN11': {
+        status: 'blocked',
+        delivered_at: '2026-06-11T12:00:00Z',
+        attempts: 2,
+        first_seen_utc: '2026-06-11T00:00:00Z',
+      },
+    },
+  }, null, 2));
+
+  const calls = [];
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    eventsFile,
+    runStepImpl: (label, command, args) => {
+      calls.push({ label, command, args });
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  assert.deepEqual(result.seen.map(e => e.event_ticker), ['KXDELIVEREDONCE-26JUN11']);
+  assert.equal(result.attempted.length, 0);
+  assert.equal(result.retried.length, 0);
+  assert.equal(calls.length, 0);
 });
 
 // ─── per-event isolation, blocker artifacts, throttle ────────────────────────

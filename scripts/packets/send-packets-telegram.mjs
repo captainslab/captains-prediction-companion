@@ -17,6 +17,10 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import {
+  DELIVERY_VERDICTS,
+  inspectPacketFile,
+} from '../cron/cpc-packet-janitor.mjs';
 
 const TELEGRAM_SAFE_CHARS = 3500;
 
@@ -35,6 +39,14 @@ const packetType = argValue('--type') || 'mentions-daily';
 // out-of-scope artifacts sitting in the same dir can never ride along.
 const onlyStems = (() => {
   const v = argValue('--only');
+  if (!v) return null;
+  return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
+})();
+// --exclude stem1,stem2 — drop these stems from the final delivery plan.
+// This is applied after --only so callers can pass a narrow allow-list and
+// then carve out a manual hold list without changing the delivery ledger.
+const excludeStems = (() => {
+  const v = argValue('--exclude');
   if (!v) return null;
   return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
 })();
@@ -155,9 +167,12 @@ export function planDeliveries(dir, dateStr, options = {}) {
   // Returns [{ name, files }] — one entry per event packet, in stable order.
   // Audit artifacts (.inventory.txt, *.meta.json) are excluded by design.
   const preferBaseFile = options.preferBaseFile === true;
+  // Most packet types name files <date>-...; worldcup-matchday uses
+  // worldcup-<date>-... — accept either, still pinned to the requested date.
+  const prefixes = options.prefixes ?? [`${dateStr}-`, `worldcup-${dateStr}-`];
   const all = readdirSync(dir).sort();
   const bases = all.filter((f) =>
-    f.startsWith(`${dateStr}-`) &&
+    prefixes.some((p) => f.startsWith(p)) &&
     f.endsWith('.txt') &&
     !f.endsWith('.inventory.txt') &&
     !/\.chunk-\d+\.txt$/.test(f),
@@ -177,27 +192,64 @@ export function planDeliveries(dir, dateStr, options = {}) {
   return plan;
 }
 
+export function filterDeliveryPlan(plan, { onlyStems = null, excludeStems = null } = {}) {
+  return plan.filter((entry) => {
+    if (onlyStems && !onlyStems.has(entry.name)) return false;
+    if (excludeStems && excludeStems.has(entry.name)) return false;
+    return true;
+  });
+}
+
+export function filterAlreadyDeliveredPlan(plan, ledger, { force = false } = {}) {
+  return plan.filter((entry) => force || !ledger.delivered[entry.name]);
+}
+
 function isMentionsPacketType(type) {
   return type === 'mentions-daily' || type === 'mentions-watchlist';
 }
 
-export function mentionsPacketNotice(packetText = '', stem = '') {
+// All CPC packet types are delivered as one short notice + the base .txt as
+// an attached document (never chunked text messages). This is the uniform
+// CPC customer packet delivery contract.
+const CPC_DOCUMENT_TYPES = new Set([
+  'mentions-daily',
+  'mentions-watchlist',
+  'worldcup-matchday',
+  'nascar-sunday',
+  'ufc-weekly',
+  'mlb-daily',
+]);
+
+function isDocumentPacketType(type) {
+  return CPC_DOCUMENT_TYPES.has(type);
+}
+
+export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
   const eventLine = packetText
     .split(/\r?\n/)
     .map(line => line.trim())
-    .find(line => /^Event title:/i.test(line) || /^#\s*Event:/i.test(line) || /^=== .*Mentions/i.test(line));
+    .find(line =>
+      /^Event title:/i.test(line) ||
+      /^#\s*Event:/i.test(line) ||
+      /^=== .*CPC Packet:/i.test(line) ||
+      /^=== .*Mentions/i.test(line));
   const source = eventLine || stem;
   let label = source
     .replace(/^Event title:\s*/i, '')
     .replace(/^#\s*Event:\s*/i, '')
     .replace(/^===\s*/, '')
     .replace(/\s*===\s*$/, '')
-    .replace(/^Captain Mentions\s*[—-]\s*/i, '')
+    .replace(/^Captain\s+\w+\s*[—-]\s*/i, '')
+    .replace(/^CPC Packet:\s*/i, '')
     .replace(/^Daily Decision Board:\s*/i, '')
     .trim();
   if (/trump/i.test(source) && /tele-rally/i.test(source)) label = 'Trump Tele-Rally';
   if (!label) label = stem;
-  return `New mentions packet: ${label} -- attached .txt`;
+  return `New CPC packet: ${label} -- attached .txt`;
+}
+
+export function mentionsPacketNotice(packetText = '', stem = '') {
+  return cpcPacketCaption(packetText, stem, 'mentions');
 }
 
 function loadLedger(path) {
@@ -216,6 +268,20 @@ function saveLedger(path, ledger) {
   renameSync(tmp, path);
 }
 
+function ensureLedgerFile(path, ledger) {
+  if (existsSync(path)) return;
+  saveLedger(path, {
+    ...ledger,
+    schema: 'cpc_packet_delivery_ledger_v1',
+    created_utc: new Date().toISOString(),
+    delivered: ledger.delivered ?? {},
+  });
+}
+
+function janitorAlert(entryName, janitor) {
+  return `JANITOR_BLOCKED ${entryName}: ${janitor.errors?.[0]?.code ?? 'PACKET_QC_FAILED'}`;
+}
+
 async function main() {
   const dir = resolve(stateRoot, 'packets', date, packetType);
   const ledgerPath = join(dir, '.delivery-ledger.json');
@@ -226,10 +292,11 @@ async function main() {
   }
 
   const ledger = loadLedger(ledgerPath);
-  let plan = planDeliveries(dir, date, { preferBaseFile: isMentionsPacketType(packetType) });
+  if (!dryRun) ensureLedgerFile(ledgerPath, ledger);
+  let plan = planDeliveries(dir, date, { preferBaseFile: isDocumentPacketType(packetType) });
 
-  if (onlyStems) {
-    plan = plan.filter((entry) => onlyStems.has(entry.name));
+  if (onlyStems || excludeStems) {
+    plan = filterDeliveryPlan(plan, { onlyStems, excludeStems });
     if (!plan.length) {
       console.log(`${packetType} ${date}: --only matched no packets — nothing to send`);
       return;
@@ -256,47 +323,90 @@ async function main() {
     return;
   }
 
+  plan = filterAlreadyDeliveredPlan(plan, ledger, { force });
+
   let sent = 0;
   let skipped = 0;
+  const blockedEntries = [];
   for (const entry of plan) {
     if (entry.name === `${date}-no-events`) continue;
     if (ledger.delivered[entry.name] && !force) {
       skipped += 1;
       continue;
     }
-    if (isMentionsPacketType(packetType)) {
+    if (isDocumentPacketType(packetType)) {
       const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
       const filePath = join(dir, fileName);
-      const text = readFileSync(filePath, 'utf8');
-      const notice = mentionsPacketNotice(text, entry.name);
+      const janitor = dryRun ? null : inspectPacketFile(filePath, {
+        date,
+        stateRoot,
+        packetType,
+        ledgerPath,
+        idempotencyKey: entry.name,
+        requireLedger: true,
+        requireSourceHealth: true,
+        documentDelivery: true,
+        force,
+      });
+      if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+        console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        blockedEntries.push(entry.name);
+        continue;
+      }
+      const deliveryPath = janitor?.repaired_path ?? filePath;
+      const deliveryName = basename(deliveryPath);
+      const text = readFileSync(deliveryPath, 'utf8');
+      const notice = cpcPacketCaption(text, entry.name, packetType);
       if (dryRun) {
         console.log(`[dry-run] would send notice: ${notice}`);
-        console.log(`[dry-run] would send document: ${entry.name} — ${fileName}`);
+        console.log(`[dry-run] would send document: ${entry.name} — ${deliveryName}`);
         continue;
       }
       if (sent) await sleep(SEND_PACING_MS);
       const noticeId = await tgSendMessage(notice);
       await sleep(SEND_PACING_MS);
-      const documentId = await tgSendDocument(filePath);
+      const documentId = await tgSendDocument(deliveryPath);
       ledger.delivered[entry.name] = {
         utc: new Date().toISOString(),
         message_ids: [noticeId, documentId],
         notice_message_id: noticeId,
         document_message_id: documentId,
-        document_file: fileName,
+        document_file: deliveryName,
         delivery_mode: 'document_txt',
+        janitor_verdict: janitor.verdict,
+        janitor_sidecar: janitor.sidecar_path,
+        janitor_repaired_path: janitor.repaired_path ?? undefined,
         forced: force || undefined,
       };
       saveLedger(ledgerPath, ledger);
       sent += 1;
-      console.log(`sent ${entry.name} — notice + 1 document (${fileName})`);
+      console.log(`sent ${entry.name} — notice + 1 document (${deliveryName}) janitor=${janitor.verdict}`);
       continue;
     }
     const pieces = [];
     for (const f of entry.files) {
-      const text = readFileSync(join(dir, f), 'utf8');
+      const filePath = join(dir, f);
+      const janitor = dryRun ? null : inspectPacketFile(filePath, {
+        date,
+        stateRoot,
+        packetType,
+        ledgerPath,
+        idempotencyKey: entry.name,
+        requireLedger: true,
+        requireSourceHealth: true,
+        documentDelivery: false,
+        force,
+      });
+      if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+        console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        blockedEntries.push(entry.name);
+        continue;
+      }
+      const deliveryPath = janitor?.repaired_path ?? filePath;
+      const text = readFileSync(deliveryPath, 'utf8');
       pieces.push(...chunkText(text));
     }
+    if (!pieces.length) continue;
     if (dryRun) {
       console.log(`[dry-run] would send ${entry.name} — ${pieces.length} message(s) from ${entry.files.join(', ')}`);
       continue;
@@ -310,6 +420,9 @@ async function main() {
     saveLedger(ledgerPath, ledger);
     sent += 1;
     console.log(`sent ${entry.name} — ${ids.length} message(s)`);
+  }
+  if (plan.length === 1 && blockedEntries.length === 1 && sent === 0) {
+    throw new Error(`janitor blocked sole packet ${blockedEntries[0]}`);
   }
   console.log(`${packetType} ${date}: delivered=${sent} skipped_already_delivered=${skipped} total_packets=${plan.length}`);
 }

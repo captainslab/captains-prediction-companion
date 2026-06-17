@@ -16,9 +16,12 @@ import {
 } from '../scripts/shared/decision-process.mjs';
 import {
   buildKalshiEventPacket,
+  buildCompositeCard,
   PACKET_TYPE,
   weekendDates,
 } from '../scripts/packets/generate-ufc-weekly.mjs';
+import { renderUfcPacket } from '../scripts/ufc/lib/packet-renderer.mjs';
+import { renderUfcModelScores } from '../scripts/ufc/lib/model-score-matrix.mjs';
 
 // ─── 1. Cron expression: Saturday 9:00 AM server time ─────────────────────
 
@@ -228,35 +231,100 @@ test('UFC packet process includes anti-price justification field', () => {
   );
 });
 
-test('UFC packet output includes sources checked, missing inputs, research completeness, anti-price statement, and no-pick reason', () => {
+test('UFC packet output uses compact BLOCKED format with NOT IN SCORE', () => {
   const text = buildPriceOnlyPacketText();
-  assert.match(text, /Research Completeness/, 'packet must include research completeness section');
-  assert.match(text, /sources_checked:/, 'packet must list sources checked');
-  assert.match(text, /missing_inputs:/, 'packet must list missing inputs');
-  assert.match(text, /Missing evidence:/, 'packet must render missing evidence/no-pick inputs');
-  assert.match(text, /anti_price_statement:/, 'packet must include anti-price statement');
-  assert.match(text, /Why it is not price-only:/, 'packet must include anti-price justification');
-  assert.match(text, /no_pick_reason:/, 'packet must include no-pick reason');
+  assert.match(text, /BLOCKED_MODEL_LAYER_MISSING/, 'packet must include BLOCKED_MODEL_LAYER_MISSING');
+  assert.match(text, /BLOCKED — MODEL LAYER MISSING/, 'packet must include BLOCKED section header');
+  assert.match(text, /NOT IN SCORE/, 'packet must include NOT IN SCORE marker');
+  assert.match(text, /audit inventory only/, 'packet must note market data is in audit only');
 });
 
-test('UFC packet keeps prices, volume, open interest, and line movement out of Edge Basis', () => {
-  const text = buildPriceOnlyPacketText();
-  const edgeBasis = sectionBetween(text, '--- Edge Basis ---', '--- Market Context ---');
-  const marketContext = sectionBetween(text, '--- Market Context ---', 'market_watch_notes');
-  for (const term of ['yes_bid', 'yes_ask', 'last_price', 'liquidity', 'volume', 'open_interest', 'line_movement']) {
-    assert.doesNotMatch(edgeBasis, new RegExp(term, 'i'), `Edge Basis must not contain ${term}`);
-    assert.match(marketContext, new RegExp(term, 'i'), `Market Context must contain ${term}`);
+test('UFC compact packet keeps raw market data out of customer body (audit inventory only)', () => {
+  const built = buildKalshiEventPacket({
+    event: priceOnlyUfcEvent(),
+    dates: weekendDates('2099-01-03'),
+    sourcePath: '/tmp/ufc-price-only-source.json',
+  });
+  for (const term of ['yes_bid', 'yes_ask', 'last_price', 'liquidity', 'volume', 'open_interest']) {
+    assert.doesNotMatch(built.text, new RegExp(term, 'i'), `Customer packet must not contain ${term}`);
   }
+  assert.ok(built.inventoryText, 'Must produce inventory text');
+  assert.match(built.inventoryText, /markets:/, 'Inventory must contain markets section');
 });
 
-test('UFC packet with price-only market data stays WATCH, not PICK or EVIDENCE_LEAN', () => {
+test('UFC compact packet never claims PICK or EVIDENCE_LEAN', () => {
   const text = buildPriceOnlyPacketText();
-  assert.match(text, /^  decision_status: WATCH$/m, 'price-only packet must stay WATCH');
   assert.doesNotMatch(
     text,
-    /^  decision_status: (?:PICK|EVIDENCE[_ ]LEAN|STRONG EVIDENCE[_ ]LEAN)$/m,
-    'price-only packet must not become PICK or EVIDENCE_LEAN',
+    /decision_status: (?:PICK|EVIDENCE[_ ]LEAN|STRONG EVIDENCE[_ ]LEAN)/m,
+    'compact BLOCKED packet must not claim PICK or EVIDENCE_LEAN',
   );
+});
+
+test('UFC composite path keeps raw prices out of the customer packet', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'ufc-cron-composite-'));
+  try {
+    const cacheDir = join(tempDir, 'ufc', 'sources');
+    mkdirSync(cacheDir, { recursive: true });
+    const fighterA = { slpm: 5.1, str_acc: 56, sapm: 3.2, str_def: 59, td_avg: 2.1, td_acc: 49, td_def: 73, sub_avg: 0.7, height: '5\' 11"', reach: 73, stance: 'Switch', record: { wins: 13, losses: 2, draws: 0 }, fights: [{ result: 'win', method: 'KO/TKO' }] };
+    const fighterB = { slpm: 2.7, str_acc: 39, sapm: 5.1, str_def: 42, td_avg: 0.7, td_acc: 28, td_def: 44, sub_avg: 0.2, height: '5\' 8"', reach: 68, stance: 'Orthodox', record: { wins: 8, losses: 5, draws: 0 }, fights: [{ result: 'loss', method: 'U-DEC' }] };
+    writeFileSync(join(cacheDir, 'alpha.json'), JSON.stringify({ stats: fighterA }), 'utf8');
+    writeFileSync(join(cacheDir, 'beta.json'), JSON.stringify({ stats: fighterB }), 'utf8');
+
+    const winner = priceOnlyUfcEvent();
+    winner.markets[0].yes_sub_title = 'Alpha';
+    winner.markets[0].no_sub_title = 'Beta';
+    winner.markets[0].ticker = 'KXUFCFIGHT-99JAN03ALPBET-ALPHA';
+    winner.markets.push({
+      ticker: 'KXUFCFIGHT-99JAN03ALPBET-BETA',
+      event_ticker: winner.event_ticker,
+      title: 'Will Beta beat Alpha?',
+      subtitle: 'Beta',
+      yes_sub_title: 'Beta',
+      no_sub_title: 'Alpha',
+      yes_bid_dollars: '0.55',
+      yes_ask_dollars: '0.58',
+      no_bid_dollars: '0.42',
+      no_ask_dollars: '0.45',
+      last_price_dollars: '0.56',
+      liquidity_dollars: '1200.00',
+      volume_fp: '150',
+      open_interest_fp: '80',
+      close_time: '2099-01-03T23:00:00Z',
+      expected_expiration_time: '2099-01-03T23:00:00Z',
+    });
+    const composite = buildCompositeCard({
+      kalshiEvents: [winner],
+      allLaneEvents: [
+        winner,
+        { event_ticker: 'KXUFCMOV-99JAN03ALPBET', title: 'Alpha vs Beta: Method of Victory', markets: [{ ticker: 'MOV' }] },
+        { event_ticker: 'KXUFCDISTANCE-99JAN03ALPBET', title: 'Alpha vs Beta: To Go The Distance', markets: [{ ticker: 'DIST' }] },
+        { event_ticker: 'KXUFCVICROUND-99JAN03ALPBET', title: 'Alpha vs Beta: Round of Victory', markets: [{ ticker: 'VIC' }] },
+        { event_ticker: 'KXUFCROUNDS-99JAN03ALPBET', title: 'Alpha vs Beta: Round of Finish', markets: [{ ticker: 'ROF' }] },
+        { event_ticker: 'KXUFCMOF-99JAN03ALPBET', title: 'Alpha vs Beta: Method of Finish', markets: [{ ticker: 'MOF' }] },
+      ],
+      cacheDir,
+      date: '2099-01-03',
+    });
+
+    const packetText = renderUfcPacket({
+      cardTitle: composite.cardTitle,
+      date: '2099-01-03',
+      card: { fights: composite.fights },
+      sources: ['UFCStats.com'],
+    });
+    const matrixText = renderUfcModelScores({
+      cardTitle: composite.cardTitle,
+      date: '2099-01-03',
+      card: { fights: composite.fights },
+    });
+
+    assert.match(packetText, /captured lanes:/);
+    assert.doesNotMatch(packetText, /bid=|ask=|last=|vol=/);
+    assert.doesNotMatch(matrixText, /bid=|ask=|last=|vol=/);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('UFC packet TLDR note denies evidence lean without fighter context', () => {
@@ -372,8 +440,7 @@ test('generate-ufc-weekly.mjs runs to completion with temp state root (integrati
     const packetPath = join(tmp, 'packets', date, PACKET_TYPE, `${date}-local-ufc-card.txt`);
     assert.equal(existsSync(packetPath), true, `Expected packet output at ${packetPath}`);
     const packet = readFileSync(packetPath, 'utf8');
-    assert.match(packet, /telegram_send: disabled/, 'packet must state Telegram send is disabled');
-    assert.match(packet, /No trades placed by this workflow\./, 'packet must preserve no-trades footer');
+    assert.match(packet, /BLOCKED_MODEL_LAYER_MISSING|No trades placed by this workflow\./, 'packet must include BLOCKED or no-trades footer');
     assert.match(packet, /No bankroll advice\. No order placement\. Research only\./,
       'packet must preserve no-order-placement footer');
   } finally {

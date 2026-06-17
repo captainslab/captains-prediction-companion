@@ -97,7 +97,7 @@ test('MARKET_ONLY mode: no ceiling -> rows BLOCKED on missing model but keep mar
   }
 });
 
-test('NASCAR packet: sectioned board, market+composite together, raw inventory audit-only', () => {
+test('NASCAR MARKET_ONLY: compact event-level block, no per-driver dump', () => {
   const packet = buildRacePacket({
     date: '2026-05-31',
     event: nascarEvent(),
@@ -107,17 +107,18 @@ test('NASCAR packet: sectioned board, market+composite together, raw inventory a
   });
   assert.ok(packet, 'packet built');
 
-  // main packet has the sectioned board
+  // compact block instead of full sectioned board
   assert.match(packet.text, /TLDR BOARD:/);
-  assert.match(packet.text, /TOP EDGE CANDIDATES/);
-  assert.match(packet.text, /WATCHLIST \/ TRIGGER BOARD/);
-  assert.match(packet.text, /FADES \/ OVERPRICED/);
-  assert.match(packet.text, /BLOCKED \/ NEEDS SOURCE/);
-  assert.match(packet.text, /AUDIT ARTIFACTS/);
-
-  // rows carry market fields AND explicit BLOCKED model fields
-  assert.match(packet.text, /market: implied=/);
   assert.match(packet.text, /BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(packet.text, /BLOCKED — MODEL LAYER MISSING/);
+  assert.match(packet.text, /NOT IN SCORE/);
+
+  // no per-driver rows in customer packet
+  const lines = packet.text.split('\n');
+  const blockedRowCount = lines.filter(l => /^#\d+\s+\[BLOCKED\]/.test(l)).length;
+  assert.equal(blockedRowCount, 0, 'compact block must not render individual BLOCKED rows');
+  assert.ok(!/score=MISSING/.test(packet.text), 'no score=MISSING in customer packet');
+  assert.ok(!/Rank reflects market implied only/.test(packet.text), 'no legacy phrase');
 
   // raw inventory NOT in main packet
   assert.equal(looksLikeRawInventoryDump(packet.text), false);

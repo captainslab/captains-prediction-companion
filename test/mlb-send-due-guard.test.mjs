@@ -213,16 +213,23 @@ test('_send-due dry-run passes clean composite artifact', () => {
   }
 });
 
-// ─── 7. publish-article-reports --send-telegram is hard-blocked ──────────────
+// ─── 7. publish-article-reports --send-telegram needs a plan + telegram env ──
 
-test('publish-article-reports --send-telegram exits non-zero', () => {
-  // No state root needed — error is thrown before any plan is read.
-  const r = spawnSync(process.execPath, [
-    PUBLISH_ARTICLES, '--send-telegram', '--date', '2099-01-07',
-  ], { encoding: 'utf8', cwd: REPO });
-  assert.notEqual(r.status, 0, '--send-telegram should exit non-zero');
-  const combined = (r.stdout ?? '') + (r.stderr ?? '');
-  assert.match(combined, /disabled|composite/i, 'error should mention composite path');
+test('publish-article-reports --send-telegram fails cleanly without a slate plan', () => {
+  // Re-enabled 2026-06-12: article packets deliver as .txt documents. With an
+  // empty state root there is no slate plan, so the run must exit non-zero
+  // before any Telegram I/O is attempted.
+  const root = mkdtempSync(join(tmpdir(), 'mlb-articles-send-'));
+  try {
+    const r = spawnSync(process.execPath, [
+      PUBLISH_ARTICLES, '--send-telegram', '--date', '2099-01-07', '--state-root', root,
+    ], { encoding: 'utf8', cwd: REPO });
+    assert.notEqual(r.status, 0, 'missing plan should exit non-zero');
+    const combined = (r.stdout ?? '') + (r.stderr ?? '');
+    assert.match(combined, /No slate plan/i, 'error should mention missing slate plan');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // ─── 8. No forbidden strings in composite refresh output (dry-run) ───────────
@@ -332,6 +339,8 @@ test('_send-due skips window already delivered for current idempotency_key', () 
       '',
       '★ PICK  NYY@KC     →  NYY  (diff: +14)',
       '  ↳ reason.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
     ].join('\n'));
     writePlan(root, date, [{
       cluster_id: 'composite-refresh',
@@ -394,6 +403,8 @@ test('_send-due --dry-run exits 0 without telegram env', () => {
       '',
       '★ PICK  NYY@KC     →  NYY  (diff: +14)',
       '  ↳ reason.',
+      '',
+      'Composite model — no bets placed, no trades executed.',
     ].join('\n'));
     writePlan(root, date, [{
       cluster_id: 'composite-refresh',

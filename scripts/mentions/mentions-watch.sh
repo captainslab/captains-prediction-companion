@@ -10,4 +10,9 @@ TODAY=$(TZ=UTC date +%F)
 LOG_FILE="logs/mentions-watch.log"
 mkdir -p logs
 
+# One event per run: a full generate+synthesize+send cycle (~3-7 min) must
+# finish inside the cron runner's 600s script timeout; the queue drains at
+# one event per 15-min tick. Override stays possible via the environment.
+export MENTIONS_WATCH_MAX_NEW_PER_RUN="${MENTIONS_WATCH_MAX_NEW_PER_RUN:-1}"
+
 exec node scripts/mentions/mentions-watch.mjs --date "$TODAY" >> "$LOG_FILE" 2> >(tee -a "$LOG_FILE" >&2)

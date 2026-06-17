@@ -19,6 +19,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolve, dirname } from 'node:path';
 import { mkdirSync, appendFileSync } from 'node:fs';
+import {
+  DELIVERY_VERDICTS,
+  inspectPacketFile,
+} from '../cron/cpc-packet-janitor.mjs';
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', dryRun: false };
@@ -195,6 +199,10 @@ function countPicks(text) {
   return n;
 }
 
+function janitorBlockLine(clusterId, janitor) {
+  return `JANITOR_BLOCKED ${clusterId}: ${janitor.errors?.[0]?.code ?? 'PACKET_QC_FAILED'} debug=${janitor.debug_path ?? '(none)'}`;
+}
+
 const summary = [];
 for (const { window: w, artifactPath, articlePath } of sendList) {
   const text = fs.readFileSync(artifactPath, 'utf8');
@@ -215,19 +223,60 @@ for (const { window: w, artifactPath, articlePath } of sendList) {
     console.error(`BLOCK ${w.cluster_id} — artifact contains forbidden content (pricing/board data). Not sent.`);
     continue;
   }
+
+  const auditJanitor = inspectPacketFile(artifactPath, {
+    date: TODAY,
+    stateRoot: opts.stateRoot,
+    packetType: 'mlb-composite',
+    ledgerPath: PLAN,
+    idempotencyKey: w.idempotency_key ?? w.cluster_id,
+    requireLedger: true,
+    requireSourceHealth: !opts.dryRun,
+    documentDelivery: true,
+    force: false,
+  });
+  if (auditJanitor.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+    console.error(janitorBlockLine(w.cluster_id, auditJanitor));
+    continue;
+  }
+
+  let deliveryArticlePath = articlePath;
+  let deliveryArticleText = articleText;
+  let articleJanitor = null;
+  if (articlePath) {
+    articleJanitor = inspectPacketFile(articlePath, {
+      date: TODAY,
+      stateRoot: opts.stateRoot,
+      packetType: 'mlb-composite',
+      ledgerPath: PLAN,
+      idempotencyKey: `${w.idempotency_key ?? w.cluster_id}:article`,
+      requireLedger: true,
+      requireSourceHealth: !opts.dryRun,
+      documentDelivery: true,
+      force: false,
+    });
+    if (articleJanitor.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+      console.error(janitorBlockLine(w.cluster_id, articleJanitor));
+      continue;
+    }
+    deliveryArticlePath = articleJanitor.repaired_path ?? articlePath;
+    deliveryArticleText = fs.readFileSync(deliveryArticlePath, 'utf8');
+  }
+  const deliveryArtifactPath = auditJanitor.repaired_path ?? artifactPath;
+
   if (opts.dryRun) {
-    log(`[dry-run] would send ${w.cluster_id} (${mode}) — ${clearLean} pick(s)`);
+    log(`[dry-run] would send ${w.cluster_id} (${mode}) — ${clearLean} pick(s) janitor=${articleJanitor?.verdict ?? auditJanitor.verdict}`);
     continue;
   }
   // Article edition goes out as a readable message when it fits; otherwise
   // fall back to attaching it (and finally to the legacy compact document).
   let id;
-  if (articleText && articleText.length <= TELEGRAM_SAFE_CHARS) {
-    id = await tgSendMessage(articleText);
-  } else if (articleText) {
-    id = await tgSendDocument(articlePath, caption);
+  if (deliveryArticleText && deliveryArticleText.length <= TELEGRAM_SAFE_CHARS) {
+    id = await tgSendMessage(deliveryArticleText);
+  } else if (deliveryArticleText) {
+    id = await tgSendDocument(deliveryArticlePath, caption);
   } else {
-    id = await tgSendDocument(artifactPath, caption);
+    id = await tgSendDocument(deliveryArtifactPath, caption);
   }
   w.status = 'sent';
   w.delivered_idempotency_key = w.idempotency_key;
@@ -235,8 +284,11 @@ for (const { window: w, artifactPath, articlePath } of sendList) {
   w.delivered_telegram_message_ids = [id];
   w.delivered_mode = mode;
   w.clear_lean_count = clearLean;
+  w.janitor_verdict = articleJanitor?.verdict ?? auditJanitor.verdict;
+  w.janitor_sidecar = articleJanitor?.sidecar_path ?? auditJanitor.sidecar_path;
+  w.janitor_repaired_path = articleJanitor?.repaired_path ?? auditJanitor.repaired_path ?? null;
   writePlan();
-  log(`sent ${w.cluster_id} (${mode}) — ${clearLean} pick(s), msg_id=${id}`);
+  log(`sent ${w.cluster_id} (${mode}) — ${clearLean} pick(s), msg_id=${id}, janitor=${w.janitor_verdict}`);
   summary.push(`${w.cluster_id}(${mode})`);
 }
 
