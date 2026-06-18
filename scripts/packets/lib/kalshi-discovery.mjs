@@ -21,12 +21,21 @@ export const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 export const KALSHI_SOURCES = Object.freeze({
   mentions: {
     label: 'kalshi-calendar-mentions',
+    // The human-facing mentions board. It is a pure client-rendered SPA: the
+    // static HTML carries no event tickers, so discovery is scraper-FIRST
+    // (parse any tickers/anchors the page exposes) and API-FALLBACK.
     page_url: 'https://kalshi.com/calendar/mentions',
-    // DEPRECATED: Kalshi no longer uses category=Mentions. The endpoint returns
-    // HTTP 200 but events have mixed categories (World, Politics, Companies, etc.)
-    // and none are true transcript/mention markets. Use 'broad' for language-based
-    // discovery instead. This source is kept for backward compatibility only.
+    // BROKEN as an events filter: /events?category=Mentions returns HTTP 200
+    // but ignores the category and yields ~200 mixed-category events (World,
+    // Elections, Climate, ...) that do NOT include real mention events such as
+    // KXOBAMAMENTION. Kept only as a last-ditch backstop; never trust alone.
     api_url: `${KALSHI_API_BASE}/events?category=Mentions&status=open&limit=200&with_nested_markets=true`,
+    // FAITHFUL page-equivalent: the /series listing DOES carry a reliable
+    // `category` field. Series where category === 'Mentions' is the exact set
+    // the calendar/mentions board renders (category-driven), so it is the
+    // canonical API fallback behind the page scrape. See selectMentionSeries.
+    series_url: `${KALSHI_API_BASE}/series?limit=1000`,
+    category: 'Mentions',
   },
   broad: {
     label: 'kalshi-broad-discovery',
@@ -168,6 +177,46 @@ export async function fetchKalshiEvents(sourceKey, options = {}) {
  *
  * Returns { ok, events, raw, attempts, error }.
  */
+
+// Mention-series classification, shared by every discovery path so the page
+// scrape, the category API, and the legacy regex scan all agree on what a
+// "mention series" is.
+//
+// The /series listing carries a RELIABLE `category` field (unlike the broken
+// /events?category= filter). Series where category === 'Mentions' is exactly
+// the set the calendar/mentions board renders. We use that as the primary
+// signal and keep the historical ticker/title regex as an augment so we never
+// regress on series Kalshi has not (yet) tagged.
+export const MENTION_SERIES_PATTERNS = Object.freeze([
+  /mention/i,
+  /\bearnings\b.*\bmention\b/i,
+  /\bmention\b.*\bearnings\b/i,
+]);
+
+/**
+ * Select mention series from a raw /series listing. Category-first, regex
+ * augmented. Pure — no I/O. Returns the matching series records unchanged.
+ */
+export function selectMentionSeries(allSeries = [], options = {}) {
+  const category = options.category ?? 'Mentions';
+  const patterns = options.patterns ?? MENTION_SERIES_PATTERNS;
+  const seen = new Set();
+  const picked = [];
+  for (const s of allSeries) {
+    if (!s || typeof s !== 'object') continue;
+    const byCategory = typeof s.category === 'string'
+      && s.category.toLowerCase() === String(category).toLowerCase();
+    const text = `${s.ticker || ''} ${s.title || ''}`;
+    const byRegex = patterns.some((p) => p.test(text));
+    if (!byCategory && !byRegex) continue;
+    const key = s.ticker || s.title;
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    picked.push({ ...s, _matchedVia: byCategory ? 'category' : 'regex' });
+  }
+  return picked;
+}
+
 export async function fetchMentionEventsBySeries(options = {}) {
   const fetcher = options.fetcher ?? defaultFetcher;
   const attempts = [];
@@ -191,12 +240,8 @@ export async function fetchMentionEventsBySeries(options = {}) {
     if (!cursor) break;
   }
 
-  // Step 2: Filter to mention-related series
-  const mentionPatterns = [/mention/i, /\bearnings\b.*\bmention\b/i, /\bmention\b.*\bearnings\b/i];
-  const mentionSeries = allSeries.filter(s => {
-    const text = ((s.ticker || '') + ' ' + (s.title || '')).toLowerCase();
-    return mentionPatterns.some(p => p.test(text));
-  });
+  // Step 2: Filter to mention-related series (category-first, regex-augmented).
+  const mentionSeries = selectMentionSeries(allSeries);
 
   // Step 3: Fetch events for each mention series (no status filter — events have empty status)
   const maxEventPagesPerSeries = options.maxEventPagesPerSeries ?? 2;
@@ -228,6 +273,138 @@ export async function fetchMentionEventsBySeries(options = {}) {
     attempts,
     error: null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Scraper-first calendar/mentions discovery
+// ---------------------------------------------------------------------------
+//
+// The board at https://kalshi.com/calendar/mentions is a pure client-rendered
+// SPA. A plain HTTP fetch returns a ~34 KB stub with NO event data, so true
+// page scraping requires a JS-rendering fetch (e.g. firecrawl/browser) injected
+// as options.pageFetcher. When that yields rendered HTML, we extract the event
+// tickers the human sees. When it does not (no browser dep, scrape failure), we
+// fall back to the free, deterministic /series?category=Mentions API, which is
+// server-side filtered and reproduces the exact board list. Discovery never
+// depends on any single layer being up.
+
+const EVENT_TICKER_RE = /KX[A-Z0-9]*MENTION[A-Z0-9]*-[0-9]{2}[A-Z]{3}[0-9]{2}[A-Z0-9]*/gi;
+const MARKET_ANCHOR_RE = /\/markets\/[a-z0-9]+\/[a-z0-9-]+\/(kx[a-z0-9]*mention[a-z0-9-]*)/gi;
+
+/**
+ * Extract distinct mention EVENT tickers from rendered calendar/mentions HTML.
+ * Pure — no I/O. Reads both bare ticker tokens and /markets/.../<ticker> anchor
+ * hrefs (including any "show markets" / closed-history sections the render
+ * exposes), upper-cases them, and de-dupes. Returns [] for the empty SPA stub.
+ */
+export function scrapeMentionsCalendar(html = '') {
+  if (typeof html !== 'string' || !html) return { tickers: [], anchors: [] };
+  const tickers = new Set();
+  const anchors = new Set();
+  let m;
+  EVENT_TICKER_RE.lastIndex = 0;
+  while ((m = EVENT_TICKER_RE.exec(html)) !== null) tickers.add(m[0].toUpperCase());
+  MARKET_ANCHOR_RE.lastIndex = 0;
+  while ((m = MARKET_ANCHOR_RE.exec(html)) !== null) {
+    anchors.add(m[0]);
+    tickers.add(m[1].toUpperCase());
+  }
+  return { tickers: [...tickers], anchors: [...anchors] };
+}
+
+/**
+ * Fetch + scrape the calendar/mentions board. options.pageFetcher(url) must
+ * resolve { ok, status, text } with JS-rendered HTML (a browser/firecrawl
+ * adapter); without one we use defaultFetcher, which gets the inert SPA stub
+ * and therefore returns zero tickers (caller then uses the API fallback).
+ * Returns { ok, tickers, anchors, status, error }.
+ */
+export async function fetchMentionsCalendarTickers(options = {}) {
+  const url = options.pageUrl ?? KALSHI_SOURCES.mentions.page_url;
+  const pageFetcher = options.pageFetcher ?? (async (u) => {
+    const res = await defaultFetcher(u, { ...options });
+    return { ok: res.ok, status: res.status, text: null, error: res.error };
+  });
+  let res;
+  try {
+    res = await pageFetcher(url);
+  } catch (err) {
+    return { ok: false, tickers: [], anchors: [], status: 0, error: err?.message || String(err) };
+  }
+  const html = res?.text ?? res?.html ?? '';
+  const { tickers, anchors } = scrapeMentionsCalendar(html);
+  return {
+    ok: !!res?.ok && tickers.length > 0,
+    tickers,
+    anchors,
+    status: res?.status ?? 0,
+    error: res?.error ?? null,
+  };
+}
+
+/**
+ * Hydrate full event records (with nested markets) for a list of event tickers
+ * via the public events API. Read-only. Returns { ok, events, attempts }.
+ */
+export async function hydrateEventsByTicker(tickers = [], options = {}) {
+  const fetcher = options.fetcher ?? defaultFetcher;
+  const attempts = [];
+  const events = [];
+  for (const ticker of tickers) {
+    if (!ticker) continue;
+    const url = `${KALSHI_API_BASE}/events/${encodeURIComponent(ticker)}?with_nested_markets=true`;
+    const res = await fetcher(url);
+    attempts.push({ url, ok: res.ok, status: res.status, error: res.error });
+    const ev = res?.json?.event;
+    if (res.ok && ev) {
+      ev._discoveredVia = 'page_scrape';
+      events.push(ev);
+    }
+  }
+  return { ok: attempts.some((a) => a.ok), events, attempts };
+}
+
+/**
+ * Scraper-FIRST mention discovery with deterministic API fallback.
+ *   1. Scrape the rendered calendar/mentions board (options.pageFetcher).
+ *      Any tickers found are hydrated via the events API.
+ *   2. ALWAYS also run the free /series category scan (fetchMentionEventsBySeries)
+ *      so a scrape miss never drops coverage; results are unioned by ticker.
+ * Returns { events, sources: { scrape, series }, scrapedTickers }.
+ */
+export async function discoverMentionEvents(options = {}) {
+  const sources = {};
+  const byTicker = new Map();
+
+  // Layer 1: scraper-first.
+  let scrapedTickers = [];
+  try {
+    const scan = await fetchMentionsCalendarTickers(options);
+    scrapedTickers = scan.tickers;
+    sources.scrape = { ok: scan.ok, status: scan.status, count: scan.tickers.length, error: scan.error };
+    if (scan.tickers.length) {
+      const hydrated = await hydrateEventsByTicker(scan.tickers, options);
+      sources.scrape.hydrated = hydrated.events.length;
+      for (const ev of hydrated.events) {
+        if (ev?.event_ticker) byTicker.set(ev.event_ticker, ev);
+      }
+    }
+  } catch (err) {
+    sources.scrape = { ok: false, error: err?.message || String(err), count: 0 };
+  }
+
+  // Layer 2: free deterministic series-category fallback (always runs).
+  try {
+    const series = await fetchMentionEventsBySeries(options);
+    sources.series = { ok: series.ok, count: series.events.length };
+    for (const ev of series.events) {
+      if (ev?.event_ticker && !byTicker.has(ev.event_ticker)) byTicker.set(ev.event_ticker, ev);
+    }
+  } catch (err) {
+    sources.series = { ok: false, error: err?.message || String(err), count: 0 };
+  }
+
+  return { events: [...byTicker.values()], sources, scrapedTickers };
 }
 
 // ---------------------------------------------------------------------------

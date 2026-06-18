@@ -1,0 +1,2720 @@
+{
+  "series": [
+    {
+      "ticker": "KXEARNINGSMENTIONACI",
+      "title": "Albertsons",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXARMSTRONGMENTION",
+      "title": "Brian Armstrong ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMENTIONEARNGIS",
+      "title": "General Mills",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNAIR",
+      "title": "AAR Corp Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXLEAVITTSMFMENTION",
+      "title": "What will Karoline Leavitt say on Sunday Morning Futures?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONGOOGL",
+      "title": "earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDJTNATOMENTION",
+      "title": "What will Trump say in his meeting with the Secretary General of NATO?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXHARTMENTION",
+      "title": "Kevin Hart ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXWALLERMENTION",
+      "title": "Waller Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNEWSNATIONMENTION",
+      "title": "News Nation",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMENTIONEARNWGO",
+      "title": "Winnebago Industries Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBTCMENTIONULBRICHT",
+      "title": "Ross",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXANVCD",
+      "title": "dvdvsfv",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXHOMANMENTION",
+      "title": "Tom Homan",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONALK",
+      "title": "Alaska Airlines Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONWMT",
+      "title": "What will Walmart say during their earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCOMMENTSWIFTRUMP",
+      "title": "Will Taylor Swift mention Donald Trump before October?",
+      "category": "Social",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMSFT",
+      "title": "Microsoft earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONADOBE",
+      "title": "What will Adobe say during its earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXSCOTUSMENTION",
+      "title": "SCOTUS Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONWEN",
+      "title": "Wendys",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXJOHNSONMENTION",
+      "title": "Mike Johnson Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXFINKMENTION",
+      "title": "Larry Fink Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXFEDMENTIONDURATION",
+      "title": "mention duration",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXDJTCONF",
+      "title": "Trump press conference",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONNVDA",
+      "title": "NVDA Earnings Mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPSAYMAM",
+      "title": "Mamdani mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONJNJ",
+      "title": "JNJ",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONFDX",
+      "title": "What will FedEx say during their earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCUOMOMENTION",
+      "title": "Cuomo Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTRUMPMENTIONS",
+      "title": "Trump Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONLOW",
+      "title": "Lowe's Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXKHANNAMENTION",
+      "title": "Ro Khanna Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDIMONMENTION",
+      "title": "Jamie Dimon Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXATPMENTION",
+      "title": "ATP Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXCARLSONMENTION",
+      "title": "Tucker Carlson",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTRUMPMENTIONB",
+      "title": "Trump Mention B",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDOLLARGENERAL",
+      "title": "What will Dollar General say during its earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXFEDMENTION",
+      "title": "Fed mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCHWY",
+      "title": "Chewy Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONNBIS",
+      "title": "Nebius Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCMG",
+      "title": "Chipotle Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAZO",
+      "title": "Auto Zone",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXFURYMENTION",
+      "title": "Tyson Fury Mention",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXNEWSOMMENTION",
+      "title": "Gavin Newsom Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDEER",
+      "title": "John Deere",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXALTMANMENTION",
+      "title": "Sam Altman Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXUEFAMENTION",
+      "title": "UEFA Champions League Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONTGT",
+      "title": "Target",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNFDX",
+      "title": "FedEx",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONBLK",
+      "title": "What will BlackRock say at their earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONHPE",
+      "title": "Hewlett Packard Enterprise",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONWFC",
+      "title": "Wells Fargo",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPSAYEP",
+      "title": "TRUMPSAY",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCAR",
+      "title": "Avis ",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMSTR",
+      "title": "Microstrategy Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDOCUSIGN",
+      "title": "What will Docusign say during its earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCRCL",
+      "title": "Circle Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCENAMENTION",
+      "title": "John Cena Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXWHBRIEFING",
+      "title": "WH Briefing room people mentioned",
+      "category": "Politics",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONLLY",
+      "title": "Eli Lily",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDELL",
+      "title": "Dell Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONTSMC",
+      "title": "TSMC Earnings Mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXKIMMELMENTION",
+      "title": "Jimmy Kimmel Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMADDOWMENTION",
+      "title": "Rachel Maddow",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXWEFMENTION",
+      "title": "WEF",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBRKMENTION",
+      "title": "What will Berkshire Hathaway say on their next earnings call?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEPLMENTION",
+      "title": "Premier League Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPMENTIONDURATION",
+      "title": "How Long Will Trump Speak",
+      "category": "Mentions",
+      "tags": [
+        "SOTU"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONUAL",
+      "title": "United Airlines Earnings Mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXAWARDMENTION",
+      "title": "Award Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXRUBIOMENTION",
+      "title": "Marco Rubio",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCAVA",
+      "title": "Cava Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONV",
+      "title": "WHAT WILL VISA SAY IN THEIR NEXT EARNINGS CALL",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXAPPLEMENTION",
+      "title": "What will Tim Cook say at the Apple Event",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXGUTFELDMENTION",
+      "title": "Gutfeld",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXATHLETEMENTION",
+      "title": "Athlete Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPSAYTRUMP",
+      "title": "Trump saying Trump",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXINGRAHAMMENTION",
+      "title": "The Ingraham Angle",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBENIOFFMENTION",
+      "title": "Marc Benioff Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONGEV",
+      "title": "GE VERNOVA",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXPOWELLMENTION",
+      "title": "Powell Mention General ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSHOP",
+      "title": "Shopify",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMELANIAMENTION",
+      "title": "Melania Mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONETOR",
+      "title": "Etoro",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONTOL",
+      "title": "Toll Brothers Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPSAYNICKNAME",
+      "title": "Trump Nickname",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXHANNITYMENTION",
+      "title": "Hannity ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXACOOPERMENTION",
+      "title": "Anderson Cooper",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDPZ",
+      "title": "Dominos",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXZAKARIAMENTION",
+      "title": "Fareed Zakaria",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDWTSMENTION",
+      "title": "DWTS Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMENTIONEARNM",
+      "title": "Macy's",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXPORTNOYMENTION",
+      "title": "What will Dave Portnoy say on DDTG?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMCO",
+      "title": "Moodys",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONADBE",
+      "title": "Adobe Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXKIRKMENTION",
+      "title": "What will Erika Kirk say?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMRVL",
+      "title": "Marvell Technology",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBIANCOMENTION",
+      "title": "Chad Bianco Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMENTIONEARNDAL",
+      "title": "Delta Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXGLASERMENTION",
+      "title": "Nikki Glaser",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSCHUMERMENTION",
+      "title": "Schumer Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXPRESMENTION",
+      "title": "President Mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXDJTINVESTMENT",
+      "title": "What will Trump say at the \"investment announcement\"?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXLASTWORDCOUNT",
+      "title": "Last Word Trump Count",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONWING",
+      "title": "Wingstop",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONLEVI",
+      "title": "Levi's Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONPG",
+      "title": "Proctor & Gamble Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBILATERALMENTION",
+      "title": "Bilateral Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSTATEMENTCOUNTSWIFTTRUMP",
+      "title": "Will Taylor Swift mention Donald Trump before September 15?",
+      "category": "Entertainment",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSJM",
+      "title": "JM Smucker Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMETA",
+      "title": "earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCFBMENTION",
+      "title": "CFB",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTALARICOMENTION",
+      "title": "James Talarico",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXLEAVITTMENTIONDURATION",
+      "title": "Leavitt Duration",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMU",
+      "title": "Micron",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONF",
+      "title": "Ford earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDOGSHOWMENTION",
+      "title": "Dog Show",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBACHELORETTEMENTION",
+      "title": "BACHELORETTE",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDJTHANNITY",
+      "title": "Trump interview with Sean Hannity",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXNCAABMENTION",
+      "title": "College Basketball",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONPSKY",
+      "title": "Paramount",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAVAV",
+      "title": "AeroVironment",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXVIEWMENTION",
+      "title": "The View Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMENTIONEARNNKE",
+      "title": "Nike Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCANDEBMENTION",
+      "title": "Canada Leaders Debate Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONKR",
+      "title": "Kroger",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDJTRALLY",
+      "title": "Trump Rally mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONGM",
+      "title": "GM ",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSFM",
+      "title": "Sprouts",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCRYPTOSUMMIT",
+      "title": "What will Trump say at the White House Crypto Summit?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONTSLA",
+      "title": "Tesla earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDE",
+      "title": "Deere",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXKARDASHIANMENTION",
+      "title": "Kardashian Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDJTJOINTSESSION",
+      "title": "Joint Session of Congress",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPSAY",
+      "title": "What will trump say",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXCOOPERMENTION",
+      "title": "Alex Cooper Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXACKMANMENTION",
+      "title": "Bill Ackman",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMMMENTION",
+      "title": "What will the announcers say during the March Madness game?",
+      "category": "Entertainment",
+      "tags": []
+    },
+    {
+      "ticker": "KXGOVERNORMENTION",
+      "title": "Generic Governor",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONGME",
+      "title": "GME earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCOINBASE",
+      "title": "coinbase earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXWHBRIEFINGEY",
+      "title": "Eliezer Yudkowsky mentioned",
+      "category": "Politics",
+      "tags": []
+    },
+    {
+      "ticker": "KXFREYMENTION",
+      "title": "Jacob Frey",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMTPMENTION",
+      "title": "Meet The Press",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBARKLEYMENTION",
+      "title": "Charles Barkley Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONLULU",
+      "title": "Lululemon Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXUNMENTION",
+      "title": "UN ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNHLMENTION",
+      "title": "NHL Announcer Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXWALESMENTION",
+      "title": "Jimmy Wales",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXENTMENTION",
+      "title": "Entertainment Mention",
+      "category": "Mentions",
+      "tags": [
+        "Entertainment"
+      ]
+    },
+    {
+      "ticker": "KXSASMITH",
+      "title": "Stephen A Smith Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDAL",
+      "title": "Delta Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXRFKMENTION",
+      "title": "RFK Mentions",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXHEGSETHMENTION",
+      "title": "Hegseth",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXELONMENTION",
+      "title": "  Elon",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMLBMENTION",
+      "title": "MLB Announcers",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSPOT",
+      "title": "Spotify",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTION",
+      "title": "What Will Someone Say?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXDJTUKRG7",
+      "title": "UKRG7",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXSNFMENTION",
+      "title": "Sunday Night Football Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONINTC",
+      "title": "Intel Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPZELENSKYY",
+      "title": "What will Trump say with Zelenskyy?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXFTNMENTION",
+      "title": "Face The Nation",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXVLADTENEVMENTION",
+      "title": "What will vlad tenev say",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSTEYERMENTION",
+      "title": "Tom Steyer Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMCD",
+      "title": "McDonalds Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCONGRESSMENTION",
+      "title": "Congress Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDJTRGA",
+      "title": "TRUMP conference at RGA",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXDJTWOMENS",
+      "title": "What will Trump say at the women's history event?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXSTARMERMENTIONB",
+      "title": "Kier Starmer",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KX60MINMENTION",
+      "title": "60 Minutes",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAXP",
+      "title": "AMEX Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCOLBERTMENTION",
+      "title": "Colbert Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONHLT",
+      "title": "HILTON",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXJPOWMENTION",
+      "title": "What will Jerome Powell say?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXALTHOFFMENTION",
+      "title": "Judson Althoff ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONALIBABA",
+      "title": "alibaba earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONUBER",
+      "title": "uber earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMTGMENTION",
+      "title": "MTG",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONBAC",
+      "title": "Bank of America Earnings Mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDJTCANG7",
+      "title": "CANG7",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNCCL",
+      "title": "Carnival Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONRIVN",
+      "title": "Rivian Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPMENTION",
+      "title": "What will Trump say?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCRWD",
+      "title": "CrowdStrike Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONANF",
+      "title": "Abercrombie",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPTOPIC",
+      "title": "Trump Topic Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXKXDJTHANNITY",
+      "title": "Trump interview with Sean Hannity",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCVNA",
+      "title": "Carvana",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXSOUTHPARKMENTION",
+      "title": "South Park Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXGOLDENMENTION",
+      "title": "Golden Bachelor Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSNLMENTION",
+      "title": "SNL Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXFEDGOVMENTION",
+      "title": "Fed Gov Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONRY",
+      "title": "Royal Bank of Canada",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONTFC",
+      "title": "Truist Financial Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONKTOS",
+      "title": "Kratos",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMRBEASTMENTION",
+      "title": "What Will Mr Beast say in his next video",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONISRG",
+      "title": "Intuitive Surgical",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCARNEYMENTION",
+      "title": "Carney Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSNOW",
+      "title": "Snowflake Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONBULL",
+      "title": "Webull Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXFRANKLINMENTION",
+      "title": "Franklin Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCRWV",
+      "title": "CoreWeave Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCELH",
+      "title": "Celsius Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNOKLO",
+      "title": "Oklo",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXWWDCMENTION",
+      "title": "WWDC",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONVZ",
+      "title": "Verizon",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONNKE",
+      "title": "What Will Nike Say During Their Earnings Call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXAOCMENTION",
+      "title": "AOC Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXCMAMENTION",
+      "title": "CMA Awards",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXVANCEMENTION",
+      "title": "Vance Says",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXNBAMENTION",
+      "title": "NBA Mention",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXLEAVITTMENTION",
+      "title": "Leavitt mention general",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNYCMAYORDEBATEMENTION",
+      "title": "NYC Mayoral Debate",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCRM",
+      "title": "Salesforce",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDJTLANDRY",
+      "title": "Trump / Landry mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXSHAQMENTION",
+      "title": "Shaq Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSNAP",
+      "title": "SNAP earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONNIO",
+      "title": "What will Nio say during their earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTRUMPSAYSCAM",
+      "title": "Trump scam altman",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXGREENDAYMENTION",
+      "title": "WILL GREENDAY SAY MAGA",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSBMENTION",
+      "title": "SB mention",
+      "category": "Sports",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDIS",
+      "title": "disney earnings m",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONABNB",
+      "title": "ABNB Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONPYPL",
+      "title": "PayPal Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBIDENMENTION",
+      "title": "Biden Speech Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSTZ",
+      "title": "Constellation Brands",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXPERSONMENTION",
+      "title": "General",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNBAFINALSMENTION",
+      "title": "NBA Finals",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONVSCO",
+      "title": "Victoria Secret",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXGRIFFINMENTION",
+      "title": "Ken Griffin Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONRKLB",
+      "title": "Rocket Lab Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXREEVESMENTION",
+      "title": "Keanu Reeves Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXKAMALAMENTION",
+      "title": "What will Kalmala Harris say on the late show with stephen colbert",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBUSHMENTION",
+      "title": "George Bush ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXLOVEISLMENTION",
+      "title": "Love Island Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Entertainment"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONLUCID",
+      "title": "lucid earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAMD",
+      "title": "AMD earnings menti",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCOSTAMENTION",
+      "title": "António Costa Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXAMODEIMENTION",
+      "title": "Amodei ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONPGR",
+      "title": "Progressive Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXLAMMYMENTION",
+      "title": "David Lammy",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSTARMERMENTION",
+      "title": "Starmer mentions",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAVGO",
+      "title": "Broadcom Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONHIMS",
+      "title": "Hims Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXWATTERSMENTION",
+      "title": "Jesse Watters Primetime",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONBA",
+      "title": "Boeing Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNIGNSMENTIONJPM",
+      "title": "JPM Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONHOOD",
+      "title": "Robinhood Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONLYFT",
+      "title": "Lyft Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBRKEM",
+      "title": "What will Berkshire Hathaway say on their next earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAMZN",
+      "title": "Amazon earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMAMDANIMENTION",
+      "title": "What will Zohran Mamdani say? ",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONKLAR",
+      "title": "Klarna Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXKARPMENTION",
+      "title": "Alex Karp Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCBRL",
+      "title": "Cracker Barrel Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDROZMENTION",
+      "title": "Dr Oz Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMTN",
+      "title": "Vail Resorts",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNLULU",
+      "title": "Lululemon",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONGS",
+      "title": "Goldman Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBANNONMENTION",
+      "title": "Steve Bannon",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBARRMENTION",
+      "title": "Barr Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTHEBEAT",
+      "title": "The Beat with Ari Melber",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONROKU",
+      "title": "Roku Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNCHWY",
+      "title": "Chewy Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDILLONMENTION",
+      "title": "Tim Dillon Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXPEARLMANMENTION",
+      "title": "Oz Pearlman Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAAL",
+      "title": "AAL Mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONPEP",
+      "title": "Pepsi Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXECBMENTION",
+      "title": "ECB MENTION",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXWALZMENTION",
+      "title": "Tim Walz",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTRUMPSAYMONTH",
+      "title": "Trump Monthly",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONRDDT",
+      "title": "Reddit Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXOBAMAMENTION",
+      "title": "Obama Mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXPORTERMENTION",
+      "title": "Katie Porter Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMENTIONEARNSFD",
+      "title": "Smithfield Foods Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCOST",
+      "title": "What will Costco say on their next earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXGILLISESPYS",
+      "title": "Gillis Espys",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSPECIALREPORTMENTION",
+      "title": "Special Report",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTHEWEEKNIGHTMENTION",
+      "title": "Weeknight",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXBONDIMENTION",
+      "title": "Pam Bondi ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONNFLX",
+      "title": "What will netflix say on their next earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXZUCKMENTION",
+      "title": "What will Zuck say?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONJPM",
+      "title": "JPM Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDJTJUSTICEMENTION",
+      "title": "What will trump say at the Justice Department speech?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXSPANBERGERMENTION",
+      "title": "Spanberger",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSWIFTMENTION",
+      "title": "What will Taylor Swfit say ",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDJTDAS",
+      "title": "What will Trump say in his address to the Digital Asset Summit?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXNETANYAHUMENTION",
+      "title": "Netanyahu Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXZIWEMENTION",
+      "title": "Ziwe",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXROGANMENTION",
+      "title": "Joe Rogan Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAMC",
+      "title": "AMC earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDKNG",
+      "title": "DraftKings Earnings",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONCCL",
+      "title": "Carnival Cruise Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONSBUX",
+      "title": "Starbucks Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONQCOM",
+      "title": "Qualcomm",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXTHREADGUYMENTION",
+      "title": "Threadguy Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXHEARINGMENTION",
+      "title": "Hearing Mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXSNOOPMENTION",
+      "title": "Snoop Dogg",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONEA",
+      "title": "EA Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXBERNIEMENTION",
+      "title": "Bernie says",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXZELENSKYYMENTION",
+      "title": "Zelenskyy Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONULTA",
+      "title": "What will ULTA Beauty say during its earnings call?",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMS",
+      "title": "Morgan Stanley Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONURBN",
+      "title": "Urban Outfitters Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONORCL",
+      "title": "What will Oracle say in their earnings call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXPSAKIMENTION",
+      "title": "Jen Psaki Mention",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXHOCHULMENTION",
+      "title": "Kathy Hochul",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXKINGMENTION",
+      "title": "King Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTNFMENTION",
+      "title": "TNF Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXBESSENTMTPMENTION",
+      "title": "What will Scott Bessent say",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXLASTWORDMENTION",
+      "title": "Last Word",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONAAPL",
+      "title": "Apple earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXWOMENTION",
+      "title": "Winter Olympics",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXLUTNICKFTNMENTION",
+      "title": "What will Howard Lutnick say on Face the Nation?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNYCMDEBMENTION",
+      "title": "NYC Mayor debate",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXCANDACEMENTION",
+      "title": "Candace Owens Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONALLY",
+      "title": "Ally Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONDASH",
+      "title": "DoorDash",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONRACE",
+      "title": "Ferrari Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXPAULMENTION",
+      "title": "Jake Paul",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNCAAMENTION",
+      "title": "NCAA Mention",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONKO",
+      "title": "Coca Cola Earnings Mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXSHIRLEYMENTION",
+      "title": "Nick Shirley",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXHILTONMENTION",
+      "title": "Steve Hilton Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMVEMENTIONSSINGLE",
+      "title": "MVE Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDJTFRENCHREP",
+      "title": "Trump press conference WITH FRENCH REPUBLIC",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXMVEMENTIONSINGLE",
+      "title": "MVE Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXGAMEDAYMENTION",
+      "title": "CFB Gameday",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXIRANMOU",
+      "title": "US x Iran MOU",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNFLMENTION",
+      "title": "NFL Mention",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONOKLO",
+      "title": "Oklo Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDJTCPAC",
+      "title": "Trump conference at CPAC",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXBONGINOMENTION",
+      "title": "Bongino",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONNYT",
+      "title": "New York Times",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMARMADUNCSDS",
+      "title": "What will the commentators say during the UNC vs. San Diego St. game?",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXDJTMEXG7",
+      "title": "MEXG7",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXDESANTISMENTION",
+      "title": "Ron Desantis",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXFOXNEWSMENTION",
+      "title": "Fox News",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXCROCKETTMENTION",
+      "title": "Jasmine Crockett",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTBPNMENTION",
+      "title": "TBPN Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXFIGHTMENTION",
+      "title": "Fight",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXBUSINESSROUNDTABLE",
+      "title": "What will Trump say at the Business Roundtable?",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXMAHERMENTION",
+      "title": "Bill Maher Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXALLINMENTION",
+      "title": "All in with Chris Hayes",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXINFANTINOMENTION",
+      "title": "Gianni Infantino",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXTRUMPLATE",
+      "title": "Trump Late",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXJEFFRIESMENTION",
+      "title": "Hakeem Jeffries Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXMIRANMENTION",
+      "title": "Stephen Miran Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXNADALMENTION",
+      "title": "Nadal Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXSURVIVORMENTION",
+      "title": "Survivor Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXLATENIGHTMENTION",
+      "title": "Late Night Mention",
+      "category": "Mentions",
+      "tags": [
+        "Entertainment"
+      ]
+    },
+    {
+      "ticker": "KXMINAJMENTION",
+      "title": "Nicki Minaj",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONM",
+      "title": "Macy's Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXMENTIONEARNMU",
+      "title": "Micron",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDEBATEMENTION",
+      "title": "Debate Mentions",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONPLTR",
+      "title": "Palantir earnings mention",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXDRAKEMENTION",
+      "title": "Drake Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Entertainment"
+      ]
+    },
+    {
+      "ticker": "KXLEBRONMENTION",
+      "title": "Lebron James Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONASTS",
+      "title": "AST SpaceMobile",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXWARSHMENTION",
+      "title": "Kevin Warsh Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXPELOSIMENTION",
+      "title": "Nancy Pelosi Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXPOLITICSMENTION",
+      "title": "General Politics",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONC",
+      "title": "Citi Earnings Call",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONMA",
+      "title": "Mastercard",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONON",
+      "title": "ON Semi",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXWBCMENTION",
+      "title": "WBC",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONKKR",
+      "title": "KKR",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXEARNINGSMENTIONHD",
+      "title": "Home Depot",
+      "category": "Mentions",
+      "tags": [
+        "Earnings"
+      ]
+    },
+    {
+      "ticker": "KXCULTUREMENTION",
+      "title": "Culture",
+      "category": "Mentions",
+      "tags": [
+        "Entertainment"
+      ]
+    },
+    {
+      "ticker": "KXHBIDENMENTION",
+      "title": "Hunter Biden Mention",
+      "category": "Mentions",
+      "tags": []
+    },
+    {
+      "ticker": "KXWCMENTION",
+      "title": "World Cup Mentions",
+      "category": "Mentions",
+      "tags": [
+        "Sports"
+      ]
+    },
+    {
+      "ticker": "KXOSCARMENTION",
+      "title": "Oscar mentions",
+      "category": "Entertainment",
+      "tags": [
+        "Awards"
+      ]
+    },
+    {
+      "ticker": "KXLEAVITTLATE",
+      "title": "Karoline Leavitt Late",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXBTCMENTIONVANCE",
+      "title": "Vance",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    },
+    {
+      "ticker": "KXJENSENMENTION",
+      "title": "Jensen Mention",
+      "category": "Mentions",
+      "tags": [
+        "CEOs"
+      ]
+    },
+    {
+      "ticker": "KXSECPRESSMENTION",
+      "title": "Sec Press mentions",
+      "category": "Mentions",
+      "tags": [
+        "Politicians"
+      ]
+    }
+  ]
+}
