@@ -79,6 +79,7 @@ import {
   CUSTOMER_RENDERER_ID,
 } from '../mentions/render-mention-packet.mjs';
 import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
+import { gateMentionMarket } from '../mentions/lexical-gate.mjs';
 import {
   loadHistory,
   buildHistoryMatch,
@@ -451,7 +452,7 @@ function buildSportsVenueTeamSync(sportRecords, term, teams, venue) {
   return { present: true, score, source_basis: `venue/team phrase relevance: ${hits}/${settled.length} YES for "${term}" with ${teams.join('/')}`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null } = {}) {
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -461,6 +462,26 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     asText(legacy?.keyword) ||
     'MISSING'
   );
+
+  // ---- Lexical pre-evidence gate (HARD) --------------------------------------
+  // The literal lexical engine decides whether this market is even valid before
+  // ANY evidence layer is built or any composite/posture is produced. Hard
+  // blocks (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE_ROLLING) short-circuit here and
+  // never reach scoring or rendering. An evaluated NO_MATCH suppresses
+  // conviction downstream. MATCH / PENDING proceed to the layer build below.
+  const lexicalGate = gateMentionMarket({ event, market, legacy, candidateText });
+  if (lexicalGate.hard_blocked) {
+    return blockedMentionComposite({
+      event,
+      market,
+      legacy,
+      targetMention,
+      profileResolution,
+      route,
+      lexicalGate,
+    });
+  }
+
   let layerRecords = firstLayerRecordMap(market, event, legacy);
 
   // Phase 2 priority-one alpha (earnings_call only): last-four-quarter per-term
@@ -550,6 +571,17 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
   });
 
+  // Lexical NO_MATCH suppression: an evaluated literal NO_MATCH means the target
+  // did not literally occur in the evidence text, so downstream may NOT invent
+  // conviction from context. Force the composite back to NO_CLEAR_PICK with no
+  // score/confidence before any source-ladder upgrade can run.
+  if (lexicalGate.suppress_conviction) {
+    result.posture = 'NO_CLEAR_PICK';
+    result.composite_score = null;
+    result.confidence = null;
+    result.reasoning_summary = `NO_CLEAR_PICK — lexical NO_MATCH: "${targetMention}" not literally present in evaluated evidence.`;
+  }
+
   // Source ladder (optional — runs if explicit inputs are supplied via market/event/legacy)
   let ladder = null;
   let postureFinal = result.posture;
@@ -565,7 +597,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   // Earnings context-delta posture adjustment runs AFTER the qualification cap
   // and is fully code-owned/deterministic (see applyEarningsPostureHint).
   let earningsAdjustment = null;
-  if (earningsHint) {
+  if (earningsHint && !lexicalGate.suppress_conviction) {
     const adjusted = applyEarningsPostureHint(postureFinal, earningsHint);
     earningsAdjustment = {
       direction: earningsHint.direction,
@@ -612,6 +644,69 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
+    lexical_gate: lexicalGate,
+  };
+}
+
+// Hard-blocked composite result for a market the lexical pre-evidence gate
+// rejected (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE_ROLLING). No evidence layers
+// are built and composeMentionLedger is never called — the market can never
+// surface a soft verdict (WATCH/LEAN/etc.) or any score/confidence. The shape
+// mirrors the normal return so downstream rank/summary/render code is unchanged.
+function blockedMentionComposite({ event, market, legacy, targetMention, profileResolution, route, lexicalGate }) {
+  const decision = lexicalGate.lexical_result?.status === 'BLOCKED' ? lexicalGate.decision : 'BLOCK';
+  const blockReasons = Array.isArray(lexicalGate.lexical_result?.block_reasons)
+    ? lexicalGate.lexical_result.block_reasons
+    : [];
+  const result = {
+    event: eventNameForComposite(event ?? {}, legacy),
+    target_mention: targetMention,
+    profile: profileResolution.profile,
+    composite_score: null,
+    confidence: null,
+    posture: 'NO_CLEAR_PICK',
+    top_supporting_layers: [],
+    missing_layers: [],
+    source_notes: [],
+    market_context: null,
+    evidence_ledger: [],
+    reasoning_summary: `NO_CLEAR_PICK — lexical gate ${decision} (${blockReasons.join(', ') || 'rules unclear'}); market blocked before scoring.`,
+    lexical_blocked: true,
+    _meta: {
+      schema_version: 'mention_composite_v1',
+      layers_present: 0,
+      layers_total: 0,
+      pricing_excluded: true,
+      lexical_gate_decision: decision,
+    },
+  };
+  return {
+    market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
+    profile_basis: profileResolution.basis,
+    research_route: route?.route ?? null,
+    route_basis: route?.basis ?? null,
+    route_entity: route?.entity ?? null,
+    route_horizon: route?.horizon ?? null,
+    history_match_tier: null,
+    history_sample_size: null,
+    history_hits: null,
+    history_misses: null,
+    history_hit_rate: null,
+    history_match_quality_penalty: null,
+    history_source_tickers: null,
+    last_four_quarter_hit_rate: null,
+    earnings_quarter_terms: null,
+    earnings_quarter_sample_size: null,
+    earnings_context_delta: null,
+    earnings_posture_adjustment: null,
+    sports_history: null,
+    sports_game_context: null,
+    result,
+    source_ladder: null,
+    posture_final: 'NO_CLEAR_PICK',
+    posture_cap_reason: `lexical_gate:${decision}`,
+    research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
+    lexical_gate: lexicalGate,
   };
 }
 

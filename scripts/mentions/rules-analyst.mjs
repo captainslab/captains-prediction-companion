@@ -85,6 +85,20 @@ function asText(value) {
   return value == null ? '' : String(value).trim();
 }
 
+// Kalshi markets sometimes carry the strike word as an object (e.g.
+// { Word: 'Fraud' }) rather than a bare string. Without this, String(obj)
+// becomes "[object Object]" and pollutes the surface / accepted_forms. Mirror
+// the legacy strike-word extraction (Word/word/text/value/label/phrase/strike).
+function strikeSurface(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const key of ['Word', 'word', 'text', 'value', 'label', 'phrase', 'strike']) {
+      if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim();
+    }
+    return '';
+  }
+  return asText(value);
+}
+
 function lowerFold(value) {
   return asText(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -159,7 +173,7 @@ function marketText(market) {
     market?.no_sub_title,
     market?.rules_primary,
     market?.rules_secondary,
-    market?.custom_strike,
+    strikeSurface(market?.custom_strike),
     market?.strike_type,
     market?.result,
     market?.close_time,
@@ -184,7 +198,7 @@ function hasRollingHorizon(event, market) {
     market?.no_sub_title,
     market?.rules_primary,
     market?.rules_secondary,
-    market?.custom_strike,
+    strikeSurface(market?.custom_strike),
   ]);
   return WEEKLY_RE.test(text) || MONTHLY_RE.test(text) || ROLLING_TICKER_RE.test(text);
 }
@@ -202,7 +216,7 @@ function hasTruthSocialFraming(event, market) {
     market?.no_sub_title,
     market?.rules_primary,
     market?.rules_secondary,
-    market?.custom_strike,
+    strikeSurface(market?.custom_strike),
   ]);
   return TRUTH_SOCIAL_RE.test(text);
 }
@@ -246,7 +260,7 @@ function detectMarketType(event, market, family) {
 
   if (family) return 'binary';
 
-  const hasYesNoStrike = [market?.yes_sub_title, market?.no_sub_title, market?.custom_strike, market?.title, market?.subtitle]
+  const hasYesNoStrike = [market?.yes_sub_title, market?.no_sub_title, strikeSurface(market?.custom_strike), market?.title, market?.subtitle]
     .some((value) => /\bwill\b|\bresolves\b|\byes\b|\bno\b/i.test(asText(value)) || asText(value).length > 0);
   return hasYesNoStrike ? 'binary' : 'unsupported';
 }
@@ -278,7 +292,7 @@ function acronymExpansionCandidate(value) {
 
 function extractSurfaceSource(event, market) {
   for (const candidate of [
-    market?.custom_strike,
+    strikeSurface(market?.custom_strike),
     market?.yes_sub_title,
     market?.no_sub_title,
     market?.subtitle,
@@ -543,12 +557,20 @@ export function buildMarketRulesSnapshot(event, market) {
   const family = outOfScope ? null : detectRuleFamily(safeEvent, safeMarket);
   const marketType = marketTypeBestEffort(safeEvent, safeMarket, family);
 
+  // BLOCKED_RULES_UNCLEAR fires only when the rules contract genuinely cannot
+  // determine what counts: an unsupported market type, or no resolvable accepted
+  // form. A null rule_family alone is NOT unclear — if the market carries a
+  // determinable strike (accepted_forms) and a supported market type, the
+  // literal lexical contract knows exactly what to match and routing is handled
+  // separately by the research-route resolver. This prevents sparse fixture
+  // shape from producing a fake hard block on otherwise-determinable markets.
+  const acceptedFormsCount = outOfScope
+    ? 0
+    : buildAcceptedForms(extractSurfaceSource(safeEvent, safeMarket)).length;
+
   const blockReasons = [];
   if (outOfScope) blockReasons.push('OUT_OF_SCOPE_ROLLING');
-  if (!outOfScope && (family === null || marketType === 'unsupported')) {
-    blockReasons.push('BLOCKED_RULES_UNCLEAR');
-  }
-  if (!outOfScope && family && marketType === 'unsupported' && !blockReasons.includes('BLOCKED_RULES_UNCLEAR')) {
+  if (!outOfScope && (marketType === 'unsupported' || acceptedFormsCount === 0)) {
     blockReasons.push('BLOCKED_RULES_UNCLEAR');
   }
 
@@ -583,4 +605,4 @@ export function rulesSnapshotHasForbiddenFields(value) {
   return json;
 }
 
-export { deepSanitize, isForbiddenKey, hashSnapshot };
+export { deepSanitize, isForbiddenKey, hashSnapshot, hasTruthSocialFraming };
