@@ -137,10 +137,36 @@ function result(route, basis, { entity = null, horizon = null, close_window_days
 
 /**
  * Resolve the research route for a Kalshi-style mention event.
- * Pure and offline: depends only on `event` text/close fields and `now`.
+ * Pure and offline: depends only on `event` text/close fields, `now`, and an
+ * optional rulesSnapshot override.
  */
-export function resolveResearchRoute(event, { now } = {}) {
+export function resolveResearchRoute(event, { now, rulesSnapshot } = {}) {
+  return resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot });
+}
+
+function activeRuleFamilyFromSnapshot(rulesSnapshot) {
+  if (!rulesSnapshot || rulesSnapshot.out_of_scope === true) return null;
+  const direct = rulesSnapshot?.rule_family;
+  if (typeof direct === 'string' && Object.hasOwn(ROUTE_TO_PROFILE, direct)) return direct;
+  if (Array.isArray(rulesSnapshot?.markets)) {
+    for (const market of rulesSnapshot.markets) {
+      const family = market?.rule_family;
+      if (typeof family === 'string' && market?.out_of_scope !== true && Object.hasOwn(ROUTE_TO_PROFILE, family)) {
+        return family;
+      }
+    }
+  }
+  return null;
+}
+
+function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
   const nowMs = (now instanceof Date ? now : new Date(now ?? Date.now())).getTime();
+  const snapshotFamily = activeRuleFamilyFromSnapshot(rulesSnapshot);
+  if (snapshotFamily) {
+    const horizon = snapshotFamily === 'topic_most_mentioned' ? null : 'event';
+    const entity = snapshotFamily === 'trump_event' ? 'trump' : null;
+    return result(snapshotFamily, 'rules_snapshot', { entity, horizon, close_window_days: closeWindowDays(event, nowMs) });
+  }
   const text = combinedText(event);
   const windowDays = closeWindowDays(event, nowMs);
 
