@@ -84,6 +84,7 @@ import {
   loadHistory,
   buildHistoryMatch,
   historyToLayerScore,
+  buildSettledHistoryArtifact,
 } from '../mentions/settled-history.mjs';
 import {
   resolveEarningsFamily,
@@ -548,14 +549,30 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   // Settled-history alpha: price-free hit/miss records (settled YES/NO only)
   // feed the historical_tendency layer when no research-supplied record exists.
   // Empty/no-match history stays absent — never fake conviction.
+  //
+  // ORDER (Phase 4): Rules Analyst -> lexical gate -> settled history. History
+  // lookup runs ONLY after the lexical gate clears the market to evidence
+  // (MATCH / PENDING / ROLLING_SUPPORTED). It NEVER runs for a hard block
+  // (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE — already short-circuited above) nor
+  // for an evaluated NO_MATCH (suppress_conviction): a literal non-occurrence
+  // must not pull in settled comparables and manufacture conviction.
   let historyMatch = null;
-  if (route && Array.isArray(historyRecords) && historyRecords.length) {
+  let settledHistory = null;
+  if (route && !lexicalGate.suppress_conviction && Array.isArray(historyRecords) && historyRecords.length) {
     historyMatch = buildHistoryMatch({
       records: historyRecords,
       route: route.route,
       entity: route.entity,
       horizon: route.horizon,
       seriesTicker: event?.series_ticker ?? null,
+    });
+    settledHistory = buildSettledHistoryArtifact({
+      records: historyRecords,
+      route: route.route,
+      entity: route.entity,
+      horizon: route.horizon,
+      seriesTicker: event?.series_ticker ?? null,
+      acceptedForms: lexicalGate.lexical_result?.matched_forms ?? [],
     });
     const historyLayer = historyToLayerScore(historyMatch);
     if (historyLayer.present && !(layerRecords?.historical_tendency?.present)) {
@@ -616,6 +633,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    settled_history: settledHistory,
     history_match_tier: historyMatch?.match_tier ?? null,
     history_sample_size: historyMatch?.sample_size ?? null,
     history_hits: historyMatch?.hits ?? null,
@@ -687,6 +705,7 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    settled_history: null,
     history_match_tier: null,
     history_sample_size: null,
     history_hits: null,
