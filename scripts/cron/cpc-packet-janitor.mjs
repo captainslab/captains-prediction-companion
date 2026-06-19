@@ -601,8 +601,49 @@ function hasNoClearJustification(text, packetType) {
   return hasCoverage && (hasCancellation || hasBlocker);
 }
 
-function hasCacheOnlyDisclosure(text) {
+export function hasCacheOnlyDisclosure(text) {
   return /\b(?:cache-only|cache only|from cache|cached coverage|stale cache|stale-source|stale source|stale coverage|live fetch unavailable|live source unavailable|using cached)\b/i.test(text);
+}
+
+// Canonical, price-free disclosure line the renderer emits when source health is
+// cache-only / stale / partial. It deliberately contains phrases that
+// hasCacheOnlyDisclosure() recognizes ("Live fetch unavailable", "cache-only",
+// "stale-source", "cached"), so the renderer's disclosure trigger can never drift
+// from the janitor's block trigger. Contains NO price/odds/volume tokens — it is
+// a freshness statement only and is safe under the price-isolation invariant.
+export const CACHE_ONLY_DISCLOSURE_LINE =
+  'Source freshness: Live fetch unavailable this run — packet built from cache-only / stale-source coverage; treat source layers as cached/provisional until live research lands. NOT a score input.';
+
+// Pure detector reused by the mentions renderer. Runs the SAME date-wide source-
+// health discovery the janitor uses at send time and reports whether the packet
+// must carry a cache/stale-source disclosure. Read-only: it never mutates state,
+// never rewrites packets, and never weakens any janitor verdict. Returns
+// needsDisclosure=true when any discovered source-health artifact is cache-only,
+// stale, or partial — a superset that exactly covers the three janitor branches
+// gated by hasCacheOnlyDisclosure (FETCH_CACHE_ONLY, FETCH_SOURCE_STALE,
+// FETCH_PARTIAL_COVERAGE).
+export function detectSourceHealthDisclosure(context = {}) {
+  const packetType = inferPacketType(context.filePath, context.packetType);
+  const paths = discoverSourceHealthPaths({ ...context, packetType });
+  let cacheOnly = false;
+  let stale = false;
+  let partial = false;
+  for (const sourcePath of paths) {
+    const parsed = readJsonIfExists(sourcePath);
+    if (!parsed) continue;
+    if (cacheOnlyFinding(parsed)) cacheOnly = true;
+    const ts = sourceTimestamp(parsed);
+    if (ts && Date.now() - ts > SOURCE_STALE_MS) stale = true;
+    if (sourceCoverageFinding(parsed)) partial = true;
+  }
+  const needsDisclosure = cacheOnly || stale || partial;
+  return {
+    needsDisclosure,
+    cacheOnly,
+    stale,
+    partial,
+    disclosureLine: needsDisclosure ? CACHE_ONLY_DISCLOSURE_LINE : null,
+  };
 }
 
 function ufcNoClearGaps(text) {

@@ -269,6 +269,10 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
   // 6 SOURCE GAPS
   lines.push('6. SOURCE GAPS');
+  // Deterministic cache/stale-source disclosure. Present only when the generator
+  // detected cache-only/stale/partial source health (same signal the delivery
+  // janitor blocks on); price-free freshness statement, never a score input.
+  if (input.source_health_disclosure) lines.push(`- ${input.source_health_disclosure}`);
   const gaps = (a.source_gaps?.length ? a.source_gaps : null) ?? deterministicSourceGaps(ranked);
   for (const g of gaps) lines.push(`- ${g}`);
   const provenanceLines = Array.isArray(input.deterministic_provenance_lines)

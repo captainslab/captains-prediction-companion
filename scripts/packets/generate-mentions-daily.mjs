@@ -36,6 +36,7 @@ import {
   fetchMentionEventsBySeries,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { detectSourceHealthDisclosure } from '../cron/cpc-packet-janitor.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
 import {
   PROFILE_KEY as POLITICAL_PROFILE,
@@ -966,7 +967,7 @@ function renderSettledHistoryProvenance(composites) {
   return lines;
 }
 
-export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null }) {
+export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
   const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
@@ -989,6 +990,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     inventoryPath,
     compositeSummary: summary,
     provenanceLines,
+    sourceHealthDisclosure,
   });
   const text = renderMentionPacket(synthesisInput, {
     generatedAtUtc: new Date().toISOString(),
@@ -1073,7 +1075,7 @@ export function normalizeLayerList(value) {
   return [];
 }
 
-export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [] } = {}) {
+export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null } = {}) {
   const s = summarizeEvent(event);
   const rules = firstMarketRules(event);
   // Compact each term to only what the model needs for the article.
@@ -1127,6 +1129,7 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       best_posture: compositeSummary.best_posture ?? null,
     },
     deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
+    source_health_disclosure: sourceHealthDisclosure || null,
     terms,
   };
 }
@@ -1630,7 +1633,7 @@ function mergeResearchIntoEvent(event, researchEntry) {
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
 
@@ -1735,6 +1738,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     composites,
     sourcePath: sourceUrl,
     inventoryPath,
+    sourceHealthDisclosure,
   });
   if (slate) {
     if (researchProvenance) slate.synthesisInput.research_provenance = researchProvenance;
@@ -2105,6 +2109,15 @@ export async function writeKalshiEventPackets({
   // Settled-history records (price-free, outcomes only) load once per run and
   // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
   const historyRecords = await loadHistory({ stateRoot });
+  // Cache/stale-source disclosure: detected once per run from the same date-wide
+  // source-health artifacts the delivery janitor inspects at send time. When the
+  // run is built from cache-only/stale/partial source health, every packet must
+  // carry the explicit disclosure or the janitor fail-closes the send. Price-free.
+  const sourceHealthDisclosure = detectSourceHealthDisclosure({
+    stateRoot,
+    date,
+    packetType: PACKET_TYPE,
+  }).disclosureLine;
   for (const ev of events) {
     const ticker = ev?.event_ticker;
     if (!ticker || seen.has(ticker)) continue;
@@ -2128,7 +2141,7 @@ export async function writeKalshiEventPackets({
         );
       }
     }
-    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources });
+    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources, sourceHealthDisclosure });
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
