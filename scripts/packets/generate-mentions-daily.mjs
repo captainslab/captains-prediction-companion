@@ -928,6 +928,44 @@ function renderEarningsAlphaProvenance(composites) {
   return lines.join('\n');
 }
 
+// Most-recent source tickers shown per settled_history line; the rest collapse
+// to a bounded "+N more" count so a long comparable list can never blow up the
+// rendered packet.
+const SETTLED_HISTORY_TICKER_CAP = 8;
+
+// Deterministic settled-history provenance block. Surfaces the PRICE-FREE
+// settled_history artifact attached after the lexical gate clears a market to
+// evidence (Phase 4) so the rendered packet shows match tier, sample size,
+// hits/misses, hit rate, the full settlement-class breakdown
+// (resolved_yes/resolved_no/ednq/ambiguous/unresolved), bounded source tickers,
+// and the usable/fail_safe flag. n<2 / soft-only history renders as fail_safe
+// (never a bullish signal); a null settled_history (hard block, Truth Social
+// out-of-scope, or evaluated NO_MATCH suppression) renders NOTHING — no invented
+// confidence. This is render-only: it reads the existing artifact and never
+// re-scores. Prices never appear; the artifact carries no price-shaped field.
+function renderSettledHistoryProvenance(composites) {
+  const withHistory = composites.filter((c) => c && c.settled_history);
+  if (!withHistory.length) return [];
+  const lines = ['settled_history (Kalshi settled comparables; outcomes only, prices excluded):'];
+  for (const c of withHistory) {
+    const h = c.settled_history;
+    const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker ?? 'unknown'));
+    const hitRate = h.hit_rate === null || h.hit_rate === undefined ? 'n/a' : Number(h.hit_rate).toFixed(2);
+    lines.push(`  - ${label}: tier=${h.match_tier} n=${h.sample_size} hits=${h.hits} misses=${h.misses} hit_rate=${hitRate} usable=${h.usable === true} fail_safe=${h.fail_safe === true}`);
+    const b = h.settlement_breakdown ?? {};
+    lines.push(`      settlement_breakdown: resolved_yes=${b.resolved_yes ?? 0} resolved_no=${b.resolved_no ?? 0} ednq=${b.ednq ?? 0} ambiguous=${b.ambiguous ?? 0} unresolved=${b.unresolved ?? 0}`);
+    const tickers = Array.isArray(h.source_tickers) ? h.source_tickers : [];
+    const shown = tickers.slice(0, SETTLED_HISTORY_TICKER_CAP);
+    const more = tickers.length - shown.length;
+    const tickerText = shown.length
+      ? `${shown.join(',')}${more > 0 ? ` (+${more} more)` : ''}`
+      : 'none';
+    lines.push(`      source_tickers: ${tickerText} (count=${tickers.length})`);
+    if (h.note) lines.push(`      note: ${h.note}`);
+  }
+  return lines;
+}
+
 export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
@@ -940,6 +978,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   if (prov?.research_route) {
     provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`);
   }
+  provenanceLines.push(...renderSettledHistoryProvenance(composites));
   const earningsNote = renderEarningsAlphaProvenance(composites);
   if (earningsNote) provenanceLines.push(...earningsNote.split('\n'));
   const synthesisInput = buildMentionsSynthesisInput({
