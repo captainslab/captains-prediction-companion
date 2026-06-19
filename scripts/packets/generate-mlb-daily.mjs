@@ -29,6 +29,27 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
+import {
+  buildScoreEngineProjection,
+  buildYrfiProjection,
+  buildKsProjection,
+  buildHrProjection,
+} from '../mlb/lib/projection-contracts.mjs';
+import {
+  describeMoneyline,
+  describeRunline,
+  describeTotal,
+  describeTeamRuns,
+  describeYrfi,
+  describeKs,
+  describeHr,
+} from '../mlb/lib/projection-language.mjs';
+import {
+  buildGameProjections,
+  loadStatsRecords,
+  leagueRunsPerGame,
+  matchStatsRecord,
+} from '../mlb/lib/projection-engine.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 import {
   buildDecisionRow,
@@ -332,7 +353,86 @@ export function extractGames(paths = []) {
   return out;
 }
 
-function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks }) {
+// Projection-FIRST read for one game. Renders what the MODEL layer projects
+// (win prob, total/team runs, YRFI, Ks, HR) through the price-isolated
+// projection contracts + language — NEVER a board line or an over/under call.
+//
+// Inputs are derived ONLY from confirmation gaps (lineup/roof/weather), never
+// from market price, odds, or board shape. We do NOT fabricate projection
+// outputs: with no model outputs available the contracts return blocked /
+// provisional, and the language layer states that honestly. This is the wire
+// that lets real model outputs flow the moment they exist.
+export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = null, leagueRPG = null } = {}) {
+  const picks = Array.isArray(gamePicks) ? gamePicks : [];
+  const as_of = `${date || 'unknown-date'}T00:00:00Z`;
+  const FOOTER = 'Projection layer only — model outputs feed this read; no market signal does.';
+
+  // Team names: prefer the matched stats record, else parse "Away at Home".
+  let away = statsRecord?.away_team || 'Away';
+  let home = statsRecord?.home_team || 'Home';
+  const gameStr = picks.find((p) => typeof p?.game === 'string' && / at /.test(p.game))?.game;
+  if (!statsRecord && gameStr) {
+    const [a, h] = gameStr.split(' at ');
+    if (a?.trim()) away = a.trim();
+    if (h?.trim()) home = h.trim();
+  }
+
+  // Confirmation-derived status — NOT price-derived. Honest default is
+  // UNCONFIRMED (this is the pre-final-lineup packet): we only call a lineup
+  // confirmed on a POSITIVE signal, never on the mere absence of a pending
+  // token (some lanes simply don't gate on lineups). So real projections render
+  // as provisional until lineups actually post.
+  const allMissing = picks.flatMap((p) => (Array.isArray(p.missing_confirmations) ? p.missing_confirmations : []));
+  const passedText = picks.flatMap((p) => (Array.isArray(p.gates_passed) ? p.gates_passed : [])).join(' | ').toLowerCase();
+  const lineupConfirmed = /lineup/.test(passedText) && /confirm/.test(passedText) && !/pending|soft/.test(passedText);
+  const lineup_status = lineupConfirmed ? 'confirmed' : ((picks.length || statsRecord) ? 'unconfirmed' : null);
+  const weather_status = picks.length
+    ? (allMissing.some((m) => /roof|weather/i.test(String(m))) ? 'partial' : 'complete')
+    : null;
+
+  // ---- Real projections when a public-stats record matched this game ----
+  if (statsRecord) {
+    const proj = buildGameProjections({ record: statsRecord, leagueRPG, as_of, lineup_status, weather_status });
+    const apName = statsRecord.away_pitcher?.name || `${away} starter`;
+    const hpName = statsRecord.home_pitcher?.name || `${home} starter`;
+    return [
+      '--- PROJECTION-FIRST READ (model layer, market-free) ---',
+      describeMoneyline(proj.score, { home_team: home, away_team: away }),
+      describeRunline(proj.score, { home_team: home }),
+      describeTotal(proj.score),
+      describeTeamRuns(proj.score, 'home', home),
+      describeTeamRuns(proj.score, 'away', away),
+      describeYrfi(proj.yrfi),
+      describeKs(proj.ks_away, apName),
+      describeKs(proj.ks_home, hpName),
+      describeHr(proj.hr),
+      FOOTER,
+    ];
+  }
+
+  // ---- No matched inputs: honest blocked read, never fabricated ----
+  const game_id = String(picks[0]?.matched_game_pk ?? picks[0]?.event_ticker ?? 'unknown');
+  const park = picks[0]?.matched_game_pk != null ? { id: String(picks[0].matched_game_pk), roof: null } : null;
+  const common = { game_id, as_of, lineup_status, weather_status };
+  const score = buildScoreEngineProjection({ ...common, inputs: { park }, outputs: null });
+  const yrfi = buildYrfiProjection({ ...common, inputs: { park }, outputs: null });
+  const ks = buildKsProjection({ game_id, as_of, lineup_status, inputs: {}, outputs: null });
+  const hr = buildHrProjection({ game_id, as_of, lineup_status, weather_status, inputs: { park }, outputs: null });
+
+  return [
+    '--- PROJECTION-FIRST READ (model layer, market-free) ---',
+    describeMoneyline(score, { home_team: home, away_team: away }),
+    describeTotal(score),
+    describeTeamRuns(score, 'home', home),
+    describeTeamRuns(score, 'away', away),
+    describeYrfi(yrfi),
+    describeKs(ks),
+    describeHr(hr),
+    FOOTER,
+  ];
+}
+
+function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks, statsRecord = null, leagueRPG = null }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
   const process = buildMlbPacketProcess({ event, marketCount: block.marketCount, artifacts });
@@ -376,6 +476,10 @@ function buildKalshiGamePacket({ date, event, artifacts, primeAttempts, kalshiSu
     lines.push('--- Market Context - NOT IN SCORE ---');
     lines.push('Market data stored in audit artifact for reference; not displayed in customer packet without model layer.');
   }
+
+  // Projection-first read: model-layer language (not board-derived), every game.
+  lines.push('');
+  for (const l of buildProjectionFirstBlock({ date, gamePicks, statsRecord, leagueRPG })) lines.push(l);
 
   const inventoryLines = [];
   inventoryLines.push(`event_ticker: ${s.ticker}`);
@@ -477,6 +581,10 @@ async function main() {
   const primeAttempts = primeMlbResearch(opts.date);
   const artifacts = locateMlbArtifacts(opts.stateRoot, opts.date);
 
+  // Public-stats projection inputs (price-free). Drives real model-layer reads.
+  const statsRecords = loadStatsRecords(opts.stateRoot, opts.date);
+  const leagueRPG = leagueRunsPerGame(statsRecords);
+
   const discovery = await fetchKalshiEvents('mlb');
   const dateFilter = filterByEventDate(opts.date, { windowDays: 0, allowUndated: false });
   const kalshiEvents = discovery.events.filter(dateFilter);
@@ -551,7 +659,12 @@ async function main() {
       if (!ticker) continue;
       const sourcePath = resolve(opts.stateRoot, 'mlb', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
       const gamePicks = scoring ? scoring.picks.filter((p) => p.event_ticker === ticker) : null;
-      const built = buildKalshiGamePacket({ date: opts.date, event: ev, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks });
+      const statsRecord = matchStatsRecord(statsRecords, {
+        eventTicker: ticker,
+        awayName: ev?.away_team ?? '',
+        homeName: ev?.home_team ?? '',
+      });
+      const built = buildKalshiGamePacket({ date: opts.date, event: ev, artifacts, primeAttempts, kalshiSummary, sourcePath, gamePicks, statsRecord, leagueRPG });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
