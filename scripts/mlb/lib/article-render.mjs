@@ -443,16 +443,25 @@ function familyStatusLines(it) {
       : mlCoverage.status === 'BOARD_ANALYZER_ONLY'
         ? `composite ${composite}; ${mlCoverage.status} — board signal only, not evidence, not a pick.`
         : `composite ${composite}; ${mlCoverage.status} — no ML market to model.`;
-  const hrStatus = propCounts.hr
-    ? `BOARD_ANALYZER_ONLY — ${propCounts.hr} HR market anomaly(ies); HR ladder analyzer only; display-only board context, not a non-market composite.`
-    : coverage.families.hr.status === 'BLOCKED_MODEL_LAYER_MISSING'
-      ? 'BLOCKED_MODEL_LAYER_MISSING — HR markets missing; no HR board analyzer to render.'
-      : 'BOARD_ANALYZER_ONLY — HR ladder analyzer only; display-only board context, not a non-market composite.';
-  const kStatus = propCounts.k
-    ? `BOARD_ANALYZER_ONLY — ${propCounts.k} K market anomaly(ies); K ladder analyzer only; display-only board context, not a non-market composite.`
-    : coverage.families.ks.status === 'BLOCKED_MODEL_LAYER_MISSING'
-      ? 'BLOCKED_MODEL_LAYER_MISSING — K markets missing; no K board analyzer to render.'
-      : 'BOARD_ANALYZER_ONLY — K ladder analyzer only; display-only board context, not a non-market composite.';
+  // Ks/HR: a real modeled composite (from the projection engine) wins over the
+  // board-analyzer fallback. Board anomaly counts are display-only context and
+  // never override a modeled read.
+  const hrFamily = coverage.families.hr;
+  const hrStatus = hrFamily.modeled
+    ? `${hrFamily.status} — ${hrFamily.detail}.`
+    : propCounts.hr
+      ? `BOARD_ANALYZER_ONLY — ${propCounts.hr} HR market anomaly(ies); HR ladder analyzer only; display-only board context, not a non-market composite.`
+      : hrFamily.status === 'BLOCKED_MODEL_LAYER_MISSING'
+        ? 'BLOCKED_MODEL_LAYER_MISSING — HR markets missing; no HR board analyzer to render.'
+        : 'BOARD_ANALYZER_ONLY — HR ladder analyzer only; display-only board context, not a non-market composite.';
+  const ksFamily = coverage.families.ks;
+  const kStatus = ksFamily.modeled
+    ? `${ksFamily.status} — ${ksFamily.detail}.`
+    : propCounts.k
+      ? `BOARD_ANALYZER_ONLY — ${propCounts.k} K market anomaly(ies); K ladder analyzer only; display-only board context, not a non-market composite.`
+      : ksFamily.status === 'BLOCKED_MODEL_LAYER_MISSING'
+        ? 'BLOCKED_MODEL_LAYER_MISSING — K markets missing; no K board analyzer to render.'
+        : 'BOARD_ANALYZER_ONLY — K ladder analyzer only; display-only board context, not a non-market composite.';
   return [
     `${matchup}:`,
     `ML/game-side: ${mlStatus}`,
@@ -464,7 +473,7 @@ function familyStatusLines(it) {
   ];
 }
 
-function renderFamilyStatusBlock(game, analysis) {
+export function renderFamilyStatusBlock(game, analysis) {
   const coverage = getFamilyCoverage({ game, analysis });
   const lines = ['Market-family coverage'];
   lines.push(`  Coverage mode: ${coverage.mode} — ${coverage.mode === 'LIMITED' ? 'limited coverage; board analyzers remain display-only and NOT IN SCORE.' : 'full modeled coverage.'}`);
