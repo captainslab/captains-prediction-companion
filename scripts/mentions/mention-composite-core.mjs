@@ -192,7 +192,16 @@ export function composeMentionLedger({
       ? null
       : Math.round(clamp(researchNum / researchDen, 0, 100));
   const layersPresent = ledger.filter(r => r.present).length;
-  const posture       = scoreToPosture(composite, layersPresent);
+  // Posture/tier must be driven ONLY by scoreable evidence layers. event_proximity
+  // is an event-level gate/context scaffold (isScoreableLayer === false): it is
+  // already excluded from the score numerator, and it must ALSO be excluded from
+  // the layer count that selects posture bands — otherwise a present proximity
+  // scaffold silently upgrades tier (e.g. LEAN -> EVIDENCE_LEAN) on identical
+  // P(YES), making it per-strike score evidence. The full `layersPresent` (which
+  // still counts proximity) is preserved for _meta and the downstream
+  // proximity-only / fail-closed coverage gate, which intentionally keys on it.
+  const scoreableLayersPresent = ledger.filter(r => r.present && isScoreableLayer(r.category)).length;
+  const posture       = scoreToPosture(composite, scoreableLayersPresent);
 
   const topSupportingLayers = ledger
     .filter(r => r.present && r.contribution !== null)
