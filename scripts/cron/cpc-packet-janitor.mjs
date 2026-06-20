@@ -515,6 +515,31 @@ function hasModelScaffoldLeak(text, packetType) {
   return false;
 }
 
+// Detects a mentions customer packet that carries NO usable source evidence —
+// the product-failure signature where the whole board is proximity-only / no
+// research ran (e.g. "0/12 term(s) carry source evidence beyond event
+// proximity"). This is a HARD send-time gate and is intentionally NOT
+// downgradable by a cache-only / stale-source disclosure: disclosing that the
+// cache is stale does not turn "no research" into a valid customer packet.
+// Returns a finding object or null. Reads only the customer text — no prices.
+export function noUsableSourceEvidenceFinding(text, packetType) {
+  if (!/mention/i.test(packetType ?? '')) return null;
+  const body = String(text ?? '');
+  // Explicit renderer summary: "<n>/<total> term(s) carry source evidence".
+  const m = body.match(/(\d+)\s*\/\s*(\d+)\s+term\(s\)\s+carry\s+source\s+evidence/i);
+  if (m) {
+    const withEvidence = Number(m[1]);
+    const total = Number(m[2]);
+    if (Number.isFinite(withEvidence) && Number.isFinite(total) && total > 0 && withEvidence === 0) {
+      return {
+        code: 'NO_USABLE_SOURCE_EVIDENCE',
+        message: `mentions packet has 0/${total} terms with source-backed evidence (proximity-only / no research performed); not a valid customer packet`,
+      };
+    }
+  }
+  return null;
+}
+
 function priceLeaksInScoring(text) {
   const leaks = [];
   let inScoreSection = false;
@@ -777,6 +802,15 @@ export function validatePacketText(text, context = {}) {
       code: 'MODEL_SCAFFOLD_LEAKAGE',
       message: 'model scaffold or legacy customer-output language leaked into packet',
     });
+  }
+
+  const noSourceEvidence = noUsableSourceEvidenceFinding(text, packetType);
+  if (noSourceEvidence) {
+    // Hard send-time gate: a mentions packet with zero source-backed terms is a
+    // research gap, never a deliverable customer packet. A cache-only / stale
+    // disclosure does NOT clear this — disclosing stale cache cannot manufacture
+    // research that was never performed.
+    errors.push(noSourceEvidence);
   }
 
   const leaks = priceLeaksInScoring(text);

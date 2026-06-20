@@ -135,6 +135,21 @@ const POSTURE_RANK = Object.freeze({
   PICK: 4,
 });
 
+// Source-status values that mean the research layer did NOT produce usable
+// source evidence for this market: either it never ran (no declared official
+// source URL), or every fetch path was blocked/timed out. A market carrying one
+// of these AND no source-backed (beyond-proximity) evidence layer must FAIL
+// CLOSED — it can never become a valid customer row from event proximity alone.
+const NO_RESEARCH_SOURCE_STATUSES = Object.freeze(new Set([
+  'NO_DECLARED_SOURCES',
+  'SOURCE_FETCH_BLOCKED_BY_SITE',
+  'SOURCE_FETCH_TIMEOUT',
+]));
+
+export function isNoResearchSourceStatus(status) {
+  return typeof status === 'string' && NO_RESEARCH_SOURCE_STATUSES.has(status);
+}
+
 function asText(value) {
   return value == null ? '' : String(value).trim();
 }
@@ -663,6 +678,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
+    source_status: market?.source_status ?? legacy?.source_status ?? null,
     lexical_gate: lexicalGate,
   };
 }
@@ -823,6 +839,18 @@ export function mentionCompositeToDecisionRow(composite) {
   // No source-backed evidence at all -> BLOCKED on the missing source layers.
   const sourceBlocked = layersPresent === 0;
   const proximityOnly = layersPresent === 1 && presentCats.length === 1 && presentCats[0] === 'event_proximity';
+  // Beyond-proximity source evidence = any present layer that is not the
+  // event_proximity scaffold. This is what separates a real researched row from
+  // a "schedule confirmed, nothing else" row.
+  const hasBeyondProximityEvidence = presentCats.some((c) => c !== 'event_proximity');
+  // FAIL-CLOSED gate: when the research layer never produced usable source
+  // evidence for this market (no declared source / blocked / timed-out fetch)
+  // AND there is no beyond-proximity evidence layer, the row is NOT a valid
+  // customer WATCH — it is a research gap. event_proximity (schedule confirmed)
+  // alone can never carry a customer row. This is the product-failure fix: a
+  // NO_DECLARED_SOURCES / no-live-research event must fail closed, not render.
+  const noResearchPerformed = isNoResearchSourceStatus(composite?.source_status);
+  const noUsableSources = !hasBeyondProximityEvidence && noResearchPerformed;
   let postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
 
   // Stub cap: never allow LEAN/EVIDENCE_LEAN/PICK from stub-only research
@@ -836,10 +864,17 @@ export function mentionCompositeToDecisionRow(composite) {
   let analysis;
   let trigger;
 
-  if (sourceBlocked) {
+  if (sourceBlocked || noUsableSources) {
+    postureFinal = 'NO_CLEAR_PICK';
     statusOverride = EDGE_STATUS.BLOCKED;
-    blocker = `BLOCKED_SOURCE_LAYER_MISSING: no source-backed evidence layers for "${target}"`;
-    analysis = `Market priced; mention composite has 0/${layersTotal} source layers. Not a pick or a pass — research gap. Missing: ${missingCats.join(', ') || 'all source layers'}.`;
+    const reasonCode = sourceBlocked && !noResearchPerformed
+      ? 'BLOCKED_SOURCE_LAYER_MISSING'
+      : 'NO_USABLE_SOURCES';
+    const why = noResearchPerformed
+      ? `source research did not run or returned no usable source for this event (source_status=${composite?.source_status})`
+      : `no source-backed evidence layers present`;
+    blocker = `${reasonCode}: no source-backed evidence layers for "${target}" (${why})`;
+    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} source layers and no source-backed evidence beyond event proximity for "${target}". Not a pick or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all source layers'}.`;
     trigger = {
       price: null,
         event: `run mentions research for "${target}" (transcripts > quotes > context > prompt source ladder), then re-score`,
@@ -1627,6 +1662,14 @@ function mergeResearchIntoEvent(event, researchEntry) {
     if (r.research_quality) {
       merged.research_quality = r.research_quality;
     }
+    // Carry the per-market source_status (NO_DECLARED_SOURCES / DECLARED /
+    // SOURCE_FETCHED*) so the composite + decision row can tell "no research
+    // was performed" apart from "research ran and found only proximity". The
+    // event-level status is the fallback when a market lacks its own.
+    const marketSourceStatus = r.source_status ?? researchEntry.source_status ?? null;
+    if (marketSourceStatus) {
+      merged.source_status = marketSourceStatus;
+    }
     return merged;
   });
 
@@ -2145,6 +2188,48 @@ export async function writeKalshiEventPackets({
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
+
+    // EVENT-LEVEL FAIL-CLOSED gate: if every decision row is BLOCKED (no usable
+    // source evidence anywhere on the board — the NO_DECLARED_SOURCES /
+    // no-live-research case), this event has no customer-deliverable research.
+    // Write a source-research blocker artifact and skip the .txt entirely, the
+    // same isolation the model-synthesis blocker path uses. A normal board
+    // (real WATCH/LEAN/PICK rows alongside the EDNQ blocked row) is unaffected.
+    const counts = built.counts ?? null;
+    const allRowsBlocked = counts && counts.total > 0 && counts.blocked >= counts.total;
+    if (allRowsBlocked) {
+      const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+      mkdirSync(blockerDir, { recursive: true });
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      const evSourceStatus = mergedEvent?.markets?.find?.((m) => m?.source_status)?.source_status
+        ?? researchEntry?.source_status ?? null;
+      writeFileSync(blockerPath, JSON.stringify({
+        event_ticker: ticker,
+        date,
+        stage: 'source_research',
+        reason: isNoResearchSourceStatus(evSourceStatus) ? 'NO_USABLE_SOURCES' : 'SOURCE_RESEARCH_MISSING',
+        source_status: evSourceStatus,
+        rows_total: counts.total,
+        rows_blocked: counts.blocked,
+        error: `no usable source-backed evidence for any market on ${ticker} (source_status=${evSourceStatus}); customer packet failed closed`,
+        blocked_at_utc: new Date().toISOString(),
+        delivered: false,
+      }, null, 2));
+      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: no usable source evidence on any row (source_status=${evSourceStatus}); fail-closed, no customer .txt (blocker: ${blockerPath})`);
+      failedTickers.push(ticker);
+      // Inventory audit may still be written below for traceability; do not
+      // write a customer packet for this event.
+      if (built.inventoryText) {
+        const invW = audit(dir, inventoryName, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+          fail_closed: true,
+        });
+        items.push({ name: inventoryName, ...invW });
+      }
+      continue;
+    }
+
     // Raw per-contract inventory -> audit artifact only (never the packet body).
     if (built.inventoryText) {
       const invW = audit(dir, inventoryName, built.inventoryText, {

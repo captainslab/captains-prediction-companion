@@ -24,6 +24,11 @@ import {
   mergeExtractedLayers,
 } from './source-research.mjs';
 import { ensureSourcesManifest, SOURCE_STATUS } from './discover-sources.mjs';
+import {
+  runResearchForEvent,
+  perplexityRowsToLayers,
+  hasPerplexityKey,
+} from './mentions-research-perplexity.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -244,6 +249,40 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     }
   }
 
+  // Perplexity research pass (Kalshi-native-first + two-pass literal-utterance
+  // forecast). This is the primary cron research path — it runs per event when
+  // PERPLEXITY_API_KEY is available (loaded from .env.local), independent of
+  // whether declared official source URLs were discovered. Produces PRICE-FREE
+  // per-phrase evidence layers (direct_mention_pathway + historical_tendency).
+  // It fails soft: any error leaves declared-source/stub results untouched.
+  let pplxLayers = { byTerm: {}, usableTerms: 0 };
+  let pplxRan = false;
+  const hasKey = (deps.hasPerplexityKey ?? hasPerplexityKey)(env);
+  if (date && allKeywords.length && hasKey) {
+    try {
+      const research = await (deps.runResearchForEvent ?? runResearchForEvent)({
+        event,
+        date,
+        stateRoot,
+        env,
+        ...(deps.perplexityImpl ? { perplexityImpl: deps.perplexityImpl } : {}),
+        ...(deps.fetcherImpl ? { fetcherImpl: deps.fetcherImpl } : {}),
+      });
+      pplxLayers = perplexityRowsToLayers(research.rows ?? []);
+      pplxRan = true;
+      if (pplxLayers.usableTerms > 0) {
+        sourceStatus = SOURCE_STATUS.SOURCE_FETCHED;
+      }
+      console.log(`[collect-mentions-research] ${eventTicker}: perplexity research usable_terms=${pplxLayers.usableTerms}`);
+    } catch (err) {
+      sourceResearch.notes.push(`perplexity research failed closed: ${err.message}`);
+      console.error(`[collect-mentions-research] ${eventTicker}: perplexity research failed closed: ${err.message}`);
+    }
+  } else if (date && allKeywords.length && !hasKey) {
+    sourceResearch.notes.push('PERPLEXITY_KEY_MISSING: set PERPLEXITY_API_KEY to enable mention research');
+    console.log(`[collect-mentions-research] ${eventTicker}: PERPLEXITY_KEY_MISSING (no live mention research performed)`);
+  }
+
   const marketResearches = [];
 
   for (const market of markets) {
@@ -355,13 +394,25 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       researchQuality = 'no_source';
     }
 
+    // Merge Perplexity per-phrase evidence (fills missing layers only; never
+    // overwrites adapter/declared-source evidence; pricing excluded by
+    // construction). A term with usable Perplexity layers is source_backed;
+    // a term Perplexity ran on but found nothing for is a verified gap.
+    const pplxForTerm = pplxLayers.byTerm[keyword];
+    if (pplxForTerm && Object.keys(pplxForTerm).length) {
+      layerRecords = mergeExtractedLayers(layerRecords, pplxForTerm);
+      researchQuality = 'source_backed';
+    } else if (pplxRan && researchQuality === 'stub') {
+      researchQuality = 'no_source';
+    }
+
     marketResearches.push({
       market_ticker: marketTicker,
       keyword,
       profile,
       research_quality: researchQuality,
       source_status: sourceStatus,
-      research_gap_notes: extracted && Object.keys(extracted).length ? [] : sourceResearch.notes,
+      research_gap_notes: (extracted && Object.keys(extracted).length) || (pplxForTerm && Object.keys(pplxForTerm).length) ? [] : sourceResearch.notes,
       layer_records: layerRecords,
       source_ladder_inputs: sourceLadderInputs,
       rules_primary: market.rules_primary || null,
