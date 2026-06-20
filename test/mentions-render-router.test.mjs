@@ -8,6 +8,7 @@ import {
   formatCentral,
   SECTION_ORDER,
 } from '../scripts/mentions/render-mention-packet.mjs';
+import { buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
 import {
   selectAnalystTier,
   validateAnalystJson,
@@ -323,10 +324,36 @@ test('analyst JSON cannot smuggle scores/prices (forbidden fields flagged and ig
 
 test('valid analyst JSON lands in board catalyst/settlement-fit columns', () => {
   const input = builtInput({ sourceBacked: true });
-  const { value } = validateAnalystJson(ANALYST_JSON);
-  const text = renderMentionPacket(input, { analyst: value, generatedAtUtc: NOW, analystTier: 'standard' });
+  input.terms[0].research_term_note = buildResearchTermNote({
+    phrase: 'Malarkey',
+    reason: 'habit/news-cycle pressure',
+    kalshiNativePct: 60,
+    kalshiNativeN: 5,
+    proofPct: 12,
+    handicapPct: 74,
+    citations: ['https://example.com/proof', 'https://example.com/hcap'],
+  });
+  input.terms.push({
+    full_strike_text: 'Will Biden say it? -- Aardvark',
+    short_term: 'Aardvark',
+    cpc_score: null,
+    research_state: 'research gap',
+    bucket: 'blocked/no-source',
+    market_context: { note: 'NOT IN SCORE' },
+  });
+  const analyst = validateAnalystJson({
+    ...ANALYST_JSON,
+    term_notes: [
+      ...ANALYST_JSON.term_notes,
+      { term: 'Aardvark', catalyst: 'fabricated stub', settlement_fit: 'fabricated stub', trap_risk: 'stub' },
+    ],
+  }).value;
+  const text = renderMentionPacket(input, { analyst, generatedAtUtc: NOW, analystTier: 'standard' });
   const row = text.split('\n').find((l) => /^\d+\s/.test(l.trim()) && l.includes('Malarkey'));
-  assert.ok(row.includes('signature phrase') && row.includes('exact string'));
+  assert.ok(row.includes('habit/news-cycle press'), 'board catalyst should come from research note');
+  assert.ok(row.includes('YES only if the exact'), 'board settlement fit should come from research note');
+  const gapRow = text.split('\n').find((l) => /^\d+\s/.test(l.trim()) && l.includes('Aardvark'));
+  assert.ok(gapRow.includes('MISSING'), 'gap row keeps catalyst/settlement fit un-fabricated');
   assert.ok(text.includes('1. FAST READ\nThree researched terms, schedule confirmed.'));
 });
 

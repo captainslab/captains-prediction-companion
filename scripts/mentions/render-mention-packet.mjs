@@ -186,7 +186,21 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const ranked = rankTerms(Array.isArray(input.terms) ? input.terms : [], e.title);
   if (!ranked.length) throw new Error('renderMentionPacket: no terms to render');
   const a = analyst ?? {};
-  const notes = a.term_notes ?? {};
+  const notes = Object.create(null);
+  for (const term of ranked) {
+    const researchNote = term.research_term_note;
+    if (researchNote && typeof researchNote === 'object') {
+      notes[term._short] = researchNote;
+    }
+  }
+  for (const term of ranked) {
+    if (!isResearchBacked(term)) continue;
+    if (notes[term._short]) continue;
+    const analystNote = a.term_notes?.[term._short];
+    if (analystNote && typeof analystNote === 'object') {
+      notes[term._short] = analystNote;
+    }
+  }
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
@@ -275,10 +289,6 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
   // 6 SOURCE GAPS
   lines.push('6. SOURCE GAPS');
-  // Deterministic cache/stale-source disclosure. Present only when the generator
-  // detected cache-only/stale/partial source health (same signal the delivery
-  // janitor blocks on); price-free freshness statement, never a score input.
-  if (input.source_health_disclosure) lines.push(`- ${input.source_health_disclosure}`);
   const analystGaps = Array.isArray(a.source_gaps)
     ? a.source_gaps.map((g) => safeCustomerText(g, null)).filter(Boolean)
     : null;
@@ -356,15 +366,9 @@ function marketSummary(terms) {
 }
 
 function deterministicSourceGaps(ranked) {
-  const gaps = [];
-  for (const t of ranked) {
-    if (!isResearchBacked(t)) {
-      gaps.push(`${t._short}: research gap remains`);
-      continue;
-    }
-    const missing = Array.isArray(t.missing_research_layers) ? t.missing_research_layers : [];
-    if (missing.length) gaps.push(`${t._short}: research gap remains`);
-  }
+  const gaps = ranked
+    .filter((t) => !isResearchBacked(t))
+    .map((t) => `${t._short}: research gap remains`);
   return gaps.length ? gaps : ['none recorded'];
 }
 

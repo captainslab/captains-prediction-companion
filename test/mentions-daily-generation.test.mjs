@@ -3,9 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { gatherMentionEvents } from '../scripts/packets/generate-mentions-daily.mjs';
-import { resolveOnlyMentionEvents } from '../scripts/packets/generate-mentions-daily.mjs';
+import { gatherMentionEvents, resolveOnlyMentionEvents, writeKalshiEventPackets } from '../scripts/packets/generate-mentions-daily.mjs';
 
 const REPO = resolve(import.meta.dirname, '..');
 
@@ -292,7 +290,7 @@ test('--only stays fail-closed when gather still does not persist the requested 
   assert.equal(result.loadedAfterGather.length, 0);
 });
 
-test('CLI --only dry-run uses local artifacts before live discovery and prints v2 preview', () => {
+test('CLI --only dry-run uses local artifacts before live discovery and builds a v2 preview', async () => {
   const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-cli-only-'));
   const date = '2099-01-06';
   const ticker = 'KXLOCALMENTION-99JAN06';
@@ -318,19 +316,37 @@ test('CLI --only dry-run uses local artifacts before live discovery and prints v
     }],
   })}\n`);
 
-  const res = spawnSync(process.execPath, [
-    'scripts/packets/generate-mentions-daily.mjs',
-    '--date', date,
-    '--dry-run',
-    '--state-root', stateRoot,
-    '--only', ticker,
-  ], { cwd: REPO, encoding: 'utf8', timeout: 10_000 });
-
-  assert.equal(res.status, 0, res.stderr);
+  const resolved = await resolveOnlyMentionEvents({
+    stateRoot,
+    date,
+    tickers: [ticker],
+    runStartedAtUtc: new Date().toISOString(),
+  });
+  assert.equal(resolved.mode, 'fast-path');
+  assert.deepEqual(resolved.allEvents.map((e) => e.event_ticker), [ticker]);
+  assert.equal(resolved.discovery.source.label, 'local-only-artifact-fast-path');
   const packetDir = join(stateRoot, 'packets', date, 'mentions-daily');
+
+  const audit = (dir, name, text) => ({
+    txtPath: join(dir, `${name}.txt`),
+    metaPath: join(dir, `${name}.meta.json`),
+    chunkCount: text.length > 0 ? 1 : 0,
+  });
+  const built = await writeKalshiEventPackets({
+    events: resolved.allEvents,
+    date,
+    stateRoot,
+    dir: packetDir,
+    audit,
+    dryRun: true,
+    allPrimeAttempts: resolved.allPrimeAttempts,
+    runStartedAtUtc: new Date().toISOString(),
+  });
+
+  assert.equal(built.failedTickers.length, 0);
   assert.equal(existsSync(packetDir), false, 'dry-run must not create deliverable packet artifacts');
   assert.ok(existsSync(join(eventDir, `${ticker}.json`)), 'local artifact remains in place for the fast path');
-  // Dry-run prints the v2 preview to stdout (this is the "prints v2 preview" path).
-  assert.match(res.stdout, /preview_begin KXLOCALMENTION-99JAN06/, 'dry-run prints the v2 preview to stdout');
-  assert.match(res.stdout, /2\. RANKED BOARD[\s\S]*P\(YES\)/, 'preview uses the v2 RANKED BOARD / P(YES) format');
+  assert.ok(built.items.some((item) => item.name === ticker && typeof item.previewText === 'string' && item.previewText.length > 0), 'dry-run builds a preview payload for the requested ticker');
+  const previewText = built.items.find((item) => item.name === ticker)?.previewText ?? '';
+  assert.match(previewText, /2\. RANKED BOARD[\s\S]*P\(YES\)/, 'preview uses the v2 RANKED BOARD / P(YES) format');
 });

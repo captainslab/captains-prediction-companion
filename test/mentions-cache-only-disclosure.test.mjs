@@ -4,11 +4,10 @@
 // FETCH_CACHE_ONLY when source health is cache-only/stale and the packet carries
 // no explicit cache/stale-source disclosure. These tests pin the fix end to end:
 //   1. the janitor blocks cache-only source health WITHOUT a disclosure,
-//   2. the janitor passes the same source health WITH a disclosure,
-//   3. the renderer emits the disclosure when the generator flags cache-only,
-//   4. the disclosure is deterministic,
-//   5. the existing settled_history block still renders alongside it,
-//   6. neither the disclosure nor the detector leak any price-shaped field.
+//   2. the renderer never emits the disclosure string,
+//   3. the omission is deterministic,
+//   4. the existing settled_history block still renders without disclosure,
+//   5. neither the disclosure nor the detector leak any price-shaped field.
 // Janitor safety is preserved: the block still fires when disclosure is absent.
 
 import test from 'node:test';
@@ -202,14 +201,15 @@ test('janitor does NOT raise FETCH_CACHE_ONLY when the packet carries the disclo
 });
 
 // ===========================================================================
-// Renderer — emits disclosure only when flagged; settled_history intact
+// Renderer — never emits the cache-only disclosure line; settled_history intact
 // ===========================================================================
 
-test('rendered packet includes the disclosure in SOURCE GAPS when the generator flags cache-only', () => {
+test('rendered packet never emits the cache-only disclosure line even when flagged', () => {
   const { text } = renderObamaSlate({ disclosure: CACHE_ONLY_DISCLOSURE_LINE });
   const gaps = sourceGapsBlock(text);
-  assert.ok(gaps.includes(CACHE_ONLY_DISCLOSURE_LINE), 'disclosure renders inside SOURCE GAPS');
-  assert.ok(hasCacheOnlyDisclosure(text), 'rendered packet would clear the janitor cache-only gate');
+  assert.ok(!gaps.includes(CACHE_ONLY_DISCLOSURE_LINE), 'disclosure is never rendered inside SOURCE GAPS');
+  assert.ok(!hasCacheOnlyDisclosure(text), 'rendered packet never emits the cache-only disclosure');
+  assert.ok(!text.includes(CACHE_ONLY_DISCLOSURE_LINE), 'packet text omits the disclosure string entirely');
 });
 
 test('rendered packet omits the disclosure when source health is not cache-only', () => {
@@ -217,12 +217,12 @@ test('rendered packet omits the disclosure when source health is not cache-only'
   assert.ok(!hasCacheOnlyDisclosure(text), 'no disclosure phrase when none was flagged');
 });
 
-test('disclosure renders alongside an intact settled_history block', () => {
+test('settled_history still renders without any cache-only disclosure', () => {
   const { text, composite } = renderObamaSlate({ disclosure: CACHE_ONLY_DISCLOSURE_LINE });
   assert.ok(composite.settled_history, 'guard: settled_history attached');
   assert.match(text, /provenance \(outcomes only; market prices excluded\):/);
   assert.match(text, /settled_history: tier=exact_horizon n=2 hits=2 misses=0 hit_rate=1\.00/);
-  assert.ok(hasCacheOnlyDisclosure(text), 'disclosure coexists with settled_history');
+  assert.ok(!hasCacheOnlyDisclosure(text), 'settled_history must not reintroduce the disclosure');
 });
 
 test('rendered disclosure is deterministic across repeated renders', () => {

@@ -178,7 +178,94 @@ function buildPrompt({ event, words, pass }) {
   ];
 }
 
-function mergePasses(words, proof, hcap, prior) {
+function trimWords(text, maxWords = 20) {
+  const cleaned = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  const words = cleaned.split(' ');
+  return words.length <= maxWords ? cleaned : words.slice(0, maxWords).join(' ');
+}
+
+function hasNoEvidenceLanguage(text) {
+  return /\bno evidence\b|\bno mention\b/i.test(String(text ?? ''));
+}
+
+export function selectPrimaryReason({ proof_pct = null, handicap_pct = null, proof_reason = null, handicap_reason = null, blended_pct = null } = {}) {
+  const proofText = trimWords(proof_reason, 20);
+  const handicapText = trimWords(handicap_reason, 20);
+  const proofFinite = Number.isFinite(Number(proof_pct));
+  const handicapFinite = Number.isFinite(Number(handicap_pct));
+  const proofLow = !proofFinite || Number(proof_pct) <= 35;
+  const handicapDriven = handicapFinite && (!proofFinite || proofLow || Number(handicap_pct) >= Number(proof_pct) + 10);
+  let reason = handicapDriven ? (handicapText || proofText) : (proofText || handicapText);
+
+  if (Number.isFinite(Number(blended_pct)) && Number(blended_pct) >= 50 && hasNoEvidenceLanguage(reason)) {
+    const alt = (handicapText && !hasNoEvidenceLanguage(handicapText))
+      ? handicapText
+      : (proofText && !hasNoEvidenceLanguage(proofText))
+        ? proofText
+        : null;
+    reason = alt;
+  }
+  return trimWords(reason, 20);
+}
+
+function detectRepeatRequirement(phrase) {
+  const match = String(phrase ?? '').match(/\b(\d+|n)\+\s*times\b/i);
+  if (!match) return null;
+  const value = String(match[1]).toLowerCase() === 'n' ? 'N' : match[1];
+  return `${value}+ times`;
+}
+
+function describeSettlementFit(phrase) {
+  const raw = String(phrase ?? '').trim();
+  if (!raw) return null;
+  const repeat = detectRepeatRequirement(raw);
+  const base = raw.replace(/\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*$/i, '').trim();
+  const slashParts = base.split('/').map((part) => part.trim()).filter(Boolean);
+  let fit;
+  if (slashParts.length >= 2) {
+    fit = `YES if either exact token "${slashParts[0]}" or "${slashParts[1]}" is said`;
+  } else {
+    fit = `YES only if the exact token "${base}" is said`;
+  }
+  if (repeat) {
+    fit += `; repeat requirement: ${repeat}`;
+  }
+  return fit;
+}
+
+export function buildResearchTermNote({
+  phrase,
+  reason = null,
+  kalshiNativePct = null,
+  kalshiNativeN = null,
+  proofPct = null,
+  handicapPct = null,
+  citations = [],
+} = {}) {
+  const baseReason = trimWords(reason, 20);
+  const usable = [proofPct, handicapPct, kalshiNativePct].some((v) => Number.isFinite(Number(v)));
+  if (!usable || !baseReason) return null;
+
+  let catalyst = baseReason;
+  if (Number.isFinite(Number(kalshiNativePct)) && Number.isFinite(Number(kalshiNativeN)) && Number(kalshiNativeN) >= 2) {
+    const total = Number(kalshiNativeN);
+    const yes = Math.max(0, Math.min(total, Math.round((Number(kalshiNativePct) / 100) * total)));
+    catalyst = `${baseReason}; historically YES in ${yes}/${total} comparable events`;
+  }
+
+  const note = {
+    catalyst: trimWords(catalyst, 28),
+    settlement_fit: describeSettlementFit(phrase),
+    trap_risk: null,
+  };
+  if (Array.isArray(citations) && citations.length) {
+    note.citations = citations.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()).slice(0, 6);
+  }
+  return note;
+}
+
+export function mergePasses(words, proof, hcap, prior) {
   const byPhrase = (arr) => {
     const m = new Map();
     for (const r of arr ?? []) {
@@ -206,6 +293,15 @@ function mergePasses(words, proof, hcap, prior) {
     } else {
       blended = pplxBlend ?? kalshiPct;
     }
+    const proofReason = trimWords(p?.reason, 20);
+    const handicapReason = trimWords(h?.reason, 20);
+    const reason = selectPrimaryReason({
+      proof_pct: Number.isFinite(p?.likelihood_pct) ? p.likelihood_pct : null,
+      handicap_pct: Number.isFinite(h?.likelihood_pct) ? h.likelihood_pct : null,
+      proof_reason: proofReason,
+      handicap_reason: handicapReason,
+      blended_pct: blended,
+    });
     return {
       phrase: w.phrase,
       ticker: w.ticker,
@@ -215,7 +311,9 @@ function mergePasses(words, proof, hcap, prior) {
       handicap_pct: Number.isFinite(h?.likelihood_pct) ? h.likelihood_pct : null,
       blended_pct: blended,
       confidence: p?.confidence || h?.confidence || 'low',
-      reason: p?.reason || h?.reason || null,
+      proof_reason: proofReason,
+      handicap_reason: handicapReason,
+      reason,
       actual_result: w.result, // settled outcome (yes/no) — backtest only, NOT a score input
     };
   });

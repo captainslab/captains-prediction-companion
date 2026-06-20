@@ -36,8 +36,8 @@ import {
   fetchMentionEventsBySeries,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
-import { detectSourceHealthDisclosure } from '../cron/cpc-packet-janitor.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
+import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
 import {
   PROFILE_KEY as POLITICAL_PROFILE,
   LAYER_DEFS as POLITICAL_LAYERS,
@@ -672,6 +672,16 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     } : null,
     sports_game_context: sportsGameCtx?.gameContext ?? null,
     result,
+    proof_pct: market?.proof_pct ?? null,
+    handicap_pct: market?.handicap_pct ?? null,
+    kalshi_native_pct: market?.kalshi_native_pct ?? null,
+    kalshi_native_n: market?.kalshi_native_n ?? null,
+    confidence: market?.confidence ?? null,
+    reason: market?.research_reason ?? null,
+    proof_reason: market?.proof_reason ?? null,
+    handicap_reason: market?.handicap_reason ?? null,
+    research_citations: Array.isArray(market?.research_citations) ? market.research_citations : [],
+    research_term_note: market?.research_term_note ?? null,
     source_ladder: ladder,
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
@@ -736,6 +746,16 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     sports_history: null,
     sports_game_context: null,
     result,
+    proof_pct: market?.proof_pct ?? null,
+    handicap_pct: market?.handicap_pct ?? null,
+    kalshi_native_pct: market?.kalshi_native_pct ?? null,
+    kalshi_native_n: market?.kalshi_native_n ?? null,
+    confidence: market?.confidence ?? null,
+    reason: market?.research_reason ?? null,
+    proof_reason: market?.proof_reason ?? null,
+    handicap_reason: market?.handicap_reason ?? null,
+    research_citations: Array.isArray(market?.research_citations) ? market.research_citations : [],
+    research_term_note: market?.research_term_note ?? null,
     source_ladder: null,
     posture_final: 'NO_CLEAR_PICK',
     posture_cap_reason: `lexical_gate:${decision}`,
@@ -897,7 +917,7 @@ export function mentionCompositeToDecisionRow(composite) {
     };
   }
 
-  return buildDecisionRow({
+  const row = buildDecisionRow({
     marketTicker: composite?.market_ticker ?? 'MISSING',
     sideTarget: target,
     marketType: `mention_${r.profile ?? 'unknown'}`,
@@ -920,6 +940,19 @@ export function mentionCompositeToDecisionRow(composite) {
     statusOverride,
     blocker,
   });
+  return {
+    ...row,
+    proof_pct: composite?.proof_pct ?? null,
+    handicap_pct: composite?.handicap_pct ?? null,
+    kalshi_native_pct: composite?.kalshi_native_pct ?? null,
+    kalshi_native_n: composite?.kalshi_native_n ?? null,
+    confidence: composite?.confidence ?? row.confidence ?? null,
+    reason: composite?.reason ?? null,
+    proof_reason: composite?.proof_reason ?? null,
+    handicap_reason: composite?.handicap_reason ?? null,
+    research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
+    research_term_note: composite?.research_term_note ?? null,
+  };
 }
 
 /**
@@ -1000,6 +1033,23 @@ function renderSettledHistoryProvenance(composites) {
   return lines;
 }
 
+function renderResearchCitationProvenance(composites) {
+  const ranked = composites
+    .filter((c) => Array.isArray(c?.research_citations) && c.research_citations.length)
+    .slice()
+    .sort((a, b) => (b?.result?.composite_score ?? -1) - (a?.result?.composite_score ?? -1))
+    .slice(0, 3);
+  if (!ranked.length) return [];
+  const lines = ['research_citations (proof + handicapping, URLs only):'];
+  for (const c of ranked) {
+    const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker ?? 'unknown'));
+    const citations = c.research_citations.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()).slice(0, 4);
+    if (!citations.length) continue;
+    lines.push(`  - ${label}: ${citations.join(', ')}`);
+  }
+  return lines.length > 1 ? lines : [];
+}
+
 export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
@@ -1013,6 +1063,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`);
   }
   provenanceLines.push(...renderSettledHistoryProvenance(composites));
+  provenanceLines.push(...renderResearchCitationProvenance(composites));
   const earningsNote = renderEarningsAlphaProvenance(composites);
   if (earningsNote) provenanceLines.push(...earningsNote.split('\n'));
   const synthesisInput = buildMentionsSynthesisInput({
@@ -1129,6 +1180,16 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       ? row.missing_layers.map((l) => l.category ?? l.label ?? String(l)).slice(0, 5)
       : [],
     upgrade_trigger: row.trigger_event,
+    research_reason: row.reason ?? null,
+    proof_pct: row.proof_pct ?? null,
+    handicap_pct: row.handicap_pct ?? null,
+    kalshi_native_pct: row.kalshi_native_pct ?? null,
+    kalshi_native_n: row.kalshi_native_n ?? null,
+    confidence: row.confidence ?? null,
+    proof_reason: row.proof_reason ?? null,
+    handicap_reason: row.handicap_reason ?? null,
+    research_citations: Array.isArray(row.research_citations) ? row.research_citations : [],
+    research_term_note: row.research_term_note ?? null,
     market_context: {
       implied: row.implied_probability,
       bid_cents: row.market_yes_bid,
@@ -1490,15 +1551,69 @@ export function discoverMentionEvents(stateRoot, date) {
 // Research merge: read state/mentions/<date>/research/*.json and merge
 // layer_records + source_ladder_inputs into the Kalshi event/market objects.
 // ---------------------------------------------------------------------------
-function loadResearchForDate(stateRoot, date) {
+function utcMs(value) {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// Research is collected by the orchestrator immediately BEFORE generation (collect
+// -> generate, minutes apart), so a fresh artifact is produced slightly earlier
+// than the generation run start — never after it. "Fresh" therefore means "from
+// the current collection cycle": produced within MAX_RESEARCH_AGE_MS of the run.
+// Genuinely stale (prior-day / prior-cycle) artifacts are rejected so the packet
+// fails closed rather than rendering yesterday's research. Exact per-cycle
+// freshness (threading a cycle id from the orchestrator) is tracked separately.
+const MAX_RESEARCH_AGE_MS = 6 * 60 * 60 * 1000;
+function researchArtifactIsFresh(entry, runStartedAtUtc) {
+  const runStart = utcMs(runStartedAtUtc);
+  if (runStart === null) return false;
+  const cutoff = runStart - MAX_RESEARCH_AGE_MS;
+  const generated = utcMs(entry?.generated_utc);
+  const produced = utcMs(entry?.produced_at);
+  const stamp = Math.max(
+    generated ?? Number.NEGATIVE_INFINITY,
+    produced ?? Number.NEGATIVE_INFINITY,
+  );
+  return Number.isFinite(stamp) && stamp >= cutoff;
+}
+
+function researchRowHasUsableSignal(row) {
+  if (!row || typeof row !== 'object') return false;
+  const layerRecords = row.layer_records && typeof row.layer_records === 'object' ? row.layer_records : null;
+  const sourceLadderInputs = row.source_ladder_inputs && typeof row.source_ladder_inputs === 'object' ? row.source_ladder_inputs : null;
+  return [
+    row.blended_pct,
+    row.proof_pct,
+    row.handicap_pct,
+    row.kalshi_native_pct,
+    layerRecords && Object.keys(layerRecords).length ? 1 : null,
+    sourceLadderInputs && Object.keys(sourceLadderInputs).length ? 1 : null,
+  ].some((v) => Number.isFinite(Number(v)))
+    && (!Number.isFinite(Number(row.kalshi_native_n)) || Number(row.kalshi_native_n) >= 0);
+}
+
+function researchEntryHasUsableSignal(entry) {
+  return Array.isArray(entry?.markets) && entry.markets.some(researchRowHasUsableSignal);
+}
+
+function loadResearchForDate(stateRoot, date, { runStartedAtUtc = null } = {}) {
   const researchDir = resolve(stateRoot, 'mentions', date, 'research');
-  if (!existsSync(researchDir)) return new Map();
+  if (!existsSync(researchDir)) {
+    const empty = new Map();
+    empty._staleTickers = new Set();
+    return empty;
+  }
   const map = new Map();
+  map._staleTickers = new Set();
   for (const entry of readdirSync(researchDir)) {
     if (!entry.endsWith('.json')) continue;
     const p = join(researchDir, entry);
     const data = readJsonIfExists(p);
     if (!data || !data.event_ticker) continue;
+    if (runStartedAtUtc && !researchArtifactIsFresh(data, runStartedAtUtc)) {
+      map._staleTickers.add(data.event_ticker);
+      continue;
+    }
     // Build a per-market-ticker lookup
     const marketMap = new Map();
     for (const m of data.markets || []) {
@@ -1534,7 +1649,7 @@ function localOnlyDiscoveryStats(events) {
   };
 }
 
-function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = [] } = {}) {
+function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = [], runStartedAtUtc = null } = {}) {
   const roots = uniqueResolved(stateRoots.length ? stateRoots : ['state']);
   const events = [];
   const loaded = [];
@@ -1545,9 +1660,11 @@ function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = 
       const eventPath = resolve(root, 'mentions', date, 'kalshi-events', `${ticker}.json`);
       const event = readJsonIfExists(eventPath);
       if (!event?.event_ticker) continue;
-      const researchEntry = loadResearchForDate(root, date).get(ticker);
+      const researchMap = loadResearchForDate(root, date, { runStartedAtUtc });
+      const researchEntry = researchMap.get(ticker);
+      const staleResearch = researchMap._staleTickers?.has(ticker) ?? false;
       found = {
-        event: mergeResearchIntoEvent(event, researchEntry),
+        event: mergeResearchIntoEvent(event, researchEntry, { staleResearch }),
         root,
         eventPath,
         researchPath: resolve(root, 'mentions', date, 'research', `${ticker}.json`),
@@ -1572,6 +1689,7 @@ export async function resolveOnlyMentionEvents({
   allowUndated = false,
   env = process.env,
   deps = {},
+  runStartedAtUtc = null,
 } = {}) {
   const stateRoots = deps.stateRoots ?? [stateRoot, 'state'];
   const loadExactMentionEventsFromArtifactsImpl = deps.loadExactMentionEventsFromArtifacts || loadExactMentionEventsFromArtifacts;
@@ -1584,6 +1702,7 @@ export async function resolveOnlyMentionEvents({
     date,
     tickers,
     stateRoots,
+    runStartedAtUtc,
   });
   const hasAllRequestedArtifacts = tickers.length > 0
     && localOnlyLoad.loaded.length === tickers.length
@@ -1633,6 +1752,7 @@ export async function resolveOnlyMentionEvents({
     date,
     tickers,
     stateRoots,
+    runStartedAtUtc,
   });
 
   return {
@@ -1650,17 +1770,54 @@ export async function resolveOnlyMentionEvents({
   };
 }
 
-function mergeResearchIntoEvent(event, researchEntry) {
-  if (!researchEntry) return event;
+function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } = {}) {
+  const keepOnlyEventProximity = (layerRecords = {}) => {
+    if (!layerRecords || typeof layerRecords !== 'object') return {};
+    return layerRecords.event_proximity ? { event_proximity: layerRecords.event_proximity } : {};
+  };
+  if (!researchEntry && !staleResearch) {
+    return { ...event };
+  }
+  if (staleResearch || (researchEntry && !researchEntryHasUsableSignal(researchEntry))) {
+    const cloned = { ...event };
+    cloned.source_status = 'NO_DECLARED_SOURCES';
+    cloned.markets = (Array.isArray(cloned.markets) ? cloned.markets : []).map((m) => ({
+      ...m,
+      source_status: 'NO_DECLARED_SOURCES',
+      layer_records: keepOnlyEventProximity(m.layer_records),
+      source_ladder_inputs: null,
+      research_quality: 'stub',
+      blended_pct: null,
+    }));
+    return cloned;
+  }
   const cloned = { ...event };
   const markets = Array.isArray(cloned.markets) ? cloned.markets.slice() : [];
   const marketMap = researchEntry._marketMap || new Map();
+  const hasUsableResearch = researchEntryHasUsableSignal(researchEntry);
+  const eventSourceStatus = hasUsableResearch ? (researchEntry.source_status ?? null) : 'NO_DECLARED_SOURCES';
+  const proofCitations = Array.isArray(researchEntry.proof_pass?.citations) ? researchEntry.proof_pass.citations : [];
+  const handicappingCitations = Array.isArray(researchEntry.handicapping_pass?.citations) ? researchEntry.handicapping_pass.citations : [];
+  const combinedCitations = [...new Set([...proofCitations, ...handicappingCitations].filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()))];
+  if (eventSourceStatus) {
+    cloned.source_status = eventSourceStatus;
+  }
 
   cloned.markets = markets.map(m => {
     const ticker = m.ticker;
     const r = marketMap.get(ticker);
-    if (!r) return m;
     const merged = { ...m };
+    if (eventSourceStatus) {
+      merged.source_status = eventSourceStatus;
+    }
+    if (!r) return merged;
+    if (!hasUsableResearch) {
+      merged.layer_records = keepOnlyEventProximity(m.layer_records);
+      merged.source_ladder_inputs = null;
+      merged.research_quality = 'stub';
+      merged.blended_pct = null;
+      return merged;
+    }
     if (r.layer_records) {
       merged.layer_records = r.layer_records;
     }
@@ -1673,13 +1830,44 @@ function mergeResearchIntoEvent(event, researchEntry) {
     if (Number.isFinite(Number(r.blended_pct))) {
       merged.blended_pct = Number(r.blended_pct);
     }
-    // Carry the per-market source_status (NO_DECLARED_SOURCES / DECLARED /
-    // SOURCE_FETCHED*) so the composite + decision row can tell "no research
-    // was performed" apart from "research ran and found only proximity". The
-    // event-level status is the fallback when a market lacks its own.
-    const marketSourceStatus = r.source_status ?? researchEntry.source_status ?? null;
-    if (marketSourceStatus) {
-      merged.source_status = marketSourceStatus;
+    if (r.proof_pct !== undefined) {
+      merged.proof_pct = r.proof_pct;
+    }
+    if (r.handicap_pct !== undefined) {
+      merged.handicap_pct = r.handicap_pct;
+    }
+    if (r.kalshi_native_pct !== undefined) {
+      merged.kalshi_native_pct = r.kalshi_native_pct;
+    }
+    if (r.kalshi_native_n !== undefined) {
+      merged.kalshi_native_n = r.kalshi_native_n;
+    }
+    if (r.confidence) {
+      merged.confidence = r.confidence;
+    }
+    if (r.proof_reason) {
+      merged.proof_reason = r.proof_reason;
+    }
+    if (r.handicap_reason) {
+      merged.handicap_reason = r.handicap_reason;
+    }
+    if (r.reason) {
+      merged.research_reason = r.reason;
+    }
+    if (combinedCitations.length) {
+      merged.research_citations = combinedCitations;
+    }
+    const researchNote = buildResearchTermNote({
+      phrase: targetMentionFromMarket(m),
+      reason: r.reason ?? null,
+      kalshiNativePct: r.kalshi_native_pct ?? null,
+      kalshiNativeN: r.kalshi_native_n ?? null,
+      proofPct: r.proof_pct ?? null,
+      handicapPct: r.handicap_pct ?? null,
+      citations: combinedCitations,
+    });
+    if (researchNote) {
+      merged.research_term_note = researchNote;
     }
     return merged;
   });
@@ -2152,6 +2340,7 @@ export async function writeKalshiEventPackets({
   dryRun = false,
   allPrimeAttempts = [],
   synthesizeImpl = composeMentionPacketDeterministic,
+  runStartedAtUtc = null,
 }) {
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
@@ -2159,25 +2348,17 @@ export async function writeKalshiEventPackets({
   const items = [];
   const failedTickers = [];
   const seen = new Set();
-  const researchMap = loadResearchForDate(stateRoot, date);
+  const researchMap = loadResearchForDate(stateRoot, date, { runStartedAtUtc });
   // Settled-history records (price-free, outcomes only) load once per run and
   // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
   const historyRecords = await loadHistory({ stateRoot });
-  // Cache/stale-source disclosure: detected once per run from the same date-wide
-  // source-health artifacts the delivery janitor inspects at send time. When the
-  // run is built from cache-only/stale/partial source health, every packet must
-  // carry the explicit disclosure or the janitor fail-closes the send. Price-free.
-  const sourceHealthDisclosure = detectSourceHealthDisclosure({
-    stateRoot,
-    date,
-    packetType: PACKET_TYPE,
-  }).disclosureLine;
   for (const ev of events) {
     const ticker = ev?.event_ticker;
     if (!ticker || seen.has(ticker)) continue;
     seen.add(ticker);
     const researchEntry = researchMap.get(ticker);
-    const mergedEvent = mergeResearchIntoEvent(ev, researchEntry);
+    const staleResearch = researchMap._staleTickers?.has(ticker) ?? false;
+    const mergedEvent = mergeResearchIntoEvent(ev, researchEntry, { staleResearch });
     const sourcePath = resolve(stateRoot, 'mentions', date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
     const inventoryName = `${date}-${ticker}.inventory`;
     const inventoryPath = `${inventoryName}.txt`;
@@ -2195,7 +2376,7 @@ export async function writeKalshiEventPackets({
         );
       }
     }
-    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources, sourceHealthDisclosure });
+    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources });
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
@@ -2314,6 +2495,7 @@ export async function writeKalshiEventPackets({
 }
 
 async function main() {
+  const runStartedAtUtc = new Date().toISOString();
   const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
   const opts = parsePacketArgs(passthrough);
   if (opts.help) {
@@ -2346,6 +2528,7 @@ async function main() {
       tickers: extra.only,
       windowDays: extra.windowDays,
       allowUndated: extra.allowUndated,
+      runStartedAtUtc,
     });
     localOnlyLoad = onlyResolution.localOnlyLoad;
     allEvents = onlyResolution.allEvents;
@@ -2387,7 +2570,12 @@ async function main() {
   // events stay persisted as research/state, they just don't get a packet (or
   // a send) until their event date arrives.
   if (!extra.watchlist) {
-    const todayGuard = filterByEventDate(opts.date, { windowDays: extra.windowDays, allowUndated: false });
+    // Dry-run --only previews may target a local artifact that has no derived
+    // event date yet. Keep that previewable without widening normal runs.
+    const todayGuard = filterByEventDate(opts.date, {
+      windowDays: extra.windowDays,
+      allowUndated: opts.dryRun && Boolean(extra.only),
+    });
     const deferred = events.filter((ev) => !todayGuard(ev));
     if (deferred.length) {
       console.log(`[${PACKET_TYPE}] deferred ${deferred.length} non-today event(s): ${deferred.map(e => e.event_ticker).join(', ')} (watchlist scope — no packet on the cron path)`);
@@ -2437,6 +2625,7 @@ async function main() {
       audit,
       dryRun: opts.dryRun,
       allPrimeAttempts,
+      runStartedAtUtc,
     });
     totalMarketCount += kalshiResult.totalMarketCount;
     missingMarketEventCount += kalshiResult.missingMarketEventCount;

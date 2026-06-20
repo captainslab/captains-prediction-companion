@@ -188,6 +188,122 @@ test('writeKalshiEventPackets fails closed: blocker artifact written, NO custome
   assert.equal(customerTxts.length, 0, 'no customer packet .txt for a research-free event');
 });
 
+test('stale research is treated as absent and fails closed instead of rendering', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-stale-'));
+  const date = '2026-06-19';
+  const event = {
+    event_ticker: 'KXSTALEMENTION-26JUN19',
+    series_ticker: 'KXSTALEMENTION',
+    title: 'What will the speaker say during the rally?',
+    sub_title: 'speaker',
+    markets: [
+      {
+        ticker: 'KXSTALEMENTION-26JUN19-AFFORD',
+        title: 'What will the speaker say? -- Affordability',
+        yes_sub_title: 'Affordability',
+        custom_strike: { Word: 'Affordability' },
+        mention_profile: 'political_mentions',
+        layer_records: {
+          event_proximity: { present: true, score: 92, source_basis: 'confirmed rally schedule' },
+        },
+      },
+    ],
+  };
+  const researchDir = join(stateRoot, 'mentions', date, 'research');
+  mkdirSync(researchDir, { recursive: true });
+  writeFileSync(join(researchDir, `${event.event_ticker}.json`), JSON.stringify({
+    event_ticker: event.event_ticker,
+    // Prior-cycle (a day old): well beyond the freshness window -> treated as stale.
+    produced_at: '2026-06-18T12:00:00.000Z',
+    source_status: 'SOURCE_FETCHED',
+    markets: [{
+      market_ticker: event.markets[0].ticker,
+      blended_pct: 78,
+      proof_pct: 10,
+      handicap_pct: 82,
+      kalshi_native_pct: 60,
+      kalshi_native_n: 5,
+      confidence: 'high',
+      reason: 'habit/news-cycle pressure',
+      proof_reason: 'no evidence in provided results',
+      handicap_reason: 'habit/news-cycle pressure',
+    }],
+  }, null, 2));
+
+  const dir = join(stateRoot, 'packets', date, 'mentions-daily');
+  mkdirSync(dir, { recursive: true });
+  const written = [];
+  const audit = (d, name, text) => {
+    const p = join(d, `${name}.txt`);
+    writeFileSync(p, text);
+    written.push(`${name}.txt`);
+    return { path: p };
+  };
+
+  const result = await writeKalshiEventPackets({
+    events: [event],
+    date,
+    stateRoot,
+    dir,
+    audit,
+    dryRun: true,
+    runStartedAtUtc: '2026-06-19T12:00:00.000Z',
+  });
+
+  assert.ok(result.failedTickers.includes(event.event_ticker), 'stale research fails closed');
+  assert.ok(existsSync(join(stateRoot, 'mentions', date, 'blockers', `${date}-${event.event_ticker}.json`)), 'blocker artifact written');
+  assert.equal(written.filter((n) => !n.includes('.inventory')).length, 0, 'no stale customer packet rendered');
+});
+
+test('current-cycle research (produced shortly BEFORE the run start) renders, not fails closed', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-fresh-'));
+  const date = '2026-06-19';
+  const event = {
+    event_ticker: 'KXFRESHMENTION-26JUN19',
+    series_ticker: 'KXFRESHMENTION',
+    title: 'What will the speaker say during the rally?',
+    sub_title: 'speaker',
+    markets: [{
+      ticker: 'KXFRESHMENTION-26JUN19-AFFORD',
+      title: 'What will the speaker say? -- Affordability',
+      yes_sub_title: 'Affordability',
+      custom_strike: { Word: 'Affordability' },
+      mention_profile: 'political_mentions',
+      layer_records: { event_proximity: { present: true, score: 92, source_basis: 'confirmed rally schedule' } },
+    }],
+  };
+  const researchDir = join(stateRoot, 'mentions', date, 'research');
+  mkdirSync(researchDir, { recursive: true });
+  writeFileSync(join(researchDir, `${event.event_ticker}.json`), JSON.stringify({
+    event_ticker: event.event_ticker,
+    // Same cycle: produced 5 minutes before the generation run start (the normal
+    // collect -> generate ordering). Must be treated as FRESH, not stale.
+    produced_at: '2026-06-19T11:55:00.000Z',
+    source_status: 'SOURCE_FETCHED',
+    markets: [{
+      market_ticker: event.markets[0].ticker,
+      blended_pct: 78, proof_pct: 10, handicap_pct: 82,
+      kalshi_native_pct: 60, kalshi_native_n: 5, confidence: 'high',
+      reason: 'habit/news-cycle pressure',
+      proof_reason: 'no evidence in provided results',
+      handicap_reason: 'habit/news-cycle pressure',
+    }],
+  }, null, 2));
+
+  const dir = join(stateRoot, 'packets', date, 'mentions-daily');
+  mkdirSync(dir, { recursive: true });
+  const written = [];
+  const audit = (d, name, text) => { writeFileSync(join(d, `${name}.txt`), text); written.push(`${name}.txt`); return { path: join(d, `${name}.txt`) }; };
+
+  const result = await writeKalshiEventPackets({
+    events: [event], date, stateRoot, dir, audit, dryRun: true,
+    runStartedAtUtc: '2026-06-19T12:00:00.000Z',
+  });
+
+  assert.ok(!result.failedTickers.includes(event.event_ticker), 'same-cycle research must NOT fail closed');
+  assert.equal(written.filter((n) => !n.includes('.inventory')).length, 1, 'a customer packet .txt is rendered from fresh research');
+});
+
 test('price isolation: source_status gate and blocker reasoning carry no price-shaped field', () => {
   const ev = noResearchEvent();
   const composite = buildMentionCompositeForMarket({ event: ev, market: ev.markets[0] });

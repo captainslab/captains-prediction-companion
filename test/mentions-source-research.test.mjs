@@ -18,6 +18,7 @@ import {
   EVIDENCE_LAYERS,
 } from '../scripts/mentions/source-research.mjs';
 import { buildEventResearch } from '../scripts/mentions/collect-mentions-research.mjs';
+import { mergePasses, buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
 
 const DATE = '2026-06-12';
 const TERMS = ['China / Chinese', 'Epstein', 'Pardon / Pardoned'];
@@ -53,6 +54,35 @@ function goodExtraction() {
     ],
   };
 }
+
+test('mergePasses prefers the handicap reason when proof is empty and the blend is handicap-driven', () => {
+  const rows = mergePasses(
+    [{ phrase: 'Affordability', ticker: 'AFF' }],
+    [{ phrase: 'Affordability', likelihood_pct: 8, confidence: 'low', reason: 'no evidence / no mention in the provided results' }],
+    [{ phrase: 'Affordability', likelihood_pct: 74, confidence: 'high', reason: 'habit/news-cycle pressure keeps the phrase live' }],
+    { by_word: new Map([['affordability', { n: 5, yes: 3 }]]) },
+  );
+  assert.equal(rows[0].proof_reason, 'no evidence / no mention in the provided results');
+  assert.equal(rows[0].handicap_reason, 'habit/news-cycle pressure keeps the phrase live');
+  assert.equal(rows[0].reason, 'habit/news-cycle pressure keeps the phrase live');
+  assert.ok(!/no evidence|no mention/i.test(rows[0].reason), 'rendered reason must not assert no evidence on a YES-leaning blend');
+});
+
+test('buildResearchTermNote derives settlement fit from slash tokens and repeat requirements', () => {
+  const note = buildResearchTermNote({
+    phrase: 'Afford / Affordable (N+ times)',
+    reason: 'habit/news-cycle pressure',
+    kalshiNativePct: 50,
+    kalshiNativeN: 2,
+    proofPct: 10,
+    handicapPct: 72,
+  });
+  assert.ok(note, 'research note should be built from usable research');
+  assert.match(note.catalyst, /habit\/news-cycle pressure/);
+  assert.match(note.catalyst, /historically YES in 1\/2 comparable events/);
+  assert.match(note.settlement_fit, /either exact token "Afford" or "Affordable"/);
+  assert.match(note.settlement_fit, /repeat requirement: N\+ times/);
+});
 
 test('source extraction batches by source document, not per term (1 model call for N terms)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'src-research-'));

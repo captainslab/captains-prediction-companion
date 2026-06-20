@@ -256,6 +256,10 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
   // per-phrase evidence layers (direct_mention_pathway + historical_tendency).
   // It fails soft: any error leaves declared-source/stub results untouched.
   let pplxLayers = { byTerm: {}, usableTerms: 0 };
+  // Raw Perplexity rows keyed by exact strike phrase, so the per-market research
+  // artifact can persist the reasoning fields (reason/base-rate/proof/handicap)
+  // that the packet renders as Catalyst/Settlement Fit. Layers alone drop these.
+  let pplxRowsByTerm = {};
   let pplxRan = false;
   const hasKey = (deps.hasPerplexityKey ?? hasPerplexityKey)(env);
   if (date && allKeywords.length && hasKey) {
@@ -269,6 +273,9 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
         ...(deps.fetcherImpl ? { fetcherImpl: deps.fetcherImpl } : {}),
       });
       pplxLayers = perplexityRowsToLayers(research.rows ?? []);
+      for (const row of research.rows ?? []) {
+        if (row && typeof row.phrase === 'string') pplxRowsByTerm[row.phrase] = row;
+      }
       pplxRan = true;
       if (pplxLayers.usableTerms > 0) {
         sourceStatus = SOURCE_STATUS.SOURCE_FETCHED;
@@ -406,6 +413,10 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       researchQuality = 'no_source';
     }
 
+    // Persist the per-strike research reasoning so the packet can render a real,
+    // research-sourced Catalyst/Settlement Fit (never a fabricated stub).
+    const pplxRow = pplxRowsByTerm[keyword] ?? null;
+
     marketResearches.push({
       market_ticker: marketTicker,
       keyword,
@@ -413,6 +424,14 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       research_quality: researchQuality,
       source_status: sourceStatus,
       blended_pct: pplxForTerm?.direct_mention_pathway?.score ?? null,
+      reason: pplxRow?.reason ?? null,
+      proof_reason: pplxRow?.proof_reason ?? null,
+      handicap_reason: pplxRow?.handicap_reason ?? null,
+      kalshi_native_pct: pplxRow?.kalshi_native_pct ?? null,
+      kalshi_native_n: pplxRow?.kalshi_native_n ?? null,
+      proof_pct: pplxRow?.proof_pct ?? null,
+      handicap_pct: pplxRow?.handicap_pct ?? null,
+      confidence: pplxRow?.confidence ?? null,
       research_gap_notes: (extracted && Object.keys(extracted).length) || (pplxForTerm && Object.keys(pplxForTerm).length) ? [] : sourceResearch.notes,
       layer_records: layerRecords,
       source_ladder_inputs: sourceLadderInputs,

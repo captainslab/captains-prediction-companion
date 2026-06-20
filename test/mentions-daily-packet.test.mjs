@@ -108,7 +108,7 @@ test('mentions daily packet renders mention-composite scoring instead of WATCH-o
   assert.match(text, /2\. RANKED BOARD/);
   assert.match(text, /PowerEdge/);
   assert.match(text, /\|\s*88\s*\|\s*STRONG YES\s*\|/);
-  assert.match(text, /PowerEdge: research gap remains/);
+  assert.doesNotMatch(text, /PowerEdge: research gap remains/);
   // strong source-backed market is NOT downgraded to a generic WATCH-only posture
   assert.doesNotMatch(text, /\|\s*88\s*\|\s*(?:WATCH|LEAN|NO_CLEAR_PICK)\s*\|/);
   assert.doesNotMatch(text, /TLDR BOARD|TOP EDGE CANDIDATES|LOW-SOURCE WATCH/);
