@@ -80,6 +80,20 @@ const NEVER_AIRED_RE = /\bstream(?:\s+|-)never(?:\s+|-)aired\b|\bnever\s+aired\b
 const EVENT_DOES_NOT_OCCUR_RE = /\bevent\s+does\s+not\s+occur\b|\bdoes\s+not\s+happen\b/i;
 const NO_OFFICIAL_CAPACITY_RE = /\bno\s+official(?:\s|-)?capacity\s+speech\b/i;
 const SLASH_RE = /\//;
+const NUMBER_WORDS = Object.freeze({
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+});
 
 function asText(value) {
   return value == null ? '' : String(value).trim();
@@ -153,6 +167,34 @@ function hashSnapshot(snapshot) {
 
 function lowerJoined(parts) {
   return parts.map(asText).filter(Boolean).join(' ').toLowerCase();
+}
+
+function countTokenToNumber(token) {
+  const raw = lowerFold(token).replace(/[+]/g, '').trim();
+  if (!raw) return null;
+  if (/^\d+$/.test(raw)) {
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+  return NUMBER_WORDS[raw] ?? null;
+}
+
+export function parseThresholdCount(text) {
+  const normalized = lowerFold(text).replace(/[“”]/g, '"').replace(/[’‘]/g, "'");
+  if (!normalized) return null;
+  const patterns = [
+    /\b(?:at least\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(?:\+|plus)\s*(?:mentions?|times?)\b/i,
+    /\b(?:at least\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(?:or more)(?:\s*(?:mentions?|times?))?\b/i,
+    /\b(?:at least\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\+\b/i,
+    /\bat least\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (!match) continue;
+    const parsed = countTokenToNumber(match[1]);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return null;
 }
 
 function eventText(event) {
@@ -244,8 +286,7 @@ function detectMarketType(event, market, family) {
   const text = combinedText(event, market);
   if (TOPIC_MOST_RE.test(text)) return 'comparative_count';
 
-  const thresholdMatch = text.match(/\b(?:at least\s+)?(\d+)\s*(?:\+|plus|or more)\s*(?:mentions?|times?)\b|\b(\d+)\s*\+\s*(?:mentions?|times?)\b|\b(\d+)\s*(?:or more)\s*(?:mentions?|times?)\b/i);
-  if (thresholdMatch) return 'threshold_count';
+  if (parseThresholdCount(text)) return 'threshold_count';
 
   if (
     EVENT_DOES_NOT_OCCUR_RE.test(text) ||
@@ -535,6 +576,9 @@ function baseSnapshot({
     content_window_policy: outOfScope ? null : contentWindowForFamily(family),
     resolution_authority: outOfScope ? null : resolutionAuthorityForFamily(family),
     settlement_sources: settlementSources,
+    required_count: outOfScope ? null : (marketType === 'threshold_count'
+      ? parseThresholdCount(text)
+      : (marketType === 'binary' || marketType === 'ednq' ? 1 : null)),
     ednq_trigger_set: outOfScope ? [] : ednqTriggersFromText(text, family),
     qualification_requirements: outOfScope ? [] : qualificationRequirementsForFamily(family, text),
     source_order: RULES_SOURCE_ORDER,

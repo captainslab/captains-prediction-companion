@@ -124,6 +124,25 @@ function truthSocialEvent() {
   };
 }
 
+function thresholdEvent() {
+  return {
+    event_ticker: 'KXTHRESHOLD-26JUN24',
+    series_ticker: 'KXTHRESHOLD',
+    title: 'What will Trump say during the press portion?',
+    sub_title: 'threshold mention',
+    settlement_sources: [],
+    markets: [
+      {
+        ticker: 'KXTHRESHOLD-26JUN24-TARIFF',
+        title: 'Will Trump say tariff three or more times?',
+        yes_sub_title: 'tariff',
+        custom_strike: 'tariff',
+        rules_primary: 'Resolves YES if Trump says tariff three or more times during the press portion.',
+      },
+    ],
+  };
+}
+
 function emptyRulesEvent() {
   return {
     event_ticker: 'KXGARBAGE-26JUN18',
@@ -242,6 +261,12 @@ test('EDNQ triggers are extracted from rules text', () => {
   const snapshot = buildMarketRulesSnapshot(trumpEvent(), trumpEvent().markets[0]);
   assert.ok(snapshot.ednq_trigger_set.includes('archival_or_prerecorded_replay'));
   assert.ok(snapshot.ednq_trigger_set.includes('press_portion_not_open'));
+});
+
+test('threshold-count snapshots surface the required_count', () => {
+  const snapshot = buildMarketRulesSnapshot(thresholdEvent(), thresholdEvent().markets[0]);
+  assert.equal(snapshot.market_type, 'threshold_count');
+  assert.equal(snapshot.required_count, 3);
 });
 
 test('settlement_sources comes only from event.settlement_sources[].url', () => {

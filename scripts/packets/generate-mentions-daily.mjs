@@ -316,6 +316,13 @@ function targetMentionFromMarket(market = {}) {
   );
 }
 
+// A market is the structural EDNQ ("Event does not qualify") fallback only when
+// its OWN strike text says so — never from the event-level cancellation boilerplate
+// that detectMarketType folds into every market's combined text (which would wrongly
+// flag normal content terms like "Biden" as qualification terms).
+const EDNQ_STRIKE_RE = /event does not qualify|does not occur/i;
+function strikeIsEdnq(text) { return EDNQ_STRIKE_RE.test(String(text ?? '')); }
+
 function eventNameForComposite(event = {}, legacy = null) {
   return (
     asText(legacy?.event_context) ||
@@ -647,6 +654,14 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    market_type: lexicalGate.lexical_result?.market_type ?? null,
+    required_count: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) ? Number(lexicalGate.lexical_result.required_count) : null,
+    repeat_requirement: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) && Number(lexicalGate.lexical_result.required_count) > 1
+      ? `${Number(lexicalGate.lexical_result.required_count)}+ times`
+      : null,
+    is_qualification_term: strikeIsEdnq(
+      market ? targetMentionFromMarket(market) : (legacy?.target_phrase ?? legacy?.target_mention ?? '')
+    ),
     settled_history: settledHistory,
     history_match_tier: historyMatch?.match_tier ?? null,
     history_sample_size: historyMatch?.sample_size ?? null,
@@ -730,6 +745,14 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    market_type: lexicalGate.lexical_result?.market_type ?? null,
+    required_count: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) ? Number(lexicalGate.lexical_result.required_count) : null,
+    repeat_requirement: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) && Number(lexicalGate.lexical_result.required_count) > 1
+      ? `${Number(lexicalGate.lexical_result.required_count)}+ times`
+      : null,
+    is_qualification_term: strikeIsEdnq(
+      market ? targetMentionFromMarket(market) : (legacy?.target_phrase ?? legacy?.target_mention ?? '')
+    ),
     settled_history: null,
     history_match_tier: null,
     history_sample_size: null,
@@ -766,7 +789,7 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
 
 function bestComposite(composites) {
   const ranked = composites
-    .filter(c => c?.result)
+    .filter(c => c?.result && !c?.is_qualification_term)
     .slice()
     .sort((a, b) => {
       const postureDiff = (POSTURE_RANK[b.result.posture] ?? -1) - (POSTURE_RANK[a.result.posture] ?? -1);
@@ -794,11 +817,12 @@ function hasBeyondProximityEvidence(composite) {
 
 function summarizeCompositeRun(composites) {
   const best = bestComposite(composites);
+  const contentComposites = composites.filter((c) => !c?.is_qualification_term);
   return {
     market_count: composites.length,
-    scored_count: composites.filter(c => c?.result?.composite_score !== null).length,
-    source_backed_count: composites.filter(hasBeyondProximityEvidence).length,
-    proximity_only_count: composites.filter(isProximityOnlyComposite).length,
+    scored_count: contentComposites.filter(c => c?.result?.composite_score !== null).length,
+    source_backed_count: contentComposites.filter(hasBeyondProximityEvidence).length,
+    proximity_only_count: contentComposites.filter(isProximityOnlyComposite).length,
     best_posture: best?.result?.posture ?? 'NO_CLEAR_PICK',
     best_score: best?.result?.composite_score ?? null,
     best_target: best?.result?.target_mention ?? null,
@@ -836,6 +860,11 @@ export function mentionCompositeToDecisionRow(composite) {
   const layersPresent = Number(meta.layers_present ?? 0);
   const layersTotal = Number(meta.layers_total ?? 0);
   const mc = r.market_context ?? {};
+  const lexical = composite?.lexical_gate?.lexical_result ?? null;
+  const marketType = lexical?.market_type ?? null;
+  const requiredCount = Number.isFinite(Number(lexical?.required_count)) ? Number(lexical.required_count) : null;
+  const qualificationStatus = composite?.source_ladder?.qualification_status ?? null;
+  const qualificationPostureCap = composite?.source_ladder?.posture_cap ?? null;
 
   // market half (cents from composite core; buildDecisionRow treats >1.5 as cents)
   const market = {
@@ -952,6 +981,12 @@ export function mentionCompositeToDecisionRow(composite) {
     handicap_reason: composite?.handicap_reason ?? null,
     research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
     research_term_note: composite?.research_term_note ?? null,
+    market_type: marketType,
+    required_count: requiredCount,
+    repeat_requirement: requiredCount && requiredCount > 1 ? `${requiredCount}+ times` : null,
+    qualification_status: qualificationStatus,
+    qualification_posture_cap: qualificationPostureCap,
+    is_qualification_term: strikeIsEdnq(r.target_mention),
   };
 }
 
@@ -1165,15 +1200,17 @@ export function normalizeLayerList(value) {
 export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null } = {}) {
   const s = summarizeEvent(event);
   const rules = firstMarketRules(event);
+  const contentRows = rows.filter((row) => row.is_qualification_term !== true);
+  const qualificationRows = rows.filter((row) => row.is_qualification_term === true);
   // Compact each term to only what the model needs for the article.
   const terms = rows.map((row) => ({
     full_strike_text: row.side_target,
     short_term: shortTerm(row.side_target, s.title),
     cpc_score: row.composite_score ?? null,
     p_yes_tier: scoreToTier(row.composite_score),
-    bucket: termBucketForRow(row),
-    evidence_status: evidenceStatusForRow(row),
-    research_state: evidenceStatusForRow(row),
+    bucket: row.is_qualification_term ? 'qualification/fallback' : termBucketForRow(row),
+    evidence_status: row.is_qualification_term ? 'qualification fallback' : evidenceStatusForRow(row),
+    research_state: row.is_qualification_term ? 'qualification fallback' : evidenceStatusForRow(row),
     layers_present: normalizeLayerList(row.layers_present),
     composite_posture: row.composite_posture,
     missing_research_layers: Array.isArray(row.missing_layers)
@@ -1181,6 +1218,12 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       : [],
     upgrade_trigger: row.trigger_event,
     research_reason: row.reason ?? null,
+    market_type: row.market_type ?? null,
+    required_count: Number.isFinite(Number(row.required_count)) ? Number(row.required_count) : null,
+    repeat_requirement: row.repeat_requirement ?? null,
+    qualification_status: row.qualification_status ?? null,
+    qualification_posture_cap: row.qualification_posture_cap ?? null,
+    is_qualification_term: row.is_qualification_term === true,
     proof_pct: row.proof_pct ?? null,
     handicap_pct: row.handicap_pct ?? null,
     kalshi_native_pct: row.kalshi_native_pct ?? null,
@@ -1227,7 +1270,9 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       source_backed_count: compositeSummary.source_backed_count ?? null,
       research_backed_count: compositeSummary.source_backed_count ?? null,
       proximity_only_count: compositeSummary.proximity_only_count ?? null,
-      research_gap_count: rows.length - (compositeSummary.source_backed_count ?? 0),
+      content_term_count: contentRows.length,
+      qualification_term_count: qualificationRows.length,
+      research_gap_count: contentRows.length - (compositeSummary.source_backed_count ?? 0),
       best_posture: compositeSummary.best_posture ?? null,
       best_tier: scoreToTier(compositeSummary.best_score ?? null),
     },
@@ -1854,6 +1899,24 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
     if (r.reason) {
       merged.research_reason = r.reason;
     }
+    if (r.market_type !== undefined) {
+      merged.market_type = r.market_type;
+    }
+    if (r.required_count !== undefined) {
+      merged.required_count = r.required_count;
+    }
+    if (r.repeat_requirement !== undefined) {
+      merged.repeat_requirement = r.repeat_requirement;
+    }
+    if (r.is_qualification_term !== undefined) {
+      merged.is_qualification_term = r.is_qualification_term;
+    }
+    if (r.qualification_status !== undefined) {
+      merged.qualification_status = r.qualification_status;
+    }
+    if (r.qualification_posture_cap !== undefined) {
+      merged.qualification_posture_cap = r.qualification_posture_cap;
+    }
     if (combinedCitations.length) {
       merged.research_citations = combinedCitations;
     }
@@ -1864,6 +1927,7 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
       kalshiNativeN: r.kalshi_native_n ?? null,
       proofPct: r.proof_pct ?? null,
       handicapPct: r.handicap_pct ?? null,
+      requiredCount: r.required_count ?? null,
       citations: combinedCitations,
     });
     if (researchNote) {
@@ -1938,7 +2002,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     });
   });
   const compositeSummary = summarizeCompositeRun(composites);
-  const prov = composites[0] ?? null;
+  const prov = composites.find((c) => !c?.is_qualification_term) ?? bestComposite(composites) ?? null;
   const researchProvenance = prov ? {
     research_route: prov.research_route ?? null,
     route_basis: prov.route_basis ?? null,

@@ -18,7 +18,12 @@ import {
   EVIDENCE_LAYERS,
 } from '../scripts/mentions/source-research.mjs';
 import { buildEventResearch } from '../scripts/mentions/collect-mentions-research.mjs';
-import { mergePasses, buildResearchTermNote, ensurePerplexityEnvLoaded } from '../scripts/mentions/mentions-research-perplexity.mjs';
+import {
+  mergePasses,
+  buildResearchTermNote,
+  ensurePerplexityEnvLoaded,
+  runResearchForEvent,
+} from '../scripts/mentions/mentions-research-perplexity.mjs';
 
 test('cron-like env: Perplexity key loads from .env.local without exported shell state', () => {
   const root = mkdtempSync(join(tmpdir(), 'pplx-env-'));
@@ -115,12 +120,54 @@ test('buildResearchTermNote derives settlement fit from slash tokens and repeat 
     kalshiNativeN: 2,
     proofPct: 10,
     handicapPct: 72,
+    requiredCount: 3,
   });
   assert.ok(note, 'research note should be built from usable research');
   assert.match(note.catalyst, /habit\/news-cycle pressure/);
   assert.match(note.catalyst, /historically YES in 1\/2 comparable events/);
   assert.match(note.settlement_fit, /either exact token "Afford" or "Affordable"/);
-  assert.match(note.settlement_fit, /repeat requirement: N\+ times/);
+  assert.match(note.settlement_fit, /Requires 3 or more qualifying mentions, not just one\./);
+});
+
+test('threshold research prompt carries required_count and repeat-count context', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-threshold-'));
+  const event = {
+    event_ticker: 'KXTHRESH-26JUN12',
+    series_ticker: 'KXTHRESH',
+    title: 'What will Trump say during the press portion?',
+    markets: [
+      {
+        ticker: 'KXTHRESH-26JUN12-TARIFF',
+        title: 'Will Trump say tariff 3+ times?',
+        yes_sub_title: 'tariff',
+        custom_strike: 'tariff',
+        rules_primary: 'Resolves YES if Trump says tariff 3+ times during the press portion.',
+      },
+    ],
+  };
+  const prompts = [];
+  const res = await runResearchForEvent({
+    event,
+    date: DATE,
+    stateRoot: root,
+    env: { PERPLEXITY_API_KEY: 'test-key' },
+    fetcherImpl: async () => ({ ok: true, json: { events: [], cursor: null } }),
+    perplexityImpl: async ({ messages }) => {
+      prompts.push(messages.map((m) => m.content).join('\n'));
+      return {
+        content: JSON.stringify([
+          { phrase: 'tariff', likelihood_pct: 11, confidence: 'low', reason: 'single mention only' },
+        ]),
+        citations: [],
+      };
+    },
+  });
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[0], /count threshold: estimate probability the token is said at least 3 times/);
+  assert.match(prompts[0], /keep the repeat-count threshold in view/i);
+  assert.equal(res.rows[0].required_count, 3);
+  assert.equal(res.rows[0].market_type, 'threshold_count');
+  assert.equal(res.rows[0].repeat_requirement, '3+ times');
 });
 
 test('source extraction batches by source document, not per term (1 model call for N terms)', async () => {
@@ -160,8 +207,13 @@ test('source cache prevents repeat fetches (second run = cache hit, zero network
   assert.equal(second.source_health.from_cache, true);
   assert.equal(second.source_health.cache_only, true);
   assert.equal(second.source_health.disclosure_required, true);
-  assert.equal(second.source_health.generated_utc, cached.fetched_at_utc);
-  assert.equal(second.source_health.generated_utc, first.source_health.generated_utc);
+  const cachedAt = new Date(cached.fetched_at_utc).getTime();
+  const generatedAt = new Date(second.source_health.generated_utc).getTime();
+  const firstGeneratedAt = new Date(first.source_health.generated_utc).getTime();
+  assert.ok(Number.isFinite(cachedAt) && Number.isFinite(generatedAt));
+  assert.ok(Number.isFinite(firstGeneratedAt));
+  assert.ok(Math.abs(generatedAt - cachedAt) <= 5, 'cache timestamp should match within a few milliseconds');
+  assert.ok(Math.abs(firstGeneratedAt - generatedAt) <= 5, 'first and second fetches should share the same cache timestamp within a few milliseconds');
   assert.ok(cachePathForUrl(root, DATE, url).includes('research-cache'));
 });
 

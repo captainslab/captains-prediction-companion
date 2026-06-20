@@ -29,6 +29,7 @@ import {
   defaultFetcher,
   KALSHI_API_BASE,
 } from '../packets/lib/kalshi-discovery.mjs';
+import { buildMarketRulesSnapshot } from './rules-analyst.mjs';
 import {
   classifyPriorityFamily,
   buildPriorityDomains,
@@ -97,7 +98,16 @@ function candidateWordsFromEvent(event) {
     const key = phrase.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ phrase, ticker: m.ticker, result: m.result ?? null });
+    const snapshot = buildMarketRulesSnapshot(event, m);
+    const requiredCount = Number.isFinite(Number(snapshot.required_count)) ? Number(snapshot.required_count) : null;
+    out.push({
+      phrase,
+      ticker: m.ticker,
+      result: m.result ?? null,
+      market_type: snapshot.market_type ?? 'binary',
+      required_count: requiredCount,
+      repeat_requirement: requiredCount && requiredCount > 1 ? `${requiredCount}+ times` : detectRepeatRequirement(phrase),
+    });
   }
   return out;
 }
@@ -176,16 +186,24 @@ async function perplexity({ key, model, messages, domains, maxTokens = 1200 }) {
 
 function buildPrompt({ event, words, pass }) {
   const title = event.title || event.event_ticker;
-  const phraseList = words.map((w, i) => `${i + 1}. "${w.phrase}"`).join('\n');
+  const phraseList = words.map((w, i) => {
+    const count = Number(w.required_count);
+    if (Number.isFinite(count) && count > 1) {
+      const repeatNote = w.repeat_requirement ? ` (${w.repeat_requirement})` : '';
+      return `${i + 1}. "${w.phrase}" — count threshold: estimate probability the token is said at least ${count} times during the appearance${repeatNote}`;
+    }
+    return `${i + 1}. "${w.phrase}" — single-mention literal utterance`;
+  }).join('\n');
   const lexRules = [
     'Resolution is LITERAL: the exact word/phrase must be spoken aloud by the speaker.',
     'Plural and possessive forms COUNT. Other inflections (tense/derivation) do NOT.',
     'Acronyms are NOT their expansion ("AI" is not "artificial intelligence") and vice-versa.',
     'Synonyms / paraphrases / same-topic talk do NOT count — only the literal token.',
+    'For any count-threshold candidate with required_count N>1, estimate the probability the speaker says the token at least N times during this appearance; do not collapse it to P(at least one).',
   ].join(' ');
   const framing = pass === 'proof'
-    ? 'Use the official record / named outlets. Judge whether each exact phrase was (or would be) actually spoken by the speaker during this specific appearance.'
-    : 'Use the broader news cycle, the speaker\'s recent verbal habits, and what topics are being forced right now to judge how likely each exact phrase is to be spoken.';
+    ? 'Use the official record / named outlets. Judge whether each exact phrase was (or would be) actually spoken by the speaker during this specific appearance, and for threshold candidates judge whether the required count is met. Keep the repeat-count threshold in view.'
+    : 'Use the broader news cycle, the speaker\'s recent verbal habits, and what topics are being forced right now to judge how likely each exact phrase is to be spoken. For threshold candidates, keep the repeat-count threshold in view.';
   return [
     {
       role: 'system',
@@ -242,7 +260,13 @@ function detectRepeatRequirement(phrase) {
   return `${value}+ times`;
 }
 
-function describeSettlementFit(phrase) {
+function requiredCountSentence(requiredCount) {
+  const count = Number(requiredCount);
+  if (!Number.isFinite(count) || count <= 1) return null;
+  return `Requires ${count} or more qualifying mentions, not just one.`;
+}
+
+function describeSettlementFit(phrase, requiredCount = null) {
   const raw = String(phrase ?? '').trim();
   if (!raw) return null;
   const repeat = detectRepeatRequirement(raw);
@@ -254,7 +278,10 @@ function describeSettlementFit(phrase) {
   } else {
     fit = `YES only if the exact token "${base}" is said`;
   }
-  if (repeat) {
+  const countSentence = requiredCountSentence(requiredCount);
+  if (countSentence) {
+    fit += `; ${countSentence}`;
+  } else if (repeat) {
     fit += `; repeat requirement: ${repeat}`;
   }
   return fit;
@@ -267,6 +294,7 @@ export function buildResearchTermNote({
   kalshiNativeN = null,
   proofPct = null,
   handicapPct = null,
+  requiredCount = null,
   citations = [],
 } = {}) {
   const baseReason = trimWords(reason, 20);
@@ -282,7 +310,7 @@ export function buildResearchTermNote({
 
   const note = {
     catalyst: trimWords(catalyst, 28),
-    settlement_fit: describeSettlementFit(phrase),
+    settlement_fit: describeSettlementFit(phrase, requiredCount),
     trap_risk: null,
   };
   if (Array.isArray(citations) && citations.length) {
@@ -331,6 +359,9 @@ export function mergePasses(words, proof, hcap, prior) {
     return {
       phrase: w.phrase,
       ticker: w.ticker,
+      market_type: w.market_type ?? null,
+      required_count: Number.isFinite(Number(w.required_count)) ? Number(w.required_count) : null,
+      repeat_requirement: w.repeat_requirement ?? null,
       kalshi_native_pct: kalshiPct,   // checked FIRST (Kalshi calendar/native)
       kalshi_native_n: kalshiN,
       proof_pct: Number.isFinite(p?.likelihood_pct) ? p.likelihood_pct : null,

@@ -29,6 +29,7 @@ import {
   perplexityRowsToLayers,
   hasPerplexityKey,
 } from './mentions-research-perplexity.mjs';
+import { buildMarketRulesSnapshot } from './rules-analyst.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -297,6 +298,7 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     if (!keyword || keyword === 'Event does not qualify') continue;
 
     const marketTicker = market.ticker;
+    const rulesSnapshot = buildMarketRulesSnapshot(event, market);
     let layerRecords = {};
     let sourceLadderInputs = {};
     let researchQuality = 'source_backed';
@@ -423,6 +425,12 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       profile,
       research_quality: researchQuality,
       source_status: sourceStatus,
+      market_type: rulesSnapshot.market_type ?? null,
+      required_count: Number.isFinite(Number(rulesSnapshot.required_count)) ? Number(rulesSnapshot.required_count) : null,
+      repeat_requirement: Number.isFinite(Number(rulesSnapshot.required_count)) && Number(rulesSnapshot.required_count) > 1
+        ? `${Number(rulesSnapshot.required_count)}+ times`
+        : null,
+      is_qualification_term: rulesSnapshot.market_type === 'ednq',
       blended_pct: pplxForTerm?.direct_mention_pathway?.score ?? null,
       reason: pplxRow?.reason ?? null,
       proof_reason: pplxRow?.proof_reason ?? null,

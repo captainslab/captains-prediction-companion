@@ -11,8 +11,9 @@
 //   3 WEAK YES WATCHLIST
 //   4 WEAK NO / STRONG NO TRAPS
 //   5 SOURCE GAPS
-//   6 SETTLEMENT NOTES
-//   7 FULL STRIKE INVENTORY
+//   6 QUALIFICATION RISK
+//   7 SETTLEMENT NOTES
+//   8 FULL STRIKE INVENTORY
 //
 // Market price/liquidity is display-only context and never a score input.
 // All user-facing times are America/Chicago.
@@ -23,8 +24,9 @@ export const SECTION_ORDER = Object.freeze([
   '3. WEAK YES WATCHLIST',
   '4. WEAK NO / STRONG NO TRAPS',
   '5. SOURCE GAPS',
-  '6. SETTLEMENT NOTES',
-  '7. FULL STRIKE INVENTORY',
+  '6. QUALIFICATION RISK',
+  '7. SETTLEMENT NOTES',
+  '8. FULL STRIKE INVENTORY',
 ]);
 
 const CENTRAL_TZ = 'America/Chicago';
@@ -32,6 +34,8 @@ export const CUSTOMER_PACKET_CONTRACT_V2 = 'mentions_customer_packet_v2';
 export const CUSTOMER_RENDERER_ID = 'renderMentionPacket/v2';
 const GAP_STATE = 'research gap';
 const GAP_LABEL = 'RESEARCH GAP';
+const QUALIFICATION_STATE = 'qualification fallback';
+const QUALIFICATION_LABEL = 'QUALIFICATION RISK';
 const TIER_RANK = Object.freeze({ 'STRONG YES': 4, 'WEAK YES': 3, 'WEAK NO': 2, 'STRONG NO': 1, [GAP_LABEL]: 0 });
 const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|PICK|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
 
@@ -46,12 +50,23 @@ function scoreToTier(score) {
 
 function researchState(term) {
   if (String(term?.research_state ?? '').trim()) return String(term.research_state).trim();
+  if (isQualificationRisk(term)) return QUALIFICATION_STATE;
   if (term?.bucket === 'blocked/no-source') return GAP_STATE;
   return Number.isFinite(Number(term?.cpc_score)) ? 'research-backed' : GAP_STATE;
 }
 
+function isQualificationRisk(term) {
+  // Only the structural EDNQ strike is a qualification term. Do NOT trust
+  // term.market_type === 'ednq' here: detectMarketType folds event-level
+  // cancellation boilerplate into every market, so that flag is set on normal
+  // content terms too. Key on the explicit flag (derived from the strike text
+  // upstream) and the strike text itself.
+  return term?.is_qualification_term === true
+    || /event does not qualify/i.test(String(term?.full_strike_text ?? ''));
+}
+
 function isResearchBacked(term) {
-  return researchState(term) !== GAP_STATE;
+  return !isQualificationRisk(term) && researchState(term) !== GAP_STATE;
 }
 
 export function formatCentral(isoOrDate) {
@@ -181,10 +196,28 @@ function renderGapSummary(lines, gapTerms) {
   lines.push('  These strikes stay out of the YES/NO cards until research-backed evidence lands.');
 }
 
+function renderQualificationRiskSection(lines, qualificationTerms) {
+  lines.push('6. QUALIFICATION RISK');
+  if (!qualificationTerms.length) {
+    lines.push('- none');
+    lines.push('');
+    return;
+  }
+  for (const term of qualificationTerms) {
+    const status = String(term?.qualification_status ?? '').trim().toLowerCase();
+    const proven = status === 'high' || status === 'medium';
+    lines.push(`- ${maybe(term._short)}`);
+    lines.push('  Settlement fit: separate settlement path if the event or rules do not qualify.');
+    lines.push(`  Read: ${proven ? `YES-leaning qualification risk proven (${status || 'unknown'})` : 'neutral fallback, not a pick.'}`);
+  }
+  lines.push('');
+}
+
 // Best rendered tier from the customer board. Research gaps sort last.
 export function postCapBestPosture(terms) {
   let best = GAP_LABEL;
   for (const t of terms ?? []) {
+    if (isQualificationRisk(t)) continue;
     const p = renderedPosture(t);
     if ((TIER_RANK[p] ?? 0) > (TIER_RANK[best] ?? 0)) best = p;
   }
@@ -194,6 +227,7 @@ export function postCapBestPosture(terms) {
 // Stable ranking: scored terms first (P(YES) desc), then research gaps.
 // Pure on input - gate-only terms can never outrank researched terms.
 function rankGroup(term) {
+  if (isQualificationRisk(term)) return 2;
   if (!isResearchBacked(term)) return 1;
   return 0;
 }
@@ -264,6 +298,8 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   if (!ranked.length) throw new Error('renderMentionPacket: no terms to render');
   const a = analyst ?? {};
   const notes = collectNotes(ranked, a);
+  const qualificationTerms = ranked.filter(isQualificationRisk);
+  const contentTerms = ranked.filter((term) => !isQualificationRisk(term));
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
@@ -273,12 +309,13 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push(`settlement_source: ${maybe(e.settlement_source_link)}`);
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('Market Context - NOT IN SCORE: display-only context; never a score input.');
+  lines.push('Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify.');
   lines.push('');
 
-  const bestTier = postCapBestPosture(ranked);
-  const researchedCount = ranked.filter(isResearchBacked).length;
+  const bestTier = postCapBestPosture(contentTerms);
+  const researchedCount = contentTerms.filter(isResearchBacked).length;
   lines.push('1. FAST READ');
-  lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${summary.market_count ?? ranked.length} term(s) have research-backed P(YES); best tier ${bestTier}. Research only — no trade.`));
+  lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${contentTerms.length} term(s) have research-backed P(YES); best tier ${bestTier}. Research only — no trade.`));
   lines.push('');
 
   const strongYes = [];
@@ -286,7 +323,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const weakNo = [];
   const strongNo = [];
   const gapTerms = [];
-  for (const term of ranked) {
+  for (const term of contentTerms) {
     const tier = renderedPosture(term);
     if (!isResearchBacked(term)) {
       gapTerms.push(term);
@@ -311,7 +348,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   renderCardSection(lines, '4. WEAK NO / STRONG NO TRAPS', [...weakNo, ...strongNo], ranked, notes);
 
   lines.push('5. SOURCE GAPS');
-  renderGapSummary(lines, gapTerms.length ? gapTerms : ranked.filter((t) => !isResearchBacked(t)));
+  renderGapSummary(lines, gapTerms.length ? gapTerms : contentTerms.filter((t) => !isResearchBacked(t)));
   if (redteam?.narrative_risks?.length) {
     lines.push('red-team narrative flags (advisory only, never re-scores):');
     for (const risk of redteam.narrative_risks) {
@@ -329,7 +366,9 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   }
   lines.push('');
 
-  lines.push('6. SETTLEMENT NOTES');
+  renderQualificationRiskSection(lines, qualificationTerms);
+
+  lines.push('7. SETTLEMENT NOTES');
   const provenanceLines = Array.isArray(input.deterministic_provenance_lines)
     ? input.deterministic_provenance_lines.filter(Boolean)
     : [];
@@ -341,7 +380,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   }
   lines.push('');
 
-  lines.push('7. FULL STRIKE INVENTORY');
+  lines.push('8. FULL STRIKE INVENTORY');
   for (const t of ranked) lines.push(`- ${maybe(t.full_strike_text)}`);
   lines.push('');
 

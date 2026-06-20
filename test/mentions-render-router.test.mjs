@@ -225,6 +225,105 @@ test('P(YES) tier buckets render as STRONG YES, WEAK YES, WEAK NO, STRONG NO', (
   assert.match(text, /Tier Delta — P\(YES\) 20 — STRONG NO/);
 });
 
+test('count thresholds and EDNQ render in separate sections', () => {
+  const input = {
+    packet_kind: 'mentions_customer_packet_v2',
+    date: '2026-06-11',
+    event: {
+      title: 'What will Trump say during his press portion?',
+      subtitle: 'Donald Trump - press portion',
+      date_time: '2026-06-11T18:00:00Z',
+      settlement_source_link: 'https://kalshi.com/events/KXTHRESH',
+      rules_primary: 'If Trump says tariff 3+ times during the press portion, the market resolves Yes.',
+    },
+    summary: { market_count: 3 },
+    terms: [
+      {
+        full_strike_text: 'Will Trump say tariff 3+ times? -- tariff',
+        short_term: 'tariff',
+        cpc_score: 42,
+        research_state: 'research-backed',
+        market_type: 'threshold_count',
+        required_count: 3,
+        repeat_requirement: '3+ times',
+        research_term_note: {
+          catalyst: 'repeat pressure and repeated references',
+          settlement_fit: 'YES only if the exact token "tariff" is said; Requires 3 or more qualifying mentions, not just one.',
+          trap_risk: 'single mention is insufficient',
+        },
+        market_context: { note: 'NOT IN SCORE' },
+      },
+      {
+        full_strike_text: 'What will Hunter Biden say? -- Event does not qualify',
+        short_term: 'Event does not qualify',
+        cpc_score: null,
+        research_state: 'qualification fallback',
+        market_type: 'ednq',
+        is_qualification_term: true,
+        qualification_status: 'high',
+        market_context: { note: 'NOT IN SCORE' },
+      },
+      {
+        full_strike_text: 'Will Trump say rally?',
+        short_term: 'rally',
+        cpc_score: 70,
+        research_state: 'research-backed',
+        market_context: { note: 'NOT IN SCORE' },
+      },
+    ],
+  };
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  assert.match(text, /Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify\./);
+  const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
+  assert.match(topYes, /rally/);
+  assert.doesNotMatch(topYes, /Event does not qualify/);
+
+  const traps = sectionBlock(text, '4. WEAK NO \/ STRONG NO TRAPS', '5. SOURCE GAPS');
+  assert.match(traps, /tariff/);
+  assert.match(traps, /Requires 3[\s\S]*not just one\./);
+
+  const qualification = sectionBlock(text, '6. QUALIFICATION RISK', '7. SETTLEMENT NOTES');
+  assert.match(qualification, /Event does not qualify/);
+  assert.match(qualification, /YES-leaning qualification risk proven \(high\)/);
+  assert.doesNotMatch(qualification, /P\(YES\)/);
+});
+
+test('threshold-supported repeated mention evidence can still render a YES tier', () => {
+  const input = {
+    packet_kind: 'mentions_customer_packet_v2',
+    date: '2026-06-11',
+    event: {
+      title: 'What will Trump say during his press portion?',
+      subtitle: 'Donald Trump - press portion',
+      date_time: '2026-06-11T18:00:00Z',
+      settlement_source_link: 'https://kalshi.com/events/KXTHRESHYES',
+      rules_primary: 'If Trump says tariff 3+ times during the press portion, the market resolves Yes.',
+    },
+    summary: { market_count: 1 },
+    terms: [
+      {
+        full_strike_text: 'Will Trump say tariff 3+ times? -- tariff',
+        short_term: 'tariff',
+        cpc_score: 66,
+        research_state: 'research-backed',
+        market_type: 'threshold_count',
+        required_count: 3,
+        repeat_requirement: '3+ times',
+        research_term_note: {
+          catalyst: 'repeated references in the appearance',
+          settlement_fit: 'YES only if the exact token "tariff" is said; Requires 3 or more qualifying mentions, not just one.',
+          trap_risk: 'single mention is insufficient',
+        },
+        market_context: { note: 'NOT IN SCORE' },
+      },
+    ],
+  };
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
+  assert.match(topYes, /tariff — P\(YES\) 66 — STRONG YES/);
+  assert.match(topYes, /Requires 3[\s\S]*not just one\./);
+});
+
 test('customer packet omits retired jargon and keeps event proximity out of the text', () => {
   const input = builtInput({ sourceBacked: true });
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
@@ -258,7 +357,7 @@ test('fast read uses the rendered tier, not the summary, and research gaps sort 
     market_context: { implied: null, bid_cents: null, ask_cents: null, note: 'NOT IN SCORE' },
   });
   const gapText = renderMentionPacket(gapInput, { generatedAtUtc: NOW });
-  const gapSection = sectionBlock(gapText, '5. SOURCE GAPS', '6. SETTLEMENT NOTES');
+  const gapSection = sectionBlock(gapText, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
   assert.match(gapSection, /Aardvark/);
   assert.doesNotMatch(gapText, /Aardvark — P\(YES\)/);
 });
@@ -303,7 +402,7 @@ test('valid analyst JSON lands in card catalyst/settlement-fit text', () => {
   assert.match(topYes, /YES only if the exact token "Malarkey" is said/);
   assert.ok(!topYes.includes('…'), 'full catalyst and settlement fit text should not truncate');
 
-  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. SETTLEMENT NOTES');
+  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
   assert.match(gaps, /Aardvark/);
   assert.doesNotMatch(gaps, /Aardvark — P\(YES\)/);
 });
@@ -312,11 +411,11 @@ test('source gaps stay compact and settlement notes preserve provenance', () => 
   const input = builtInput({ sourceBacked: false });
   input.deterministic_provenance_lines = ['settled_history: tier=exact_horizon n=2 hits=2 misses=0 hit_rate=1.00'];
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. SETTLEMENT NOTES');
+  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
   assert.match(gaps, /research gap/i);
   assert.doesNotMatch(gaps, /Malarkey.*Malarkey/);
 
-  const notes = sectionBlock(text, '6. SETTLEMENT NOTES', '7. FULL STRIKE INVENTORY');
+  const notes = sectionBlock(text, '7. SETTLEMENT NOTES', '8. FULL STRIKE INVENTORY');
   assert.match(notes, /settled_history: tier=exact_horizon n=2 hits=2 misses=0 hit_rate=1\.00/);
   assert.ok(!notes.includes('yes_bid'));
 });
@@ -324,7 +423,7 @@ test('source gaps stay compact and settlement notes preserve provenance', () => 
 test('full strike inventory preserves every exact strike text', () => {
   const input = builtInput({ sourceBacked: true });
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const inventory = text.split('7. FULL STRIKE INVENTORY')[1];
+  const inventory = text.split('8. FULL STRIKE INVENTORY')[1];
   for (const term of ['Malarkey', 'Folks', 'Democracy']) {
     assert.match(inventory, new RegExp(`Will Biden say it\\? -- ${term}`));
   }

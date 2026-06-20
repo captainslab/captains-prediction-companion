@@ -175,6 +175,25 @@ function thresholdEvent() {
   };
 }
 
+function wordThresholdEvent() {
+  return {
+    event_ticker: 'KXTRUMPMENTION-26JUN25',
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Trump say during the press portion?',
+    sub_title: 'single event',
+    settlement_sources: [],
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTION-26JUN25-TARIFF',
+        title: 'Will Trump say tariff at least three times?',
+        yes_sub_title: 'tariff',
+        custom_strike: 'tariff',
+        rules_primary: 'Resolves YES if Trump says tariff at least three times during the press portion.',
+      },
+    ],
+  };
+}
+
 test('binary accepted form matches once', () => {
   const snapshot = buildMarketRulesSnapshot(obamaEvent(), obamaEvent().markets[0]);
   const result = evaluateLexicalMention({ rules_snapshot: snapshot, candidate_text: 'the kid waved' });
@@ -293,6 +312,7 @@ test('out-of-scope weekly and truth_social snapshots remain blocked', () => {
 test('threshold_count requires the parsed threshold', () => {
   const snapshot = buildMarketRulesSnapshot(thresholdEvent(), thresholdEvent().markets[0]);
   assert.equal(snapshot.market_type, 'threshold_count');
+  assert.equal(snapshot.required_count, 3);
   const twoHits = evaluateLexicalMention({
     rules_snapshot: snapshot,
     candidate_text: 'tariff tariff',
@@ -306,6 +326,18 @@ test('threshold_count requires the parsed threshold', () => {
   assert.equal(twoHits.matched_count, 2);
   assert.equal(threeHits.status, 'MATCH');
   assert.equal(threeHits.matched_count, 3);
+});
+
+test('threshold_count parses word-form and at-least thresholds', () => {
+  const snapshot = buildMarketRulesSnapshot(wordThresholdEvent(), wordThresholdEvent().markets[0]);
+  assert.equal(snapshot.market_type, 'threshold_count');
+  assert.equal(snapshot.required_count, 3);
+  const result = evaluateLexicalMention({
+    rules_snapshot: snapshot,
+    candidate_text: 'tariff tariff tariff',
+  });
+  assert.equal(result.required_count, 3);
+  assert.equal(result.status, 'MATCH');
 });
 
 test('comparative_count returns sorted topic_counts without a probability field', () => {

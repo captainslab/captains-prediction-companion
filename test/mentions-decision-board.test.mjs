@@ -108,7 +108,7 @@ test('mentions slate packet: v2 CPC board, compact customer text, raw inventory 
   // Composite score is shown as stacked cards; the board stays numeric and readable.
   assert.match(packet.text, /RESEARCH GAP/);
   assert.match(packet.text, /5\. SOURCE GAPS[\s\S]*2 research gaps remain: Karen Bass, Nithya Raman\./);
-  assert.match(packet.text, /7\. FULL STRIKE INVENTORY[\s\S]*Will Karen Bass qualify for the runoff\?/);
+  assert.match(packet.text, /8\. FULL STRIKE INVENTORY[\s\S]*Will Karen Bass qualify for the runoff\?/);
 
   // raw contract inventory is audit-only
   assert.equal(looksLikeRawInventoryDump(packet.text), false);

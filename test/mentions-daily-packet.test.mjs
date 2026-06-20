@@ -130,10 +130,10 @@ test('mentions daily packet uses full strike text, not abbreviation-only labels'
     sourceUrl: '/tmp/trump.json',
   }).text;
 
-  const inventory = text.split('7. FULL STRIKE INVENTORY')[1];
+  const inventory = text.split('8. FULL STRIKE INVENTORY')[1];
   assert.match(inventory, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
   assert.doesNotMatch(inventory, /Biden — P\(YES\)/);
-  assert.match(text, /7\. FULL STRIKE INVENTORY[\s\S]*What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  assert.match(text, /8\. FULL STRIKE INVENTORY[\s\S]*What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
 });
 
 test('proximity-only mention rows are low-source capped, not source-backed composite', () => {

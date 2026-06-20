@@ -1,8 +1,7 @@
-import { deepSanitize, RULES_FORBIDDEN_PATTERN } from './rules-analyst.mjs';
+import { deepSanitize, RULES_FORBIDDEN_PATTERN, parseThresholdCount } from './rules-analyst.mjs';
 import { classifyRouteFromSnapshot, getRouteContract } from './route-taxonomy.mjs';
 
 const BOUNDARY_SAFE_CHAR_RE = /[A-Za-z0-9'-]/;
-const THRESHOLD_COUNT_RE = /\b(?:at least\s+)?(\d+)\s*(?:\+|plus|or more)\s*(?:mentions?|times?)\b/;
 const EVIDENCE_WINDOW = 24;
 const MAX_EVIDENCE_SPANS = 50;
 
@@ -43,20 +42,18 @@ function pushReason(list, reason) {
   list.push(reason);
 }
 
+function parseRequiredCountFromSnapshot(safeSnapshot) {
+  if (Number.isFinite(Number(safeSnapshot?.required_count)) && Number(safeSnapshot.required_count) > 0) {
+    return Number(safeSnapshot.required_count);
+  }
+  const text = [safeSnapshot?.market_title, safeSnapshot?.market_subtitle].filter(Boolean).join(' ');
+  return parseThresholdCount(text);
+}
+
 function boundarySafe(text, start, end) {
   const before = start > 0 ? text[start - 1] : '';
   const after = end < text.length ? text[end] : '';
   return !BOUNDARY_SAFE_CHAR_RE.test(before) && !BOUNDARY_SAFE_CHAR_RE.test(after);
-}
-
-function parseThresholdCount(snapshot) {
-  const title = normalizeText(snapshot?.market_title);
-  const subtitle = normalizeText(snapshot?.market_subtitle);
-  const joined = [title, subtitle].filter(Boolean).join(' ');
-  const match = joined.match(THRESHOLD_COUNT_RE);
-  if (!match) return null;
-  const parsed = Number.parseInt(match[1], 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function buildMatchData(candidateText, acceptedForms) {
@@ -158,7 +155,7 @@ export function evaluateLexicalMention({ rules_snapshot, candidate_text, speaker
       matched_forms: [],
       matched_count: 0,
       required_count: marketType === 'binary' || marketType === 'ednq' ? 1 : marketType === 'threshold_count'
-        ? parseThresholdCount(safeSnapshot)
+        ? parseRequiredCountFromSnapshot(safeSnapshot)
         : null,
       market_type: marketType,
       route,
@@ -176,7 +173,7 @@ export function evaluateLexicalMention({ rules_snapshot, candidate_text, speaker
       matched_forms: [],
       matched_count: 0,
       required_count: marketType === 'binary' || marketType === 'ednq' ? 1 : marketType === 'threshold_count'
-        ? parseThresholdCount(safeSnapshot)
+        ? parseRequiredCountFromSnapshot(safeSnapshot)
         : null,
       market_type: marketType,
       route,
@@ -207,7 +204,7 @@ export function evaluateLexicalMention({ rules_snapshot, candidate_text, speaker
   if (marketType === 'binary' || marketType === 'ednq') {
     requiredCount = 1;
   } else if (marketType === 'threshold_count') {
-    requiredCount = parseThresholdCount(safeSnapshot);
+    requiredCount = parseRequiredCountFromSnapshot(safeSnapshot);
     if (!requiredCount) {
       pushReason(blockReasons, 'BLOCKED_RULES_UNCLEAR');
       return deepFreeze({
