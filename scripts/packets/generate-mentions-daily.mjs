@@ -386,10 +386,7 @@ function applyEarningsPostureHint(posture, hint) {
   const bumped = POSTURE_LADDER[Math.min(POSTURE_LADDER.length - 1, rank + 1)];
   if (hint.direction === 'upgrade_capped') {
     const capped = POSTURE_RANK[bumped] > POSTURE_RANK.LEAN ? 'LEAN' : bumped;
-    const capNote = String(hint.reason ?? '').includes(CAPPED_MAX_POSTURE)
-      ? hint.reason
-      : `${hint.reason} (capped at ${CAPPED_MAX_POSTURE})`;
-    return { posture: capped, applied: capped !== posture, reason: capNote };
+    return { posture: capped, applied: capped !== posture, reason: hint.reason ?? 'capped upward adjustment' };
   }
   return { posture: bumped, applied: bumped !== posture, reason: hint.reason };
 }
@@ -602,6 +599,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     layerDefs: profileConfig.layerDefs,
     layerRecords,
     marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
+    researchScore: Number.isFinite(Number(market?.blended_pct)) ? Number(market.blended_pct) : null,
   });
 
   // Lexical NO_MATCH suppression: an evaluated literal NO_MATCH means the target
@@ -871,21 +869,21 @@ export function mentionCompositeToDecisionRow(composite) {
       ? 'BLOCKED_SOURCE_LAYER_MISSING'
       : 'NO_USABLE_SOURCES';
     const why = noResearchPerformed
-      ? `source research did not run or returned no usable source for this event (source_status=${composite?.source_status})`
-      : `no source-backed evidence layers present`;
-    blocker = `${reasonCode}: no source-backed evidence layers for "${target}" (${why})`;
-    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} source layers and no source-backed evidence beyond event proximity for "${target}". Not a pick or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all source layers'}.`;
+      ? `research did not run or returned no usable evidence for this event (source_status=${composite?.source_status})`
+      : `no usable evidence channels present`;
+    blocker = `${reasonCode}: no usable evidence channels for "${target}" (${why})`;
+    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a pick or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
     trigger = {
       price: null,
-        event: `run mentions research for "${target}" (transcripts > quotes > context > prompt source ladder), then re-score`,
+        event: `run mentions research for "${target}" (transcripts > quotes > context), then re-score`,
     };
   } else if (proximityOnly) {
     postureFinal = 'WATCH';
     statusOverride = EDGE_STATUS.WATCH;
-    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic/source layers are missing for "${target}". Missing: ${missingCats.join(', ') || 'source research layers'}.`;
+    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic evidence is missing for "${target}". Missing: ${missingCats.join(', ') || 'evidence channels'}.`;
     trigger = {
       price: null,
-      event: 'upgrade only after exact-source research adds transcript, direct quote, historical tendency, or topic-path evidence',
+      event: 'upgrade only after transcript, direct quote, historical tendency, or topic-path evidence lands',
     };
   } else {
     statusOverride = MENTION_POSTURE_TO_EDGE[postureFinal] ?? EDGE_STATUS.WATCH;
@@ -895,7 +893,7 @@ export function mentionCompositeToDecisionRow(composite) {
       price: null,
       event: postureFinal === 'PICK' || postureFinal === 'EVIDENCE_LEAN'
         ? 'confirm exact settlement wording + official event source, then enter on value'
-        : 'await stronger source layer (transcript/quote confirmation)',
+        : 'await stronger evidence (transcript/quote confirmation)',
     };
   }
 
@@ -957,7 +955,7 @@ function renderEarningsAlphaProvenance(composites) {
       lines.push(`    ${shortTerm(String(c.result?.target_mention ?? c.market_ticker)).padEnd(21)} | delta=${d.earnings_context_delta?.value ?? 'absent'} continuity=${d.transcript_theme_continuity?.value ?? 'n/a'} qa_likelihood=${d.analyst_question_likelihood?.value ?? 'n/a'} catalyst=${d.current_quarter_catalyst?.value ?? 'n/a'} settlement_fit=${d.settlement_fit?.value ?? 'unknown'} sources=${provSrc}`);
       if (c.earnings_posture_adjustment?.applied) {
         const adj = c.earnings_posture_adjustment;
-        lines.push(`      posture_adjustment: ${adj.direction} ${adj.from} -> ${adj.to} (${adj.reason})`);
+        lines.push(`      context_adjustment: capped upward adjustment (${adj.reason})`);
       }
     }
   }
@@ -1061,21 +1059,24 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
 }
 
 function termBucketForRow(row) {
-  const analysis = String(row.analysis ?? '').toLowerCase();
   if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
-  if (analysis.includes('low-source watch only')) return 'watch-only';
-  if (row.edge_status === EDGE_STATUS.PICK || row.edge_status === EDGE_STATUS.LEAN) return 'most-likely';
-  return 'watch-only';
+  if (row.composite_score === null || row.composite_score === undefined) return 'research-gap';
+  return 'research-backed';
 }
 
 function evidenceStatusForRow(row) {
-  const analysis = String(row.analysis ?? '');
-  if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
-  if (/LOW-SOURCE WATCH only/i.test(analysis)) return 'proximity-only source cap -- no pick';
-  if (Array.isArray(row.top_evidence_layers) && row.top_evidence_layers.length) {
-    return `source evidence present: ${row.top_evidence_layers.map((x) => x.category ?? x.label ?? String(x)).join(', ')}`;
-  }
-  return 'missing source-backed research';
+  if (row.edge_status === EDGE_STATUS.BLOCKED) return 'research gap';
+  if (row.composite_score === null || row.composite_score === undefined) return 'research gap';
+  return 'research-backed';
+}
+
+function scoreToTier(score) {
+  const s = Number(score);
+  if (!Number.isFinite(s)) return 'RESEARCH GAP';
+  if (s >= 65) return 'STRONG YES';
+  if (s >= 50) return 'WEAK YES';
+  if (s >= 35) return 'WEAK NO';
+  return 'STRONG NO';
 }
 
 function compactMarketContext(row) {
@@ -1118,8 +1119,10 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     full_strike_text: row.side_target,
     short_term: shortTerm(row.side_target, s.title),
     cpc_score: row.composite_score ?? null,
+    p_yes_tier: scoreToTier(row.composite_score),
     bucket: termBucketForRow(row),
     evidence_status: evidenceStatusForRow(row),
+    research_state: evidenceStatusForRow(row),
     layers_present: normalizeLayerList(row.layers_present),
     composite_posture: row.composite_posture,
     missing_research_layers: Array.isArray(row.missing_layers)
@@ -1134,7 +1137,7 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     },
   }));
   const nonBlocked = terms.filter((term) => term.bucket !== 'blocked/no-source');
-  const allProximityOnly = nonBlocked.length > 0 && nonBlocked.every((term) => term.evidence_status === 'proximity-only source cap -- no pick');
+  const allResearchGap = nonBlocked.length > 0 && nonBlocked.every((term) => term.research_state === 'research gap');
 
   return {
     packet_kind: 'mentions_customer_packet_v2',
@@ -1153,15 +1156,19 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       model_written_final_packet_allowed: false,
       use_full_strike_text_only: true,
       market_context_not_in_score: true,
-      all_terms_proximity_only: allProximityOnly,
-      proximity_only_label: allProximityOnly ? 'LOW-SOURCE WATCH only -- no pick' : null,
-      forbidden_claims_when_all_terms_proximity_only: ['source-backed composite', 'source backed composite'],
+      all_terms_proximity_only: allResearchGap,
+      all_terms_research_gap: allResearchGap,
+      research_gap_label: allResearchGap ? 'research gap only -- no score' : null,
+      forbidden_claims_when_all_terms_proximity_only: ['source-backed composite', 'source backed composite', 'composite score'],
     },
     summary: {
       market_count: compositeSummary.market_count ?? rows.length,
       source_backed_count: compositeSummary.source_backed_count ?? null,
+      research_backed_count: compositeSummary.source_backed_count ?? null,
       proximity_only_count: compositeSummary.proximity_only_count ?? null,
+      research_gap_count: rows.length - (compositeSummary.source_backed_count ?? 0),
       best_posture: compositeSummary.best_posture ?? null,
+      best_tier: scoreToTier(compositeSummary.best_score ?? null),
     },
     deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
     source_health_disclosure: sourceHealthDisclosure || null,
@@ -1210,8 +1217,9 @@ export function appendFullStrikeInventory(text, input) {
 
 export function validateSynthesizedMentionPacket(text, input) {
   if (!text || !text.trim()) throw new Error('Hermes returned an empty mentions packet');
-  if (input?.synthesis_rules?.all_terms_proximity_only && /source-backed composite/i.test(text)) {
-    throw new Error('Hermes packet violated proximity-only labeling: used "source-backed composite"');
+  const forbiddenJargon = /\b(EVIDENCE_LEAN|LEAN|WATCH|NO_CLEAR_PICK|source-backed composite|source layer(?:s)?|proximity-only|stub|scaffold|composite score)\b/i;
+  if ((input?.synthesis_rules?.all_terms_proximity_only || input?.synthesis_rules?.all_terms_research_gap) && forbiddenJargon.test(text)) {
+    throw new Error('Hermes packet violated research-gap labeling: used legacy customer jargon');
   }
   for (const term of input?.terms ?? []) {
     const full = String(term.full_strike_text ?? '').trim();
@@ -1389,7 +1397,7 @@ function renderCompositeEvidence(composites) {
       lines.push(`    settled_history: tier=${c.history_match_tier} n=${c.history_sample_size} hits=${c.history_hits} misses=${c.history_misses} hit_rate=${c.history_hit_rate ?? 'n/a'}`);
     }
     lines.push(`    composite_score: ${r.composite_score === null ? 'MISSING' : r.composite_score}`);
-    lines.push(`    composite_posture: ${r.posture}`);
+    lines.push(`    composite_tier: ${scoreToTier(r.composite_score)}`);
     lines.push(`    layers_present: ${r._meta.layers_present}/${r._meta.layers_total}`);
     lines.push('    top_support:');
     if (r.top_supporting_layers.length) {
@@ -1397,7 +1405,7 @@ function renderCompositeEvidence(composites) {
         lines.push(`      - ${layer.category}: value=${layer.value} contribution=${layer.contribution}`);
       }
     } else {
-      lines.push('      - MISSING: no source-backed layers supplied');
+      lines.push('      - MISSING: no evidence channels supplied');
     }
     lines.push('    missing_layers:');
     if (r.missing_layers.length) {
@@ -1662,6 +1670,9 @@ function mergeResearchIntoEvent(event, researchEntry) {
     if (r.research_quality) {
       merged.research_quality = r.research_quality;
     }
+    if (Number.isFinite(Number(r.blended_pct))) {
+      merged.blended_pct = Number(r.blended_pct);
+    }
     // Carry the per-market source_status (NO_DECLARED_SOURCES / DECLARED /
     // SOURCE_FETCHED*) so the composite + decision row can tell "no research
     // was performed" apart from "research ran and found only proximity". The
@@ -1841,7 +1852,7 @@ function buildLegacyEventPacket({ date, event }) {
   lines.push(`  decision_status: ${process.decisionStatus}`);
   lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
   lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
-  lines.push('  note: legacy artifact uses mention-composite only when source layer records are present.');
+  lines.push('  note: legacy artifact uses mention-composite only when evidence records are present.');
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');

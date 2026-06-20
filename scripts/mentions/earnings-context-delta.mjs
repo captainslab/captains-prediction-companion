@@ -238,7 +238,7 @@ export function postureAdjustmentHint({ four_quarter_hit_rate, sample_size, delt
     return { direction: 'downgrade', max_posture: null, reason: 'high hit rate but context fading/absent this quarter' };
   }
   if (rate < LOW_HIT_RATE && delta === 'new_catalyst') {
-    return { direction: 'upgrade_capped', max_posture: CAPPED_MAX_POSTURE, reason: `low hit rate with new catalyst: capped at ${CAPPED_MAX_POSTURE}` };
+    return { direction: 'upgrade_capped', max_posture: CAPPED_MAX_POSTURE, reason: 'low hit rate with new catalyst: capped at the conservative ceiling' };
   }
   return { direction: 'none', max_posture: null, reason: 'no rule matched: no adjustment' };
 }

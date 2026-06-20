@@ -10,9 +10,9 @@
 //
 // Coverage cap (mirrors MLB evidence-ledger):
 //   0 layers → NO_CLEAR_PICK
-//   1 layer  → max LEAN
-//   2 layers → max EVIDENCE_LEAN
-//   3+ layers → PICK eligible (still subject to score threshold)
+//   event_proximity only → NO_CLEAR_PICK (gate only, never a score input)
+//   otherwise the score comes from research-backed layers or an explicit
+//   blended research probability.
 
 export const MENTION_PROFILES = Object.freeze([
   'political_mentions',
@@ -76,6 +76,10 @@ function assertNoPricingInLayer(key, rec, trail = []) {
   }
 }
 
+function isScoreableLayer(key) {
+  return key !== 'event_proximity';
+}
+
 // Strip any pricing keys from the caller-supplied market_context to prevent
 // accidental re-promotion into scores downstream.
 function sanitizeMarketContext(ctx) {
@@ -112,6 +116,7 @@ export function composeMentionLedger({
   layerDefs,
   layerRecords,
   marketContext = null,
+  researchScore = null,
 } = {}) {
   if (!MENTION_PROFILES.includes(profile)) {
     throw new Error(`Unknown mention profile: "${profile}". Must be one of: ${MENTION_PROFILES.join(', ')}`);
@@ -124,6 +129,8 @@ export function composeMentionLedger({
 
   let num = 0;
   let den = 0;
+  let researchNum = 0;
+  let researchDen = 0;
   const ledger = [];
   const sourceNotes = [];
 
@@ -139,8 +146,12 @@ export function composeMentionLedger({
     const score = present ? Math.round(clamp(numScore, 0, 100)) : null;
 
     if (present) {
-      num += score * def.weight;
       den += def.weight;
+      if (isScoreableLayer(def.key)) {
+        num += score * def.weight;
+        researchNum += score * def.weight;
+        researchDen += def.weight;
+      }
       if (rec.source_basis) {
         sourceNotes.push(`[${def.key}] ${rec.source_basis}`);
       }
@@ -166,11 +177,20 @@ export function composeMentionLedger({
   for (const row of ledger) {
     if (row.present && row.value !== null && den > 0) {
       row.normalized_weight = +(row.raw_weight / den).toFixed(4);
-      row.contribution      = +(row.value * (row.raw_weight / den)).toFixed(2);
+      row.contribution = isScoreableLayer(row.category) && researchDen > 0
+        ? +(row.value * (row.raw_weight / researchDen)).toFixed(2)
+        : 0;
     }
   }
 
-  const composite     = den === 0 ? null : Math.round(clamp(num / den, 0, 100));
+  const overrideScore = researchScore !== null && researchScore !== undefined && Number.isFinite(Number(researchScore))
+    ? Number(researchScore)
+    : null;
+  const composite     = overrideScore !== null
+    ? Math.round(clamp(overrideScore, 0, 100))
+    : researchDen === 0
+      ? null
+      : Math.round(clamp(researchNum / researchDen, 0, 100));
   const layersPresent = ledger.filter(r => r.present).length;
   const posture       = scoreToPosture(composite, layersPresent);
 
@@ -190,8 +210,8 @@ export function composeMentionLedger({
     .map(r => `${r.category}=${r.value}×${r.normalized_weight}=${r.contribution}`)
     .join(' + ');
   const reasoning_summary = composite === null
-    ? `NO_CLEAR_PICK — no usable layers (missing: ${missingTxt}).`
-    : `composite=${composite} [${posture}] from ${layersPresent} layer(s): ${contribsTxt}. Missing: ${missingTxt}.`;
+    ? `NO_CLEAR_PICK — no usable research layers (missing: ${missingTxt}).`
+    : `research_score=${composite} [${posture}] from ${layersPresent} layer(s): ${contribsTxt}. Missing: ${missingTxt}.`;
 
   return {
     event,
@@ -211,6 +231,7 @@ export function composeMentionLedger({
       layers_present:   layersPresent,
       layers_total:     layerDefs.length,
       pricing_excluded: true,
+      research_score:   composite,
     },
   };
 }

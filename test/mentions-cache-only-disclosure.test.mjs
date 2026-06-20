@@ -26,8 +26,10 @@ import {
 } from '../scripts/cron/cpc-packet-janitor.mjs';
 import {
   buildMentionCompositeForMarket,
-  buildMentionSlatePacket,
+  mentionCompositeToDecisionRow,
+  buildMentionsSynthesisInput,
 } from '../scripts/packets/generate-mentions-daily.mjs';
+import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 
 // ---- fixtures ---------------------------------------------------------------
 
@@ -91,11 +93,19 @@ function renderObamaSlate({ disclosure = null } = {}) {
   const composite = buildMentionCompositeForMarket({
     event: ev, market: ev.markets[0], candidateText: 'the kid waved', historyRecords: obamaHistory,
   });
-  const slate = buildMentionSlatePacket({
-    date: '2026-06-19', event: ev, composites: [composite], sourceHealthDisclosure: disclosure,
+  const row = mentionCompositeToDecisionRow(composite);
+  const input = buildMentionsSynthesisInput({
+    date: '2026-06-19',
+    event: ev,
+    rows: [row],
+    sourceHealthDisclosure: disclosure,
+    provenanceLines: [
+      'research_route: talk_show_media (horizon=event) | settled_history: tier=exact_horizon n=2 hits=2 misses=0 hit_rate=1.00',
+    ],
   });
-  assert.ok(slate?.text, 'slate packet must render text');
-  return { text: slate.text, composite };
+  const text = renderMentionPacket(input, { generatedAtUtc: '2026-06-19T14:04:23.727Z' });
+  assert.ok(text, 'slate packet must render text');
+  return { text, composite, row };
 }
 
 // Extract section 6 SOURCE GAPS only, so price-isolation assertions never trip
@@ -152,7 +162,12 @@ test('detector output is deterministic', () => {
 // Janitor — block without disclosure, pass with disclosure (safety preserved)
 // ===========================================================================
 
-const CONTRACT_LACKING_PACKET = '=== Captain Mentions — CPC Packet: stub ===\n1. FAST READ\nresearch only.\n';
+const CONTRACT_LACKING_PACKET = [
+  '=== Captain Mentions — CPC Packet: Test Packet ===',
+  'generated_utc: 2099-01-01T00:00:00Z',
+  'Market Context - NOT IN SCORE.',
+  'Research only. No trades.',
+].join('\n');
 
 test('janitor BLOCKS cache-only source health when the packet lacks a disclosure', () => {
   const path = writeCacheOnlySource();
@@ -205,9 +220,8 @@ test('rendered packet omits the disclosure when source health is not cache-only'
 test('disclosure renders alongside an intact settled_history block', () => {
   const { text, composite } = renderObamaSlate({ disclosure: CACHE_ONLY_DISCLOSURE_LINE });
   assert.ok(composite.settled_history, 'guard: settled_history attached');
-  assert.match(text, /settled_history \(Kalshi settled comparables/);
-  assert.match(text, /tier=exact_horizon/);
-  assert.match(text, /hits=2/);
+  assert.match(text, /provenance \(outcomes only; market prices excluded\):/);
+  assert.match(text, /settled_history: tier=exact_horizon n=2 hits=2 misses=0 hit_rate=1\.00/);
   assert.ok(hasCacheOnlyDisclosure(text), 'disclosure coexists with settled_history');
 });
 

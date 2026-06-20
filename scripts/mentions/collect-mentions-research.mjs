@@ -412,6 +412,7 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       profile,
       research_quality: researchQuality,
       source_status: sourceStatus,
+      blended_pct: pplxForTerm?.direct_mention_pathway?.score ?? null,
       research_gap_notes: (extracted && Object.keys(extracted).length) || (pplxForTerm && Object.keys(pplxForTerm).length) ? [] : sourceResearch.notes,
       layer_records: layerRecords,
       source_ladder_inputs: sourceLadderInputs,

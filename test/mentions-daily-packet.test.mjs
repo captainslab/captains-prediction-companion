@@ -105,13 +105,13 @@ test('mentions daily packet renders mention-composite scoring instead of WATCH-o
   const text = built.text;
 
   assert.match(text, /1\. FAST READ/);
-  assert.match(text, /2\. CPC COMPOSITE BOARD/);
+  assert.match(text, /2\. RANKED BOARD/);
   assert.match(text, /PowerEdge/);
-  assert.match(text, /\|\s*90\s*\|\s*PICK\s*\|/);
-  assert.match(text, /missing baseline_relevance/);
+  assert.match(text, /\|\s*88\s*\|\s*STRONG YES\s*\|/);
+  assert.match(text, /PowerEdge: research gap remains/);
   // strong source-backed market is NOT downgraded to a generic WATCH-only posture
-  assert.doesNotMatch(text, /\|\s*90\s*\|\s*WATCH\s*\|/);
-  assert.doesNotMatch(text, /TLDR BOARD|TOP EDGE CANDIDATES/);
+  assert.doesNotMatch(text, /\|\s*88\s*\|\s*(?:WATCH|LEAN|NO_CLEAR_PICK)\s*\|/);
+  assert.doesNotMatch(text, /TLDR BOARD|TOP EDGE CANDIDATES|LOW-SOURCE WATCH/);
 });
 
 test('mentions daily packet keeps market context only in NOT IN SCORE section', () => {
@@ -145,7 +145,7 @@ test('mentions daily packet uses full strike text, not abbreviation-only labels'
     sourceUrl: '/tmp/trump.json',
   }).text;
 
-  const board = text.split('3. TOP WATCH TERMS')[0].split('2. CPC COMPOSITE BOARD')[1];
+  const board = text.split('3. TOP RESEARCHED TERMS')[0].split('2. RANKED BOARD')[1];
   assert.match(board, /\|\s*Biden\s*\|/);
   assert.doesNotMatch(board, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
   assert.match(text, /Full Strike Inventory[\s\S]*What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
@@ -158,8 +158,7 @@ test('proximity-only mention rows are low-source capped, not source-backed compo
     sourceUrl: '/tmp/trump.json',
   }).text;
 
-  assert.match(text, /LOW-SOURCE WATCH only -- no pick/);
-  assert.match(text, /LOW-SOURCE WATCH cap/);
+  assert.match(text, /RESEARCH GAP/);
   assert.doesNotMatch(text, /source-backed composite/i);
   assert.doesNotMatch(text, /\|\s*scaffold\s*\|/i);
 });
@@ -328,8 +327,8 @@ test('mentions daily packet preserves all mention composite profiles', () => {
   assert.match(text, /tariff/);
   assert.match(text, /revenue/);
   assert.match(text, /rivalry/);
-  assert.match(text, /CPC COMPOSITE BOARD/);
-  assert.match(text, /LOW-SOURCE WATCH cap/);
+  assert.match(text, /RANKED BOARD/);
+  assert.match(text, /RESEARCH GAP/);
 });
 
 test('mentions packet generator preserves forbidden pricing field guard in layer records', () => {

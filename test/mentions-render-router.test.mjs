@@ -63,9 +63,42 @@ function builtInput(opts) {
   return built.synthesisInput;
 }
 
+function axiosTrumpFixture() {
+  const terms = [
+    { term: 'Biden', blendedPct: 88, proximity: 18 },
+    { term: 'Bibi', blendedPct: 79, proximity: 14 },
+    { term: 'Democrat', blendedPct: 72, proximity: 11 },
+    { term: 'Terminate', blendedPct: 41, proximity: 98 },
+  ];
+  return {
+    event_ticker: 'KXTRUMPAXIOS-26JUN11',
+    title: 'What will Trump say during his Axios interview?',
+    sub_title: 'Donald Trump - Axios interview',
+    series_ticker: 'KXTRUMPMENTION',
+    markets: terms.map(({ term, blendedPct, proximity }) => ({
+      ticker: `KXTRUMPAXIOS-26JUN11-${term.toUpperCase()}`,
+      title: 'What will Donald Trump say during Axios interview?',
+      yes_sub_title: term,
+      no_sub_title: term,
+      custom_strike: { Word: term },
+      yes_bid_dollars: '0.10',
+      yes_ask_dollars: '0.15',
+      last_price_dollars: '0.12',
+      rules_primary: `If Donald Trump says ${term}, the market resolves to Yes.`,
+      mention_profile: 'political_mentions',
+      blended_pct: blendedPct,
+      layer_records: {
+        event_proximity: { present: true, score: proximity, source_basis: 'Axios interview scheduled' },
+        historical_tendency: { present: true, score: blendedPct, source_basis: 'historical transcript calibration' },
+        direct_mention_pathway: { present: true, score: blendedPct, source_basis: 'direct mention pathway calibration' },
+      },
+    })),
+  };
+}
+
 const ANALYST_JSON = {
-  fast_read: 'Three watch terms, schedule confirmed.',
-  final_read: 'Watch only; verify settlement wording.',
+  fast_read: 'Three researched terms, schedule confirmed.',
+  final_read: 'Research only; verify settlement wording.',
   term_notes: [
     { term: 'Malarkey', catalyst: 'signature phrase', settlement_fit: 'exact string', trap_risk: 'rarely scripted' },
   ],
@@ -96,7 +129,7 @@ test('section order is stable and validated', () => {
 test('composite board is present with every term exactly once, short terms not full titles', () => {
   const input = builtInput({ sourceBacked: true });
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const board = text.split('3. TOP WATCH TERMS')[0].split('2. CPC COMPOSITE BOARD')[1];
+  const board = text.split('3. TOP RESEARCHED TERMS')[0].split('2. RANKED BOARD')[1];
   for (const word of ['Malarkey', 'Folks', 'Democracy']) {
     const occurrences = board.split('\n').filter((l) => /^\d+\s/.test(l.trim()) && l.includes(word));
     assert.equal(occurrences.length, 1, `${word} appears once in board`);
@@ -104,7 +137,7 @@ test('composite board is present with every term exactly once, short terms not f
   // No repeated full event title in board rows
   const rows = board.split('\n').filter((l) => /^\d+\s/.test(l.trim()));
   for (const row of rows) assert.ok(!row.includes('Will Biden say it? --'), 'board rows use short terms');
-  assert.ok(board.includes('Rank') && board.includes('CPC') && board.includes('Posture') && board.includes('Settlement Fit') && board.includes('Market Context'));
+  assert.ok(board.includes('Rank') && board.includes('P(YES)') && board.includes('Tier') && board.includes('Settlement Fit') && board.includes('Market Context'));
 });
 
 test('market prices are excluded from score inputs (composite core throws on pricing fields)', () => {
@@ -132,7 +165,73 @@ test('all 0/100 market context is summarized once, not spammed by row', () => {
   const section5 = text.split('6. SOURCE GAPS')[0].split('5. MARKET CONTEXT - NOT IN SCORE')[1];
   assert.match(section5, /all 3 displayed terms show bid=0c \/ ask=100c/);
   assert.equal((section5.match(/bid=0c/g) ?? []).length, 1, '0/100 context summarized once');
-  assert.match(text.split('3. TOP WATCH TERMS')[0], /one-sided sec5/);
+  assert.match(text.split('3. TOP RESEARCHED TERMS')[0], /one-sided sec5/);
+});
+
+test('research-backed Trump/Axios fixture ranks by research P(YES), not event proximity', () => {
+  const packet = renderMentionPacket({
+    packet_kind: 'mentions_customer_packet_v2',
+    date: '2026-06-11',
+    event: {
+      title: 'What will Trump say during his Axios interview?',
+      subtitle: 'Donald Trump - Axios interview',
+      date_time: '2026-06-11T18:00:00Z',
+      settlement_source_link: 'https://kalshi.com/events/KXTRUMPAXIOS-26JUN11',
+      rules_primary: 'If Donald Trump says the strike term, the market resolves Yes.',
+    },
+    summary: { market_count: 4 },
+    terms: axiosTrumpFixture().markets.map((market) => ({
+      full_strike_text: `${market.title} -- ${market.yes_sub_title}`,
+      short_term: market.yes_sub_title,
+      cpc_score: market.blended_pct,
+      research_state: 'research-backed',
+      market_context: { bid_cents: 10, ask_cents: 15, note: 'NOT IN SCORE' },
+    })),
+  }, { generatedAtUtc: NOW });
+  const board = packet.split('3. TOP RESEARCHED TERMS')[0].split('2. RANKED BOARD')[1];
+  const rows = board.split('\n').filter((l) => /^\d+\s/.test(l.trim()));
+  const order = rows.map((row) => row.split('|')[1].trim());
+  assert.deepEqual(order, ['Biden', 'Bibi', 'Democrat', 'Terminate']);
+  assert.match(rows[0], /\|\s*88\s*\|\s*STRONG YES\s*\|/);
+  assert.match(rows[1], /\|\s*79\s*\|\s*STRONG YES\s*\|/);
+  assert.match(rows[2], /\|\s*72\s*\|\s*STRONG YES\s*\|/);
+  assert.match(rows[3], /\|\s*41\s*\|\s*WEAK NO\s*\|/);
+  assert.doesNotMatch(packet, /\b(?:WATCH|LEAN|NO_CLEAR_PICK|EVIDENCE_LEAN|composite score|source layer(?:s)?|proximity-only|stub|scaffold)\b/i);
+});
+
+test('P(YES) tier buckets render as STRONG YES, WEAK YES, WEAK NO, STRONG NO', () => {
+  const input = {
+    packet_kind: 'mentions_customer_packet_v2',
+    date: '2026-06-11',
+    event: {
+      title: 'Tier mapping test',
+      subtitle: 'tier mapping',
+      date_time: '2026-06-11T18:00:00Z',
+      settlement_source_link: 'https://kalshi.com/events/KXTIER',
+      rules_primary: 'If the word appears, resolves Yes.',
+    },
+    summary: { market_count: 4 },
+    terms: [
+      { full_strike_text: 'Tier Alpha', short_term: 'Alpha', cpc_score: 70, research_state: 'research-backed', market_context: { note: 'NOT IN SCORE' } },
+      { full_strike_text: 'Tier Beta', short_term: 'Beta', cpc_score: 55, research_state: 'research-backed', market_context: { note: 'NOT IN SCORE' } },
+      { full_strike_text: 'Tier Gamma', short_term: 'Gamma', cpc_score: 40, research_state: 'research-backed', market_context: { note: 'NOT IN SCORE' } },
+      { full_strike_text: 'Tier Delta', short_term: 'Delta', cpc_score: 20, research_state: 'research-backed', market_context: { note: 'NOT IN SCORE' } },
+    ],
+  };
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  assert.match(text, /\|\s*70\s*\|\s*STRONG YES\s*\|/);
+  assert.match(text, /\|\s*55\s*\|\s*WEAK YES\s*\|/);
+  assert.match(text, /\|\s*40\s*\|\s*WEAK NO\s*\|/);
+  assert.match(text, /\|\s*20\s*\|\s*STRONG NO\s*\|/);
+});
+
+test('customer packet omits retired jargon and keeps event proximity out of the text', () => {
+  const input = builtInput({ sourceBacked: true });
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  for (const term of ['EVIDENCE_LEAN', 'LEAN', 'WATCH', 'NO_CLEAR_PICK', 'source layer', 'proximity-only', 'stub', 'scaffold', 'composite score']) {
+    assert.doesNotMatch(text, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  }
+  assert.doesNotMatch(text, /\bevent_proximity\b/i);
 });
 
 test('missing model fields fall back safely to MISSING/deterministic text', () => {
@@ -162,7 +261,8 @@ test('proximity-only packet renders with NO model call (no GPT-5.5, no analyst a
   });
   assert.equal(calls, 0, 'no model invoked for proximity-only event');
   assert.equal(composed.invocation.analyst_tier, 'none');
-  assert.ok(composed.text.includes('LOW-SOURCE WATCH only -- no pick'));
+  assert.ok(composed.text.includes('RESEARCH GAP'));
+  assert.ok(!composed.text.includes('LOW-SOURCE WATCH only -- no pick'));
 });
 
 test('premium gate: gpt-5.5 only for flagged high-value source-backed events; never every event', () => {
@@ -227,7 +327,7 @@ test('valid analyst JSON lands in board catalyst/settlement-fit columns', () => 
   const text = renderMentionPacket(input, { analyst: value, generatedAtUtc: NOW, analystTier: 'standard' });
   const row = text.split('\n').find((l) => /^\d+\s/.test(l.trim()) && l.includes('Malarkey'));
   assert.ok(row.includes('signature phrase') && row.includes('exact string'));
-  assert.ok(text.includes('1. FAST READ\nThree watch terms, schedule confirmed.'));
+  assert.ok(text.includes('1. FAST READ\nThree researched terms, schedule confirmed.'));
 });
 
 test('user-facing event time renders in America/Chicago', () => {
@@ -238,46 +338,44 @@ test('user-facing event time renders in America/Chicago', () => {
 test('proximity-only rows show capped numeric CPC scores, never scaffold text', () => {
   const input = builtInput({ sourceBacked: false }); // event_proximity score only
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const rows = text.split('3. TOP WATCH TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
+  const rows = text.split('3. TOP RESEARCHED TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
   assert.ok(rows.length >= 3);
   for (const row of rows) {
-    const cpc = Number(row.split('|')[2].trim());
-    assert.ok(Number.isFinite(cpc), `CPC score must be numeric: ${row}`);
-    assert.ok(cpc <= 39, `proximity-only CPC score capped low: ${row}`);
+    assert.equal(row.split('|')[2].trim(), '--', `proximity-only row must show no P(YES): ${row}`);
+    assert.ok(row.includes('RESEARCH GAP'), 'proximity-only row must be labeled research gap');
     assert.ok(!row.includes('scaffold'), `proximity-only row leaked scaffold text: ${row}`);
-    assert.ok(row.includes('WATCH'), 'posture capped at WATCH');
   }
-  assert.ok(text.includes('LOW-SOURCE WATCH cap'));
+  assert.ok(text.includes('best tier RESEARCH GAP'));
 });
 
-test('FAST READ and FINAL CPC READ use post-cap posture from rendered rows, not pre-cap summary', () => {
+test('FAST READ and FINAL READ use post-cap tier from rendered rows, not summary', () => {
   const input = builtInput({ sourceBacked: false });
-  // simulate the pre-cap composite summary claiming LEAN (1 layer at high score)
-  input.summary = { ...input.summary, best_posture: 'LEAN', source_backed_count: 0 };
+  input.summary = { ...input.summary, best_posture: 'STRONG YES', source_backed_count: 0 };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const fastRead = text.split('2. CPC COMPOSITE BOARD')[0];
-  assert.ok(!fastRead.includes('LEAN'), 'pre-cap LEAN never surfaces in FAST READ');
-  assert.ok(fastRead.includes('best posture WATCH (post-cap)'));
-  const finalRead = text.split('8. FINAL CPC READ')[1];
-  assert.ok(!finalRead.includes('best posture LEAN'), 'pre-cap LEAN never surfaces in FINAL READ');
+  const fastRead = text.split('2. RANKED BOARD')[0];
+  assert.ok(fastRead.includes('best tier RESEARCH GAP'));
+  assert.ok(!fastRead.includes('STRONG YES'), 'pre-cap summary never overrides the rendered tier');
+  const finalRead = text.split('8. FINAL READ')[1];
+  assert.ok(finalRead.includes('Best tier RESEARCH GAP on the board above.'));
 });
 
-test('source-backed terms always rank above proximity-only capped rows regardless of raw score', () => {
+test('research-backed terms always rank above research-gap rows regardless of raw score', () => {
   const input = builtInput({ sourceBacked: true });
-  // add a proximity-only term with an inflated raw score
+  // add a research-gap term with an inflated raw score
   input.terms.push({
     full_strike_text: 'Will Biden say it? -- Aardvark',
     short_term: 'Aardvark', cpc_score: 99, bucket: 'watch-only',
-    evidence_status: 'proximity-only source cap -- no pick',
-    layers_present: ['1/9'], composite_posture: 'WATCH',
+    evidence_status: 'research gap',
+    research_state: 'research gap',
+    layers_present: ['1/9'], composite_posture: 'RESEARCH GAP',
     missing_research_layers: [], upgrade_trigger: null,
     market_context: { implied: null, bid_cents: null, ask_cents: null, note: 'NOT IN SCORE' },
   });
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const rows = text.split('3. TOP WATCH TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
+  const rows = text.split('3. TOP RESEARCHED TERMS')[0].split('\n').filter((l) => /^\d+\s/.test(l.trim()));
   const aardvarkRank = rows.findIndex((r) => r.includes('Aardvark'));
-  assert.equal(aardvarkRank, rows.length - 1, 'proximity-only row ranks last despite raw score 99');
-  assert.match(rows[aardvarkRank], /\|\s*39\s*\|/);
+  assert.equal(aardvarkRank, rows.length - 1, 'research-gap row ranks last despite raw score 99');
+  assert.match(rows[aardvarkRank], /\|\s*--\s*\|\s*RESEARCH GAP\s*\|/);
   assert.ok(!rows[aardvarkRank].includes('scaffold'));
 });
 

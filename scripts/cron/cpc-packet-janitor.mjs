@@ -36,17 +36,17 @@ const TELEGRAM_DOC_SAFE_CHARS = 3500;
 
 const MENTION_REQUIRED_SECTIONS = [
   'FAST READ',
-  'CPC COMPOSITE BOARD',
-  'TOP WATCH TERMS',
-  'LOW-SOURCE / TRAP WATCH',
+  'RANKED BOARD',
+  'TOP RESEARCHED TERMS',
+  'RESEARCH GAPS',
   'MARKET CONTEXT - NOT IN SCORE',
   'SOURCE GAPS',
-  'UPGRADE / DOWNGRADE TRIGGERS',
-  'FINAL CPC READ',
+  'UPDATE / DOWNGRADE TRIGGERS',
+  'FINAL READ',
 ];
 
 const SCORING_SECTION_RE =
-  /(CPC COMPOSITE BOARD|MODEL|MODEL SCORE|SCORING|SCORECARD|RATIONALE|EDGE BASIS|FINAL READ|DECISION BASIS)/i;
+  /(CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|MODEL|MODEL SCORE|SCORING|SCORECARD|RATIONALE|EDGE BASIS|FINAL READ|DECISION BASIS)/i;
 const MARKET_SECTION_RE = /(MARKET CONTEXT|NOT IN SCORE|DISPLAY ONLY|DISPLAY-ONLY|LIQUIDITY|INVENTORY ARTIFACT ONLY|INVENTORY-ARTIFACT-ONLY)/i;
 const MARKET_ROW_RE = /^\s*(?:[-*]\s*)?(?:raw\s+)?(?:market|market context|liquidity)\s*[:|-]/i;
 const MARKET_PLACEHOLDER_RE = /\b(?:price|bid|ask|yes_ask|yes_bid|no_ask|no_bid|last[_ -]?price|volume|open[_ -]?interest|oi)\s*[:=]\s*(?:MISSING|PENDING|N\/A|NA|null|none|unknown)\b/i;
@@ -57,7 +57,7 @@ const WRAPPER_RE = /^\s*(Cronjob Response:|Hermes cron response:|Command output:
 const BAD_SCAFFOLD_RE =
   /\b(scaffold|placeholder|todo:|insert evidence|rewrite this|model-written final packet|final customer text draft)\b/i;
 const MENTIONS_LEGACY_RE =
-  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|PICK\s*:\s*|EVIDENCE_LEAN\s*:)\b/i;
+  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|CPC COMPOSITE BOARD|TOP WATCH TERMS|PICK\s*:\s*|EVIDENCE_LEAN\s*:|LEAN\b|WATCH\b|NO_CLEAR_PICK\b|source layer(?:s)?\b|proximity-only\b|stub\b|scaffold\b|composite score\b|source-backed composite\b)\b/i;
 const SOURCE_STALE_MS = 36 * 60 * 60 * 1000;
 
 function nowIso() {
@@ -525,15 +525,15 @@ function hasModelScaffoldLeak(text, packetType) {
 export function noUsableSourceEvidenceFinding(text, packetType) {
   if (!/mention/i.test(packetType ?? '')) return null;
   const body = String(text ?? '');
-  // Explicit renderer summary: "<n>/<total> term(s) carry source evidence".
-  const m = body.match(/(\d+)\s*\/\s*(\d+)\s+term\(s\)\s+carry\s+source\s+evidence/i);
+  // Explicit renderer summary: "<n>/<total> term(s) have research-backed P(YES)".
+  const m = body.match(/(\d+)\s*\/\s*(\d+)\s+term\(s\)\s+have\s+research-backed\s+P\(YES\)/i);
   if (m) {
     const withEvidence = Number(m[1]);
     const total = Number(m[2]);
     if (Number.isFinite(withEvidence) && Number.isFinite(total) && total > 0 && withEvidence === 0) {
       return {
         code: 'NO_USABLE_SOURCE_EVIDENCE',
-        message: `mentions packet has 0/${total} terms with source-backed evidence (proximity-only / no research performed); not a valid customer packet`,
+        message: `mentions packet has 0/${total} terms with research-backed P(YES) (research gap / no research performed); not a valid customer packet`,
       };
     }
   }
@@ -584,9 +584,9 @@ function countNoClear(text) {
   let noClear = 0;
   let total = 0;
   for (const line of lines) {
-    if (/\b(NO_CLEAR_PICK|NO CLEAR PICK|NO CLEAR PICKS|PASS|WATCH)\b/i.test(line)) {
+    if (/\b(?:RESEARCH GAP|NO_CLEAR_PICK)\b/i.test(line)) {
       total += 1;
-      if (/\b(NO_CLEAR_PICK|NO CLEAR PICK|NO CLEAR PICKS)\b/i.test(line)) noClear += 1;
+      noClear += 1;
     } else if (/^\s*(?:#\d+|\*|-|[★◆◇○])\s+/u.test(line)) {
       total += 1;
     }
@@ -618,11 +618,11 @@ function hasUfcClosenessSignal(scope) {
 }
 
 function hasNoClearJustification(text, packetType) {
-  const hasCoverage = /(source layer coverage|source coverage|source-backed|layers(?:_present)?\s*[:=]\s*\d+\/\d+|layers present|coverage\s*[:=])/i.test(text);
-  const hasCancellation = /(cancel(?:ing|lation)? evidence|evidence cancels|offsetting|close composite margin|close margin|score margin|margin\s*(?:<=|<|:)|missing layer list|missing layers?)/i.test(text);
-  const hasBlocker = /(BLOCKED_|blocker artifact|fail-closed|source gap|missing source)/i.test(text);
+  const hasCoverage = /(research-backed terms|research coverage|research-backed|terms? have research-backed P\(YES\)|research gap section|source layer coverage|source coverage|source-backed|data coverage|coverage\s*[:=])/i.test(text);
+  const hasCancellation = /(cancel(?:ing|lation)? evidence|evidence cancels|offsetting|settlement wording|event schedule|research gap|missing research|missing source)/i.test(text);
+  const hasBlocker = /(BLOCKED_|blocker artifact|fail-closed|research gap|missing source|NO_USABLE_SOURCE_EVIDENCE)/i.test(text);
   if (/ufc/i.test(packetType ?? '')) return hasCoverage && hasUfcClosenessSignal(text);
-  if (/mentions/i.test(packetType ?? '')) return hasBlocker;
+  if (/mentions/i.test(packetType ?? '')) return hasBlocker || hasCoverage;
   return hasCoverage && (hasCancellation || hasBlocker);
 }
 
@@ -637,7 +637,7 @@ export function hasCacheOnlyDisclosure(text) {
 // from the janitor's block trigger. Contains NO price/odds/volume tokens — it is
 // a freshness statement only and is safe under the price-isolation invariant.
 export const CACHE_ONLY_DISCLOSURE_LINE =
-  'Source freshness: Live fetch unavailable this run — packet built from cache-only / stale-source coverage; treat source layers as cached/provisional until live research lands. NOT a score input.';
+  'Source freshness: Live fetch unavailable this run — packet built from cache-only / stale-source coverage; treat research as cached/provisional until live research lands. NOT a score input.';
 
 // Pure detector reused by the mentions renderer. Runs the SAME date-wide source-
 // health discovery the janitor uses at send time and reports whether the packet
@@ -693,14 +693,16 @@ function contradictionFindings(text) {
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const scoreMatch = line.match(/\b(?:score|cpc_score|composite_score)\s*[:=]\s*(\d{1,3})\b/i);
+    const scoreMatch = line.match(/\bP\(YES\)\s*[:=]?\s*(\d{1,3})\b/i)
+      || line.match(/\|\s*(\d{1,3}|--)\s*\|\s*(STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)\s*\|/i);
     if (!scoreMatch) continue;
-    const score = Number(scoreMatch[1]);
-    if (score >= 70 && /\b(NO_CLEAR_PICK|NO CLEAR PICK|PASS)\b/i.test(line)) {
-      findings.push({ line: i + 1, reason: `high score ${score} paired with no-clear/pass posture` });
+    const score = scoreMatch[1] === '--' ? null : Number(scoreMatch[1]);
+    const tier = String(scoreMatch[2] ?? '').toUpperCase();
+    if (score !== null && score >= 65 && tier !== 'STRONG YES') {
+      findings.push({ line: i + 1, reason: `high P(YES) ${score} paired with ${tier || 'missing'} tier` });
     }
-    if (score <= 30 && /\b(PICK|PLAY|CLEAR|TRADE_YES)\b/i.test(line)) {
-      findings.push({ line: i + 1, reason: `low score ${score} paired with pick/play posture` });
+    if (score !== null && score < 35 && tier !== 'STRONG NO') {
+      findings.push({ line: i + 1, reason: `low P(YES) ${score} paired with ${tier || 'missing'} tier` });
     }
   }
   return findings;
@@ -826,7 +828,7 @@ export function validatePacketText(text, context = {}) {
   if (noClear.total >= 3 && noClear.ratio >= 0.6 && !hasNoClearJustification(text, packetType)) {
     errors.push({
       code: 'HIGH_NO_CLEAR_PICK_RATIO_WITHOUT_EXPLANATION',
-      message: `NO_CLEAR_PICK ratio ${noClear.noClear}/${noClear.total} requires source coverage, cancellation/margin, and missing-layer explanation`,
+      message: `research gap ratio ${noClear.noClear}/${noClear.total} requires research-backed coverage and gap explanation`,
     });
   }
   const ufcNoClearMissing = /ufc/i.test(packetType) ? ufcNoClearGaps(text) : [];

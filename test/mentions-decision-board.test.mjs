@@ -100,13 +100,13 @@ test('mentions slate packet: v2 CPC board, compact customer text, raw inventory 
 
   // v2 customer sections present; old shared board headings absent.
   assert.match(packet.text, /1\. FAST READ/);
-  assert.match(packet.text, /2\. CPC COMPOSITE BOARD/);
+  assert.match(packet.text, /2\. RANKED BOARD/);
   assert.match(packet.text, /5\. MARKET CONTEXT - NOT IN SCORE/);
   assert.match(packet.text, /renderer_contract: mentions_customer_packet_v2/);
   assert.doesNotMatch(packet.text, /TLDR BOARD|TOP EDGE CANDIDATES/);
 
   // Composite score and market context are both shown, but score stays numeric.
-  assert.match(packet.text, /\|\s*0\s*\|\s*NO_CLEAR_PICK\s*\|/);
+  assert.match(packet.text, /\|\s*--\s*\|\s*RESEARCH GAP\s*\|/);
   assert.match(packet.text, /bid range 27c-91c; ask range 32c-92c/);
 
   // raw contract inventory is audit-only

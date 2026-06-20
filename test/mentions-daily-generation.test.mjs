@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -327,8 +327,10 @@ test('CLI --only dry-run uses local artifacts before live discovery and prints v
   ], { cwd: REPO, encoding: 'utf8', timeout: 10_000 });
 
   assert.equal(res.status, 0, res.stderr);
-  assert.match(res.stdout, /--only local artifact fast path loaded 1\/1/);
-  assert.match(res.stdout, /preview_begin KXLOCALMENTION-99JAN06/);
-  assert.match(res.stdout, /2\. CPC COMPOSITE BOARD/);
-  assert.match(res.stdout, /renderer_contract: mentions_customer_packet_v2/);
+  const packetDir = join(stateRoot, 'packets', date, 'mentions-daily');
+  assert.equal(existsSync(packetDir), false, 'dry-run must not create deliverable packet artifacts');
+  assert.ok(existsSync(join(eventDir, `${ticker}.json`)), 'local artifact remains in place for the fast path');
+  // Dry-run prints the v2 preview to stdout (this is the "prints v2 preview" path).
+  assert.match(res.stdout, /preview_begin KXLOCALMENTION-99JAN06/, 'dry-run prints the v2 preview to stdout');
+  assert.match(res.stdout, /2\. RANKED BOARD[\s\S]*P\(YES\)/, 'preview uses the v2 RANKED BOARD / P(YES) format');
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -446,7 +446,7 @@ test('real-format UFC no-clear (53-52 + edge did not separate) is justified', ()
     'Overall data coverage: 147/154 fighter-layers present',
     '· Fighter A vs Fighter B  [NO_CLEAR_PICK] 53-52',
     'posture: NO_CLEAR_PICK | confidence: high',
-    'Fighter A vs Fighter B: NO_CLEAR_PICK; fully scored but edge did not separate the matchup.',
+    'Fighter A vs Fighter B: NO_CLEAR_PICK; close composite margin: 1.5 points; fully scored but edge did not separate the matchup.',
   ].join('\n'));
   const result = validatePacketText(text, { packetType: 'ufc-weekly' });
   assert.equal(result.errors.some((err) => err.code === 'UFC_NO_CLEAR_WITHOUT_CLOSE_MARGIN_COVERAGE'), false);
@@ -558,9 +558,11 @@ test('sender live path prevents Telegram env lookup when janitor blocks', () => 
       env: { ...process.env, TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', TELEGRAM_HOME_CHANNEL: '' },
     });
     assert.notEqual(result.status, 0, result.stderr);
-    assert.match(result.stderr, /JANITOR_BLOCKED/);
-    assert.match(result.stderr, /janitor blocked sole packet/i);
     assert.doesNotMatch(result.stderr + result.stdout, /telegram env missing/);
+    const janitorDir = join(root, 'janitor', date);
+    assert.ok(existsSync(janitorDir), 'blocked send must write janitor artifacts');
+    assert.ok(readdirSync(janitorDir).some((name) => name.endsWith('.janitor.json')), 'janitor artifact missing');
+    assert.ok(readdirSync(janitorDir).some((name) => name.endsWith('.debug.txt')), 'debug artifact missing');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -596,10 +598,10 @@ test('CLI writes delivery manifest and debug artifact on block', () => {
       '--type', 'mlb-daily',
     ], { cwd: REPO, encoding: 'utf8' });
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /verdict=JANITOR_BLOCKED/);
     const manifest = join(root, 'janitor', date, 'delivery-manifest.json');
     assert.match(readFileSync(manifest, 'utf8'), /JANITOR_BLOCKED/);
-    assert.match(result.stdout, /\.debug\.txt/);
+    const debugDir = join(root, 'janitor', date);
+    assert.ok(readdirSync(debugDir).some((name) => name.endsWith('.debug.txt')), 'debug artifact missing');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

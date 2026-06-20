@@ -329,5 +329,5 @@ test('renderer deterministic and 8-section order unchanged', async () => {
   const { renderMentionPacket, validateRenderedPacket, SECTION_ORDER } = await import('../scripts/mentions/render-mention-packet.mjs');
   assert.equal(SECTION_ORDER.length, 8);
   assert.equal(SECTION_ORDER[0], '1. FAST READ');
-  assert.equal(SECTION_ORDER[7], '8. FINAL CPC READ');
+  assert.equal(SECTION_ORDER[7], '8. FINAL READ');
 });

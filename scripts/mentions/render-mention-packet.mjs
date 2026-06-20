@@ -7,9 +7,9 @@
 //
 // Fixed section order (never reordered):
 //   1 FAST READ
-//   2 CPC COMPOSITE BOARD
-//   3 TOP WATCH TERMS
-//   4 LOW-SOURCE / TRAP WATCH
+//   2 RANKED BOARD
+//   3 TOP RESEARCHED TERMS
+//   4 RESEARCH GAPS
 //   5 MARKET CONTEXT - NOT IN SCORE
 //   6 SOURCE GAPS
 //   7 UPGRADE / DOWNGRADE TRIGGERS
@@ -20,20 +20,41 @@
 
 export const SECTION_ORDER = Object.freeze([
   '1. FAST READ',
-  '2. CPC COMPOSITE BOARD',
-  '3. TOP WATCH TERMS',
-  '4. LOW-SOURCE / TRAP WATCH',
+  '2. RANKED BOARD',
+  '3. TOP RESEARCHED TERMS',
+  '4. RESEARCH GAPS',
   '5. MARKET CONTEXT - NOT IN SCORE',
   '6. SOURCE GAPS',
-  '7. UPGRADE / DOWNGRADE TRIGGERS',
-  '8. FINAL CPC READ',
+  '7. UPDATE / DOWNGRADE TRIGGERS',
+  '8. FINAL READ',
 ]);
 
 const CENTRAL_TZ = 'America/Chicago';
 export const CUSTOMER_PACKET_CONTRACT_V2 = 'mentions_customer_packet_v2';
 export const CUSTOMER_RENDERER_ID = 'renderMentionPacket/v2';
-const LOW_SOURCE_SCORE_CAP = 39;
-const POSTURE_RANK = Object.freeze({ NO_CLEAR_PICK: 0, WATCH: 1, LEAN: 2, EVIDENCE_LEAN: 3, PICK: 4 });
+const GAP_STATE = 'research gap';
+const GAP_LABEL = 'RESEARCH GAP';
+const TIER_RANK = Object.freeze({ 'STRONG YES': 4, 'WEAK YES': 3, 'WEAK NO': 2, 'STRONG NO': 1, [GAP_LABEL]: 0 });
+const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|PICK|source layer(?:s)?|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
+
+function scoreToTier(score) {
+  if (score === null || score === undefined || !Number.isFinite(Number(score))) return GAP_LABEL;
+  const s = Math.round(Math.max(0, Math.min(100, Number(score))));
+  if (s >= 65) return 'STRONG YES';
+  if (s >= 50) return 'WEAK YES';
+  if (s >= 35) return 'WEAK NO';
+  return 'STRONG NO';
+}
+
+function researchState(term) {
+  if (String(term?.research_state ?? '').trim()) return String(term.research_state).trim();
+  if (term?.bucket === 'blocked/no-source') return GAP_STATE;
+  return Number.isFinite(Number(term?.cpc_score)) ? 'research-backed' : GAP_STATE;
+}
+
+function isResearchBacked(term) {
+  return researchState(term) !== GAP_STATE;
+}
 
 export function formatCentral(isoOrDate) {
   if (!isoOrDate) return 'MISSING';
@@ -68,6 +89,13 @@ function maybe(v, fallback = 'MISSING') {
   return v === null || v === undefined || v === '' ? fallback : String(v);
 }
 
+function safeCustomerText(value, fallback = null) {
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+  if (FORBIDDEN_CUSTOMER_JARGON_RE.test(text)) return fallback;
+  return text;
+}
+
 function cents(v) {
   return v === null || v === undefined ? '-' : `${v}c`;
 }
@@ -82,16 +110,7 @@ function tableRow(cells, widths) {
 }
 
 function sourceLabel(term) {
-  const status = String(term.evidence_status ?? '');
-  if (term.bucket === 'blocked/no-source') return 'blocked/no-source';
-  if (/proximity scaffold only|proximity-only source cap|low-source watch only/i.test(status)) return 'proximity-only';
-  const layers = (Array.isArray(term.layers_present) ? term.layers_present : [])
-    .filter((l) => !/^\d+\/\d+$/.test(String(l)));
-  if (layers.length) return layers.join('+').slice(0, 28);
-  const m = status.match(/source evidence present:\s*(.+)/i);
-  if (m) return m[1].split(',').map((x) => x.trim()).filter(Boolean).join('+').slice(0, 28);
-  const coverage = (Array.isArray(term.layers_present) ? term.layers_present : []).find((l) => /^\d+\/\d+$/.test(String(l)));
-  return coverage ? `${coverage} layers` : 'unsourced';
+  return researchState(term);
 }
 
 function marketCell(term) {
@@ -99,57 +118,40 @@ function marketCell(term) {
   return `${cents(mc.bid_cents)}/${cents(mc.ask_cents)} ctx-only`;
 }
 
-function isProximityOnly(term) {
-  return sourceLabel(term) === 'proximity-only';
-}
-
 function numericScore(term) {
   const raw = Number(term?.cpc_score);
-  const base = Number.isFinite(raw) ? Math.round(Math.max(0, Math.min(100, raw))) : 0;
-  if (term?.bucket === 'blocked/no-source') return 0;
-  if (isProximityOnly(term)) return Math.min(base, LOW_SOURCE_SCORE_CAP);
-  return base;
+  if (!isResearchBacked(term)) return null;
+  return Number.isFinite(raw) ? Math.round(Math.max(0, Math.min(100, raw))) : null;
 }
 
 function capReason(term) {
-  if (term?.bucket === 'blocked/no-source') return 'no usable source layers; score floor 0';
-  if (isProximityOnly(term)) {
-    const raw = Number(term?.cpc_score);
-    const rawNote = Number.isFinite(raw) && raw > LOW_SOURCE_SCORE_CAP ? ` raw=${Math.round(raw)}` : '';
-    return `LOW-SOURCE WATCH cap: event proximity only; max CPC ${LOW_SOURCE_SCORE_CAP}.${rawNote}`;
-  }
-  return 'source-backed score';
+  if (!isResearchBacked(term)) return 'research gap: no usable score';
+  return 'research-backed score';
 }
 
 function renderedPosture(term) {
-  if (term?.bucket === 'blocked/no-source') return 'NO_CLEAR_PICK';
-  const posture = String(term?.composite_posture ?? 'NO_CLEAR_PICK');
-  if (isProximityOnly(term) && (POSTURE_RANK[posture] ?? 0) > POSTURE_RANK.WATCH) return 'WATCH';
-  return posture;
+  return scoreToTier(numericScore(term));
 }
 
 function cpcCell(term) {
-  return String(numericScore(term));
+  const score = numericScore(term);
+  return score === null ? '--' : String(score);
 }
 
-// Post-cap best posture: derived from the rendered rows' final postures
-// (already WATCH-capped for proximity-only/stub terms), never from the raw
-// pre-cap composite summary.
+// Best rendered tier from the customer board. Research gaps sort last.
 export function postCapBestPosture(terms) {
-  let best = 'NO_CLEAR_PICK';
+  let best = GAP_LABEL;
   for (const t of terms ?? []) {
     const p = renderedPosture(t);
-    if ((POSTURE_RANK[p] ?? 0) > (POSTURE_RANK[best] ?? 0)) best = p;
+    if ((TIER_RANK[p] ?? 0) > (TIER_RANK[best] ?? 0)) best = p;
   }
   return best;
 }
 
-// Stable ranking: source-backed terms first (CPC desc), then proximity-only
-// scaffolds, then blocked/no-source. Within a group: score desc, term asc.
-// Pure on input — schedule-only evidence can never outrank real evidence.
+// Stable ranking: scored terms first (P(YES) desc), then research gaps.
+// Pure on input — gate-only terms can never outrank researched terms.
 function rankGroup(term) {
-  if (term.bucket === 'blocked/no-source') return 2;
-  if (isProximityOnly(term)) return 1;
+  if (!isResearchBacked(term)) return 1;
   return 0;
 }
 
@@ -185,7 +187,6 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   if (!ranked.length) throw new Error('renderMentionPacket: no terms to render');
   const a = analyst ?? {};
   const notes = a.term_notes ?? {};
-  const proximityOnly = Boolean(input.synthesis_rules?.all_terms_proximity_only);
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
@@ -196,18 +197,17 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('');
 
-  // 1 FAST READ — posture from post-cap rendered rows, never the raw
-  // pre-cap composite summary (a proximity-only board must read WATCH).
-  const bestPosture = postCapBestPosture(ranked);
+  // 1 FAST READ — tier from the rendered rows, never the raw composite summary.
+  const bestTier = postCapBestPosture(ranked);
+  const researchedCount = ranked.filter(isResearchBacked).length;
   lines.push('1. FAST READ');
-  if (proximityOnly) lines.push(`LOW-SOURCE WATCH only -- no pick. Proximity-only terms capped at CPC ${LOW_SOURCE_SCORE_CAP}.`);
-  lines.push(a.fast_read || `${summary.source_backed_count ?? 0}/${summary.market_count ?? ranked.length} term(s) carry source evidence beyond event proximity; best posture ${bestPosture} (post-cap). Research only — no trade.`);
+  lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${summary.market_count ?? ranked.length} term(s) have research-backed P(YES); best tier ${bestTier}. Research only — no trade.`));
   lines.push('');
 
-  // 2 CPC COMPOSITE BOARD
-  lines.push('2. CPC COMPOSITE BOARD');
-  const widths = [4, 22, 9, 13, 18, 22, 22, 18];
-  lines.push(tableRow(['Rank', 'Term', 'CPC', 'Posture', 'Source', 'Catalyst', 'Settlement Fit', 'Market Context'], widths));
+  // 2 RANKED BOARD
+  lines.push('2. RANKED BOARD');
+  const widths = [4, 22, 9, 14, 16, 22, 22, 18];
+  lines.push(tableRow(['Rank', 'Term', 'P(YES)', 'Tier', 'Research', 'Catalyst', 'Settlement Fit', 'Market Context'], widths));
   lines.push(tableRow(widths.map((w) => '-'.repeat(w)), widths));
   ranked.forEach((t, i) => {
     const note = notes[t._short] ?? {};
@@ -217,49 +217,55 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
       cpcCell(t),
       renderedPosture(t),
       sourceLabel(t),
-      note.catalyst ?? 'MISSING',
-      note.settlement_fit ?? 'MISSING',
+      safeCustomerText(note.catalyst, 'MISSING'),
+      safeCustomerText(note.settlement_fit, 'MISSING'),
       marketBoardCell(t, ranked),
     ], widths));
   });
-  lines.push(`note: CPC Score is deterministic source-layer conviction after caps. Proximity-only terms are capped at ${LOW_SOURCE_SCORE_CAP} and WATCH. Market Context is display-only and NEVER a score input.`);
+  lines.push('note: P(YES) is the deterministic research probability. Research gaps stay as RESEARCH GAP. Market Context is display-only and NEVER a score input.');
   lines.push('');
 
-  // 3 TOP WATCH TERMS
-  lines.push('3. TOP WATCH TERMS');
-  const top = ranked.filter((t) => t.bucket !== 'blocked/no-source').slice(0, 5);
+  // 3 TOP RESEARCHED TERMS
+  lines.push('3. TOP RESEARCHED TERMS');
+  const top = ranked.filter(isResearchBacked).slice(0, 5);
   if (top.length) {
-    for (const t of top) lines.push(`- ${t._short}: ${maybe(t.evidence_status, 'no evidence status')}`);
-  } else {
-    lines.push('- none (all terms blocked on missing source layers)');
-  }
-  lines.push('');
-
-  // 4 LOW-SOURCE / TRAP WATCH
-  lines.push('4. LOW-SOURCE / TRAP WATCH');
-  const low = ranked.filter((t) => t.bucket === 'blocked/no-source' || sourceLabel(t) === 'proximity-only');
-  if (low.length) {
-    for (const t of low) {
-      const trap = notes[t._short]?.trap_risk ?? redteam?.trap_flags?.[t._short] ?? null;
-      lines.push(`- ${t._short}: CPC Score ${numericScore(t)} | posture ${renderedPosture(t)} | cap: ${capReason(t)}${trap ? ` | trap: ${trap}` : ''}`);
-    }
+    for (const t of top) lines.push(`- ${t._short}: ${cpcCell(t)} (${renderedPosture(t)})`);
   } else {
     lines.push('- none');
   }
+  lines.push('');
+
+  // 4 RESEARCH GAPS
+  lines.push('4. RESEARCH GAPS');
+  const gapTerms = ranked.filter((t) => !isResearchBacked(t));
+  if (gapTerms.length) {
+    for (const t of gapTerms) {
+      const trap = notes[t._short]?.trap_risk ?? redteam?.trap_flags?.[t._short] ?? null;
+      lines.push(`- ${t._short}: ${capReason(t)}${trap ? ` | trap: ${trap}` : ''}`);
+    }
+  } else {
+  lines.push('- none');
+  }
   if (redteam?.narrative_risks?.length) {
     lines.push('red-team narrative flags (advisory only, never re-scores):');
-    for (const risk of redteam.narrative_risks) lines.push(`- ${risk}`);
+    for (const risk of redteam.narrative_risks) {
+      const safeRisk = safeCustomerText(risk, null);
+      if (safeRisk) lines.push(`- ${safeRisk}`);
+    }
   }
   const xHeat = Object.entries(redteam?.x_narrative_heat ?? {});
   if (xHeat.length) {
     lines.push('X narrative heat (social context only — never source evidence, never a score input):');
-    for (const [term, note] of xHeat) lines.push(`- ${term}: ${note}`);
+    for (const [term, note] of xHeat) {
+      const safeNote = safeCustomerText(note, null);
+      if (safeNote) lines.push(`- ${term}: ${safeNote}`);
+    }
   }
   lines.push('');
 
   // 5 MARKET CONTEXT - NOT IN SCORE
   lines.push('5. MARKET CONTEXT - NOT IN SCORE');
-  lines.push('Kalshi price/liquidity shown for validation only; excluded from all CPC scoring inputs.');
+  lines.push('Kalshi price/liquidity shown for validation only; excluded from all score inputs.');
   if (allOneSided0100(ranked)) {
     lines.push(`- all ${ranked.length} displayed terms show bid=0c / ask=100c; stale/one-sided/closed-looking board context only, NOT IN SCORE.`);
   } else {
@@ -273,30 +279,37 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   // detected cache-only/stale/partial source health (same signal the delivery
   // janitor blocks on); price-free freshness statement, never a score input.
   if (input.source_health_disclosure) lines.push(`- ${input.source_health_disclosure}`);
-  const gaps = (a.source_gaps?.length ? a.source_gaps : null) ?? deterministicSourceGaps(ranked);
+  const analystGaps = Array.isArray(a.source_gaps)
+    ? a.source_gaps.map((g) => safeCustomerText(g, null)).filter(Boolean)
+    : null;
+  const gaps = (analystGaps?.length ? analystGaps : null) ?? deterministicSourceGaps(ranked);
   for (const g of gaps) lines.push(`- ${g}`);
   const provenanceLines = Array.isArray(input.deterministic_provenance_lines)
     ? input.deterministic_provenance_lines.filter(Boolean)
     : [];
   if (provenanceLines.length) {
-    lines.push('provenance (outcomes/source layers only; market prices excluded):');
+    lines.push('provenance (outcomes only; market prices excluded):');
     for (const line of provenanceLines) lines.push(`- ${line}`);
   }
   lines.push('');
 
-  // 7 UPGRADE / DOWNGRADE TRIGGERS
-  lines.push('7. UPGRADE / DOWNGRADE TRIGGERS');
-  const ups = (a.upgrade_triggers?.length ? a.upgrade_triggers : null) ?? deterministicUpgradeTriggers(ranked);
+  // 7 UPDATE / DOWNGRADE TRIGGERS
+  lines.push('7. UPDATE / DOWNGRADE TRIGGERS');
+  const analystUps = Array.isArray(a.upgrade_triggers)
+    ? a.upgrade_triggers.map((u) => safeCustomerText(u, null)).filter(Boolean)
+    : null;
+  const ups = (analystUps?.length ? analystUps : null) ?? deterministicUpgradeTriggers(ranked);
   for (const u of ups) lines.push(`- upgrade: ${u}`);
-  const downs = a.downgrade_triggers?.length ? a.downgrade_triggers : ['settlement wording drifts from listed strike text', 'event schedule slips past close time'];
+  const analystDowns = Array.isArray(a.downgrade_triggers)
+    ? a.downgrade_triggers.map((d) => safeCustomerText(d, null)).filter(Boolean)
+    : null;
+  const downs = analystDowns?.length ? analystDowns : ['settlement wording drifts from listed strike text', 'event schedule slips past close time'];
   for (const d of downs) lines.push(`- downgrade: ${d}`);
   lines.push('');
 
-  // 8 FINAL CPC READ
-  lines.push('8. FINAL CPC READ');
-  lines.push(a.final_read || (proximityOnly
-    ? `LOW-SOURCE WATCH only -- no pick. All displayed scores are capped at ${LOW_SOURCE_SCORE_CAP} until transcript/quote/history layers arrive.`
-    : `Best posture ${bestPosture} (post-cap) on the board above. No trade is implied; scores are research conviction only.`));
+  // 8 FINAL READ
+  lines.push('8. FINAL READ');
+  lines.push(safeCustomerText(a.final_read, `Best tier ${bestTier} on the board above. Research only — no trade.`));
   lines.push('');
 
   // Local completeness appendix: every contract's exact strike text, compact.
@@ -345,8 +358,12 @@ function marketSummary(terms) {
 function deterministicSourceGaps(ranked) {
   const gaps = [];
   for (const t of ranked) {
+    if (!isResearchBacked(t)) {
+      gaps.push(`${t._short}: research gap remains`);
+      continue;
+    }
     const missing = Array.isArray(t.missing_research_layers) ? t.missing_research_layers : [];
-    if (missing.length) gaps.push(`${t._short}: missing ${missing.join(', ')}`);
+    if (missing.length) gaps.push(`${t._short}: research gap remains`);
   }
   return gaps.length ? gaps : ['none recorded'];
 }
@@ -373,7 +390,13 @@ export function validateRenderedPacket(text, input) {
   if (!text.includes(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`)) {
     throw new Error(`rendered packet omitted ${CUSTOMER_PACKET_CONTRACT_V2} contract marker`);
   }
+  const legacyPostureLine = text.split(/\r?\n/).find((line) => /\b(EVIDENCE_LEAN|LEAN|WATCH|NO_CLEAR_PICK)\b/i.test(line)) ?? null;
+  if (legacyPostureLine) throw new Error(`rendered packet leaked legacy posture jargon: ${legacyPostureLine}`);
+  const legacyResearchLine = text.split(/\r?\n/).find((line) => /\b(source layer(?:s)?|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i.test(line)) ?? null;
+  if (legacyResearchLine) {
+    throw new Error(`rendered packet leaked legacy research jargon: ${legacyResearchLine}`);
+  }
   if (/Most likely mention terms/i.test(text)) throw new Error('rendered packet leaked old Most likely mention terms scaffold format');
-  if (/\|\s*scaffold\s*\|/i.test(text)) throw new Error('rendered packet leaked scaffold in CPC column');
+  if (/\|\s*scaffold\s*\|/i.test(text)) throw new Error('rendered packet leaked scaffold in board column');
   return true;
 }
