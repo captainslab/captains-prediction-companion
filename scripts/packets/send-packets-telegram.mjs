@@ -224,6 +224,27 @@ function isDocumentPacketType(type) {
   return CPC_DOCUMENT_TYPES.has(type);
 }
 
+function buildJanitorOptions({ packetType, dryRun, ledgerPath, force }) {
+  return {
+    requireLedger: dryRun ? existsSync(ledgerPath) : true,
+    requireSourceHealth: packetType === 'mlb-daily' ? false : true,
+    documentDelivery: isDocumentPacketType(packetType),
+    force,
+    dryRun,
+  };
+}
+
+function logDryRunVerdict(entryName, janitor, { notice = null, documentName = null, pieceCount = null } = {}) {
+  const wouldBlock = janitor.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED;
+  console.log(`[dry-run] would-block=${wouldBlock ? 'YES' : 'NO'} entry=${entryName} verdict=${janitor.verdict}`);
+  console.log(
+    `[dry-run] would-send=${wouldBlock ? 'NO' : 'YES'}` +
+    `${notice ? ` notice=${notice}` : ''}` +
+    `${documentName ? ` document=${documentName}` : ''}` +
+    `${pieceCount != null ? ` pieces=${pieceCount}` : ''}`,
+  );
+}
+
 export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
   const eventLine = packetText
     .split(/\r?\n/)
@@ -299,6 +320,9 @@ async function main() {
     plan = filterDeliveryPlan(plan, { onlyStems, excludeStems });
     if (!plan.length) {
       console.log(`${packetType} ${date}: --only matched no packets — nothing to send`);
+      if (dryRun) {
+        console.log(`${packetType} ${date}: dry-run would_send=NO would_block=NO would_send_count=0 would_block_count=0 total_packets=0`);
+      }
       return;
     }
   }
@@ -314,6 +338,7 @@ async function main() {
     const msg = `${packetType} ${date}: no events discovered.`;
     if (dryRun) {
       console.log(`[dry-run] would send status: ${msg}`);
+      console.log(`${packetType} ${date}: dry-run would_send=YES would_block=NO would_send_count=1 would_block_count=0 total_packets=1`);
       return;
     }
     await tgSendMessage(msg);
@@ -327,6 +352,8 @@ async function main() {
 
   let sent = 0;
   let skipped = 0;
+  let wouldSend = 0;
+  let wouldBlock = 0;
   const blockedEntries = [];
   for (const entry of plan) {
     if (entry.name === `${date}-no-events`) continue;
@@ -337,19 +364,21 @@ async function main() {
     if (isDocumentPacketType(packetType)) {
       const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
       const filePath = join(dir, fileName);
-      const janitor = dryRun ? null : inspectPacketFile(filePath, {
+      const janitor = inspectPacketFile(filePath, {
         date,
         stateRoot,
         packetType,
         ledgerPath,
         idempotencyKey: entry.name,
-        requireLedger: true,
-        requireSourceHealth: true,
-        documentDelivery: true,
-        force,
+        ...buildJanitorOptions({ packetType, dryRun, ledgerPath, force }),
       });
       if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
-        console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        if (dryRun) {
+          wouldBlock += 1;
+          logDryRunVerdict(entry.name, janitor);
+        } else {
+          console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        }
         blockedEntries.push(entry.name);
         continue;
       }
@@ -358,8 +387,8 @@ async function main() {
       const text = readFileSync(deliveryPath, 'utf8');
       const notice = cpcPacketCaption(text, entry.name, packetType);
       if (dryRun) {
-        console.log(`[dry-run] would send notice: ${notice}`);
-        console.log(`[dry-run] would send document: ${entry.name} — ${deliveryName}`);
+        wouldSend += 1;
+        logDryRunVerdict(entry.name, janitor, { notice, documentName: deliveryName });
         continue;
       }
       if (sent) await sleep(SEND_PACING_MS);
@@ -386,19 +415,21 @@ async function main() {
     const pieces = [];
     for (const f of entry.files) {
       const filePath = join(dir, f);
-      const janitor = dryRun ? null : inspectPacketFile(filePath, {
+      const janitor = inspectPacketFile(filePath, {
         date,
         stateRoot,
         packetType,
         ledgerPath,
         idempotencyKey: entry.name,
-        requireLedger: true,
-        requireSourceHealth: true,
-        documentDelivery: false,
-        force,
+        ...buildJanitorOptions({ packetType, dryRun, ledgerPath, force }),
       });
       if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
-        console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        if (dryRun) {
+          wouldBlock += 1;
+          logDryRunVerdict(entry.name, janitor, { pieceCount: entry.files.length });
+        } else {
+          console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+        }
         blockedEntries.push(entry.name);
         continue;
       }
@@ -408,7 +439,8 @@ async function main() {
     }
     if (!pieces.length) continue;
     if (dryRun) {
-      console.log(`[dry-run] would send ${entry.name} — ${pieces.length} message(s) from ${entry.files.join(', ')}`);
+      wouldSend += 1;
+      logDryRunVerdict(entry.name, { verdict: DELIVERY_VERDICTS.SEND_ALLOWED }, { pieceCount: pieces.length });
       continue;
     }
     const ids = [];
@@ -420,6 +452,10 @@ async function main() {
     saveLedger(ledgerPath, ledger);
     sent += 1;
     console.log(`sent ${entry.name} — ${ids.length} message(s)`);
+  }
+  if (dryRun) {
+    console.log(`${packetType} ${date}: dry-run would_send=${wouldSend > 0 ? 'YES' : 'NO'} would_block=${wouldBlock > 0 ? 'YES' : 'NO'} would_send_count=${wouldSend} would_block_count=${wouldBlock} total_packets=${plan.length}`);
+    return;
   }
   if (plan.length === 1 && blockedEntries.length === 1 && sent === 0) {
     throw new Error(`janitor blocked sole packet ${blockedEntries[0]}`);

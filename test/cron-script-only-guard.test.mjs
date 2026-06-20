@@ -28,6 +28,8 @@ import {
 import { inspectPacketFile } from '../scripts/cron/cpc-packet-janitor.mjs';
 import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 
+const SENDER = join(process.cwd(), 'scripts/packets/send-packets-telegram.mjs');
+
 // ─── 1. Hermes cron provider guard ───────────────────────────────────────────
 
 function loadHermesCronJobs() {
@@ -86,6 +88,17 @@ function makePacketDir(date, type = 'mentions-daily') {
   const dir = join(root, 'packets', date, type);
   mkdirSync(dir, { recursive: true });
   return { root, dir };
+}
+
+function runSenderCli(root, date, extraArgs = []) {
+  return spawnSync('node', [
+    SENDER,
+    '--state-root', root,
+    '--date', date,
+    '--type', 'mlb-daily',
+    '--dry-run',
+    ...extraArgs,
+  ], { encoding: 'utf8' });
 }
 
 test('planDeliveries sends chunks in order and never audit artifacts', () => {
@@ -250,6 +263,42 @@ test('sender exits 0 quietly when packet directory is absent', () => {
   const root = mkdtempSync(join(tmpdir(), 'send-packets-empty-'));
   const dir = join(root, 'packets', '2099-01-03', 'mentions-daily');
   assert.equal(existsSync(dir), false);
+});
+
+test('MLB sender dry-run reports explicit YES/NO would-send and would-block outcomes', () => {
+  const date = '2099-01-04';
+  const { root, dir } = makePacketDir(date, 'mlb-daily');
+  const file = join(dir, `${date}-good.txt`);
+  writeFileSync(file, [
+    '=== CPC Packet: MLB Test ===',
+    'generated_utc: 2099-01-04T00:00:00Z',
+    'Market Context - NOT IN SCORE.',
+    'Research only. No trades.',
+  ].join('\n'));
+
+  const result = runSenderCli(root, date);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /would_send=YES/);
+  assert.match(result.stdout, /would_block=NO/);
+});
+
+test('MLB sender dry-run reports YES would-block for a blocked packet and NO would-send', () => {
+  const date = '2099-01-05';
+  const { root, dir } = makePacketDir(date, 'mlb-daily');
+  const file = join(dir, `${date}-blocked.txt`);
+  writeFileSync(file, [
+    '=== CPC Packet: MLB Test ===',
+    'generated_utc: 2099-01-05T00:00:00Z',
+    'Market Context - NOT IN SCORE.',
+    '#1 [PICK] TEST :: target',
+    '    model: fair=50% score=MISSING posture=WATCH layers=0/4 conf=low',
+    'Research only. No trades.',
+  ].join('\n'));
+
+  const result = runSenderCli(root, date);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /would_send=NO/);
+  assert.match(result.stdout, /would_block=YES/);
 });
 
 test('sender live mode without telegram env fails loudly (non-zero, stderr)', () => {

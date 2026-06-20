@@ -88,6 +88,37 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.ok(fadeRow > fadesIdx && fadeRow < blockedIdx, 'FADE row sits in the FADES section');
 });
 
+test('BLOCKED MLB rows compact into event-level notes and never render score=MISSING rows', () => {
+  const blockedPick = (market_ticker) => ({
+    market_ticker,
+    contract_title: 'Blocked HR market',
+    game: 'Toronto Blue Jays at Baltimore Orioles',
+    market_lane: 'home_run_hitter',
+    classification: 'BLOCKED',
+    fair_value: null,
+    kalshi_ask: null,
+    edge_pp: null,
+    primary_pick: false,
+    missing_confirmations: ['statcast_hr_optional_source_unavailable'],
+    gates_passed: [],
+  });
+
+  const scoring = {
+    picks: [
+      blockedPick('KXMLB-HR-1'),
+      blockedPick('KXMLB-HR-2'),
+    ],
+    source: '/tmp/picks.json',
+    summaryCounts: { blocked: 2 },
+  };
+  const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
+  assert.ok(slate, 'slate packet built');
+  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
+  assert.match(slate.text, /2 blocked row\(s\)/);
+  assert.doesNotMatch(slate.text, /#\d+\s+\[BLOCKED\]/);
+  assert.doesNotMatch(slate.text, /score=MISSING/);
+});
+
 test('market price is never folded into the composite score', () => {
   // Two picks identical except market price; composite_score must be identical.
   const a = mlbPickToDecisionRow(prelineupPick({ kalshi_ask: 0.77 }));

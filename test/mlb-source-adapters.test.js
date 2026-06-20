@@ -21,6 +21,10 @@ import {
   fixtureStatsEnvelope,
 } from '../scripts/mlb/source-adapters/stats-readonly.mjs';
 import {
+  fetchBaseballSavantReadonly,
+  fixtureBaseballSavantEnvelope,
+} from '../scripts/mlb/source-adapters/baseball-savant-readonly.mjs';
+import {
   loadDynamicCompositeSlate,
   runComposite,
 } from '../scripts/mlb/late-slate-composite-refresh.mjs';
@@ -94,6 +98,92 @@ test('fixture MLB stats envelope exposes composite-ready fields without prices',
   assert.equal(envelope.records[0].away_team_stats.ops, 0.735);
   assert.equal(envelope.records[0].away_team_woba, null);
   assert.doesNotMatch(JSON.stringify(envelope.records[0]), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+});
+
+test('fixture Baseball Savant envelope is optional and bounded to per-batter HR aggregates', () => {
+  const envelope = fixtureBaseballSavantEnvelope({
+    runDate: '2026-05-15',
+    checkedAtUtc: '2026-05-15T14:00:00.000Z',
+    outputDir: 'state/mlb/2026-05-15/discovery',
+  });
+
+  assert.equal(envelope.source_id, 'baseball_savant');
+  assert.equal(envelope.status, 'ok');
+  assert.equal(envelope.required, false);
+  assert.equal(envelope.optional_source, true);
+  assert.equal(envelope.records.length, 2);
+  assert.equal(envelope.records[0].query_type, 'statcast_hr_batter_aggregate');
+  assert.equal(envelope.records[0].pa, 12);
+  assert.equal(envelope.records[0].window_end_utc, '2026-05-14');
+  assert.doesNotMatch(JSON.stringify(envelope.records[0]), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+});
+
+test('live Baseball Savant adapter uses a trailing yesterday-ending window and rejects today-only mode', async () => {
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(String(url));
+    const parsed = new URL(String(url));
+    const day = parsed.searchParams.get('game_date_lt');
+    const dayText = day ? new Date(`${day}T00:00:00.000Z`) : new Date('2026-06-19T00:00:00.000Z');
+    dayText.setUTCDate(dayText.getUTCDate() - 1);
+    const queryDay = dayText.toISOString().slice(0, 10);
+    if (!String(url).includes('game_date_lt=2026-06-20')) {
+      return makeJsonResponse('game_date,player_name,batter,launch_speed,launch_angle,hit_distance_sc,events,barrel\n');
+    }
+    return makeJsonResponse(
+      `game_date,player_name,batter,launch_speed,launch_angle,hit_distance_sc,events,barrel\n${queryDay},Ada Ace,11,101.2,27,405,home_run,1\n${queryDay},Ada Ace,11,98.4,22,390,single,0`,
+    );
+  };
+
+  const envelope = await fetchBaseballSavantReadonly({
+    runDate: '2026-06-20',
+    outputDir: 'state/mlb/2026-06-20/discovery',
+    fixturesOnly: false,
+    fetchImpl,
+    now: new Date('2026-06-20T14:00:00.000Z'),
+    trailingDays: 3,
+    maxBatters: 10,
+  });
+
+  assert.equal(envelope.status, 'ok');
+  assert.ok(calls.length >= 1, 'expected at least one Statcast fetch');
+  assert.ok(calls.every((url) => !url.includes('game_date_gt=2026-06-20')), 'today-pregame must not be queried');
+  assert.ok(calls.some((url) => url.includes('game_date_lt=2026-06-20')), 'yesterday-ending window should include yesterday');
+  assert.equal(envelope.records.length, 1);
+  assert.equal(envelope.records[0].player_name, 'Ada Ace');
+  assert.equal(envelope.records[0].hr_events, 1);
+  assert.equal(envelope.records[0].pa, 2);
+  assert.doesNotMatch(JSON.stringify(envelope.records[0]), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+
+  const todayOnly = await fetchBaseballSavantReadonly({
+    runDate: '2026-06-20',
+    outputDir: 'state/mlb/2026-06-20/discovery',
+    fixturesOnly: false,
+    fetchImpl: async () => {
+      throw new Error('should not be called');
+    },
+    now: new Date('2026-06-20T14:00:00.000Z'),
+    mode: 'today_only',
+  });
+
+  assert.equal(todayOnly.status, 'blocked');
+  assert.match(JSON.stringify(todayOnly.errors), /STATCAST_TODAY_ONLY_REJECTED/);
+});
+
+test('live Baseball Savant adapter surfaces CSV error-column failures as optional-source blocks', async () => {
+  const envelope = await fetchBaseballSavantReadonly({
+    runDate: '2026-06-20',
+    outputDir: 'state/mlb/2026-06-20/discovery',
+    fixturesOnly: false,
+    fetchImpl: async () => makeJsonResponse('game_date,player_name,error\n2026-06-19,Ada Ace,CSV_PARSE_ERROR'),
+    now: new Date('2026-06-20T14:00:00.000Z'),
+    trailingDays: 1,
+  });
+
+  assert.equal(envelope.status, 'blocked');
+  assert.equal(envelope.required, false);
+  assert.equal(envelope.optional_source, true);
+  assert.match(JSON.stringify(envelope.errors), /CSV_ERROR_COLUMN_FAILURE/);
 });
 
 test('live MLB stats adapter normalizes pitcher/team/bullpen stats from no-auth sources', async () => {
@@ -728,6 +818,97 @@ test('scoring blocks CLEAR_PICK when fixture mode detected', async () => {
   for (const candidate of result.candidates) {
     assert.notEqual(candidate.classification, 'CLEAR_PICK');
   }
+});
+
+test('Kalshi degraded and Baseball Savant blocked still allow MLB scoring to return a candidate', async () => {
+  const { scoreMarkets } = await import('../scripts/mlb/scoring-core.mjs');
+  const { fixtureKalshiSuccessEnvelope } = await import('../scripts/mlb/source-adapters/kalshi-readonly.mjs');
+
+  const checkedAtUtc = '2026-05-15T14:00:00.000Z';
+  const outputDir = 'state/mlb/2026-05-15/discovery';
+  const kalshiSeed = fixtureKalshiSuccessEnvelope({ checkedAtUtc, outputDir });
+  const kalshi = {
+    ...kalshiSeed,
+    status: 'degraded',
+    warnings: [],
+    errors: ['HTTP 429'],
+    records: kalshiSeed.records.map((record) => ({
+      ...record,
+      matched_game_pk: 100001,
+      away_team: 'Alpha City Aces',
+      home_team: 'Beta Town Bears',
+      markets: record.markets.map((market) => ({
+        ...market,
+        yes_ask: 0.55,
+        yes_bid: 0.45,
+        market_title: 'Will the Alpha City Aces beat the Beta Town Bears?',
+        contract_title: null,
+        team_side: 'away',
+      })),
+    })),
+  };
+  const mlb = {
+    source_id: 'mlb_official',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    records: [{
+      game_pk: 100001,
+      away_team: 'Alpha City Aces',
+      home_team: 'Beta Town Bears',
+    }],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+  const baseballSavant = {
+    source_id: 'baseball_savant',
+    status: 'blocked',
+    checked_at_utc: checkedAtUtc,
+    records: [],
+    warnings: ['OPTIONAL_SOURCE=UNAVAILABLE'],
+    errors: ['OPTIONAL_SOURCE=UNAVAILABLE'],
+    source_urls: [],
+  };
+  const weather = {
+    source_id: 'weather',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    records: [],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+  const liquidity = {
+    source_id: 'liquidity',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    records: [],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+  const sportsbook = {
+    source_id: 'sportsbook',
+    status: 'ok',
+    checked_at_utc: checkedAtUtc,
+    records: [{
+      away_team: 'Alpha City Aces',
+      home_team: 'Beta Town Bears',
+      away_no_vig_fair: 0.55,
+      home_no_vig_fair: 0.45,
+      over_under: 8.5,
+    }],
+    warnings: [],
+    errors: [],
+    source_urls: [],
+  };
+
+  const result = scoreMarkets({ kalshi, mlb, baseballSavant, weather, liquidity, sportsbook });
+
+  assert.equal(result.fixture_mode, false);
+  assert.equal(result.candidates.length, 1);
+  assert.notEqual(result.candidates[0].classification, 'BLOCKED_SOURCE_GAP');
+  assert.notEqual(result.candidates[0].classification, 'NO_CLEAR_PICK');
 });
 
 test('output writer reads optional liquidity adapter when present', async () => {

@@ -1003,6 +1003,7 @@ export function inspectPacketFile(filePath, options = {}) {
     date: options.date ?? inferDateFromPath(filePath),
     packetType: inferPacketType(filePath, options.packetType),
   };
+  const dryRun = context.dryRun === true;
   let text = readTextIfExists(filePath);
   let generator_result = null;
   if (text == null && options.generatorCommand && !options.generatorAlreadyRan) {
@@ -1028,21 +1029,26 @@ export function inspectPacketFile(filePath, options = {}) {
       result.repair_rule = repair.rule;
       if (repairedValidation.ok) {
         const repairedPath = filePath.replace(/\.txt$/i, '.janitor-repaired.txt');
-        atomicWriteText(repairedPath, repair.text.endsWith('\n') ? repair.text : `${repair.text}\n`);
-        const metaPath = rebuildMetaIfMissing(repairedPath, repair.text, context);
-        const chunkPaths = chunkCleanPacket(repairedPath, repair.text);
         result = {
           ...repairedValidation,
           verdict: DELIVERY_VERDICTS.SEND_ALLOWED_AFTER_REPAIR,
           repair_attempted: true,
           repair_attempt_count: MAX_REPAIR_ATTEMPTS,
           repair_rule: repair.rule,
-          repaired_path: repairedPath,
+          repaired_path: dryRun ? null : repairedPath,
           repaired_sha256: sha256(repair.text),
           original_sha256,
-          meta_rebuilt_path: metaPath,
-          chunk_paths: chunkPaths,
+          meta_rebuilt_path: null,
+          chunk_paths: [],
+          dry_run: dryRun,
         };
+        if (!dryRun) {
+          atomicWriteText(repairedPath, repair.text.endsWith('\n') ? repair.text : `${repair.text}\n`);
+          const metaPath = rebuildMetaIfMissing(repairedPath, repair.text, context);
+          const chunkPaths = chunkCleanPacket(repairedPath, repair.text);
+          result.meta_rebuilt_path = metaPath;
+          result.chunk_paths = chunkPaths;
+        }
       } else {
         result.errors = [
           ...(result.errors ?? []),
@@ -1055,6 +1061,11 @@ export function inspectPacketFile(filePath, options = {}) {
         result.verdict = DELIVERY_VERDICTS.JANITOR_BLOCKED;
       }
     }
+  }
+
+  if (dryRun) {
+    result.dry_run = true;
+    return result;
   }
 
   const record = writeJanitorArtifacts(result, context);
