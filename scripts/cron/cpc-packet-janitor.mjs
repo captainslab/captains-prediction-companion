@@ -36,17 +36,16 @@ const TELEGRAM_DOC_SAFE_CHARS = 3500;
 
 const MENTION_REQUIRED_SECTIONS = [
   'FAST READ',
-  'RANKED BOARD',
-  'TOP RESEARCHED TERMS',
-  'RESEARCH GAPS',
-  'MARKET CONTEXT - NOT IN SCORE',
+  'TOP YES CASE',
+  'WEAK YES WATCHLIST',
+  'WEAK NO / STRONG NO TRAPS',
   'SOURCE GAPS',
-  'UPDATE / DOWNGRADE TRIGGERS',
-  'FINAL READ',
+  'SETTLEMENT NOTES',
+  'FULL STRIKE INVENTORY',
 ];
 
 const SCORING_SECTION_RE =
-  /(CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|MODEL|MODEL SCORE|SCORING|SCORECARD|RATIONALE|EDGE BASIS|FINAL READ|DECISION BASIS)/i;
+  /(CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|TOP YES CASE|WEAK YES WATCHLIST|WEAK NO \/ STRONG NO TRAPS|MODEL|MODEL SCORE|SCORING|SCORECARD|RATIONALE|EDGE BASIS|FINAL READ|DECISION BASIS)/i;
 const MARKET_SECTION_RE = /(MARKET CONTEXT|NOT IN SCORE|DISPLAY ONLY|DISPLAY-ONLY|LIQUIDITY|INVENTORY ARTIFACT ONLY|INVENTORY-ARTIFACT-ONLY)/i;
 const MARKET_ROW_RE = /^\s*(?:[-*]\s*)?(?:raw\s+)?(?:market|market context|liquidity)\s*[:|-]/i;
 const MARKET_PLACEHOLDER_RE = /\b(?:price|bid|ask|yes_ask|yes_bid|no_ask|no_bid|last[_ -]?price|volume|open[_ -]?interest|oi)\s*[:=]\s*(?:MISSING|PENDING|N\/A|NA|null|none|unknown)\b/i;
@@ -57,7 +56,7 @@ const WRAPPER_RE = /^\s*(Cronjob Response:|Hermes cron response:|Command output:
 const BAD_SCAFFOLD_RE =
   /\b(scaffold|placeholder|todo:|insert evidence|rewrite this|model-written final packet|final customer text draft)\b/i;
 const MENTIONS_LEGACY_RE =
-  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|CPC COMPOSITE BOARD|TOP WATCH TERMS|PICK\s*:\s*|EVIDENCE_LEAN\s*:|LEAN\b|WATCH\b|NO_CLEAR_PICK\b|source layer(?:s)?\b|proximity-only\b|stub\b|scaffold\b|composite score\b|source-backed composite\b)\b/i;
+  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|PICK\s*:\s*|EVIDENCE_LEAN\s*:|LEAN\b|WATCH\b|NO_CLEAR_PICK\b|source layer(?:s)?\b|event_proximity\b|proximity-only\b|stub\b|scaffold\b|composite score\b|source-backed composite\b)\b/i;
 const SOURCE_STALE_MS = 36 * 60 * 60 * 1000;
 
 function nowIso() {
@@ -693,7 +692,9 @@ function contradictionFindings(text) {
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const scoreMatch = line.match(/\bP\(YES\)\s*[:=]?\s*(\d{1,3})\b/i)
+    const scoreMatch =
+      line.match(/^\s*#?\d+\.?\s+.+?\s+—\s+P\(YES\)\s*(\d{1,3}|--)\s+—\s+(STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)\b/i)
+      || line.match(/\bP\(YES\)\s*[:=]?\s*(\d{1,3})\b/i)
       || line.match(/\|\s*(\d{1,3}|--)\s*\|\s*(STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)\s*\|/i);
     if (!scoreMatch) continue;
     const score = scoreMatch[1] === '--' ? null : Number(scoreMatch[1]);

@@ -348,5 +348,6 @@ test('CLI --only dry-run uses local artifacts before live discovery and builds a
   assert.ok(existsSync(join(eventDir, `${ticker}.json`)), 'local artifact remains in place for the fast path');
   assert.ok(built.items.some((item) => item.name === ticker && typeof item.previewText === 'string' && item.previewText.length > 0), 'dry-run builds a preview payload for the requested ticker');
   const previewText = built.items.find((item) => item.name === ticker)?.previewText ?? '';
-  assert.match(previewText, /2\. RANKED BOARD[\s\S]*P\(YES\)/, 'preview uses the v2 RANKED BOARD / P(YES) format');
+  assert.match(previewText, /2\. TOP YES CASE[\s\S]*5\. SOURCE GAPS[\s\S]*7\. FULL STRIKE INVENTORY/, 'preview uses the stacked card / sectioned packet format');
+  assert.doesNotMatch(previewText, /RANKED BOARD|TOP RESEARCHED TERMS|CPC COMPOSITE BOARD/i);
 });

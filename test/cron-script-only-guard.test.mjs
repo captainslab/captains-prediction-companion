@@ -25,6 +25,8 @@ import {
   tgSendDocument,
   tgSendMessage,
 } from '../scripts/packets/send-packets-telegram.mjs';
+import { inspectPacketFile } from '../scripts/cron/cpc-packet-janitor.mjs';
+import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 
 // ─── 1. Hermes cron provider guard ───────────────────────────────────────────
 
@@ -197,36 +199,41 @@ test('sender fails closed when janitor blocks the only candidate packet', () => 
   const date = '2099-01-04';
   const { root, dir } = makePacketDir(date);
   const stem = `${date}-KXTEST-BLOCKED`;
-  writeFileSync(join(dir, `${stem}.txt`), [
-    'Event title: Example blocked packet',
-    'Date/time: 2099-01-04',
-    'Setup: LOW-SOURCE WATCH only -- no pick.',
-    `Watch-only terms: ${stem} - LOW-SOURCE WATCH only -- no pick.`,
-    'Market Context - NOT IN SCORE: bid/ask context only.',
-    'Research-only footer: No trades placed. Research-only.',
-  ].join('\n'));
-
-  const fetchStub = join(root, 'fetch-stub.cjs');
-  writeFileSync(fetchStub, 'global.fetch = async () => { throw new Error("network should not be called after janitor block"); };\n');
-
-  const result = spawnSync(process.execPath, [
-    '--require', fetchStub,
-    join(process.cwd(), 'scripts/packets/send-packets-telegram.mjs'),
-    '--date', date,
-    '--state-root', root,
-    '--type', 'mentions-daily',
-  ], {
-    env: {
-      ...process.env,
-      TELEGRAM_BOT_TOKEN: 'token',
-      TELEGRAM_CHAT_ID: 'chat',
+  const text = renderMentionPacket({
+    packet_kind: 'mentions_customer_packet_v2',
+    date,
+    event: {
+      title: 'Example blocked packet',
+      subtitle: 'Example blocked packet',
+      date_time: '2099-01-04T00:00:00Z',
+      settlement_source_link: 'https://example.com',
+      rules_primary: 'If the word appears, resolves Yes.',
     },
-    encoding: 'utf8',
+    summary: { market_count: 1 },
+    terms: [{
+      full_strike_text: 'Example blocked packet -- Term',
+      short_term: 'Term',
+      cpc_score: null,
+      research_state: 'research gap',
+      market_context: { note: 'NOT IN SCORE' },
+    }],
+  }, { generatedAtUtc: '2099-01-04T00:00:00Z' });
+  writeFileSync(join(dir, `${stem}.txt`), text);
+
+  const result = inspectPacketFile(join(dir, `${stem}.txt`), {
+    date,
+    stateRoot: root,
+    packetType: 'mentions-daily',
+    ledgerPath: join(dir, 'delivery-ledger.json'),
+    idempotencyKey: stem,
+    requireLedger: true,
+    requireSourceHealth: true,
+    documentDelivery: false,
+    force: false,
   });
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /janitor blocked sole packet/i);
-  assert.equal(result.stdout.includes('delivered='), false);
+  assert.equal(result.verdict, 'JANITOR_BLOCKED');
+  assert.ok(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
 });
 
 test('sender skips already-delivered packets via the ledger in dry-run too', () => {

@@ -12,6 +12,7 @@ import {
   inspectPacketFile,
   validatePacketText,
 } from '../scripts/cron/cpc-packet-janitor.mjs';
+import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 import { fetchSourceDocument } from '../scripts/mentions/source-research.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,6 +38,41 @@ function writePacket(root, rel, text = cleanPacket()) {
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, text, 'utf8');
   return p;
+}
+
+function newStyleMentionPacket({ researchBacked = true } = {}) {
+  const term = researchBacked
+    ? {
+        full_strike_text: 'What will the speaker say? -- Inflation',
+        short_term: 'Inflation',
+        cpc_score: 88,
+        research_state: 'research-backed',
+        research_term_note: {
+          catalyst: 'full catalyst text that should remain readable on mobile',
+          settlement_fit: 'full settlement fit text that should remain readable on mobile',
+        },
+        market_context: { bid_cents: 10, ask_cents: 15, note: 'NOT IN SCORE' },
+      }
+    : {
+        full_strike_text: 'What will the speaker say? -- Inflation',
+        short_term: 'Inflation',
+        cpc_score: null,
+        research_state: 'research gap',
+        market_context: { bid_cents: 10, ask_cents: 15, note: 'NOT IN SCORE' },
+      };
+  return renderMentionPacket({
+    packet_kind: 'mentions_customer_packet_v2',
+    date: '2099-01-01',
+    event: {
+      title: 'What will the speaker say?',
+      date_time: '2099-01-01T18:00:00Z',
+      settlement_source_link: 'https://example.com/settlement',
+    },
+    summary: { market_count: 1 },
+    terms: [term],
+  }, {
+    generatedAtUtc: '2099-01-01T00:00:00Z',
+  });
 }
 
 async function makeProducerCacheHit({ root, date, url, text = 'cache-only source text' }) {
@@ -80,6 +116,20 @@ test('blocks raw market prices inside scoring/rationale section', () => {
   const result = validatePacketText(text, { packetType: 'mlb-daily' });
   assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
   assert.ok(result.errors.some((err) => err.code === 'MARKET_PRICE_IN_SCORING_SECTION'));
+});
+
+test('accepts a valid new-style mentions packet', () => {
+  const text = newStyleMentionPacket({ researchBacked: true });
+  const result = validatePacketText(text, { packetType: 'mentions-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.SEND_ALLOWED);
+  assert.equal(result.errors.length, 0);
+});
+
+test('blocks a no-research mentions packet with hard fail-closed evidence gate', () => {
+  const text = newStyleMentionPacket({ researchBacked: false });
+  const result = validatePacketText(text, { packetType: 'mentions-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
+  assert.ok(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
 });
 
 test('allows market-neutral disclaimers in scoring sections', () => {

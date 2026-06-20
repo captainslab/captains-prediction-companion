@@ -1278,7 +1278,7 @@ export function appendFullStrikeInventory(text, input) {
 
 export function validateSynthesizedMentionPacket(text, input) {
   if (!text || !text.trim()) throw new Error('Hermes returned an empty mentions packet');
-  const forbiddenJargon = /\b(EVIDENCE_LEAN|LEAN|WATCH|NO_CLEAR_PICK|source-backed composite|source layer(?:s)?|proximity-only|stub|scaffold|composite score)\b/i;
+  const forbiddenJargon = /\b(EVIDENCE_LEAN|LEAN|WATCH|NO_CLEAR_PICK|source-backed composite|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score)\b/i;
   if ((input?.synthesis_rules?.all_terms_proximity_only || input?.synthesis_rules?.all_terms_research_gap) && forbiddenJargon.test(text)) {
     throw new Error('Hermes packet violated research-gap labeling: used legacy customer jargon');
   }

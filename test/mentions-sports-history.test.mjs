@@ -327,7 +327,7 @@ test('sports packet no longer stays flat when history/context differentiates ter
 
 test('renderer deterministic and 8-section order unchanged', async () => {
   const { renderMentionPacket, validateRenderedPacket, SECTION_ORDER } = await import('../scripts/mentions/render-mention-packet.mjs');
-  assert.equal(SECTION_ORDER.length, 8);
+  assert.equal(SECTION_ORDER.length, 7);
   assert.equal(SECTION_ORDER[0], '1. FAST READ');
-  assert.equal(SECTION_ORDER[7], '8. FINAL READ');
+  assert.equal(SECTION_ORDER[6], '7. FULL STRIKE INVENTORY');
 });

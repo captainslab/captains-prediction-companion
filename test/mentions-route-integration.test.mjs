@@ -172,13 +172,13 @@ test('empty history falls back safely without fake conviction', () => {
   assert.equal(histRow.present, false);
 });
 
-test('renderer stays deterministic with 8-section order, provenance fields tolerated', () => {
+test('renderer stays deterministic with 7-section order, provenance fields tolerated', () => {
   const built = buildKalshiEventPacket({ date: '2026-06-12', event: trumpWeeklyEvent(), sourceUrl: 'x.json' });
   const text1 = renderMentionPacket(built.synthesisInput, { generatedAtUtc: '2026-06-12T12:00:00Z' });
   const text2 = renderMentionPacket(built.synthesisInput, { generatedAtUtc: '2026-06-12T12:00:00Z' });
   assert.equal(text1, text2);
   assert.equal(validateRenderedPacket(text1, built.synthesisInput), true);
-  assert.equal(SECTION_ORDER.length, 8);
+  assert.equal(SECTION_ORDER.length, 7);
   let lastIdx = -1;
   for (const section of SECTION_ORDER) {
     const idx = text1.indexOf(section);
