@@ -22,8 +22,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   defaultFetcher,
@@ -37,19 +37,45 @@ import {
 
 const PPLX_URL = 'https://api.perplexity.ai/chat/completions';
 const KEY_PATH = resolve(homedir(), '.config/cpc/perplexity.key');
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const PPLX_ENV_KEYS = ['PERPLEXITY_API_KEY', 'PPLX_API_KEY'];
 
 function argValue(args, flag) { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; }
 
-// Key source order: PERPLEXITY_API_KEY env first (cron-usable, loaded from
-// .env.local), then the interactive home-dir key file. Env support is what lets
-// the cron pipeline run Perplexity research; the file path stays as the
+// Load ONLY the Perplexity key vars from the repo .env / .env.local into the
+// given env when not already set, so non-interactive / cron execution can run
+// research without exported shell state (cron cd's into the repo; we resolve from
+// the module path so cwd does not matter). Non-overriding, narrow (no other
+// secrets are read), idempotent, and SILENT — the value is NEVER logged. Returns
+// the env so callers/tests can assert on it.
+export function ensurePerplexityEnvLoaded(env = process.env, { root = REPO_ROOT } = {}) {
+  if (PPLX_ENV_KEYS.some((k) => (env[k] || '').trim())) return env; // already present
+  for (const file of ['.env', '.env.local']) {
+    const p = resolve(root, file);
+    if (!existsSync(p)) continue;
+    let text;
+    try { text = readFileSync(p, 'utf8'); } catch { continue; }
+    for (const line of text.split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!m || !PPLX_ENV_KEYS.includes(m[1]) || env[m[1]]) continue;
+      env[m[1]] = m[2].trim().replace(/^['"]|['"]$/g, '');
+    }
+  }
+  return env;
+}
+
+// Key source order: PERPLEXITY_API_KEY env first (cron-usable, auto-loaded from
+// the repo .env.local), then the interactive home-dir key file. Env support is
+// what lets the cron pipeline run Perplexity research; the file path stays as the
 // interactive fallback. The key is NEVER printed.
 export function hasPerplexityKey(env = process.env) {
+  ensurePerplexityEnvLoaded(env);
   const fromEnv = (env.PERPLEXITY_API_KEY || env.PPLX_API_KEY || '').trim();
   return Boolean(fromEnv) || existsSync(KEY_PATH);
 }
 
 function readKey(env = process.env) {
+  ensurePerplexityEnvLoaded(env);
   const fromEnv = (env.PERPLEXITY_API_KEY || env.PPLX_API_KEY || '').replace(/\s+/g, '');
   if (fromEnv) return fromEnv;
   if (!existsSync(KEY_PATH)) {

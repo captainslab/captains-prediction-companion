@@ -18,7 +18,46 @@ import {
   EVIDENCE_LAYERS,
 } from '../scripts/mentions/source-research.mjs';
 import { buildEventResearch } from '../scripts/mentions/collect-mentions-research.mjs';
-import { mergePasses, buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
+import { mergePasses, buildResearchTermNote, ensurePerplexityEnvLoaded } from '../scripts/mentions/mentions-research-perplexity.mjs';
+
+test('cron-like env: Perplexity key loads from .env.local without exported shell state', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-env-'));
+  // Other secrets present too — only the Perplexity key vars must be read.
+  writeFileSync(join(root, '.env.local'), [
+    'TELEGRAM_BOT_TOKEN=should-not-load',
+    'PERPLEXITY_API_KEY="pplx-test-secret-123"',
+    '',
+  ].join('\n'));
+  const env = {}; // no inherited shell state, mimics non-interactive cron
+  ensurePerplexityEnvLoaded(env, { root });
+  assert.equal(env.PERPLEXITY_API_KEY, 'pplx-test-secret-123', 'key loaded from .env.local');
+  assert.equal(env.TELEGRAM_BOT_TOKEN, undefined, 'narrow: non-Perplexity secrets are NOT loaded');
+});
+
+test('ensurePerplexityEnvLoaded never overwrites an already-set key and is silent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-env-keep-'));
+  writeFileSync(join(root, '.env.local'), 'PERPLEXITY_API_KEY=from-file-secret\n');
+  const env = { PERPLEXITY_API_KEY: 'from-shell-secret' };
+  const logs = [];
+  const orig = { log: console.log, error: console.error };
+  console.log = (...a) => logs.push(a.join(' '));
+  console.error = (...a) => logs.push(a.join(' '));
+  try {
+    ensurePerplexityEnvLoaded(env, { root });
+  } finally {
+    console.log = orig.log; console.error = orig.error;
+  }
+  assert.equal(env.PERPLEXITY_API_KEY, 'from-shell-secret', 'existing env var wins, file does not override');
+  const blob = logs.join('\n');
+  assert.ok(!/from-file-secret|from-shell-secret/.test(blob), 'secret value never printed');
+});
+
+test('ensurePerplexityEnvLoaded fabricates no key when no .env / .env.local exists', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-env-none-'));
+  const env = {};
+  ensurePerplexityEnvLoaded(env, { root });
+  assert.equal(env.PERPLEXITY_API_KEY, undefined, 'no key invented when config is absent (fail-closed upstream)');
+});
 
 const DATE = '2026-06-12';
 const TERMS = ['China / Chinese', 'Epstein', 'Pardon / Pardoned'];
