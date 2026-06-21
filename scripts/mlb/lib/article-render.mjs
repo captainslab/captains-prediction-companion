@@ -827,25 +827,34 @@ function modelConsistencyCheck(game, analysis) {
     }
     const compositeLead = awaySide === homeSide ? 'even' : awaySide > homeSide ? 'away' : 'home';
     const projectedLead = awayRuns === homeRuns ? 'even' : awayRuns > homeRuns ? 'away' : 'home';
+    // Run-line cover probability is a magnitude detail, not a direction signal:
+    // a sub-50% home -1.5 cover only means the projected margin is under 1.5,
+    // not that the other side is favored. So it is reported, never a mismatch trigger.
     const runlineHomeFav = scoreProj?.outputs?.runline_home_minus_1_5;
-    const runlineLead = Number.isFinite(runlineHomeFav)
-      ? (runlineHomeFav >= 0.5 ? 'home' : 'away')
-      : 'unknown';
-    if (compositeLead === projectedLead && (runlineLead === 'unknown' || runlineLead === projectedLead || runlineLead === 'even')) {
-      return ['CONSISTENT', `leading ${compositeLead}; projected runs ${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)}; run-line lean ${runlineLead}.`];
+    const coverNote = Number.isFinite(runlineHomeFav)
+      ? ` home -1.5 cover ${Math.round(runlineHomeFav * 100)}%`
+      : '';
+    if (compositeLead === 'even' || projectedLead === 'even') {
+      return ['INSUFFICIENT_DATA', `composite lead ${compositeLead}; projected runs ${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)}.`];
     }
-    return ['MISMATCH', `leading ${compositeLead} but projected runs ${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)} and run-line lean ${runlineLead}.`];
+    if (compositeLead === projectedLead) {
+      return ['CONSISTENT', `both favor ${compositeLead}; projected runs ${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)};${coverNote}.`];
+    }
+    return ['MISMATCH', `composite leads ${compositeLead} but projected runs favor ${projectedLead} (${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)}).`];
   })();
 
   const checkB = (() => {
-    if (!Number.isFinite(totalRuns) || !Number.isFinite(awaySide) || !Number.isFinite(homeSide)) {
-      return ['INSUFFICIENT_DATA', 'missing total projection or composite run environment'];
+    // Compare the projected total against the sum of projected team runs — both
+    // are run-scale model outputs. (Side scores are evidence composites, not
+    // runs, so they must not be summed into a "run environment" here.)
+    if (!Number.isFinite(totalRuns) || !Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) {
+      return ['INSUFFICIENT_DATA', 'missing total projection or projected team runs'];
     }
-    const envTotal = awaySide + homeSide;
+    const envTotal = awayRuns + homeRuns;
     const delta = Math.abs(totalRuns - envTotal);
-    if (delta <= 1.0) return ['CONSISTENT', `projected total ${totalRuns.toFixed(1)} vs composite run environment ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
-    if (delta >= 1.5) return ['MISMATCH', `projected total ${totalRuns.toFixed(1)} vs composite run environment ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
-    return ['INSUFFICIENT_DATA', `projected total ${totalRuns.toFixed(1)} vs composite run environment ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
+    if (delta <= 1.0) return ['CONSISTENT', `projected total ${totalRuns.toFixed(1)} vs summed team runs ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
+    if (delta >= 1.5) return ['MISMATCH', `projected total ${totalRuns.toFixed(1)} vs summed team runs ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
+    return ['INSUFFICIENT_DATA', `projected total ${totalRuns.toFixed(1)} vs summed team runs ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
   })();
 
   const checkC = (() => {

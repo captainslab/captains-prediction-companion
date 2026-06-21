@@ -152,6 +152,9 @@ test('article: default packet is clean, price-free, and carries the model sectio
   assert.match(a.text, /HR model/);
   assert.match(a.text, /Model Consistency Check/);
   assert.match(a.text, /Source Ledger/);
+  // Model Consistency Check must not sum evidence side-scores as a "run
+  // environment": that compares composite points against runs and is nonsense.
+  assert.doesNotMatch(a.text, /composite run environment/i);
 });
 
 test('article: default packet lists modeled families instead of saying only ML when spread/total/YRFI are ready', () => {
