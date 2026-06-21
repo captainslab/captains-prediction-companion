@@ -967,9 +967,12 @@ function defaultNoPickReason(game, analysis) {
   if (!lineupIsReady(lineupStatus)) {
     return 'lineup pending keeps projections provisional';
   }
-  const modeledCount = Object.values(coverage?.families ?? {}).filter((family) => family?.status === 'NON_MARKET_COMPOSITE_READY').length;
-  if (modeledCount > 1) {
+  const modeledFamilies = Object.values(coverage?.families ?? {}).filter((family) => family?.status === 'NON_MARKET_COMPOSITE_READY');
+  if (modeledFamilies.length > 1) {
     return 'modeled families disagree';
+  }
+  if (modeledFamilies.length === 1) {
+    return 'single modeled family only';
   }
   if (projections?.score?.status === 'provisional' || projections?.yrfi?.status === 'provisional') {
     return 'lineup pending keeps projections provisional';

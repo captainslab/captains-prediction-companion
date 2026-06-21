@@ -492,11 +492,19 @@ function classifyGamePacketRead(gamePicks = []) {
     };
   }
 
-  if (picks.length > 1) {
+  if (modeledFamilies.size > 1) {
     return {
       call: 'NO CLEAR PICK',
       reason: 'modeled families disagree',
       summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+    };
+  }
+
+  if (modeledFamilies.size === 1) {
+    return {
+      call: 'NO CLEAR PICK',
+      reason: 'single modeled family only',
+      summary: `modeled families present: ${Array.from(modeledFamilies).join(', ')}`,
     };
   }
 
@@ -864,8 +872,6 @@ export function buildKalshiGamePacket({
   lines.push('');
   lines.push(renderGamePacketSourceLedger({ sourceRefs, gamePicks, statsRecord }));
   lines.push('');
-  lines.push('No trades placed by this workflow.');
-  lines.push('No bankroll advice. Research only.');
 
   const inventoryLines = [];
   inventoryLines.push(`event_ticker: ${s.ticker}`);

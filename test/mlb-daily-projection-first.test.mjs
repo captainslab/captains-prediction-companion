@@ -24,6 +24,33 @@ const prelinePicks = [
   },
 ];
 
+const singleFamilyPicks = [
+  {
+    event_ticker: 'KXMLBGAME-26JUN171920NYMPHI-PHI',
+    matched_game_pk: 823449,
+    game: 'New York Mets at Philadelphia Phillies',
+    classification: 'PASS',
+    contract_title: 'Philadelphia Phillies',
+    kalshi_ask: 0.64,
+    market_reference_prob: 0.53,
+    edge_pp: null,
+    missing_confirmations: [],
+    market_lane: 'moneyline',
+  },
+  {
+    event_ticker: 'KXMLBGAME-26JUN171920NYMPHI-NYM',
+    matched_game_pk: 823449,
+    game: 'New York Mets at Philadelphia Phillies',
+    classification: 'PASS',
+    contract_title: 'New York Mets',
+    kalshi_ask: 0.36,
+    market_reference_prob: 0.47,
+    edge_pp: null,
+    missing_confirmations: [],
+    market_lane: 'moneyline',
+  },
+];
+
 test('projection block carries projected runs / YRFI / Ks vocabulary', () => {
   const block = buildProjectionFirstBlock({ date: DATE, gamePicks: prelinePicks });
   const text = block.join('\n');
