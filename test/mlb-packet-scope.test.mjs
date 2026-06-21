@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -268,6 +268,75 @@ test('single-family game packets do not claim modeled families disagree and keep
   assert.equal((packet.text.match(/No bankroll advice\./g) || []).length, 1);
 });
 
+test('single-family fully sourced packets render a sharp model-backed storyline', () => {
+  const statsPath = join('state', 'mlb', '2026-06-21', 'discovery', 'stats_adapter.json');
+  const statsJson = JSON.parse(readFileSync(statsPath, 'utf8'));
+  const statsRecord = statsJson.records.find((record) =>
+    record?.game_pk === 824987
+    || record?.game === 'Los Angeles Angels at Athletics'
+    || record?.away_team === 'Los Angeles Angels');
+
+  assert.ok(statsRecord, 'expected LAA @ ATH stats record');
+
+  const packet = buildKalshiGamePacket({
+    date: '2026-06-21',
+    event: {
+      event_ticker: 'KXMLBGAME-26JUN211605LAAATH',
+      title: 'Los Angeles Angels at Athletics',
+      series_ticker: 'KXMLBGAME',
+      away_team: 'LAA',
+      home_team: 'ATH',
+      away_full: 'Los Angeles Angels',
+      home_full: 'Athletics',
+      venue: 'Sutter Health Park',
+      start_utc: '2026-06-21T19:05:00Z',
+    },
+    artifacts: [],
+    primeAttempts: [],
+    kalshiSummary: { ok: true, total: 1, matched: 1, error: null },
+    sourcePath: '/tmp/mlb/game.json',
+    gamePicks: [{
+      market_ticker: 'KXMLBGAME-26JUN211605LAAATH-LAA',
+      game: 'Los Angeles Angels at Athletics',
+      contract_title: 'Los Angeles Angels',
+      classification: 'PASS',
+      fair_value: null,
+      kalshi_ask: 0.4,
+      kalshi_bid: 0.38,
+      edge_pp: null,
+      gates_passed: ['starter confirmed', 'lineup locked', 'weather updated'],
+      missing_confirmations: [],
+      market_lane: 'moneyline',
+    }],
+    statsRecord,
+    leagueRPG: 4.36,
+    scope: 'GAME_PACKET',
+    sourceRefs: {
+      event: statsPath.replace('stats_adapter.json', 'mlb_official_adapter.json'),
+      stats: statsPath,
+      weather: statsPath.replace('stats_adapter.json', 'weather_adapter.json'),
+      context: statsPath.replace('stats_adapter.json', 'context_adapter.json'),
+    },
+  });
+
+  assert.match(packet.text, /Event Preview \/ Storyline/);
+  assert.match(packet.text, /The model leans Los Angeles Angels because the projected run split favors Los Angeles Angels 5\.9 to 4\.8 and the win split lands at 64\.1%/);
+  assert.match(packet.text, /NO CLEAR PICK because only the MONEYLINE family is fully modeled/);
+  assert.match(packet.text, /projected total ~10\.7/);
+  assert.match(packet.text, /YRFI 73%/);
+  assert.match(packet.text, /Reid Detmers projects around 6\.4 K/);
+  assert.match(packet.text, /Jack Perkins projects around 12\.3 K/);
+  assert.match(packet.text, /Upgrade trigger: add a confirmed second modeled family/);
+  assert.doesNotMatch(packet.text, /Evidence Box/);
+  assert.doesNotMatch(packet.text, /Decision Process/);
+  assert.doesNotMatch(packet.text, /Market overview/);
+  assert.doesNotMatch(packet.text, /YES ¢|bid|ask|volume|open interest|liquidity/i);
+  assert.doesNotMatch(packet.text, /\/home\/jordan\//);
+  assert.doesNotMatch(packet.text, /state\/mlb\//);
+  assert.equal((packet.text.match(/No trades placed by this workflow\./g) || []).length, 1);
+  assert.equal((packet.text.match(/No bankroll advice\./g) || []).length, 1);
+});
+
 test('game packets show projected lineup status when alpha is still pending', () => {
   const packet = buildKalshiGamePacket({
     date: '2026-06-21',
@@ -324,5 +393,5 @@ test('game packets show projected lineup status when alpha is still pending', ()
   assert.match(packet.text, /Research Status/);
   assert.match(packet.text, /Lineup PROJECTED · Starter PROBABLE · Weather UPDATED/);
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /stays provisional until the required alpha clears/);
+  assert.match(packet.text, /the line is still provisional on lineup alpha/);
 });

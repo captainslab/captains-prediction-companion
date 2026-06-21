@@ -32,6 +32,7 @@ import {
   buildScoreEngineProjection,
   buildYrfiProjection,
   buildKsProjection,
+  distributionFloorMean,
 } from '../mlb/lib/projection-contracts.mjs';
 import {
   describeMoneyline,
@@ -515,19 +516,78 @@ function classifyGamePacketRead(gamePicks = []) {
   };
 }
 
-function buildGamePreviewLine({ event = null, statsRecord = null, read = null } = {}) {
+function pct(value, digits = 1) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function distMean(value) {
+  const mean = distributionFloorMean(value);
+  return typeof mean === 'number' && Number.isFinite(mean) ? mean : null;
+}
+
+function buildGamePreviewStory({ event = null, statsRecord = null, read = null, projections = null } = {}) {
+  const awayTeam = statsRecord?.away_team ?? event?.away_team ?? event?.away_full ?? 'Away';
+  const homeTeam = statsRecord?.home_team ?? event?.home_team ?? event?.home_full ?? 'Home';
   const awayStarter = statsRecord?.away_pitcher?.name ?? event?.away_starter ?? event?.away_pitcher ?? 'away starter';
   const homeStarter = statsRecord?.home_pitcher?.name ?? event?.home_starter ?? event?.home_pitcher ?? 'home starter';
-  const matchup = statsRecord?.game ?? event?.title ?? 'the game';
-  const call = String(read?.call ?? '').trim();
-  const reason = String(read?.reason ?? '').toLowerCase();
-  if (reason.includes('projections provisional due lineup')) {
-    return `Starter matchup is ${awayStarter} vs ${homeStarter}; ${matchup} stays provisional until the required alpha clears.`;
+  const call = String(read?.call ?? 'NO CLEAR PICK').trim() || 'NO CLEAR PICK';
+  const reason = String(read?.reason ?? '').trim().toLowerCase();
+
+  const moneylineHome = projections?.score?.outputs?.moneyline_home;
+  const totalRuns = distMean(projections?.score?.outputs?.total_runs_distribution);
+  const awayRuns = distMean(projections?.score?.outputs?.team_runs_distribution?.away);
+  const homeRuns = distMean(projections?.score?.outputs?.team_runs_distribution?.home);
+  const yrfi = projections?.yrfi?.outputs?.yrfi_prob;
+  const awayKs = distMean(projections?.ks_away?.outputs?.distribution);
+  const homeKs = distMean(projections?.ks_home?.outputs?.distribution);
+
+  const lines = [];
+
+  if (typeof moneylineHome === 'number' && Number.isFinite(moneylineHome) && typeof awayRuns === 'number' && typeof homeRuns === 'number') {
+    const awayWinProb = 1 - moneylineHome;
+    const leanTeam = awayWinProb >= moneylineHome ? awayTeam : homeTeam;
+    const leanRuns = awayWinProb >= moneylineHome
+      ? `${awayTeam} ${awayRuns.toFixed(1)} to ${homeRuns.toFixed(1)}`
+      : `${homeTeam} ${homeRuns.toFixed(1)} to ${awayRuns.toFixed(1)}`;
+    const leanProb = awayWinProb >= moneylineHome ? awayWinProb : moneylineHome;
+    lines.push(`The model leans ${leanTeam} because the projected run split favors ${leanRuns} and the win split lands at ${pct(leanProb)}.`);
+  } else {
+    lines.push(`Starter matchup: ${awayStarter} vs ${homeStarter}; ${awayTeam} at ${homeTeam} still reads through the sourced model layer.`);
   }
-  if (!call || call === 'NO CLEAR PICK') {
-    return `Starter matchup is ${awayStarter} vs ${homeStarter}; ${matchup} is a no clear pick for now.`;
+
+  if (call === 'NO CLEAR PICK') {
+    if (reason.includes('single modeled family only')) {
+      lines.push(`This remains NO CLEAR PICK because only the MONEYLINE family is fully modeled, so there is no cross-family confirmation to promote it.`);
+    } else if (reason.includes('projections provisional due lineup')) {
+      lines.push(`This remains NO CLEAR PICK because the line is still provisional on lineup alpha, so the model output cannot be promoted yet.`);
+    } else {
+      lines.push(`This remains NO CLEAR PICK because ${read?.reason ?? 'the model does not yet clear the internal promotion threshold'}.`);
+    }
+  } else {
+    lines.push(`Current call: ${call}.`);
   }
-  return `Starter matchup is ${awayStarter} vs ${homeStarter}; ${matchup} currently reads ${call}.`;
+
+  const shapeParts = [];
+  if (totalRuns !== null) shapeParts.push(`projected total ~${totalRuns.toFixed(1)}`);
+  if (yrfi !== null) shapeParts.push(`YRFI ${pct(yrfi, 0)}`);
+  if (shapeParts.length) {
+    const shapeLead = totalRuns !== null && totalRuns >= 9 ? 'Game shape is offense-friendly' : 'Game shape';
+    lines.push(`${shapeLead}: ${shapeParts.join(' with ')}.`);
+  }
+
+  const pitchParts = [];
+  if (typeof awayKs === 'number') pitchParts.push(`${awayStarter} projects around ${awayKs.toFixed(1)} K`);
+  if (typeof homeKs === 'number') pitchParts.push(`${homeStarter} projects around ${homeKs.toFixed(1)} K`);
+  if (pitchParts.length) {
+    lines.push(`Pitching context: ${pitchParts.join(' while ')}.`);
+  }
+
+  if (call === 'NO CLEAR PICK') {
+    lines.push('Upgrade trigger: add a confirmed second modeled family or a stronger lane-specific threshold before this moves off no clear pick.');
+  }
+
+  return lines.slice(0, 6);
 }
 
 function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRecord = null } = {}) {
@@ -836,6 +896,16 @@ export function buildKalshiGamePacket({
 
   if (hasComposite) {
     const read = classifyGamePacketRead(gamePicks);
+    const statusSnapshot = derivePacketStatusSnapshot({ gamePicks, statsRecord });
+    const projections = statsRecord
+      ? buildGameProjections({
+        record: statsRecord,
+        leagueRPG,
+        as_of: `${date || 'unknown-date'}T00:00:00Z`,
+        lineup_status: statusSnapshot.lineup_status,
+        weather_status: statusSnapshot.weather_status,
+      })
+      : null;
     lines.push('TLDR');
     lines.push(`  Call: ${read.call}.`);
     lines.push(`  Why: ${read.reason}.`);
@@ -847,7 +917,9 @@ export function buildKalshiGamePacket({
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
     lines.push('Event Preview / Storyline');
-    lines.push(`  ${buildGamePreviewLine({ event, statsRecord, read })}`);
+    for (const storyLine of buildGamePreviewStory({ event, statsRecord, read, projections })) {
+      lines.push(`  ${storyLine}`);
+    }
     lines.push('');
   } else {
     lines.push('TLDR');
@@ -861,7 +933,9 @@ export function buildKalshiGamePacket({
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
     lines.push('Event Preview / Storyline');
-    lines.push(`  ${buildGamePreviewLine({ event, statsRecord, read: { call: 'NO CLEAR PICK' } })}`);
+    for (const storyLine of buildGamePreviewStory({ event, statsRecord, read: { call: 'NO CLEAR PICK' } })) {
+      lines.push(`  ${storyLine}`);
+    }
     lines.push('');
   }
 
