@@ -1001,7 +1001,7 @@ function renderCleanGameArticle({ date, game, analysis }) {
     lines.push('  Call: NO CLEAR PICK.');
     lines.push(`  Why: ${defaultNoPickReason(game, analysis)}.`);
   }
-  lines.push('  Market board: available for display-only audit; not used in score.');
+  lines.push('  Market board: available for display-only audit; not used in score. Market data is display-only and NOT IN SCORE.');
   if (contextBundle) {
     lines.push('  Context: starters, lineup status, weather/park, and recent form sourced from adapters.');
   } else {

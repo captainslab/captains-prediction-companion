@@ -155,6 +155,10 @@ test('article: default packet is clean, price-free, and carries the model sectio
   // Model Consistency Check must not sum evidence side-scores as a "run
   // environment": that compares composite points against runs and is nonsense.
   assert.doesNotMatch(a.text, /composite run environment/i);
+  // The clean packet must carry the literal NOT IN SCORE market-context marker
+  // required by the mlb-daily delivery contract (the wrapped packet embeds this
+  // article verbatim, so dropping it would block delivery).
+  assert.match(a.text, /NOT IN SCORE/);
 });
 
 test('article: default packet lists modeled families instead of saying only ML when spread/total/YRFI are ready', () => {
