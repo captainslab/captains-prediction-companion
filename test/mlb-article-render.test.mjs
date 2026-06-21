@@ -144,14 +144,15 @@ test('article: default packet is clean, price-free, and carries the model sectio
   assert.doesNotMatch(a.text, /\bbid\b/i);
   assert.doesNotMatch(a.text, /\bask\b/i);
   assert.match(a.text, /Market board: available for display-only audit; not used in score\./);
-  assert.match(a.text, /Model/);
+  assert.match(a.text, /Game Model Results/);
   assert.match(a.text, /Game-side composite/);
   assert.match(a.text, /Projected runs:/);
   assert.match(a.text, /YRFI\/NRFI/);
-  assert.match(a.text, /K model/);
-  assert.match(a.text, /HR model/);
+  assert.match(a.text, /K status/);
+  assert.doesNotMatch(a.text, /HR status/);
   assert.match(a.text, /Model Consistency Check/);
   assert.match(a.text, /Source Ledger/);
+  assert.match(a.text, /AUDIT_ARTIFACTS_AVAILABLE/);
   // Model Consistency Check must not sum evidence side-scores as a "run
   // environment": that compares composite points against runs and is nonsense.
   assert.doesNotMatch(a.text, /composite run environment/i);

@@ -24,7 +24,7 @@ const prelinePicks = [
   },
 ];
 
-test('projection block carries projected runs / YRFI / Ks / HR vocabulary', () => {
+test('projection block carries projected runs / YRFI / Ks vocabulary', () => {
   const block = buildProjectionFirstBlock({ date: DATE, gamePicks: prelinePicks });
   const text = block.join('\n');
 
@@ -32,7 +32,7 @@ test('projection block carries projected runs / YRFI / Ks / HR vocabulary', () =
   assert.match(text, /Projected runs|run-scoring distribution|Total runs/);
   assert.match(text, /YRFI/, 'first-inning-run (YRFI) language present');
   assert.match(text, /Strikeouts/, 'strikeout-count language present');
-  assert.match(text, /HR risk|home run/, 'home-run language present');
+  assert.doesNotMatch(text, /HR risk|home run/, 'home-run language removed from default packet');
   assert.match(text, /Win probability|win probability/, 'derived win-prob language present');
 });
 

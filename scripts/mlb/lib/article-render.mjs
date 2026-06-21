@@ -21,7 +21,6 @@ import { MLB_SERIES } from './series-discovery.mjs';
 import { DECISION_STATUSES, renderDecisionProcess } from '../../shared/decision-process.mjs';
 import { buildMarketFamilyCoverage } from './market-engine.mjs';
 import {
-  describeHr,
   describeKs,
   describeRunline,
   describeTeamRuns,
@@ -888,7 +887,6 @@ function sourceLedger(game, analysis) {
   const coverage = analysis?.final?.coverage ?? buildMarketFamilyCoverage(game, analysis);
   const provenance = bundle?.provenance ?? {};
   const projections = analysis?.final?.projections ?? null;
-  const groups = familyGroups(coverage);
   const backed = (keys) => keys.some((key) => provenance?.[key]?.status && provenance[key].status !== 'missing');
   const lines = ['Source Ledger'];
   lines.push(`  MLB_OFFICIAL: ${backed(['starters', 'lineup']) ? 'BACKED' : 'UNAVAILABLE'}${backed(['starters', 'lineup']) ? ' via starters/lineup provenance.' : ' (starters/lineup provenance missing).'}`);
@@ -903,9 +901,7 @@ function sourceLedger(game, analysis) {
   } else {
     lines.push('  MODEL_OUTPUT: UNAVAILABLE (projection outputs missing).');
   }
-  lines.push(`  UNAVAILABLE: ${groups.unavailable.length ? groups.unavailable.join(', ') : 'none'}.`);
-  const blockedOrBoard = [...groups.board_only, ...groups.blocked];
-  lines.push(`  BLOCKED_MODEL: ${blockedOrBoard.length ? blockedOrBoard.join(', ') : 'none'}.`);
+  lines.push('  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).');
   return lines.join('\n');
 }
 
@@ -920,16 +916,27 @@ function renderDefaultModelSection(game, analysis) {
   const ksAway = projections?.ks_away ?? null;
   const ksHome = projections?.ks_home ?? null;
   const hrProj = projections?.hr ?? null;
-  const lines = ['Model'];
+  const lines = ['Game Model Results'];
   lines.push(`  Game-side composite: ${formatGameSideComposite(game, bundle)}`);
+  if (bundle?.side_scores?.home != null && bundle?.side_scores?.away != null) {
+    lines.push(`  Home composite score: ${fmtPoints(bundle.side_scores.home)}`);
+    lines.push(`  Away composite score: ${fmtPoints(bundle.side_scores.away)}`);
+  } else {
+    lines.push('  Home composite score: BLOCKED_CONTEXT_MISSING');
+    lines.push('  Away composite score: BLOCKED_CONTEXT_MISSING');
+  }
   lines.push(`  Coverage: ${coverageSummaryLine(coverage)}`);
   lines.push('  Projected runs:');
   if (scoreProj) {
+    const winLine = describeMoneyline(scoreProj, { home_team: homeName, away_team: awayName })
+      .replace(/^Projected win probability —\s*/i, '');
+    lines.push(`  Win probability: ${winLine}`);
     lines.push(`    Away: ${describeTeamRuns(scoreProj, 'away', awayName)}`);
     lines.push(`    Home: ${describeTeamRuns(scoreProj, 'home', homeName)}`);
     lines.push(`    Total: ${describeTotal(scoreProj)}`);
     lines.push(`    Spread/run differential: ${describeRunline(scoreProj, { home_team: homeName })}`);
   } else {
+    lines.push(`  Win probability: ${projectionFallbackLabel(coverage?.families?.ml)}`);
     const spreadState = projectionFallbackLabel(coverage?.families?.spread);
     const totalState = projectionFallbackLabel(coverage?.families?.total);
     lines.push(`    Away: ${spreadState}`);
@@ -943,16 +950,11 @@ function renderDefaultModelSection(game, analysis) {
     lines.push(`  YRFI/NRFI: ${projectionFallbackLabel(coverage?.families?.yfri)}`);
   }
   if (ksAway || ksHome) {
-    lines.push('  K model:');
+    lines.push('  K status: MODELED');
     lines.push(`    Away starter: ${describeKs(ksAway, `${awayName} starter`)}`);
     lines.push(`    Home starter: ${describeKs(ksHome, `${homeName} starter`)}`);
   } else {
-    lines.push(`  K model: ${projectionFallbackLabel(coverage?.families?.ks)}`);
-  }
-  if (hrProj) {
-    lines.push(`  HR model: ${describeHr(hrProj, `${homeName} / ${awayName}`)}`);
-  } else {
-    lines.push(`  HR model: ${projectionFallbackLabel(coverage?.families?.hr)}`);
+    lines.push(`  K status: ${projectionFallbackLabel(coverage?.families?.ks)}`);
   }
   return lines.join('\n');
 }

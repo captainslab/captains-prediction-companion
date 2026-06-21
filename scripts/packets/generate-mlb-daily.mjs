@@ -13,7 +13,6 @@ import {
   parsePacketArgs,
   ensurePacketDir,
   writeAudit,
-  packetHeader,
   packetFooter,
   printDryRunSummary,
   readJsonIfExists,
@@ -33,7 +32,6 @@ import {
   buildScoreEngineProjection,
   buildYrfiProjection,
   buildKsProjection,
-  buildHrProjection,
 } from '../mlb/lib/projection-contracts.mjs';
 import {
   describeMoneyline,
@@ -42,7 +40,6 @@ import {
   describeTeamRuns,
   describeYrfi,
   describeKs,
-  describeHr,
 } from '../mlb/lib/projection-language.mjs';
 import {
   buildGameProjections,
@@ -397,7 +394,148 @@ export function mlbPickToDecisionRow(pick = {}) {
     trigger,
     statusOverride: status,
     edgeOverridePp: Number.isFinite(Number(pick.edge_pp)) ? Number(pick.edge_pp) : undefined,
+    requireModelScore: true,
   });
+}
+
+function articleReportPathForGame(stateRoot, date, eventTicker) {
+  const gameKey = String(eventTicker ?? '').replace(/^KXMLBGAME-/, '');
+  if (!gameKey) return null;
+  return resolve(stateRoot, 'mlb', date, 'article-reports', `game-${gameKey}.txt`);
+}
+
+function trimArticleHeadline(text = '') {
+  const lines = String(text).trimEnd().split(/\r?\n/);
+  if (lines.length >= 3 && lines[1] && /^=+$/.test(lines[1].trim())) {
+    let idx = 2;
+    while (idx < lines.length && !lines[idx].trim()) idx += 1;
+    return lines.slice(idx).join('\n').trimEnd();
+  }
+  return String(text).trimEnd();
+}
+
+function stripAuditArtifactsSection(text = '') {
+  const raw = String(text);
+  const marker = '\n=== 5. AUDIT ARTIFACTS ===';
+  const idx = raw.indexOf(marker);
+  return idx >= 0 ? raw.slice(0, idx).trimEnd() : raw.trimEnd();
+}
+
+function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, generatedAtUtc = new Date().toISOString() }) {
+  const display = buildEventDisplay(event);
+  const matchupAbbrev = display.away_abbrev && display.home_abbrev
+    ? `${display.away_abbrev} @ ${display.home_abbrev}`
+    : (display.display_event_title !== 'MISSING' ? display.display_event_title : (event?.title ?? 'MISSING'));
+  const matchupFull = display.away_full && display.home_full
+    ? `${display.away_full} at ${display.home_full}`
+    : (display.display_event_title !== 'MISSING'
+      ? display.display_event_title
+      : (event?.title ?? 'MISSING'));
+  const firstPitch = event?.start_time_utc
+    ?? event?.start_utc
+    ?? statsRecord?.start_utc
+    ?? statsRecord?.start_time_utc
+    ?? 'MISSING';
+  const venue = event?.venue
+    ?? statsRecord?.venue
+    ?? 'MISSING';
+
+  return [
+    `Captain's MLB Prediction Companion`,
+    `Captain MLB — ${matchupAbbrev} ${packetLabel}`,
+    matchupFull,
+    `Date: ${date} | First pitch: ${firstPitch} | Venue: ${venue}`,
+    `CPC Packet: ${packetLabel} | generated_utc: ${generatedAtUtc}`,
+  ].join('\n');
+}
+
+function classifyGamePacketRead(gamePicks = []) {
+  const picks = Array.isArray(gamePicks) ? gamePicks : [];
+  const primary = picks.find((p) => p?.primary_pick) ?? picks[0] ?? null;
+  const lineupPending = picks.some((p) =>
+    Array.isArray(p?.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m))));
+  const modeledFamilies = new Set(
+    picks
+      .map((p) => String(p?.market_lane ?? p?.classification ?? '').toUpperCase())
+      .filter(Boolean),
+  );
+
+  if (!primary) {
+    return {
+      call: 'NO CLEAR PICK',
+      reason: 'no model family crosses the threshold',
+      summary: 'model outputs remain provisional while no primary pick is available',
+    };
+  }
+
+  const marketLabel = (() => {
+    const ticker = String(primary.market_ticker ?? primary.ticker ?? '');
+    const suffix = ticker.split('-').pop() || '';
+    return /^[A-Z]{2,4}$/.test(suffix) ? suffix : (primary.contract_title ?? primary.market_title ?? 'favorite');
+  })();
+
+  const classification = String(primary.classification ?? '').toUpperCase();
+  const hasModelScore = primary.fair_value != null && Number.isFinite(Number(primary.fair_value));
+  if (hasModelScore && (['LEAN', 'CLEAR_PICK', 'PRE_LINEUP_PICK'].includes(classification) || Number(primary.edge_pp) > 0)) {
+    return {
+      call: `EVIDENCE LEAN — ${marketLabel}`,
+      reason: 'required model families and context point the same way',
+      summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'modeled family data present',
+    };
+  }
+
+  if (lineupPending) {
+    return {
+      call: 'NO CLEAR PICK',
+      reason: 'projections provisional due lineup',
+      summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+    };
+  }
+
+  if (picks.length > 1) {
+    return {
+      call: 'NO CLEAR PICK',
+      reason: 'modeled families disagree',
+      summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+    };
+  }
+
+  return {
+    call: 'NO CLEAR PICK',
+    reason: 'no model family crosses the threshold',
+    summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+  };
+}
+
+function buildGamePreviewLine({ event = null, statsRecord = null, read = null } = {}) {
+  const awayStarter = statsRecord?.away_pitcher?.name ?? event?.away_starter ?? event?.away_pitcher ?? 'away starter';
+  const homeStarter = statsRecord?.home_pitcher?.name ?? event?.home_starter ?? event?.home_pitcher ?? 'home starter';
+  const matchup = statsRecord?.game ?? event?.title ?? 'the game';
+  const call = String(read?.call ?? '').trim();
+  const reason = String(read?.reason ?? '').toLowerCase();
+  if (reason.includes('projections provisional due lineup')) {
+    return `Starter matchup is ${awayStarter} vs ${homeStarter}; ${matchup} stays provisional until the required alpha clears.`;
+  }
+  if (!call || call === 'NO CLEAR PICK') {
+    return `Starter matchup is ${awayStarter} vs ${homeStarter}; ${matchup} is a no clear pick for now.`;
+  }
+  return `Starter matchup is ${awayStarter} vs ${homeStarter}; ${matchup} currently reads ${call}.`;
+}
+
+function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRecord = null } = {}) {
+  const hasRef = (value) => Boolean(String(value ?? '').trim());
+  const backed = (value) => (hasRef(value) ? 'BACKED' : 'UNAVAILABLE');
+  const lines = ['Source Ledger'];
+  lines.push(`  MLB_OFFICIAL: ${backed(sourceRefs.official ?? sourceRefs.event)}`);
+  lines.push(`  STATS_ADAPTER: ${backed(sourceRefs.stats)}`);
+  lines.push(`  WEATHER_ADAPTER: ${backed(sourceRefs.weather)}`);
+  lines.push(`  CONTEXT_ADAPTER: ${backed(sourceRefs.context)}`);
+  lines.push(`  MODEL_OUTPUT: ${Array.isArray(gamePicks) && gamePicks.length ? 'BACKED' : 'UNAVAILABLE'}`);
+  lines.push('  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).');
+  if (statsRecord?.game_pk != null) {
+    lines.push(`  GAME_PK: ${statsRecord.game_pk}`);
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -428,22 +566,25 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
 
   const body = renderSectionedPacket(boardRows, {
     tldrNote,
-    auditArtifacts: [inventoryPath, scoring.source].filter(Boolean),
+    auditArtifacts: [],
     perSectionLimit: 14,
   });
+  const cleanedBody = stripAuditArtifactsSection(body);
 
-  const header = packetHeader({
-    packetType: PACKET_TYPE,
-    date,
-    title: 'Captain MLB — CPC Packet: Daily Slate Board',
-    sources: [KALSHI_SOURCES.mlb?.page_url ?? KALSHI_SOURCES.mlb?.label, scoring.source].filter(Boolean),
-  });
+  const header = [
+    "Captain's MLB Prediction Companion",
+    'Captain MLB — Daily Slate Board',
+    `CPC Packet: Daily Slate Board`,
+    `date: ${date}`,
+    `packet_type: ${PACKET_TYPE}`,
+    `generated_utc: ${new Date().toISOString()}`,
+  ].join('\n');
   const inputStatusNote = buildPacketScopeNote({
     scope: resolvedScope,
     gamePicks: scoring.picks,
   });
   const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
-  const text = [header, inputStatusNote, neutralityNote, body, packetFooter()].filter(Boolean).join('\n\n');
+  const text = [header, inputStatusNote, neutralityNote, cleanedBody, packetFooter()].filter(Boolean).join('\n\n');
 
   // Full per-pick inventory -> audit artifact only. Each line carries model and
   // market fields together for routing/audit; pricing here is NOT a score input.
@@ -636,7 +777,6 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
       describeYrfi(proj.yrfi),
       describeKs(proj.ks_away, apName),
       describeKs(proj.ks_home, hpName),
-      describeHr(proj.hr),
       FOOTER,
     ];
   }
@@ -648,7 +788,6 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
   const score = buildScoreEngineProjection({ ...common, inputs: { park }, outputs: null });
   const yrfi = buildYrfiProjection({ ...common, inputs: { park }, outputs: null });
   const ks = buildKsProjection({ game_id, as_of, lineup_status, inputs: {}, outputs: null });
-  const hr = buildHrProjection({ game_id, as_of, lineup_status, weather_status, inputs: { park }, outputs: null });
 
   return [
     '--- PROJECTION-FIRST READ (model layer, market-free) ---',
@@ -658,7 +797,6 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
     describeTeamRuns(score, 'away', away),
     describeYrfi(yrfi),
     describeKs(ks),
-    describeHr(hr),
     FOOTER,
   ];
 }
@@ -666,6 +804,7 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
 export function buildKalshiGamePacket({
   date,
   event,
+  stateRoot = 'state',
   artifacts,
   primeAttempts,
   kalshiSummary,
@@ -685,54 +824,48 @@ export function buildKalshiGamePacket({
     hasScoring: hasComposite,
     perGame: true,
   });
-
-  const header = packetHeader({
-    title: `Captain MLB — CPC Packet: ${hasComposite ? 'Game Board' : 'Pre-Final-Lineup'}`,
-    date,
-    packetType: PACKET_TYPE,
-    sources: [sourcePath, KALSHI_SOURCES.mlb.page_url, ...artifacts],
-  });
-  const inputStatusNote = buildPacketScopeNote({
-    scope: resolvedScope,
-    gamePicks,
-    statsRecord,
-  });
   const lines = [];
 
   if (hasComposite) {
-    const rows = gamePicks.map((p) => mlbPickToDecisionRow(p));
-    const boardRows = rows.filter((r) => r.market_type !== 'correlated_alternate');
-    const lineupPending = gamePicks.filter((p) =>
-      Array.isArray(p.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m)))).length;
-    const tldrNote = lineupPending
-      ? `Pre-lineup: ${lineupPending} pick(s) await confirmed lineups — confidence downgraded, not the board.`
-      : 'Lineups confirmed where available.';
-
-    const body = renderSectionedPacket(boardRows, {
-      tldrNote,
-      auditArtifacts: [sourcePath].filter(Boolean),
-      perSectionLimit: 14,
-    });
-    lines.push('Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.');
+    const read = classifyGamePacketRead(gamePicks);
+    lines.push('TLDR');
+    lines.push(`  Call: ${read.call}.`);
+    lines.push(`  Why: ${read.reason}.`);
+    lines.push(`  Model summary: ${read.summary}.`);
+    lines.push('  Context: starters, lineup status, weather/park, and recent form sourced from adapters.');
+    lines.push('  Market data is display-only and NOT IN SCORE.');
     lines.push('');
-    lines.push(body);
+    lines.push('Research Status');
+    lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
+    lines.push('');
+    lines.push('Event Preview / Storyline');
+    lines.push(`  ${buildGamePreviewLine({ event, statsRecord, read })}`);
+    lines.push('');
   } else {
-    lines.push('TLDR BOARD:');
-    lines.push('  BLOCKED_MODEL_LAYER_MISSING');
+    lines.push('TLDR');
+    lines.push('  Call: NO CLEAR PICK.');
+    lines.push('  Why: no MLB event with a composite-ready game packet was found.');
+    lines.push('  Model summary: model outputs are unavailable.');
+    lines.push('  Context: no scored game inputs were attached.');
+    lines.push('  Market data is display-only and NOT IN SCORE.');
     lines.push('');
-    lines.push('=== BLOCKED — MODEL LAYER MISSING ===');
-    lines.push(`No composite scoring available for this game (${s.title}).`);
-    lines.push(`Markets discovered: ${block.marketCount}`);
-    lines.push('Next step: run MLB scoring pipeline (scripts/mlb/composite-dry-run.mjs) for this date.');
-    lines.push('Per-market pricing is available in the audit inventory only.');
+    lines.push('Research Status');
+    lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
-    lines.push('--- Market Context - NOT IN SCORE ---');
-    lines.push('Market data stored in audit artifact for reference; not displayed in customer packet without model layer.');
+    lines.push('Event Preview / Storyline');
+    lines.push(`  ${buildGamePreviewLine({ event, statsRecord, read: { call: 'NO CLEAR PICK' } })}`);
+    lines.push('');
   }
 
-  // Projection-first read: model-layer language (not board-derived), every game.
+  lines.push('');
+  lines.push('Game Model Results');
   lines.push('');
   for (const l of buildProjectionFirstBlock({ date, gamePicks, statsRecord, leagueRPG })) lines.push(l);
+  lines.push('');
+  lines.push(renderGamePacketSourceLedger({ sourceRefs, gamePicks, statsRecord }));
+  lines.push('');
+  lines.push('No trades placed by this workflow.');
+  lines.push('No bankroll advice. Research only.');
 
   const inventoryLines = [];
   inventoryLines.push(`event_ticker: ${s.ticker}`);
@@ -778,8 +911,15 @@ export function buildKalshiGamePacket({
     },
   });
 
+  const lead = formatGamePacketLead({
+    event,
+    date,
+    statsRecord,
+    packetLabel: hasComposite ? 'Game Board' : 'Pre-Final-Lineup',
+  });
+
   return {
-    text: [header, inputStatusNote, lines.join('\n'), packetFooter()].filter(Boolean).join('\n\n'),
+    text: [lead, lines.join('\n'), packetFooter()].filter(Boolean).join('\n\n'),
     inventoryText: inventoryLines.join('\n'),
     marketCount: block.marketCount,
     missingStrikeCount: block.missingStrikeCount,
@@ -801,12 +941,14 @@ function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
     skepticReview: 'MISSING.',
     finalJudgment: 'NO CLEAR PICK.',
   });
-  const header = packetHeader({
-    title: 'Captain MLB — CPC Packet: Pre-Final-Lineup',
-    date,
-    packetType: PACKET_TYPE,
-    sources: [KALSHI_SOURCES.mlb.api_url, KALSHI_SOURCES.mlb.page_url, ...artifacts],
-  });
+  const header = [
+    "Captain's MLB Prediction Companion",
+    'Captain MLB — Pre-Final-Lineup',
+    'CPC Packet: Pre-Final-Lineup',
+    `date: ${date}`,
+    `packet_type: ${PACKET_TYPE}`,
+    `generated_utc: ${new Date().toISOString()}`,
+  ].join('\n');
   const lines = [];
   lines.push('TLDR:');
   lines.push(`  market_type: ${process.marketType}`);
@@ -838,7 +980,7 @@ function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
   }
   lines.push('status: MISSING');
   lines.push(`reason: no Kalshi MLB events with derived event-date ${date}.`);
-  return header + lines.join('\n') + packetFooter();
+  return [header, lines.join('\n'), packetFooter()].filter(Boolean).join('\n\n');
 }
 
 async function main() {
@@ -957,6 +1099,7 @@ async function main() {
       const built = buildKalshiGamePacket({
         date: opts.date,
         event: ev,
+        stateRoot: opts.stateRoot,
         artifacts,
         primeAttempts,
         kalshiSummary,

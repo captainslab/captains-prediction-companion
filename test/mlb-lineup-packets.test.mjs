@@ -14,6 +14,10 @@ import {
   renderPerGamePacket,
   renderBlockPacket,
 } from '../scripts/mlb/lib/packet-renderer.mjs';
+import {
+  buildGameProjections,
+  leagueRunsPerGame,
+} from '../scripts/mlb/lib/projection-engine.mjs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +66,30 @@ function makeBlock(overrides = {}) {
     packet_status:        'scheduled',
     ...overrides,
   };
+}
+
+function makeProjections() {
+  const record = {
+    game_pk: 991001,
+    game_date: '2026-06-01',
+    venue: 'Wrigley Field',
+    away_team: 'Chicago Cubs',
+    home_team: 'St. Louis Cardinals',
+    away_team_stats: { runs_scored: 312, runs_allowed: 280, gamesPlayed: 72 },
+    home_team_stats: { runs_scored: 295, runs_allowed: 300, gamesPlayed: 72 },
+    away_pitcher: { mlb_id: 101, name: 'Away Ace', era: 3.61, k_pct: 0.24, games_started: 15, batters_faced: 365 },
+    home_pitcher: { mlb_id: 202, name: 'Home Ace', era: 3.88, k_pct: 0.22, games_started: 15, batters_faced: 350 },
+    away_bullpen: { era: 4.12 },
+    home_bullpen: { era: 4.05 },
+  };
+  const leagueRPG = leagueRunsPerGame([record]);
+  return buildGameProjections({
+    record,
+    leagueRPG,
+    as_of: '2026-06-01T00:00:00Z',
+    lineup_status: 'confirmed',
+    weather_status: 'complete',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +320,36 @@ test('renderPerGamePacket: Edge Basis section states fundamentals requirement', 
     /fundamentals/i.test(text) || /Edge Basis/i.test(text),
     'expected fundamentals-first statement in packet text',
   );
+});
+
+test('renderPerGamePacket: projection-first section is present, market-free, and staleness-bannered', () => {
+  const pkt = renderPerGamePacket(fakeGame, {
+    lineupStatus: LINEUP_STATUS.BOTH_CONFIRMED,
+    projections: makeProjections(),
+    modelFreshness: 'live',
+  });
+
+  const { text } = pkt;
+  assert.match(text, /STALE_PREGAME_MODEL/);
+  assert.match(text, /PROJECTION-FIRST READ \(model layer, market-free\)/);
+
+  const start = text.indexOf('--- PROJECTION-FIRST READ (model layer, market-free) ---');
+  const end = text.indexOf('--- Edge Basis ---');
+  assert.ok(start >= 0, 'expected projection-first section');
+  assert.ok(end > start, 'expected edge basis after projection-first section');
+
+  const section = text.slice(start, end);
+  assert.match(section, /Projected win probability/);
+  assert.match(section, /Projected total/);
+  assert.match(section, /Projected runs —/);
+  assert.match(section, /Projected first-inning run/);
+  assert.match(section, /Projected strikeouts/);
+  assert.doesNotMatch(section, /HR status|HR risk|home run/i);
+  assert.doesNotMatch(section, /BLOCKED_MODEL_LAYER_MISSING/);
+
+  for (const term of ['yes_ask', 'no_ask', 'open interest', 'volume', 'odds', 'bid', 'ask', 'Kalshi']) {
+    assert.ok(!section.toLowerCase().includes(term.toLowerCase()), `projection section must not contain ${term}`);
+  }
 });
 
 // ---------------------------------------------------------------------------
