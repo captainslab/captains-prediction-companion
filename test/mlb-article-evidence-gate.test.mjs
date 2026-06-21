@@ -380,7 +380,7 @@ test('stale wording is absent when context exists in the article text', () => {
   const game = makeDiscoveryGame();
   enrichGamesWithContext([game], resolve(REPO_ROOT, 'state'), '2026-06-13');
   const analysis = analyzeGame(game);
-  const article = buildGameArticle({ date: '2026-06-13', game, analysis });
+  const article = buildGameArticle({ date: '2026-06-13', game, analysis, audit: true });
   assert.doesNotMatch(article.text, /No lineup, weather, park, starter form, or bullpen context was pulled\./);
   assert.doesNotMatch(article.text, /real-world context is incomplete/i);
   assert.doesNotMatch(article.text, /context incomplete/i);

@@ -8,6 +8,7 @@ import { buildGameArticle, buildSlateArticle } from '../scripts/mlb/lib/article-
 import { analyzeGame } from '../scripts/mlb/lib/market-engine.mjs';
 import { buildReportText } from '../scripts/mlb/pre-lock-report.mjs';
 import { gatherGames, loadPlan, publish, resolveTelegramEnv } from '../scripts/mlb/publish-article-reports.mjs';
+import { DELIVERY_VERDICTS, validatePacketText } from '../scripts/cron/cpc-packet-janitor.mjs';
 
 // Build a minimal joined-game fixture in the shape analyzeGame expects.
 function makeGame({ away = 'TEX', home = 'COL', gameKey = '26MAY182040TEXCOL', mlGap = 'big', spreadConfirm = true, weakProps = true } = {}) {
@@ -63,10 +64,18 @@ function makeGame({ away = 'TEX', home = 'COL', gameKey = '26MAY182040TEXCOL', m
   };
 }
 
+function buildAuditArticle(game, analysis, date = '2026-05-18') {
+  return buildGameArticle({ date, game, analysis, audit: true });
+}
+
+function buildDefaultArticle(game, analysis, date = '2026-05-18') {
+  return buildGameArticle({ date, game, analysis });
+}
+
 test('article: per-game article renders required sections', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   // New article-style sections
   assert.ok(a.text.includes('Final Call'));
   assert.ok(a.text.includes('Market Read'));
@@ -92,7 +101,7 @@ function mainProse(text) {
 test('article: main prose does not read like engine debug output', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   const lead = mainProse(a.text);
   const gapCount = (lead.match(/\bgap\b/gi) || []).length;
   const oiCount = (lead.match(/OI ratio/gi) || []).length;
@@ -106,7 +115,7 @@ test('article: main prose does not read like engine debug output', () => {
 test('article: Evidence Box still contains numeric support', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   const idx = a.text.indexOf('Evidence Box');
   assert.ok(idx >= 0);
   const evidence = a.text.slice(idx);
@@ -118,13 +127,97 @@ test('article: Evidence Box still contains numeric support', () => {
   assert.match(evidence, /ML:\s+BOARD_ANALYZER_ONLY/);
 });
 
+test('article: default packet is clean, price-free, and carries the model sections', () => {
+  const game = makeGame();
+  const analysis = analyzeGame(game);
+  const a = buildDefaultArticle(game, analysis);
+  assert.doesNotMatch(a.text, /Evidence Box/);
+  assert.doesNotMatch(a.text, /Market overview/);
+  assert.doesNotMatch(a.text, /Decision Process/);
+  assert.doesNotMatch(a.text, /Pick summary/);
+  assert.doesNotMatch(a.text, /Best angle/);
+  assert.doesNotMatch(a.text, /Evidence$/m);
+  assert.doesNotMatch(a.text, /Final call/);
+  assert.doesNotMatch(a.text, /¢/);
+  assert.doesNotMatch(a.text, /oi=/i);
+  assert.doesNotMatch(a.text, /vol=/i);
+  assert.doesNotMatch(a.text, /\bbid\b/i);
+  assert.doesNotMatch(a.text, /\bask\b/i);
+  assert.match(a.text, /Market board: available for display-only audit; not used in score\./);
+  assert.match(a.text, /Model/);
+  assert.match(a.text, /Game-side composite/);
+  assert.match(a.text, /Projected runs:/);
+  assert.match(a.text, /YRFI\/NRFI/);
+  assert.match(a.text, /K model/);
+  assert.match(a.text, /HR model/);
+  assert.match(a.text, /Model Consistency Check/);
+  assert.match(a.text, /Source Ledger/);
+});
+
+test('article: default packet lists modeled families instead of saying only ML when spread/total/YRFI are ready', () => {
+  const game = makeGame({ away: 'LAD', home: 'SFG', gameKey: '26MAY182040LADSFG' });
+  game.starters = {
+    away: { name: 'Away Starter', era: 3.2, hand: 'L' },
+    home: { name: 'Home Starter', era: 3.8, hand: 'R' },
+  };
+  game.lineup_status = 'confirmed';
+  game.lineup_notes = 'lineup confirmed';
+  game.weather = { temperature: 72, wind_speed: 8, wind_direction: 'out', precipitation_risk: 10, roof_status: 'open' };
+  const analysis = analyzeGame(game);
+  analysis.final.context_bundle = {
+    side_scores: { away: 52, home: 47 },
+    support_team: 'LAD',
+    support_side: 'away',
+    support_margin: 5,
+    support_reason: 'non-market evidence supports LAD',
+    provenance: {
+      starters: { status: 'complete' },
+      recent_form: { status: 'complete' },
+      bullpen: { status: 'complete' },
+      weather: { status: 'complete' },
+      lineup: { status: 'complete' },
+      injuries: { status: 'complete' },
+      matchup_model: { status: 'complete' },
+    },
+  };
+  analysis.final.coverage = {
+    mode: 'LIMITED',
+    summary: 'synthetic coverage',
+    families: {
+      ml: { status: 'NON_MARKET_COMPOSITE_READY', detail: 'modeled', label: 'ML/game-side', modeled: true, board_only: false },
+      spread: { status: 'NON_MARKET_COMPOSITE_READY', detail: 'modeled', label: 'Spread', modeled: true, board_only: false },
+      total: { status: 'NON_MARKET_COMPOSITE_READY', detail: 'modeled', label: 'Total', modeled: true, board_only: false },
+      yfri: { status: 'NON_MARKET_COMPOSITE_READY', detail: 'modeled', label: 'YRFI/NRFI', modeled: true, board_only: false },
+      ks: { status: 'BLOCKED_MODEL_LAYER_MISSING', detail: 'blocked', label: 'Ks props', modeled: false, board_only: false },
+      hr: { status: 'BLOCKED_MODEL_LAYER_MISSING', detail: 'blocked', label: 'HR props', modeled: false, board_only: false },
+    },
+  };
+  const a = buildDefaultArticle(game, analysis);
+  assert.match(a.text, /Coverage: Modeled families: ML\/game-side, Spread, Total, YRFI\/NRFI\./);
+  assert.doesNotMatch(a.text, /only the ML\/game-side family has a modeled composite/i);
+  assert.doesNotMatch(a.text, /\bonly ML\b/i);
+});
+
+test('article: default packet leak would be blocked by janitor', () => {
+  const game = makeGame();
+  const analysis = analyzeGame(game);
+  const a = buildDefaultArticle(game, analysis);
+  const leaked = a.text.replace(
+    'Market board: available for display-only audit; not used in score.',
+    'Market board: available for display-only audit; not used in score. YES 52¢.',
+  );
+  const result = validatePacketText(leaked, { packetType: 'mlb-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
+  assert.ok(result.errors.length > 0);
+});
+
 test('article: W04-style soft-LEAN renders as CONTEXT WATCH without context', () => {
   const game = makeGame({ away: 'TEX', home: 'COL', gameKey: '26MAY182040TEXCOL' });
   const analysis = analyzeGame(game);
   assert.equal(analysis.final.decision, 'LEAN', 'engine should soft-LEAN this fixture');
   // Internal engine status is unchanged; only customer-facing copy is renamed.
   assert.equal(analysis.final.decision_status, 'MARKET-ONLY LEAN');
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   assert.match(a.headline, /CONTEXT WATCH/);
   assert.match(a.text, /Confidence: CONTEXT WATCH/);
   assert.match(a.text, /board signal only, not evidence, not a pick/i);
@@ -192,7 +285,7 @@ test('article: ML-only modeled packet stays limited coverage and never reads lik
   assert.equal(analysis.final.coverage.families.yfri.status, 'BLOCKED_MODEL_LAYER_MISSING');
   assert.equal(analysis.final.coverage.families.ks.status, 'BLOCKED_MODEL_LAYER_MISSING');
   assert.equal(analysis.final.coverage.families.hr.status, 'BLOCKED_MODEL_LAYER_MISSING');
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   assert.match(a.headline, /CONTEXT WATCH|EVIDENCE LEAN/);
   assert.match(a.text, /Coverage mode: LIMITED/);
   assert.match(a.text, /ML: (NON_MARKET_COMPOSITE_READY|PARTIAL_NEEDS_PATCH)/);
@@ -208,7 +301,7 @@ test('article: ML-only modeled packet stays limited coverage and never reads lik
 test('article: BOARD_ONLY game still renders useful article', () => {
   const game = makeGame({ away: 'AAA', home: 'BBB', gameKey: '26MAY18FAKE', mlGap: 'small', spreadConfirm: false });
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   assert.match(a.headline, /NO CLEAR PICK/);
   assert.match(a.text, /limited coverage/);
   assert.match(a.text, /Coverage mode: LIMITED/);
@@ -219,7 +312,7 @@ test('article: BOARD_ONLY game still renders useful article', () => {
 test('article: weak HR/K do NOT appear as notable promotions', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   assert.match(a.text, /HR props: BOARD_ANALYZER_ONLY/);
   assert.match(a.text, /K props: BOARD_ANALYZER_ONLY/);
 });
@@ -409,7 +502,7 @@ test('telegram env: throws when token missing', () => {
 test('TLDR: per-game LEAN article has TLDR immediately after headline, no engine vocab', () => {
   const game = makeGame();
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   const lines = a.text.split('\n');
   // lines[0]=headline, lines[1]=====, lines[2]='', lines[3]='TLDR'
   assert.strictEqual(lines[3], 'TLDR', 'TLDR must appear right after headline+rule+blank');
@@ -429,7 +522,7 @@ test('TLDR: per-game LEAN article has TLDR immediately after headline, no engine
 test('TLDR: PASS / NO CLEAR PICK game shows pass language', () => {
   const game = makeGame({ away: 'AAA', home: 'BBB', gameKey: '26MAY18FAKE', mlGap: 'small', spreadConfirm: false });
   const analysis = analyzeGame(game);
-  const a = buildGameArticle({ date: '2026-05-18', game, analysis });
+  const a = buildAuditArticle(game, analysis);
   const lines = a.text.split('\n');
   assert.strictEqual(lines[3], 'TLDR');
   const tldrBlock = lines.slice(3, 9).join('\n');

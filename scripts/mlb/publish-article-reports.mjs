@@ -334,6 +334,13 @@ function writeArticleFiles(outDir, baseName, article, extraMeta = {}) {
   return { txtPath, metaPath };
 }
 
+function writeAuditArticleFile(outDir, baseName, article) {
+  mkdirSync(outDir, { recursive: true });
+  const auditPath = resolve(outDir, `${baseName}.audit.txt`);
+  writeFileSync(auditPath, article.text, 'utf8');
+  return auditPath;
+}
+
 // --- Telegram delivery (best-effort, env-driven) ---
 
 // Pure resolver — exported so tests can exercise the fallback without I/O.
@@ -493,7 +500,8 @@ export async function publish(opts) {
   const perGame = [];
   for (const game of games) {
     const analysis = analyzeGame(game, { projections: projectionsFor(game) });
-    const article = buildGameArticle({ date: opts.date, game, analysis });
+    const article = buildGameArticle({ date: opts.date, game, analysis, audit: false });
+    const auditArticle = buildGameArticle({ date: opts.date, game, analysis, audit: true });
     const idem = articleIdempotencyKey(planMeta, game.game_key);
     const base = `game-${game.game_key}`;
     const { txtPath, metaPath } = writeArticleFiles(outDir, base, article, {
@@ -502,7 +510,8 @@ export async function publish(opts) {
       matchup: `${game.away_full || game.away} at ${game.home_full || game.home}`,
       first_pitch_utc: game.start_utc ?? game.first_pitch_utc ?? null,
     });
-    perGame.push({ game, analysis, article, idem, txtPath, metaPath });
+    const auditTxtPath = writeAuditArticleFile(outDir, base, auditArticle);
+    perGame.push({ game, analysis, article, auditArticle, idem, txtPath, metaPath, auditTxtPath });
   }
 
   const slate = buildSlateArticle({
