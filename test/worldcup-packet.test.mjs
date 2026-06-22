@@ -116,3 +116,71 @@ test('packet stays mobile-readable (bounded length per match)', () => {
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
   assert.ok(text.length < 8000, `single-match packet should stay compact, got ${text.length} chars`);
 });
+
+function makeGoalFixture() {
+  const match = {
+    match_id: '400021480',
+    home_team: 'Brazil',
+    away_team: 'Serbia',
+    group: 'G',
+    stage: 'group',
+    kickoff_utc: '2026-06-22T17:00:00Z',
+    lineup_status: 'lineup_pending',
+  };
+  const ledger = composeEvidenceLedgerForGame(fullSide(78), fullSide(52));
+  const board = composeMultiLaneCeilingBoard({
+    homeLedger: ledger.home,
+    awayLedger: ledger.away,
+    marketContexts: [
+      { ticker: 'KXWC-BRA', market_type: 'match_winner', implied_probability: 0.62 },
+      { ticker: 'KXWC-TOT', market_type: 'total_goals', line: 2.5 },
+      { ticker: 'KXWC-SPR', market_type: 'spread_full_game', line: -0.5, side: 'home' },
+    ],
+    isKnockout: false,
+    lineupConfirmed: false,
+  });
+  return { match, board };
+}
+
+test('packet renders projected goals, total/BTTS/spread probabilities, and Poisson 1X2 cross-check', () => {
+  const { match, board } = makeGoalFixture();
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
+  assert.ok(/projected goals: H [\d.]+ \/ A [\d.]+ \| total [\d.]+ \| margin/.test(text), 'projected goals block must render');
+  assert.ok(/Poisson 1X2 \(cross-check\):/.test(text), 'Poisson 1X2 cross-check must render');
+  assert.ok(/vs logistic: (CONSISTENT|MISMATCH|WATCH)/.test(text), 'cross-check verdict must render');
+  assert.ok(/Total: projected [\d.]+ \| P\(over 2\.5\)=\d+% \/ P\(under 2\.5\)=\d+%/.test(text), 'total over/under probability must render');
+  assert.ok(/BTTS: P\(Yes\)=\d+% \/ P\(No\)=\d+%/.test(text), 'BTTS probability must render');
+  assert.ok(/Spread: projected margin [+-][\d.]+ \| P\(cover home -0\.5\)=\d+%/.test(text), 'spread cover probability must render');
+});
+
+test('Total Goals with no line is projection-only (no fabricated over/under)', () => {
+  const ledger = composeEvidenceLedgerForGame(fullSide(60), fullSide(58));
+  const board = composeMultiLaneCeilingBoard({
+    homeLedger: ledger.home,
+    awayLedger: ledger.away,
+    marketContexts: [], // no lines at all
+    isKnockout: false,
+    lineupConfirmed: false,
+  });
+  const match = { match_id: 'x', home_team: 'A', away_team: 'B', stage: 'group', kickoff_utc: '2026-06-22T17:00:00Z', lineup_status: 'lineup_pending' };
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
+  assert.ok(/Total: projected [\d.]+ \| projection-only \(no line\)/.test(text), 'no line → projection-only total');
+  assert.ok(/Spread: projected margin [+-][\d.]+ \| margin-only \(no line\)/.test(text), 'no line → margin-only spread');
+});
+
+test('first-half lanes stay BLOCKED_MODEL_LAYER_MISSING', () => {
+  const { match, board } = makeGoalFixture();
+  const firstHalfLanes = board.lanes.filter(l => /first_half/.test(l.lane));
+  assert.ok(firstHalfLanes.length >= 4, 'all four 1st-half lanes present');
+  for (const l of firstHalfLanes) {
+    assert.equal(l.recommendation, 'BLOCKED_MODEL_LAYER_MISSING', `${l.lane} must stay blocked`);
+  }
+});
+
+test('new goal lanes introduce no price-leak tokens', () => {
+  const { match, board } = makeGoalFixture();
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
+  for (const forbidden of [/¢/, /\bcents\b/i, /\bopen[_ -]?interest\b/i, /\bOI\b/, /\bvolume\b/i, /\bbid\b/i, /\bask\b/i, /\bladder\b/i, /\borderbook\b/i, /\/home\//, /\/Users\//]) {
+    assert.ok(!forbidden.test(text), `price-leak token ${forbidden} leaked into packet`);
+  }
+});

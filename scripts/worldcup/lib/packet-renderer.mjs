@@ -53,6 +53,22 @@ function formatLane(lane) {
   lines.push(`  [${lane.label}] MODEL: ${lane.recommendation} | composite H:${lane.composite_score_home ?? 'MISSING'} A:${lane.composite_score_away ?? 'MISSING'} | confidence:${lane.confidence}`);
   if (lane.lane === 'match_winner' && lane.p_home != null) {
     lines.push(`    1X2: H ${pct(lane.p_home)} / D ${pct(lane.p_draw)} / A ${pct(lane.p_away)} | winner_lean:${lane.winner_lean} | draw_risk:${lane.draw_risk} | draw:${lane.draw_evaluation}`);
+    if (lane.cross_check_1x2) {
+      lines.push(`    Poisson 1X2 cross-check: ${lane.cross_check_1x2.verdict} (logistic→${lane.cross_check_1x2.logistic_winner ?? 'n/a'}, poisson→${lane.cross_check_1x2.poisson_winner})`);
+    }
+  }
+  if (lane.lane === 'total_goals' && lane.projected_total_goals != null) {
+    lines.push(lane.p_over != null
+      ? `    Total: projected ${lane.projected_total_goals} | P(over ${lane.total_line})=${pct(lane.p_over)} / P(under ${lane.total_line})=${pct(lane.p_under)}`
+      : `    Total: projected ${lane.projected_total_goals} | projection-only (no line)`);
+  }
+  if (lane.lane === 'both_teams_to_score' && lane.p_btts_yes != null) {
+    lines.push(`    BTTS: P(Yes)=${pct(lane.p_btts_yes)} / P(No)=${pct(lane.p_btts_no)}`);
+  }
+  if (lane.lane === 'spread_full_game' && lane.projected_goal_margin_home != null) {
+    lines.push(lane.p_cover != null
+      ? `    Spread: projected margin ${lane.projected_goal_margin_home >= 0 ? '+' : ''}${lane.projected_goal_margin_home} | P(cover ${lane.spread_side} ${lane.spread_line})=${pct(lane.p_cover)}`
+      : `    Spread: projected margin ${lane.projected_goal_margin_home >= 0 ? '+' : ''}${lane.projected_goal_margin_home} | margin-only (no line)`);
   }
   if (lane.market_context) {
     const mc = lane.market_context;
@@ -71,11 +87,15 @@ function formatLane(lane) {
   return lines.join('\n');
 }
 
-function formatMatch(match, board) {
+function formatMatch(match, board, provenance = null) {
   const lines = [];
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${match.stage}]`);
   lines.push(`  kickoff: ${match.kickoff_utc ?? 'TBD'}`);
-  lines.push(`  lineup_status: ${match.lineup_status ?? 'unknown'}`);
+  const lockStatus = match.lineup_status === 'lineup_confirmed' ? 'LOCKED' : 'PRE_LOCK / NOT_LOCKED';
+  lines.push(`  lineup_status: ${match.lineup_status ?? 'unknown'} (${lockStatus})`);
+  if (provenance?.provisional) {
+    lines.push(`  model_basis: PRIOR_TEAM_COMPOSITE (baseline ${provenance.source_date}) — PRE_LOCK / PROVISIONAL`);
+  }
   lines.push('');
 
   const probs = board.probabilities;
@@ -83,6 +103,14 @@ function formatMatch(match, board) {
     lines.push(`  1X2 model: H ${Math.round(probs.p_home * 100)}% / D ${Math.round(probs.p_draw * 100)}% / A ${Math.round(probs.p_away * 100)}% | draw_risk:${probs.draw_risk} | draw read:${probs.draw_evaluation}`);
     if (probs.goal_environment) {
       lines.push(`  goal environment (proxy): total ${probs.goal_environment.xg_total} (H ${probs.goal_environment.xg_home} / A ${probs.goal_environment.xg_away})`);
+    }
+    const gp = board.goal_projection;
+    if (gp && gp.projection_status === 'PROJECTED') {
+      lines.push(`  projected goals: H ${gp.projected_home_goals} / A ${gp.projected_away_goals} | total ${gp.projected_total_goals} | margin ${gp.projected_goal_margin_home >= 0 ? '+' : ''}${gp.projected_goal_margin_home} (home)`);
+      const cc = gp.cross_check_1x2;
+      lines.push(`  Poisson 1X2 (cross-check): H ${Math.round(gp.poisson_1x2.p_home * 100)}% / D ${Math.round(gp.poisson_1x2.p_draw * 100)}% / A ${Math.round(gp.poisson_1x2.p_away * 100)}% | vs logistic: ${cc.verdict} (logistic→${cc.logistic_winner ?? 'n/a'}, poisson→${cc.poisson_winner})`);
+    } else if (gp && gp.projection_status) {
+      lines.push(`  projected goals: ${gp.projection_status}${gp.reason ? ` — ${gp.reason}` : ''}`);
     }
     lines.push('');
   } else if (probs?.blocked_reason) {
@@ -107,8 +135,14 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const date = meta.date ?? new Date().toISOString().slice(0, 10);
   const packetStage = meta.packet_stage ?? 'morning_board';
 
+  const provenance = meta.composite_provenance ?? null;
+
   const lines = [];
   lines.push(header(packetStage === 'lineup_locked' ? 'LINEUP-LOCKED BOARD' : 'MATCHDAY MORNING BOARD', date));
+  if (provenance?.provisional) {
+    lines.push(`MODEL BASIS: PRIOR_TEAM_COMPOSITE (last available baseline ${provenance.source_date}) — PRE_LOCK / PROVISIONAL.`);
+    lines.push('Composites are carried from the most recent prior baseline; not yet refreshed for today. Confidence is provisional until lineups lock.\n');
+  }
 
   // 1. TLDR BOARD
   lines.push(section('1. TLDR BOARD'));
@@ -136,7 +170,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   // 1b. MATCH BOARDS — model half and market half per lane
   lines.push(section('MATCH BOARDS (model vs market)'));
   for (let i = 0; i < matches.length; i++) {
-    lines.push(formatMatch(matches[i], boards[i]));
+    lines.push(formatMatch(matches[i], boards[i], provenance));
   }
 
   // 2. TOP EDGE CANDIDATES

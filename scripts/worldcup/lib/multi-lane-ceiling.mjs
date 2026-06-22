@@ -18,6 +18,15 @@
 
 import { LANE_STATUSES } from './evidence-ledger.mjs';
 import { computeMatchProbabilities } from './match-probabilities.mjs';
+import {
+  projectTeamGoals,
+  buildScoreGrid,
+  totalGoalsFromGrid,
+  bttsFromGrid,
+  spreadCoverFromGrid,
+  poisson1x2FromGrid,
+  crossCheck1x2,
+} from './goal-projection.mjs';
 
 export const LANES = Object.freeze([
   { key: 'match_winner', label: '1X2 Match Result', requires: ['home', 'away'] },
@@ -44,7 +53,7 @@ function impliedToDecimal(imp) {
   return round1(1 / imp);
 }
 
-function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lineupConfirmed, probs) {
+function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lineupConfirmed, probs, goalModel) {
   const base = {
     lane: lane.key,
     label: lane.label,
@@ -85,26 +94,31 @@ function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lin
   const awayScore = awayLedger.composite_score ?? 50;
   const diff = homeScore - awayScore;
 
-  // Goal spread lane (full game) — proxy margin only, no cover probability.
+  // Goal spread lane (full game) — Poisson cover probability from the score grid.
   if (lane.key === 'spread_full_game') {
-    const env = probs?.ok ? probs.goal_environment : null;
-    if (!env) {
+    if (!goalModel?.ok) {
       base.recommendation = 'BLOCKED_MODEL_LAYER_MISSING';
-      base.explanation = 'No goal-environment proxy (attack/defense layers missing); cannot evaluate goal lines.';
-    } else {
-      const line = marketContext?.line ?? null;
-      const side = marketContext?.side ?? null;
-      if (line !== null && (side === 'home' || side === 'away')) {
-        const coverMargin = side === 'home' ? env.expected_margin - line : -env.expected_margin - line;
-        base.recommendation = coverMargin >= 0.8 ? `LEAN_COVER_${side.toUpperCase()}`
-          : coverMargin <= -0.8 ? 'LEAN_FADE' : 'WATCH';
-        base.explanation = `Expected margin ${env.expected_margin} vs ${side} line ${line} (proxy margin, no cover probability — no pp edge).`;
-      } else {
-        base.recommendation = 'WATCH';
-        base.explanation = `Expected margin proxy ${env.expected_margin} (home-positive). No parsed goal line to compare.`;
-      }
-      base.confidence = 'low';
+      base.explanation = 'No goal projection (attack/defense layers missing); cannot evaluate goal spreads.';
+      if (marketContext) base.market_context = referenceContext(marketContext);
+      return base;
     }
+    const line = marketContext?.line ?? null;
+    const side = marketContext?.side ?? null;
+    const spread = spreadCoverFromGrid({
+      grid: goalModel.grid,
+      projectedMargin: goalModel.projection.projected_goal_margin_home,
+      line,
+      side,
+    });
+    base.projected_goal_margin_home = spread.projected_margin_home;
+    base.p_cover = spread.p_cover;
+    base.spread_line = spread.line;
+    base.spread_side = spread.side;
+    base.recommendation = spread.margin_only ? 'WATCH' : spread.status;
+    base.confidence = !spread.margin_only && (spread.p_cover >= 0.68 || spread.p_cover <= 0.32) ? 'medium' : 'low';
+    base.explanation = spread.margin_only
+      ? `Projected goal margin ${spread.projected_margin_home} (home-positive). No parsed goal line to compare — margin-only, no cover probability.`
+      : `Projected margin ${spread.projected_margin_home}; P(cover ${side} ${line}) = ${(spread.p_cover * 100).toFixed(0)}% from Poisson grid.`;
   }
 
   // 1X2 match result lane
@@ -117,6 +131,11 @@ function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lin
       base.draw_risk = probs.draw_risk;
       base.draw_evaluation = probs.draw_evaluation;
       base.draw_rationale = probs.draw_rationale;
+      // Poisson 1X2 cross-check (logistic stays primary; this is a flag only).
+      if (goalModel?.ok) {
+        base.poisson_1x2 = goalModel.poisson_1x2;
+        base.cross_check_1x2 = goalModel.cross_check_1x2;
+      }
     } else {
       base.draw_evaluation = 'BLOCKED_MODEL_LAYER_MISSING';
     }
@@ -146,41 +165,51 @@ function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lin
     }
   }
 
-  // Total goals lane (full game, heuristic from attack/defense balance).
+  // Total goals lane (full game) — Poisson over/under from the score grid.
   // Requires real attack/defense layers — missing layers BLOCK, never default.
   if (lane.key === 'total_goals') {
-    const env = probs?.ok ? probs.goal_environment : null;
-    if (!env) {
+    if (!goalModel?.ok) {
       base.recommendation = 'BLOCKED_MODEL_LAYER_MISSING';
-      base.explanation = 'No goal-environment proxy (attack/defense layers missing); cannot evaluate totals.';
+      base.explanation = 'No goal projection (attack/defense layers missing); cannot evaluate totals.';
       if (marketContext) base.market_context = referenceContext(marketContext);
       return base;
     }
-    const goalExpectancy = env.xg_total;
     const line = marketContext?.line ?? null;
-    base.recommendation = goalExpectancy > 2.8 ? 'OVER' : goalExpectancy < 2.2 ? 'UNDER' : 'WATCH';
-    base.confidence = goalExpectancy > 3.2 || goalExpectancy < 1.8 ? 'medium' : 'low';
-    base.explanation = `Goal expectancy ~${round1(goalExpectancy)} from attack/defense balance${line !== null ? ` vs market line ${line}` : ''}. Proxy only — no over/under probability, no pp edge.`;
+    const total = totalGoalsFromGrid({
+      grid: goalModel.grid,
+      projectedTotal: goalModel.projection.projected_total_goals,
+      line,
+    });
+    base.projected_total_goals = total.projected_total;
+    base.p_over = total.p_over;
+    base.p_under = total.p_under;
+    base.total_line = total.line;
+    if (total.projection_only) {
+      base.recommendation = 'WATCH';
+      base.confidence = 'low';
+      base.explanation = `Projected total ${total.projected_total} goals. No total line parsed — projection-only (no over/under probability).`;
+    } else {
+      base.recommendation = total.status === 'WATCH' ? 'WATCH' : `${total.status}_${total.side}`;
+      base.confidence = total.status === 'PICK' ? 'medium' : 'low';
+      base.explanation = `Projected total ${total.projected_total}; P(over ${line}) = ${(total.p_over * 100).toFixed(0)}%, P(under ${line}) = ${(total.p_under * 100).toFixed(0)}% from Poisson grid. Status ${total.status}.`;
+    }
   }
 
-  // Both teams to score (full game). Same no-default rule.
+  // Both teams to score (full game) — Poisson P(Yes) from the score grid.
   if (lane.key === 'both_teams_to_score') {
-    const homeAttack = homeLedger.layers.find(l => l.key === 'attacking_strength' && l.present)?.score ?? null;
-    const awayAttack = awayLedger.layers.find(l => l.key === 'attacking_strength' && l.present)?.score ?? null;
-    const homeDefense = homeLedger.layers.find(l => l.key === 'defensive_strength' && l.present)?.score ?? null;
-    const awayDefense = awayLedger.layers.find(l => l.key === 'defensive_strength' && l.present)?.score ?? null;
-    if (homeAttack === null || awayAttack === null || homeDefense === null || awayDefense === null) {
+    if (!goalModel?.ok) {
       base.recommendation = 'BLOCKED_MODEL_LAYER_MISSING';
       base.explanation = 'Attack/defense layers missing on at least one side; cannot evaluate BTTS.';
       if (marketContext) base.market_context = referenceContext(marketContext);
       return base;
     }
-    const homeBtsc = (homeAttack + (100 - awayDefense)) / 2;
-    const awayBtsc = (awayAttack + (100 - homeDefense)) / 2;
-    const avg = (homeBtsc + awayBtsc) / 2;
-    base.recommendation = avg > 60 ? 'YES' : avg < 40 ? 'NO' : 'WATCH';
-    base.confidence = avg > 70 || avg < 30 ? 'medium' : 'low';
-    base.explanation = `BTTS model ~${round1(avg)} from attack vs opponent defense. Proxy only — no pp edge.`;
+    const btts = goalModel.btts;
+    base.p_btts_yes = btts.p_yes;
+    base.p_btts_no = btts.p_no;
+    base.recommendation = btts.status === 'WATCH' ? 'WATCH'
+      : btts.status.endsWith('YES') ? 'YES' : 'NO';
+    base.confidence = btts.status.startsWith('PICK') ? 'medium' : 'low';
+    base.explanation = `BTTS P(Yes) = ${(btts.p_yes * 100).toFixed(0)}% (P(No) = ${(btts.p_no * 100).toFixed(0)}%) from Poisson grid: 1 - P(home=0) - P(away=0) + P(0-0). Status ${btts.status}.`;
   }
 
   // Attach market context AFTER composite scoring
@@ -232,13 +261,38 @@ export function composeMultiLaneCeilingBoard({
   // 1X2 probabilities computed from ledgers BEFORE any market attachment.
   const probs = computeMatchProbabilities({ homeLedger, awayLedger, drawIncentive });
 
+  // Projected team goals + Poisson score grid (market-free). The grid is the
+  // single source for the derived goal lanes (total / BTTS / spread) and the
+  // Poisson 1X2 cross-check. Built ONCE per match from attack/defense layers;
+  // no market line/price enters the projection.
+  const projection = projectTeamGoals({ homeLedger, awayLedger });
+  let goalModel = { ok: false, projection };
+  if (projection.projection_status === 'PROJECTED') {
+    const gridRes = buildScoreGrid({ lambdaHome: projection.lambda_home, lambdaAway: projection.lambda_away });
+    if (gridRes.ok) {
+      const poisson = poisson1x2FromGrid({ grid: gridRes.grid });
+      goalModel = {
+        ok: true,
+        projection,
+        grid: gridRes.grid,
+        grid_sum: gridRes.sum_raw,
+        btts: bttsFromGrid({ grid: gridRes.grid }),
+        poisson_1x2: poisson,
+        cross_check_1x2: crossCheck1x2({
+          logistic: probs.ok ? { p_home: probs.p_home, p_draw: probs.p_draw, p_away: probs.p_away } : null,
+          poisson,
+        }),
+      };
+    }
+  }
+
   const lanes = LANES.map(lane => {
     const mc = marketContexts.find(m => m.market_type === lane.key)
       || (lane.key === 'match_winner'
         ? marketContexts.find(m => !m.market_type || m.market_type === 'match_winner')
         : null)
       || null;
-    return laneSignal(lane, homeLedger, awayLedger, mc, isKnockout, lineupConfirmed, probs);
+    return laneSignal(lane, homeLedger, awayLedger, mc, isKnockout, lineupConfirmed, probs, goalModel);
   });
 
   const pickLanes = lanes.filter(l => l.recommendation.startsWith('PICK'));
@@ -267,6 +321,16 @@ export function composeMultiLaneCeilingBoard({
       draw_rationale: probs.draw_rationale,
       goal_environment: probs.goal_environment,
     } : { blocked_reason: probs.blocked_reason, draw_evaluation: probs.draw_evaluation },
+    goal_projection: goalModel.ok ? {
+      projected_home_goals: goalModel.projection.projected_home_goals,
+      projected_away_goals: goalModel.projection.projected_away_goals,
+      projected_total_goals: goalModel.projection.projected_total_goals,
+      projected_goal_margin_home: goalModel.projection.projected_goal_margin_home,
+      grid_sum: goalModel.grid_sum,
+      poisson_1x2: goalModel.poisson_1x2,
+      cross_check_1x2: goalModel.cross_check_1x2,
+      projection_status: 'PROJECTED',
+    } : { projection_status: goalModel.projection.projection_status, reason: goalModel.projection.reason },
     composite_score_home: homeLedger.composite_score,
     composite_score_away: awayLedger.composite_score,
     layers_present_home: homeLedger.layers_present ?? 0,
