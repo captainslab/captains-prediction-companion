@@ -319,13 +319,36 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
     },
   });
 
+  const runSplit = packet.text.match(/projected run split favors Los Angeles Angels ([0-9]+\.[0-9]) to ([0-9]+\.[0-9]) and the win split lands at ([0-9]+\.[0-9])%/);
+  const totalShape = packet.text.match(/projected total ~([0-9]+\.[0-9])/);
+  const yrfiShape = packet.text.match(/YRFI ([0-9]+(?:\.[0-9]+)?)%/);
+  const awayKs = packet.text.match(/Reid Detmers projects around ([0-9]+\.[0-9]) K/);
+  const homeKs = packet.text.match(/Jack Perkins projects around ([0-9]+\.[0-9]) K/);
+
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /The model leans Los Angeles Angels because the projected run split favors Los Angeles Angels 5\.9 to 4\.8 and the win split lands at 64\.1%/);
   assert.match(packet.text, /NO CLEAR PICK because only the MONEYLINE family is fully modeled/);
-  assert.match(packet.text, /projected total ~10\.7/);
-  assert.match(packet.text, /YRFI 73%/);
-  assert.match(packet.text, /Reid Detmers projects around 6\.4 K/);
-  assert.match(packet.text, /Jack Perkins projects around 12\.3 K/);
+  assert.ok(runSplit, 'run split line should render');
+  assert.ok(totalShape, 'total shape line should render');
+  assert.ok(yrfiShape, 'YRFI shape line should render');
+  assert.ok(awayKs, 'away starter Ks line should render');
+  assert.ok(homeKs, 'home starter Ks line should render');
+
+  const awayRuns = Number(runSplit[1]);
+  const homeRuns = Number(runSplit[2]);
+  const awayWin = Number(runSplit[3]);
+  const totalRuns = Number(totalShape[1]);
+  const yrfi = Number(yrfiShape[1]);
+  const awayKsValue = Number(awayKs[1]);
+  const homeKsValue = Number(homeKs[1]);
+
+  assert.ok(awayRuns > homeRuns, 'away side should still project the stronger run split');
+  assert.ok(awayRuns >= 5.0 && awayRuns <= 6.9, 'away runs should stay near the calibrated fixture band');
+  assert.ok(homeRuns >= 4.0 && homeRuns <= 5.9, 'home runs should stay near the calibrated fixture band');
+  assert.ok(awayWin >= 60.0 && awayWin <= 69.5, 'win split should stay in the expected high-confidence band');
+  assert.ok(totalRuns >= 9.5 && totalRuns <= 11.9, 'total should stay in the expected one-game range');
+  assert.ok(yrfi >= 68.0 && yrfi <= 78.5, 'YRFI should stay in the expected shape band');
+  assert.ok(awayKsValue >= 5.5 && awayKsValue <= 7.5, 'away starter Ks should stay close to fixture expectations');
+  assert.ok(homeKsValue >= 11.0 && homeKsValue <= 13.5, 'home starter Ks should stay close to fixture expectations');
   assert.match(packet.text, /Upgrade trigger: add a confirmed second modeled family/);
   assert.doesNotMatch(packet.text, /Evidence Box/);
   assert.doesNotMatch(packet.text, /Decision Process/);

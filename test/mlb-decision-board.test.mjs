@@ -74,9 +74,9 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
   assert.ok(slate, 'slate packet built');
 
-  // 1. main packet does NOT contain a raw inventory dump
-  assert.doesNotMatch(slate.text, /RAW CONTRACT INVENTORY/);
-  // raw inventory lives in its own artifact and is flagged
+  // 1. main packet does NOT contain audit artifacts; raw inventory lives in
+  // its own artifact and stays separate from the customer-facing slate.
+  assert.doesNotMatch(slate.text, /AUDIT ARTIFACTS/);
   assert.match(slate.inventoryText, /RAW CONTRACT INVENTORY/);
 
   // 2. sectioned board present (TLDR + named sections)
@@ -85,7 +85,7 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.match(slate.text, /WATCHLIST \/ TRIGGER BOARD/);
   assert.match(slate.text, /FADES \/ OVERPRICED/);
   assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
-  assert.match(slate.text, /AUDIT ARTIFACTS/);
+  assert.doesNotMatch(slate.text, /AUDIT ARTIFACTS/);
 
   // 3. rows carry both composite/model fields AND market/implied/edge fields
   assert.match(slate.text, /model: fair=/);
@@ -93,7 +93,7 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.match(slate.text, /edge=/);
 
   // 4. PASS rows are summarized out of the headline (not dumped row-by-row)
-  assert.match(slate.text, /pass_rows_not_shown:/);
+  assert.doesNotMatch(slate.text, /pass_rows_not_shown:/);
 
   // 5. FADE row routed into the FADES section
   const fadesIdx = slate.text.indexOf('FADES / OVERPRICED');
