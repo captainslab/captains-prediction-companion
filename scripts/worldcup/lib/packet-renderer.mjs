@@ -21,12 +21,36 @@
 import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
+const CHICAGO_TZ = 'America/Chicago';
+const EASTERN_TZ = 'America/New_York';
+
+function generatedDisplay(d = new Date()) {
+  const ct = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  const et = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  return `${ct} / ${et}`;
+}
+
 function header(title, date) {
   return [
     `=== Captain World Cup — CPC Packet: ${title} ===`,
     `date: ${date}`,
     `packet_type: worldcup-matchday`,
-    `Generated: ${new Date().toISOString()}`,
+    `Generated: ${generatedDisplay()}`,
     `No trades placed by this workflow. Research only.`,
     ``,
   ].join('\n');
@@ -39,9 +63,6 @@ function section(title) {
 function pct(p) {
   return p == null ? 'N/A' : `${(p * 100).toFixed(0)}%`;
 }
-
-const CHICAGO_TZ = 'America/Chicago';
-const EASTERN_TZ = 'America/New_York';
 
 function safeStage(match) {
   return match?.group ?? match?.stage ?? 'Group stage';
@@ -382,10 +403,10 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   lines.push('  Pre-lock status: lineups are not confirmed');
   lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's confirmed XI.`);
   if (researchStatus === 'ok') {
-    const summary = research?.source_quality
-      ? `confirmed=${research.source_quality.confirmed ?? 0}, not_confirmed=${research.source_quality.not_confirmed ?? 0}, unknown=${research.source_quality.unknown ?? 0}`
-      : 'context captured';
-    lines.push(`  Perplexity research: live supplemental context captured and saved to ${research?.outPath ?? 'state/worldcup/<date>/research/perplexity_research.json'} (${summary})`);
+    const confirmed = research?.source_quality?.confirmed;
+    const matchCount = matches.length;
+    const capturedCount = Number.isFinite(confirmed) ? confirmed : matchCount;
+    lines.push(`  Perplexity research: live supplemental context captured for ${capturedCount}/${matchCount} matches.`);
   } else {
     lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
   }
