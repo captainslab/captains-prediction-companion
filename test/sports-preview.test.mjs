@@ -152,6 +152,41 @@ test('sanitizeResearchArtifact strips market keys and records removals', () => {
   assertNoMarketLeak(sanitized.model_safe_inputs);
 });
 
+test('sanitizeResearchArtifact removes market_snapshot container entirely', () => {
+  const artifact = {
+    schema: 'sports_preview_research_v1',
+    sport: 'mlb',
+    packet_type: 'mlb-game',
+    game_id: 'mlb-003',
+    generated_at: '2026-06-22T12:00:00Z',
+    source_id: 'perplexity',
+    source_urls: ['https://example.com/snapshot'],
+    source_titles: ['Snapshot source'],
+    source_freshness: { status: 'fresh' },
+    confirmed_facts: ['confirmed'],
+    unconfirmed_claims: [],
+    unavailable_fields: [],
+    model_safe_inputs: {
+      starters: { away: 'A', home: 'H' },
+      market_snapshot: {
+        bid_ask: '51/49',
+        odds: '-110',
+        notes: 'snapshot notes',
+      },
+    },
+    editorial_context: { storyline: 'context' },
+    why_this_game_matters: 'Why text.',
+    headline_candidates: ['Headline'],
+  };
+
+  const sanitized = sanitizeResearchArtifact(artifact);
+  assert.ok(!('market_snapshot' in sanitized.model_safe_inputs), 'market_snapshot must be removed from model_safe_inputs');
+  assert.ok(sanitized.sanitized_removed.includes('market_snapshot'), 'market_snapshot must be recorded in sanitized_removed');
+  assert.ok(sanitized.unavailable_fields.includes('market_snapshot'), 'market_snapshot must be recorded in unavailable_fields');
+  assert.ok(sanitized.model_safe_inputs.starters.away === 'A', 'unrelated model_safe_inputs fields must survive');
+  assertNoMarketLeak(sanitized.model_safe_inputs);
+});
+
 test('source-backed MLB preview uses research why text and model output values', () => {
   const research = sanitizeResearchArtifact({
     schema: 'sports_preview_research_v1',

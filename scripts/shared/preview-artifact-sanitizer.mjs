@@ -26,6 +26,7 @@ export const BANNED_MODEL_INPUT_KEYS = Object.freeze([
   'yes_bid',
   'yes_ask',
   'vol',
+  'market_snapshot',
 ]);
 
 const BANNED_KEY_SET = new Set(BANNED_MODEL_INPUT_KEYS);
