@@ -97,6 +97,24 @@ test('buildEventDisplay: unknown abbrev falls back to raw title and MISSING_MAPP
   assert.equal(d.display_event_title, 'Mystery Team vs Other');
 });
 
+test('buildEventDisplay: explicit away/home fields populate the matchup even without a parsed ticker', () => {
+  const ev = {
+    event_ticker: 'KXMLBGAME-UNKNOWN',
+    title: 'Generic Game Title',
+    away_team: 'NYY',
+    home_team: 'BOS',
+    away_full: 'New York Yankees',
+    home_full: 'Boston Red Sox',
+  };
+  const d = buildEventDisplay(ev);
+  assert.equal(d.display_name_status, 'OK');
+  assert.equal(d.display_event_title, 'New York Yankees vs Boston Red Sox');
+  assert.equal(d.away_abbrev, 'NYY');
+  assert.equal(d.home_abbrev, 'BOS');
+  assert.equal(d.away_full, 'New York Yankees');
+  assert.equal(d.home_full, 'Boston Red Sox');
+});
+
 test('buildMarketDisplay: LADSD -> LAD market shows Dodgers as YES, Padres as NO', () => {
   const evDisp = buildEventDisplay({
     event_ticker: 'KXMLBGAME-26MAY182140LADSD',

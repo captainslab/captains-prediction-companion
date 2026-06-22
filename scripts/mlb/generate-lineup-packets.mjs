@@ -15,6 +15,12 @@ import { pathToFileURL } from 'node:url';
 import { findDueBlocks, LINEUP_STATUS, resolveDowngrade } from './lib/lineup-blocks.mjs';
 import { fetchMlbScheduleReadonly } from './source-adapters/mlb-official-readonly.mjs';
 import { discoverAllSeries, joinGames } from './lib/series-discovery.mjs';
+import {
+  buildGameProjections,
+  leagueRunsPerGame,
+  loadStatsRecords,
+  matchStatsRecord,
+} from './lib/projection-engine.mjs';
 
 // Packet renderer is written by a parallel agent — import lazily so a missing
 // module produces a clear error only when actually needed, not at startup.
@@ -220,6 +226,49 @@ export function packetTextPayload(packet) {
 // Schedule record → lineup notes + starters helper
 // ---------------------------------------------------------------------------
 
+function findScheduleRecordForGame(scheduleRecords, game) {
+  const awayNames = new Set(
+    [game.away, game.away_full].filter(Boolean).map((s) => s.toLowerCase()),
+  );
+  const homeNames = new Set(
+    [game.home, game.home_full].filter(Boolean).map((s) => s.toLowerCase()),
+  );
+
+  let bestRecord = null;
+  for (const r of scheduleRecords) {
+    const rAway = (r.away_team || '').toLowerCase();
+    const rHome = (r.home_team || '').toLowerCase();
+    const awayMatch = awayNames.has(rAway);
+    const homeMatch = homeNames.has(rHome);
+    if (awayMatch && homeMatch) {
+      return r;
+    }
+    if ((awayMatch || homeMatch) && !bestRecord) bestRecord = r;
+  }
+  return bestRecord;
+}
+
+function modelFreshnessFromMlbStatus(status) {
+  const raw = String(status ?? '').trim().toLowerCase();
+  if (!raw) return 'pregame';
+  if (raw.includes('final')) return 'final';
+  if (
+    raw.includes('live')
+    || raw.includes('in progress')
+    || raw.includes('warmup')
+    || raw.includes('delayed')
+    || raw.includes('review')
+    || raw.includes('suspended')
+  ) {
+    return 'live';
+  }
+  return 'pregame';
+}
+
+function lineupStatusForProjection(lineupStatus) {
+  return lineupStatus === LINEUP_STATUS.BOTH_CONFIRMED ? 'confirmed' : 'unconfirmed';
+}
+
 /**
  * Derive lineup notes string and starters object from MLB schedule records
  * matched to a specific game (by team name fuzzy match).
@@ -229,23 +278,7 @@ export function packetTextPayload(packet) {
  * @returns {{ lineupNotes: string, starters: { away: string|null, home: string|null } }}
  */
 function deriveStartersForGame(scheduleRecords, game) {
-  const awayNames = new Set(
-    [game.away, game.away_full].filter(Boolean).map((s) => s.toLowerCase()),
-  );
-  const homeNames = new Set(
-    [game.home, game.home_full].filter(Boolean).map((s) => s.toLowerCase()),
-  );
-
-  // Find best matching record — prefer one where both sides match.
-  let bestRecord = null;
-  for (const r of scheduleRecords) {
-    const rAway = (r.away_team || '').toLowerCase();
-    const rHome = (r.home_team || '').toLowerCase();
-    const awayMatch = awayNames.has(rAway);
-    const homeMatch = homeNames.has(rHome);
-    if (awayMatch && homeMatch) { bestRecord = r; break; }
-    if ((awayMatch || homeMatch) && !bestRecord) bestRecord = r;
-  }
+  const bestRecord = findScheduleRecordForGame(scheduleRecords, game);
 
   if (!bestRecord) {
     return {
@@ -266,6 +299,11 @@ function deriveStartersForGame(scheduleRecords, game) {
     lineupNotes,
     starters: { away: awayPitcher, home: homePitcher },
   };
+}
+
+function deriveModelFreshnessForGame(scheduleRecords, game) {
+  const bestRecord = findScheduleRecordForGame(scheduleRecords, game);
+  return modelFreshnessFromMlbStatus(bestRecord?.mlb_status ?? null);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,6 +384,24 @@ async function main() {
   const renderer = await getPacketRenderer();
   const { renderPerGamePacket, renderBlockPacket, renderCompactSlate } = renderer;
 
+  const statsRecords = loadStatsRecords(stateRoot, date);
+  const leagueRPG = leagueRunsPerGame(statsRecords);
+  const projectionsFor = (game, lineupStatus) => {
+    const record = matchStatsRecord(statsRecords, {
+      eventTicker: game.series?.ml?.event_ticker ?? '',
+      awayName: game.away_full ?? game.away ?? '',
+      homeName: game.home_full ?? game.home ?? '',
+    });
+    if (!record) return null;
+    return buildGameProjections({
+      record,
+      leagueRPG,
+      as_of: `${date}T00:00:00Z`,
+      lineup_status: lineupStatusForProjection(lineupStatus),
+      weather_status: game.weather_status ?? null,
+    });
+  };
+
   // 5. Process each due block.
   for (const block of dueBlocks) {
     const blockId = block.block_id;
@@ -399,6 +455,8 @@ async function main() {
     const perGamePackets = [];
     for (const game of blockGames) {
       const { lineupNotes, starters } = deriveStartersForGame(scheduleRecords, game);
+      const modelFreshness = deriveModelFreshnessForGame(scheduleRecords, game);
+      const projections = projectionsFor(game, lineupStatus);
       let packet;
       try {
         packet = await renderPerGamePacket(game, {
@@ -406,6 +464,8 @@ async function main() {
           lineupNotes,
           starters,
           venueWeather: null,
+          projections,
+          modelFreshness,
         });
       } catch (err) {
         console.error(`[mlb-packets] ${blockId}: renderPerGamePacket failed for ${game.game_key} — ${err.message}`);

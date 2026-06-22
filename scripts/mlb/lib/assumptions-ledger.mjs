@@ -202,8 +202,8 @@ export function weatherLabel(inputStatus) {
 function projectionToInput(value, kind) {
   const raw = String(value ?? '').toLowerCase();
   if (kind === 'lineup') {
+    if (raw.includes('unconfirmed') || raw.includes('pending') || raw.includes('project')) return 'PROJECTED';
     if (raw.includes('confirm')) return 'LOCKED';
-    if (raw.includes('project')) return 'PROJECTED';
     return 'UNKNOWN';
   }
   if (kind === 'weather') {

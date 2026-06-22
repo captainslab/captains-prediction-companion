@@ -540,6 +540,21 @@ export function noUsableSourceEvidenceFinding(text, packetType) {
   return null;
 }
 
+function mlbAlphaPendingFinding(text, packetType) {
+  if (!/mlb/i.test(packetType ?? '')) return null;
+  const body = String(text ?? '');
+  const mainProjectionSection = body.split(/(?:^|\n)Source Ledger\b/i)[0] ?? body;
+  const mainProjectionMissing =
+    /(?:^|\n)\s*(?:Win probability|Projected win probability|Run line|Projected run-line|Total runs|Projected total|Projected runs \(Home\)|Projected runs \(Away\)|First-inning run \(YRFI\))\s+—\s+BLOCKED_MODEL_LAYER_MISSING\b/i.test(mainProjectionSection) ||
+    /(?:^|\n)\s*MODEL_OUTPUT:\s+UNAVAILABLE\b/i.test(body) ||
+    /(?:^|\n)\s*Model summary:\s*model outputs are unavailable\./i.test(body);
+  if (!/provisional/i.test(body) && !mainProjectionMissing) return null;
+  return {
+    code: 'MLB_ALPHA_PENDING',
+    message: 'MLB packet is still provisional; required alpha is not fully pulled',
+  };
+}
+
 function priceLeaksInScoring(text) {
   const leaks = [];
   let inScoreSection = false;
@@ -815,6 +830,11 @@ export function validatePacketText(text, context = {}) {
     // disclosure does NOT clear this — disclosing stale cache cannot manufacture
     // research that was never performed.
     errors.push(noSourceEvidence);
+  }
+
+  const alphaPending = mlbAlphaPendingFinding(text, packetType);
+  if (alphaPending) {
+    errors.push(alphaPending);
   }
 
   const leaks = priceLeaksInScoring(text);

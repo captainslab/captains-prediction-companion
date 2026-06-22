@@ -180,6 +180,19 @@ test('blocks yes_ask market value inside scoring/rationale section', () => {
   assert.ok(result.errors.some((err) => err.code === 'MARKET_PRICE_IN_SCORING_SECTION'));
 });
 
+test('blocks ranked MLB rows that still carry score=MISSING', () => {
+  const text = cleanPacket([
+    'CPC COMPOSITE BOARD',
+    '#1 [WATCH] KXMLB-TEST :: Yankees Win',
+    '    model: fair=MISSING score=MISSING posture=WATCH layers=4/7 conf=low',
+    '    market: yes_bid=0.46 yes_ask=0.48 last=0.47 vol=120 oi=180',
+    '    implied=0.47 fair=MISSING edge=MISSING confidence=low',
+  ].join('\n'));
+  const result = validatePacketText(text, { packetType: 'mlb-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
+  assert.ok(result.errors.some((err) => err.code === 'CPC_CONTRACT_VIOLATION' && /ranked board row \[WATCH\] has score=MISSING/.test(err.message)));
+});
+
 test('blocks high NO_CLEAR_PICK ratio without source-backed explanation', () => {
   const text = cleanPacket([
     '#1 [NO_CLEAR_PICK] A',

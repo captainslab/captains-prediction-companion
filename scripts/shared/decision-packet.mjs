@@ -174,6 +174,10 @@ const POSITIVE_OVERRIDE_STATUSES = Object.freeze(
   new Set([EDGE_STATUS.PICK, EDGE_STATUS.LEAN]),
 );
 
+const RANKED_EDGE_STATUSES = Object.freeze(
+  new Set([EDGE_STATUS.PICK, EDGE_STATUS.LEAN, EDGE_STATUS.WATCH]),
+);
+
 /**
  * Reconcile a domain scorer's authoritative statusOverride against the numeric
  * edge so an override can never assert a misleading positive verdict.
@@ -243,6 +247,8 @@ function reconcileOverrideWithEdge(override, thresholdStatus, edgePp) {
  *                                              decision vocabulary without overstating edge.
  * @param {number} [input.edgeOverridePp]     - domain-computed edge in pp (e.g. MLB edge_pp);
  *                                              used when no model fair probability is available.
+ * @param {boolean} [input.requireModelScore]  - when true, ranked PICK/LEAN/WATCH rows are
+ *                                              forced to BLOCKED if composite.score is missing.
  */
 export function buildDecisionRow(input = {}) {
   const composite = input.composite ?? {};
@@ -262,17 +268,22 @@ export function buildDecisionRow(input = {}) {
   }
   const edgeCents = edgePp === null ? null : Math.round(edgePp); // 1pp == 1 cent on Kalshi
 
-  const blocker = input.blocker && String(input.blocker).trim() ? String(input.blocker).trim() : null;
+  let blocker = input.blocker && String(input.blocker).trim() ? String(input.blocker).trim() : null;
   const override = (input.statusOverride && Object.values(EDGE_STATUS).includes(input.statusOverride))
     ? input.statusOverride
     : null;
-  const edgeStatus = blocker
+  let edgeStatus = blocker
     ? EDGE_STATUS.BLOCKED
     : reconcileOverrideWithEdge(
         override,
         decideEdgeStatus({ blocker, edgePp, confidence, posture: composite.posture }),
         edgePp,
       );
+  const compositeScore = composite.score ?? null;
+  if (input.requireModelScore && compositeScore === null && RANKED_EDGE_STATUSES.has(edgeStatus)) {
+    edgeStatus = EDGE_STATUS.BLOCKED;
+    blocker = blocker ?? 'model score missing for ranked row';
+  }
 
   const layersPresent = num(composite.layersPresent ?? composite.layers_present);
   const layersTotal = num(composite.layersTotal ?? composite.layers_total);
@@ -283,7 +294,7 @@ export function buildDecisionRow(input = {}) {
     market_type: input.marketType ?? 'MISSING',
     settlement_summary: input.settlementSummary ?? 'MISSING',
     // --- composite / model half (no market price inside) ---
-    composite_score: composite.score ?? null,
+    composite_score: compositeScore,
     composite_posture: composite.posture ?? 'NO_CLEAR_PICK',
     layers_present: (layersPresent !== null && layersTotal !== null)
       ? `${layersPresent}/${layersTotal}`

@@ -47,6 +47,20 @@ test('pending lineup downgrades confidence but does NOT collapse to WATCH', () =
   assert.match(row.trigger_event, /lineup/i);
 });
 
+test('missing MLB model score blocks ranked PICK/LEAN/WATCH rows before render', () => {
+  const row = mlbPickToDecisionRow(prelineupPick({
+    classification: 'LEAN',
+    fair_value: null,
+    market_reference_prob: 0.7438,
+    kalshi_ask: 0.70,
+    edge_pp: 4.382,
+  }));
+  assert.equal(row.edge_status, 'BLOCKED', 'ranked row without a model score must be blocked');
+  assert.match(row.blocker_if_any, /model score missing/i);
+  assert.match(row.analysis, /book-ref \(not composite\)/, 'book reference remains honest in analysis');
+  assert.equal(row.composite_score, null);
+});
+
 test('MLB slate packet renders sectioned board and excludes raw inventory', () => {
   const scoring = {
     picks: [
@@ -117,6 +131,37 @@ test('BLOCKED MLB rows compact into event-level notes and never render score=MIS
   assert.match(slate.text, /2 blocked row\(s\)/);
   assert.doesNotMatch(slate.text, /#\d+\s+\[BLOCKED\]/);
   assert.doesNotMatch(slate.text, /score=MISSING/);
+});
+
+test('ranked MLB rows with score=MISSING compact into blocked notes instead of ranked rows', () => {
+  const missingScorePick = (market_ticker, classification) => ({
+    market_ticker,
+    contract_title: 'Missing score market',
+    game: 'Toronto Blue Jays at Baltimore Orioles',
+    market_lane: 'moneyline',
+    classification,
+    fair_value: null,
+    kalshi_ask: 0.51,
+    edge_pp: 1.8,
+    primary_pick: false,
+    missing_confirmations: ['model_fair_missing'],
+    gates_passed: ['starters'],
+  });
+
+  const scoring = {
+    picks: [
+      missingScorePick('KXMLB-MISS-1', 'LEAN'),
+      missingScorePick('KXMLB-MISS-2', 'WATCH_FOR_LISTING'),
+    ],
+    source: '/tmp/picks.json',
+    summaryCounts: { lean: 1, watch_for_listing: 1 },
+  };
+  const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
+  assert.ok(slate, 'slate packet built');
+  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
+  assert.match(slate.text, /blocked row\(s\)/);
+  assert.doesNotMatch(slate.text, /\[\s*(LEAN|WATCH)\s*\]/, 'ranked rows must not survive with missing score');
+  assert.doesNotMatch(slate.text, /score=MISSING/, 'missing-score rows must stay out of ranked sections');
 });
 
 test('market price is never folded into the composite score', () => {

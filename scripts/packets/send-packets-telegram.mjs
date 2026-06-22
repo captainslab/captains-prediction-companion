@@ -246,15 +246,18 @@ function logDryRunVerdict(entryName, janitor, { notice = null, documentName = nu
 }
 
 export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
-  const eventLine = packetText
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .find(line =>
-      /^Event title:/i.test(line) ||
-      /^#\s*Event:/i.test(line) ||
-      /^=== .*CPC Packet:/i.test(line) ||
-      /^=== .*Mentions/i.test(line));
-  const source = eventLine || stem;
+  const lines = packetText.split(/\r?\n/).map(line => line.trim());
+  const eventLine = lines.find(line =>
+    /^Event title:/i.test(line) ||
+    /^#\s*Event:/i.test(line));
+  const gameTitleLine = lines.find(line =>
+    /^Captain MLB\s*[—-]\s*.+\s+Game Board$/i.test(line));
+  const slateTitleLine = lines.find(line =>
+    /^Captain MLB\s*[—-]\s*(?:CPC Packet:\s*)?Daily Slate Board$/i.test(line));
+  const packetLine = lines.find(line =>
+    /^=== .*CPC Packet:/i.test(line) ||
+    /^=== .*Mentions/i.test(line));
+  const source = eventLine || gameTitleLine || slateTitleLine || packetLine || stem;
   let label = source
     .replace(/^Event title:\s*/i, '')
     .replace(/^#\s*Event:\s*/i, '')
@@ -264,6 +267,12 @@ export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
     .replace(/^CPC Packet:\s*/i, '')
     .replace(/^Daily Decision Board:\s*/i, '')
     .trim();
+  if (gameTitleLine) {
+    const m = gameTitleLine.match(/^Captain MLB\s*[—-]\s*(.+\s+Game Board)$/i);
+    if (m?.[1]) label = m[1].trim();
+  } else if (slateTitleLine) {
+    label = 'Daily Slate Board';
+  }
   if (/trump/i.test(source) && /tele-rally/i.test(source)) label = 'Trump Tele-Rally';
   if (!label) label = stem;
   return `New CPC packet: ${label} -- attached .txt`;

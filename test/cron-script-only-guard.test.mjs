@@ -282,6 +282,74 @@ test('MLB sender dry-run reports explicit YES/NO would-send and would-block outc
   assert.match(result.stdout, /would_block=NO/);
 });
 
+test('MLB sender dry-run blocks provisional packets until required alpha is pulled', () => {
+  const date = '2099-01-04';
+  const { root, dir } = makePacketDir(date, 'mlb-daily');
+  const file = join(dir, `${date}-provisional.txt`);
+  writeFileSync(file, [
+    "Captain's MLB Prediction Companion",
+    'Captain MLB — NYM @ PHI Game Board',
+    'New York Mets at Philadelphia Phillies',
+    'Date: 2099-01-04 | First pitch: 2099-01-04T23:20:00Z | Venue: Citizens Bank Park',
+    'CPC Packet: Game Board | generated_utc: 2099-01-04T00:00:00Z',
+    'Research Status',
+    '  Lineup PROJECTED · Starter PROBABLE · Weather PRELIMINARY. Unconfirmed players removed or downgraded before final game packet.',
+    'Game Model Results',
+    '--- PROJECTION-FIRST READ (model layer, market-free) ---',
+    'Projected win probability — Philadelphia Phillies 80.4%, New York Mets 19.6% (model score distribution, not a market line) [provisional — lineup unconfirmed].',
+    'No trades placed by this workflow.',
+    'No bankroll advice. Research only.',
+  ].join('\n'));
+
+  const result = runSenderCli(root, date);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /would_send=NO/);
+  assert.match(result.stdout, /would_block=YES/);
+});
+
+test('MLB sender dry-run blocks packets missing main alpha even without provisional wording', () => {
+  const date = '2099-01-04';
+  const { root, dir } = makePacketDir(date, 'mlb-daily');
+  const file = join(dir, `${date}-missing-alpha.txt`);
+  writeFileSync(file, [
+    "Captain's MLB Prediction Companion",
+    'Captain MLB — NYM @ PHI Game Board',
+    'New York Mets at Philadelphia Phillies',
+    'Date: 2099-01-04 | First pitch: 2099-01-04T23:20:00Z | Venue: Citizens Bank Park',
+    'CPC Packet: Game Board | generated_utc: 2099-01-04T00:00:00Z',
+    'Research Status',
+    '  Lineup LOCKED · Starter CONFIRMED · Weather UNKNOWN. Unconfirmed players removed or downgraded before final game packet.',
+    'Event Preview / Storyline',
+    '  Starter matchup is David Peterson vs Zack Wheeler; New York Mets at Philadelphia Phillies is a no clear pick for now.',
+    'Game Model Results',
+    '--- PROJECTION-FIRST READ (model layer, market-free) ---',
+    'Win probability — BLOCKED_MODEL_LAYER_MISSING: home_starter_unconfirmed, away_starter_unconfirmed. No projection issued.',
+    'Run line — BLOCKED_MODEL_LAYER_MISSING: home_starter_unconfirmed, away_starter_unconfirmed. No projection issued.',
+    'Total runs — BLOCKED_MODEL_LAYER_MISSING: home_starter_unconfirmed, away_starter_unconfirmed. No projection issued.',
+    'Projected runs (Home) — BLOCKED_MODEL_LAYER_MISSING: home_starter_unconfirmed, away_starter_unconfirmed. No projection issued.',
+    'Projected runs (Away) — BLOCKED_MODEL_LAYER_MISSING: home_starter_unconfirmed, away_starter_unconfirmed. No projection issued.',
+    'First-inning run (YRFI) — BLOCKED_MODEL_LAYER_MISSING: home_starter_unconfirmed, away_starter_unconfirmed. No projection issued.',
+    'Strikeouts — David Peterson — BLOCKED_MODEL_LAYER_MISSING: starter_unconfirmed, pitch_count_leash_unknown, opponent_lineup_unconfirmed. No projection issued.',
+    'Strikeouts — Zack Wheeler — BLOCKED_MODEL_LAYER_MISSING: starter_unconfirmed, pitch_count_leash_unknown, opponent_lineup_unconfirmed. No projection issued.',
+    'HR risk — Batter — BLOCKED_MODEL_LAYER_MISSING: lineup_unconfirmed, batter_not_in_confirmed_lineup, expected_pa_unknown. No projection issued.',
+    'Projection layer only — model outputs feed this read; no market signal does.',
+    'Source Ledger',
+    '  MLB_OFFICIAL: BACKED',
+    '  STATS_ADAPTER: BACKED',
+    '  WEATHER_ADAPTER: BACKED',
+    '  CONTEXT_ADAPTER: BACKED',
+    '  MODEL_OUTPUT: UNAVAILABLE',
+    '  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).',
+    'No trades placed by this workflow.',
+    'No bankroll advice. Research only.',
+  ].join('\n'));
+
+  const result = runSenderCli(root, date);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /would_send=NO/);
+  assert.match(result.stdout, /would_block=YES/);
+});
+
 test('MLB sender dry-run reports YES would-block for a blocked packet and NO would-send', () => {
   const date = '2099-01-05';
   const { root, dir } = makePacketDir(date, 'mlb-daily');

@@ -127,8 +127,20 @@ export function parseMarketTickerTeam(marketTicker, eventTicker) {
 export function buildEventDisplay(event) {
   const ticker = event?.event_ticker || '';
   const rawTitle = (event?.title || '').trim();
+  const normalizeAbbrev = (value) => {
+    const key = typeof value === 'string' ? value.trim().toUpperCase() : '';
+    return MLB_TEAM_BY_ABBREV[key] ? key : null;
+  };
+  const explicitAwayAbbrev = normalizeAbbrev(event?.away_team);
+  const explicitHomeAbbrev = normalizeAbbrev(event?.home_team);
+  const explicitAwayFull = typeof event?.away_full === 'string' && event.away_full.trim() ? event.away_full.trim() : null;
+  const explicitHomeFull = typeof event?.home_full === 'string' && event.home_full.trim() ? event.home_full.trim() : null;
   const teams = parseEventTickerTeams(ticker);
-  if (!teams) {
+  const awayAbbrev = explicitAwayAbbrev ?? teams?.[0] ?? null;
+  const homeAbbrev = explicitHomeAbbrev ?? teams?.[1] ?? null;
+  const awayFull = explicitAwayFull ?? lookupMlbTeam(awayAbbrev);
+  const homeFull = explicitHomeFull ?? lookupMlbTeam(homeAbbrev);
+  if (!awayAbbrev && !homeAbbrev) {
     return {
       display_event_title: rawTitle || 'MISSING',
       display_name_status: 'MISSING_MAPPING',
@@ -138,15 +150,12 @@ export function buildEventDisplay(event) {
       home_full: null,
     };
   }
-  const [a, b] = teams;
-  const awayFull = lookupMlbTeam(a);
-  const homeFull = lookupMlbTeam(b);
   if (!awayFull || !homeFull) {
     return {
       display_event_title: rawTitle || 'MISSING',
       display_name_status: 'MISSING_MAPPING',
-      away_abbrev: a,
-      home_abbrev: b,
+      away_abbrev: awayAbbrev,
+      home_abbrev: homeAbbrev,
       away_full: awayFull,
       home_full: homeFull,
     };
@@ -154,8 +163,8 @@ export function buildEventDisplay(event) {
   return {
     display_event_title: `${awayFull} vs ${homeFull}`,
     display_name_status: 'OK',
-    away_abbrev: a,
-    home_abbrev: b,
+    away_abbrev: awayAbbrev,
+    home_abbrev: homeAbbrev,
     away_full: awayFull,
     home_full: homeFull,
   };
