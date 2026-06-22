@@ -57,12 +57,20 @@ function makeFixture({ lineupStatus = 'lineup_pending', homeScore = 85, awayScor
 
 const REQUIRED_SECTIONS = [
   '1. TLDR BOARD',
-  '2. TOP EDGE CANDIDATES',
-  '3. WATCHLIST / TRIGGER BOARD',
-  '4. FADES / OVERPRICED',
+  '2. MODEL vs MARKET — LARGEST GAPS',
+  '3. MONITOR — NO CLEAR SIDE',
+  '4. OPPOSITE-SIDE VALUE',
   '5. BLOCKED / NEEDS SOURCE',
   '6. AUDIT ARTIFACTS',
   '7. SOURCE QUALITY / MODEL COMPLETENESS',
+];
+
+// Betting-tout shorthand that must NEVER appear as user-facing packet text.
+// Internal enums may keep these names, but the rendered packet must not.
+const BANNED_USER_FACING = [
+  /\bPICK\b/, /\bLEAN\b/, /\bWATCH\b/, /\bFADE\b/, /\bOVERPRICED\b/,
+  /TOP EDGE CANDIDATES/, /TRIGGER BOARD/, /winner_lean/, /\bno edge\b/i,
+  /projection-only/,
 ];
 
 test('packet renders every required section', () => {
@@ -81,25 +89,27 @@ test('missing lineups → match appears in BLOCKED and no full PICK is emitted',
     'pending lineups must appear in BLOCKED / NEEDS SOURCE');
   assert.ok(!/PICK_HOME|PICK_AWAY/.test(text),
     'no full PICK may be emitted while lineups are unconfirmed (pre-lineup downgrade)');
-  assert.ok(text.includes('Downgraded from PICK: lineups not confirmed'),
-    'downgrade reason must be stated');
+  assert.ok(text.includes('Pre-lineup: model side held back until lineups confirm'),
+    'pre-lineup hold-back must be stated in soccer language');
   assert.ok(text.includes('Pre-lineup confidence downgrade: YES'));
 });
 
-test('confirmed lineups with strong evidence → PICK allowed, not blocked for lineups', () => {
+test('confirmed lineups with strong evidence → clear model side, not blocked for lineups', () => {
   const { match, board } = makeFixture({ lineupStatus: 'lineup_confirmed' });
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11', packet_stage: 'lineup_locked' } });
-  assert.ok(/PICK_HOME/.test(text), 'strong confirmed-lineup edge should produce a PICK');
+  assert.ok(/Clear model side: Mexico/.test(text), 'strong confirmed-lineup edge should produce a clear model side');
+  assert.ok(!/\bPICK\b/.test(text), 'no raw PICK enum in user-facing text');
   assert.ok(!text.includes('blocked — missing lineups'));
 });
 
 test('market context is labeled NOT IN SCORE on every lane row', () => {
   const { match, board } = makeFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
-  const modelRows = (text.match(/MODEL: /g) || []).length;
+  const laneHeaders = text.match(/^  \[[^\]]+\] .*/gm) || [];
+  const renderedModelLanes = laneHeaders.filter(l => !/Model unavailable/.test(l)).length;
   const marketRows = (text.match(/MARKET \(NOT IN SCORE\)/g) || []).length;
-  assert.ok(modelRows > 0, 'packet must contain model rows');
-  assert.equal(marketRows, modelRows, 'every model row must pair with a NOT IN SCORE market row');
+  assert.ok(renderedModelLanes > 0, 'packet must contain model lane rows');
+  assert.equal(marketRows, renderedModelLanes, 'every rendered model lane must pair with a NOT IN SCORE market row');
 });
 
 test('no raw market inventory or raw price fields leak into the main packet', () => {
@@ -142,18 +152,22 @@ function makeGoalFixture() {
   return { match, board };
 }
 
-test('packet renders projected goals, total/BTTS/spread probabilities, and Poisson 1X2 cross-check', () => {
+test('packet renders projected goals, total/BTTS/spread probabilities, and score-grid cross-check in soccer language', () => {
   const { match, board } = makeGoalFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
   assert.ok(/projected goals: H [\d.]+ \/ A [\d.]+ \| total [\d.]+ \| margin/.test(text), 'projected goals block must render');
-  assert.ok(/Poisson 1X2 \(cross-check\):/.test(text), 'Poisson 1X2 cross-check must render');
-  assert.ok(/vs logistic: (CONSISTENT|MISMATCH|WATCH)/.test(text), 'cross-check verdict must render');
-  assert.ok(/Total: projected [\d.]+ \| P\(over 2\.5\)=\d+% \/ P\(under 2\.5\)=\d+%/.test(text), 'total over/under probability must render');
-  assert.ok(/BTTS: P\(Yes\)=\d+% \/ P\(No\)=\d+%/.test(text), 'BTTS probability must render');
-  assert.ok(/Spread: projected margin [+-][\d.]+ \| P\(cover home -0\.5\)=\d+%/.test(text), 'spread cover probability must render');
+  assert.ok(/Score-grid cross-check: (models aligned|model disagreement|monitor model disagreement)/.test(text), 'score-grid cross-check must render');
+  assert.ok(!/Poisson 1X2 cross-check/.test(text), 'no "Poisson 1X2 cross-check" jargon in user packet');
+  assert.ok(/Goal projection: [\d.]+/.test(text), 'goal projection must render');
+  assert.ok(/Total view: (Over 2\.5 profile|Under 2\.5 profile|no clear total side)/.test(text), 'total view must render');
+  assert.ok(/Over profile: \d+% \/ Under profile: \d+%/.test(text), 'over/under profiles must render with a graded line');
+  assert.ok(/Both-score probability: \d+%/.test(text), 'BTTS probability must render');
+  assert.ok(/Clean-sheet risk: (low|moderate|high)/.test(text), 'clean-sheet risk must render');
+  assert.ok(/Projected margin: \w+ \+[\d.]+ goals/.test(text), 'projected margin must render');
+  assert.ok(/Cover profile: \d+%/.test(text), 'spread cover profile must render');
 });
 
-test('Total Goals with no line is projection-only (no fabricated over/under)', () => {
+test('Total Goals with no line shows projection, no fabricated over/under (no banned label)', () => {
   const ledger = composeEvidenceLedgerForGame(fullSide(60), fullSide(58));
   const board = composeMultiLaneCeilingBoard({
     homeLedger: ledger.home,
@@ -164,8 +178,18 @@ test('Total Goals with no line is projection-only (no fabricated over/under)', (
   });
   const match = { match_id: 'x', home_team: 'A', away_team: 'B', stage: 'group', kickoff_utc: '2026-06-22T17:00:00Z', lineup_status: 'lineup_pending' };
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
-  assert.ok(/Total: projected [\d.]+ \| projection-only \(no line\)/.test(text), 'no line → projection-only total');
-  assert.ok(/Spread: projected margin [+-][\d.]+ \| margin-only \(no line\)/.test(text), 'no line → margin-only spread');
+  assert.ok(/Goal projection: [\d.]+/.test(text), 'goal projection still shown without a line');
+  assert.ok(/Total view: no line available to grade/.test(text), 'no line → no line available to grade');
+  assert.ok(/Spread view: no line available to grade/.test(text), 'no line → spread no line available to grade');
+  assert.ok(!/projection-only/.test(text), 'banned "projection-only" label must not appear');
+});
+
+test('rendered packet contains no betting-tout shorthand (PICK/LEAN/WATCH/FADE/etc.)', () => {
+  const { match, board } = makeGoalFixture();
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
+  for (const re of BANNED_USER_FACING) {
+    assert.ok(!re.test(text), `banned user-facing token ${re} appeared in packet`);
+  }
 });
 
 test('first-half lanes stay BLOCKED_MODEL_LAYER_MISSING', () => {

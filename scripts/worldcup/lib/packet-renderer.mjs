@@ -40,49 +40,176 @@ function pct(p) {
   return p == null ? 'N/A' : `${(p * 100).toFixed(0)}%`;
 }
 
-function formatLane(lane) {
-  // Blocked lanes render as a single honest line — no fake model half.
+// --- Customer-facing translation of internal model enums ---------------------
+// Internal enum names (PICK / LEAN / WATCH / FADE, CONSISTENT / MISMATCH, …) are
+// kept on the board objects for compatibility but are NEVER rendered raw. The
+// customer reads soccer / handicapping language only; the raw enums live in the
+// audit JSON. Price/market fields still never touch any model value here.
+
+const DISPLAY_LABELS = {
+  match_winner: 'Match Result',
+  spread_full_game: 'Goal Spread',
+  total_goals: 'Total Goals',
+  both_teams_to_score: 'BTTS',
+};
+function displayLabel(lane) {
+  return DISPLAY_LABELS[lane.lane] ?? lane.label;
+}
+
+function confidenceLine(confidence, provisional) {
+  return `    Confidence: ${confidence ?? 'low'}${provisional ? ', pre-lock' : ''}`;
+}
+
+// Side + strength for a result-style recommendation, in soccer language.
+function modelSidePhrase(rec, match) {
+  const side = /HOME/.test(rec) ? match.home_team
+    : /AWAY/.test(rec) ? match.away_team
+    : /DRAW/.test(rec) ? 'Draw'
+    : null;
+  if (rec.startsWith('PICK') && side) return `Clear model side: ${side}`;
+  if (rec.startsWith('LEAN') && side) return `Slight model side: ${side}`;
+  return 'No clear side';
+}
+
+// Generic translated model state for any non-main lane (last-resort fallback).
+function modelStatePhrase(rec) {
+  if (rec.startsWith('PICK')) return 'Actionable model edge';
+  if (rec === 'LEAN_FADE') return 'Opposite-side value (model rejects price)';
+  if (rec.startsWith('LEAN')) return 'Slight model advantage';
+  if (rec === 'WATCH') return 'Monitor — no clear actionable edge';
+  if (rec === 'BLOCKED_MODEL_LAYER_MISSING') return 'Model unavailable: missing model layer';
+  return rec;
+}
+
+function crossCheckPhrase(verdict) {
+  if (verdict === 'CONSISTENT') return 'models aligned';
+  if (verdict === 'MISMATCH') return 'model disagreement';
+  return 'monitor model disagreement';
+}
+function crossCheckSentence(verdict) {
+  if (verdict === 'CONSISTENT') return 'The goal-distribution model and match-result model point to the same side.';
+  if (verdict === 'MISMATCH') return 'The goal-distribution model and match-result model point to different sides.';
+  return 'The goal-distribution model and match-result model differ slightly; monitor before lock.';
+}
+
+function drawReadPhrase(evaluation) {
+  if (evaluation === 'ACTIONABLE') return 'draw in play';
+  if (evaluation === 'WATCH_ONLY') return 'draw monitor';
+  if (evaluation === 'BLOCKED_MODEL_LAYER_MISSING') return 'unavailable';
+  return evaluation ?? 'n/a';
+}
+
+function totalProfile(total) {
+  if (total == null) return 'unknown goal environment';
+  if (total >= 3.0) return 'high-scoring profile';
+  if (total >= 2.7) return 'neutral-to-over goal environment';
+  if (total >= 2.4) return 'neutral total profile';
+  if (total >= 2.1) return 'neutral-to-under goal environment';
+  return 'low-scoring profile';
+}
+
+// Short side phrase for the summary/list sections (TLDR etc.).
+function laneSidePhrase(lane, match) {
+  const rec = lane.recommendation;
+  if (lane.lane === 'match_winner') {
+    return /HOME/.test(rec) ? match.home_team : /AWAY/.test(rec) ? match.away_team
+      : /DRAW/.test(rec) ? 'Draw' : 'no clear side';
+  }
+  if (lane.lane === 'total_goals') {
+    return /OVER/.test(rec) ? `Over ${lane.total_line}` : /UNDER/.test(rec) ? `Under ${lane.total_line}` : 'no clear total side';
+  }
+  if (lane.lane === 'spread_full_game') {
+    return /COVER_HOME/.test(rec) ? `${match.home_team} cover` : /COVER_AWAY/.test(rec) ? `${match.away_team} cover`
+      : rec === 'LEAN_FADE' ? 'underdog cushion' : 'no clear spread side';
+  }
+  if (lane.lane === 'both_teams_to_score') {
+    return rec === 'YES' ? 'Both teams to score' : rec === 'NO' ? 'No / clean sheet' : 'no clear BTTS side';
+  }
+  return 'model side';
+}
+
+function formatLane(lane, match, provisional) {
+  // Model-unavailable lanes render as a single honest line — no fake model half.
   if (lane.recommendation === 'BLOCKED_MODEL_LAYER_MISSING') {
     const ref = lane.market_context
       ? ` | market ref (NOT IN SCORE): ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
       : '';
-    return `  [${lane.label}] BLOCKED_MODEL_LAYER_MISSING — ${lane.explanation}${ref}\n`;
+    return `  [${displayLabel(lane)}] Model unavailable: missing model layer.${ref}\n`;
   }
 
   const lines = [];
-  lines.push(`  [${lane.label}] MODEL: ${lane.recommendation} | composite H:${lane.composite_score_home ?? 'MISSING'} A:${lane.composite_score_away ?? 'MISSING'} | confidence:${lane.confidence}`);
+  const label = displayLabel(lane);
+
   if (lane.lane === 'match_winner' && lane.p_home != null) {
-    lines.push(`    1X2: H ${pct(lane.p_home)} / D ${pct(lane.p_draw)} / A ${pct(lane.p_away)} | winner_lean:${lane.winner_lean} | draw_risk:${lane.draw_risk} | draw:${lane.draw_evaluation}`);
+    lines.push(`  [${label}] ${modelSidePhrase(lane.recommendation, match)}`);
+    lines.push(`    Home win profile: ${pct(lane.p_home)}`);
+    lines.push(`    Draw risk: ${pct(lane.p_draw)}`);
+    lines.push(`    Away win profile: ${pct(lane.p_away)}`);
     if (lane.cross_check_1x2) {
-      lines.push(`    Poisson 1X2 cross-check: ${lane.cross_check_1x2.verdict} (logistic→${lane.cross_check_1x2.logistic_winner ?? 'n/a'}, poisson→${lane.cross_check_1x2.poisson_winner})`);
+      lines.push(`    Score-grid cross-check: ${crossCheckPhrase(lane.cross_check_1x2.verdict)}`);
     }
+    lines.push(`    Basis: composite H ${lane.composite_score_home ?? 'MISSING'} vs A ${lane.composite_score_away ?? 'MISSING'}`);
+    if (lane.explanation && /Downgraded from PICK/.test(lane.explanation)) {
+      lines.push('    Pre-lineup: model side held back until lineups confirm');
+    }
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'total_goals' && lane.projected_total_goals != null) {
+    lines.push(`  [${label}] Goal projection: ${lane.projected_total_goals}`);
+    if (lane.p_over != null) {
+      const view = /OVER/.test(lane.recommendation) ? `Over ${lane.total_line} profile`
+        : /UNDER/.test(lane.recommendation) ? `Under ${lane.total_line} profile`
+        : 'no clear total side';
+      lines.push(`    Total view: ${view}`);
+      lines.push(`    Over profile: ${pct(lane.p_over)} / Under profile: ${pct(lane.p_under)}`);
+    } else {
+      lines.push('    Total view: no line available to grade');
+    }
+    lines.push(`    Profile: ${totalProfile(lane.projected_total_goals)}`);
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'both_teams_to_score' && lane.p_btts_yes != null) {
+    lines.push(`  [${label}] Both-score probability: ${pct(lane.p_btts_yes)}`);
+    const view = lane.recommendation === 'YES' ? 'Yes profile'
+      : lane.recommendation === 'NO' ? 'No profile'
+      : 'balanced profile / no clear BTTS side';
+    lines.push(`    BTTS view: ${view}`);
+    const csr = lane.p_btts_no >= 0.6 ? 'high' : lane.p_btts_no >= 0.45 ? 'moderate' : 'low';
+    lines.push(`    Clean-sheet risk: ${csr}`);
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'spread_full_game' && lane.projected_goal_margin_home != null) {
+    const m = lane.projected_goal_margin_home;
+    const marginPhrase = m === 0 ? 'even (0.0 goals)'
+      : m > 0 ? `${match.home_team} +${m.toFixed(2)} goals`
+      : `${match.away_team} +${Math.abs(m).toFixed(2)} goals`;
+    lines.push(`  [${label}] Projected margin: ${marginPhrase}`);
+    if (lane.p_cover != null) {
+      const view = /COVER_HOME/.test(lane.recommendation) ? 'home cover profile'
+        : /COVER_AWAY/.test(lane.recommendation) ? 'away cover profile'
+        : lane.recommendation === 'LEAN_FADE' ? 'underdog cushion profile'
+        : 'no clear spread side';
+      lines.push(`    Spread view: ${view}`);
+      lines.push(`    Cover profile: ${pct(lane.p_cover)} (${lane.spread_side} ${lane.spread_line})`);
+    } else {
+      lines.push('    Spread view: no line available to grade');
+      lines.push(`    Profile: ${m === 0 ? 'even matchup' : 'favorite advantage'}, not enough line context for a cover call`);
+    }
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else {
+    lines.push(`  [${label}] ${modelStatePhrase(lane.recommendation)} | confidence:${lane.confidence}`);
   }
-  if (lane.lane === 'total_goals' && lane.projected_total_goals != null) {
-    lines.push(lane.p_over != null
-      ? `    Total: projected ${lane.projected_total_goals} | P(over ${lane.total_line})=${pct(lane.p_over)} / P(under ${lane.total_line})=${pct(lane.p_under)}`
-      : `    Total: projected ${lane.projected_total_goals} | projection-only (no line)`);
-  }
-  if (lane.lane === 'both_teams_to_score' && lane.p_btts_yes != null) {
-    lines.push(`    BTTS: P(Yes)=${pct(lane.p_btts_yes)} / P(No)=${pct(lane.p_btts_no)}`);
-  }
-  if (lane.lane === 'spread_full_game' && lane.projected_goal_margin_home != null) {
-    lines.push(lane.p_cover != null
-      ? `    Spread: projected margin ${lane.projected_goal_margin_home >= 0 ? '+' : ''}${lane.projected_goal_margin_home} | P(cover ${lane.spread_side} ${lane.spread_line})=${pct(lane.p_cover)}`
-      : `    Spread: projected margin ${lane.projected_goal_margin_home >= 0 ? '+' : ''}${lane.projected_goal_margin_home} | margin-only (no line)`);
-  }
+
+  // Market half — display only, always labeled NOT IN SCORE.
   if (lane.market_context) {
     const mc = lane.market_context;
     const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
-    const edges = [
+    const gaps = [
       lane.edge_home_pp != null ? `H:${lane.edge_home_pp}pp` : null,
       lane.edge_draw_pp != null ? `D:${lane.edge_draw_pp}pp` : null,
       lane.edge_away_pp != null ? `A:${lane.edge_away_pp}pp` : null,
-    ].filter(Boolean).join(' ') || 'none (no model fair probability)';
-    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | edge ${edges}`);
+    ].filter(Boolean).join(' ') || 'n/a (no model fair probability)';
+    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model−market gap ${gaps}`);
   } else {
-    lines.push(`    MARKET (NOT IN SCORE): no market context attached`);
+    lines.push('    MARKET (NOT IN SCORE): no market context attached');
   }
-  lines.push(`    why: ${lane.explanation}`);
   lines.push('');
   return lines.join('\n');
 }
@@ -100,7 +227,7 @@ function formatMatch(match, board, provenance = null) {
 
   const probs = board.probabilities;
   if (probs && probs.p_home != null) {
-    lines.push(`  1X2 model: H ${Math.round(probs.p_home * 100)}% / D ${Math.round(probs.p_draw * 100)}% / A ${Math.round(probs.p_away * 100)}% | draw_risk:${probs.draw_risk} | draw read:${probs.draw_evaluation}`);
+    lines.push(`  Match result model: H ${Math.round(probs.p_home * 100)}% / D ${Math.round(probs.p_draw * 100)}% / A ${Math.round(probs.p_away * 100)}% | draw risk: ${probs.draw_risk} | draw read: ${drawReadPhrase(probs.draw_evaluation)}`);
     if (probs.goal_environment) {
       lines.push(`  goal environment (proxy): total ${probs.goal_environment.xg_total} (H ${probs.goal_environment.xg_home} / A ${probs.goal_environment.xg_away})`);
     }
@@ -108,13 +235,14 @@ function formatMatch(match, board, provenance = null) {
     if (gp && gp.projection_status === 'PROJECTED') {
       lines.push(`  projected goals: H ${gp.projected_home_goals} / A ${gp.projected_away_goals} | total ${gp.projected_total_goals} | margin ${gp.projected_goal_margin_home >= 0 ? '+' : ''}${gp.projected_goal_margin_home} (home)`);
       const cc = gp.cross_check_1x2;
-      lines.push(`  Poisson 1X2 (cross-check): H ${Math.round(gp.poisson_1x2.p_home * 100)}% / D ${Math.round(gp.poisson_1x2.p_draw * 100)}% / A ${Math.round(gp.poisson_1x2.p_away * 100)}% | vs logistic: ${cc.verdict} (logistic→${cc.logistic_winner ?? 'n/a'}, poisson→${cc.poisson_winner})`);
+      lines.push(`  Score-grid cross-check: ${crossCheckPhrase(cc.verdict)}`);
+      lines.push(`    ${crossCheckSentence(cc.verdict)}`);
     } else if (gp && gp.projection_status) {
-      lines.push(`  projected goals: ${gp.projection_status}${gp.reason ? ` — ${gp.reason}` : ''}`);
+      lines.push('  projected goals: model unavailable (missing model layer)');
     }
     lines.push('');
   } else if (probs?.blocked_reason) {
-    lines.push(`  1X2 model: BLOCKED — ${probs.blocked_reason}`);
+    lines.push(`  Match result model: unavailable — ${probs.blocked_reason}`);
     lines.push('');
   }
 
@@ -122,11 +250,11 @@ function formatMatch(match, board, provenance = null) {
     // Keep the board compact: skip not-applicable lanes and lanes the model
     // has no logic for (empty explanation) — they live in the audit JSON.
     if (lane.recommendation === 'N/A' || !lane.explanation) continue;
-    lines.push(formatLane(lane));
+    lines.push(formatLane(lane, match, provenance?.provisional));
   }
 
   lines.push(`  overall_confidence: ${board.overall_confidence}`);
-  lines.push(`  pick_count:${board.pick_count} lean_count:${board.lean_count} watch_count:${board.watch_count}`);
+  lines.push(`  Model sides — actionable: ${board.pick_count} | slight: ${board.lean_count} | monitor: ${board.watch_count}`);
   lines.push('');
   return lines.join('\n');
 }
@@ -159,10 +287,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   }
 
   if (allPicks.length === 0 && allLeans.length === 0) {
-    lines.push('  No PICKs or LEANs today. Board is WATCH or PASS.\n');
+    lines.push('  No clear model sides today. Board is monitor-only.\n');
   } else {
     for (const { match, lane } of [...allPicks, ...allLeans].slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: ${lane.recommendation} (confidence:${lane.confidence})`);
+      const strength = lane.recommendation.startsWith('PICK') ? 'clear model side' : 'slight model side';
+      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: ${laneSidePhrase(lane, match)} (${strength}, confidence ${lane.confidence})`);
     }
     lines.push('');
   }
@@ -173,8 +302,8 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     lines.push(formatMatch(matches[i], boards[i], provenance));
   }
 
-  // 2. TOP EDGE CANDIDATES
-  lines.push(section('2. TOP EDGE CANDIDATES'));
+  // 2. MODEL vs MARKET — LARGEST GAPS (post-model comparison; market is NOT IN SCORE)
+  lines.push(section('2. MODEL vs MARKET — LARGEST GAPS'));
   const edges = [];
   for (let i = 0; i < matches.length; i++) {
     const board = boards[i];
@@ -189,33 +318,33 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   }
   edges.sort((a, b) => Math.abs(b.edge ?? 0) - Math.abs(a.edge ?? 0));
   if (edges.length === 0) {
-    lines.push('  No market context available for edge calculation.\n');
+    lines.push('  No market context available for comparison.\n');
   } else {
     for (const { match, lane, edge } of edges.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: edge=${edge > 0 ? '+' : ''}${edge}pp`);
+      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: model−market gap ${edge > 0 ? '+' : ''}${edge}pp`);
     }
     lines.push('');
   }
 
-  // 3. WATCHLIST / TRIGGER BOARD
-  lines.push(section('3. WATCHLIST / TRIGGER BOARD'));
+  // 3. MONITOR — NO CLEAR SIDE
+  lines.push(section('3. MONITOR — NO CLEAR SIDE'));
   if (allWatches.length === 0) {
-    lines.push('  Nothing on watchlist.\n');
+    lines.push('  Nothing to monitor.\n');
   } else {
     for (const { match, lane } of allWatches.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: ${lane.recommendation}`);
+      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: monitor / no clear side`);
     }
     lines.push('');
   }
 
-  // 4. FADES / OVERPRICED
-  lines.push(section('4. FADES / OVERPRICED'));
+  // 4. OPPOSITE-SIDE VALUE (model points opposite the market)
+  lines.push(section('4. OPPOSITE-SIDE VALUE'));
   const fades = edges.filter(e => (e.edge ?? 0) < -5);
   if (fades.length === 0) {
-    lines.push('  No clear fades today.\n');
+    lines.push('  No opposite-side value today.\n');
   } else {
     for (const { match, lane, edge } of fades.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: model below market by ${Math.abs(edge)}pp`);
+      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: model points opposite the market by ${Math.abs(edge)}pp (possible opposite-side value)`);
     }
     lines.push('');
   }
@@ -241,7 +370,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     const blockedLanes = (board.lanes || []).filter(l => l.recommendation === 'BLOCKED_MODEL_LAYER_MISSING');
     if (blockedLanes.length > 0) {
       blockedCount++;
-      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${blockedLanes.length} market lane(s) BLOCKED_MODEL_LAYER_MISSING — ${blockedLanes.map(l => l.label).join(', ')}`);
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${blockedLanes.length} model lane(s) unavailable (missing model layer) — ${blockedLanes.map(l => displayLabel(l)).join(', ')}`);
     }
   }
   if (blockedCount === 0) lines.push('  No blocked matches.\n');
