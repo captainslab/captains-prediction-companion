@@ -40,6 +40,86 @@ function pct(p) {
   return p == null ? 'N/A' : `${(p * 100).toFixed(0)}%`;
 }
 
+const CHICAGO_TZ = 'America/Chicago';
+const EASTERN_TZ = 'America/New_York';
+
+function safeStage(match) {
+  return match?.group ?? match?.stage ?? 'Group stage';
+}
+
+function kickoffDisplay(match) {
+  if (!match?.kickoff_utc) return 'Kickoff: TBD';
+  const d = new Date(match.kickoff_utc);
+  if (Number.isNaN(d.getTime())) return 'Kickoff: TBD';
+  const ct = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ,
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  const et = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  return `Kickoff: ${ct} / ${et}`;
+}
+
+function resultEdgePhrase(board, match) {
+  const lane = (board?.lanes || []).find((entry) => entry.lane === 'match_winner');
+  if (!lane || lane.recommendation === 'N/A') return 'No clear result edge';
+  if (/HOME/.test(lane.recommendation)) return `${match.home_team} result edge`;
+  if (/AWAY/.test(lane.recommendation)) return `${match.away_team} result edge`;
+  if (/DRAW/.test(lane.recommendation)) return 'Draw edge';
+  return 'No clear result edge';
+}
+
+function projectionFor(board) {
+  const gp = board?.goal_projection;
+  return gp && gp.projection_status === 'PROJECTED' ? gp : null;
+}
+
+function goalForecastLine(match, board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Goal forecast: Model unavailable: missing model layer';
+  return `Goal forecast: Projected goals: ${match.home_team} ${gp.projected_home_goals}, ${match.away_team} ${gp.projected_away_goals}`;
+}
+
+function totalGoalsForecastLine(board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Total goals forecast: Model unavailable: missing model layer';
+  return `Total goals forecast: Projected total ${gp.projected_total_goals}`;
+}
+
+function bttsForecastLine(board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Both-score forecast: Model unavailable: missing model layer';
+  const lane = (board?.lanes || []).find((entry) => entry.lane === 'both_teams_to_score');
+  return `Both-score forecast: ${pct(lane?.p_btts_yes, 0)}`;
+}
+
+function spreadForecastLine(match, board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Goal-spread forecast: Model unavailable: missing model layer';
+  const margin = gp.projected_goal_margin_home >= 0
+    ? `${match.home_team} +${gp.projected_goal_margin_home.toFixed(2)} goals`
+    : `${match.away_team} +${Math.abs(gp.projected_goal_margin_home).toFixed(2)} goals`;
+  return `Goal-spread forecast: ${margin}; no line available to grade`;
+}
+
+function scoreGridCheck(board) {
+  const verdict = board?.goal_projection?.cross_check_1x2?.verdict;
+  if (verdict === 'CONSISTENT') return 'Score-grid check: models aligned';
+  if (verdict === 'MISMATCH') return 'Score-grid check: model disagreement';
+  if (verdict) return 'Score-grid check: model check limited';
+  return 'Score-grid check: model unavailable';
+}
+
 // --- Customer-facing translation of internal model enums ---------------------
 // Internal enum names (PICK / LEAN / WATCH / FADE, CONSISTENT / MISMATCH, …) are
 // kept on the board objects for compatibility but are NEVER rendered raw. The
@@ -216,188 +296,105 @@ function formatLane(lane, match, provisional) {
 
 function formatMatch(match, board, provenance = null) {
   const lines = [];
-  lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${match.stage}]`);
-  lines.push(`  kickoff: ${match.kickoff_utc ?? 'TBD'}`);
-  const lockStatus = match.lineup_status === 'lineup_confirmed' ? 'LOCKED' : 'PRE_LOCK / NOT_LOCKED';
-  lines.push(`  lineup_status: ${match.lineup_status ?? 'unknown'} (${lockStatus})`);
-  if (provenance?.provisional) {
-    lines.push(`  model_basis: PRIOR_TEAM_COMPOSITE (baseline ${provenance.source_date}) — PRE_LOCK / PROVISIONAL`);
+  const gp = projectionFor(board);
+  lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
+  lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
+  lines.push('  Status: Pre-lock, lineups not confirmed');
+  lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's confirmed XI`);
+  lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
+  if (gp) {
+    lines.push(`  ${goalForecastLine(match, board).replace(/^Goal forecast: /, 'Goal forecast: ')}`);
+    lines.push(`  ${totalGoalsForecastLine(board).replace(/^Total goals forecast: /, 'Total goals forecast: ')}`);
+    lines.push(`  ${bttsForecastLine(board).replace(/^Both-score forecast: /, 'Both-score forecast: ')}`);
+    lines.push(`  ${spreadForecastLine(match, board).replace(/^Goal-spread forecast: /, 'Goal-spread forecast: ')}`);
+    lines.push(`  ${scoreGridCheck(board)}`);
+  } else {
+    lines.push('  Goal forecast: Model unavailable: missing model layer');
+    lines.push('  Total goals forecast: Model unavailable: missing model layer');
+    lines.push('  Both-score forecast: Model unavailable: missing model layer');
+    lines.push('  Goal-spread forecast: Model unavailable: missing model layer');
+    lines.push('  Score-grid check: model unavailable');
   }
-  lines.push('');
-
-  const probs = board.probabilities;
-  if (probs && probs.p_home != null) {
-    lines.push(`  Match result model: H ${Math.round(probs.p_home * 100)}% / D ${Math.round(probs.p_draw * 100)}% / A ${Math.round(probs.p_away * 100)}% | draw risk: ${probs.draw_risk} | draw read: ${drawReadPhrase(probs.draw_evaluation)}`);
-    if (probs.goal_environment) {
-      lines.push(`  goal environment (proxy): total ${probs.goal_environment.xg_total} (H ${probs.goal_environment.xg_home} / A ${probs.goal_environment.xg_away})`);
-    }
-    const gp = board.goal_projection;
-    if (gp && gp.projection_status === 'PROJECTED') {
-      lines.push(`  projected goals: H ${gp.projected_home_goals} / A ${gp.projected_away_goals} | total ${gp.projected_total_goals} | margin ${gp.projected_goal_margin_home >= 0 ? '+' : ''}${gp.projected_goal_margin_home} (home)`);
-      const cc = gp.cross_check_1x2;
-      lines.push(`  Score-grid cross-check: ${crossCheckPhrase(cc.verdict)}`);
-      lines.push(`    ${crossCheckSentence(cc.verdict)}`);
-    } else if (gp && gp.projection_status) {
-      lines.push('  projected goals: model unavailable (missing model layer)');
-    }
-    lines.push('');
-  } else if (probs?.blocked_reason) {
-    lines.push(`  Match result model: unavailable — ${probs.blocked_reason}`);
-    lines.push('');
-  }
-
-  for (const lane of board.lanes || []) {
-    // Keep the board compact: skip not-applicable lanes and lanes the model
-    // has no logic for (empty explanation) — they live in the audit JSON.
-    if (lane.recommendation === 'N/A' || !lane.explanation) continue;
-    lines.push(formatLane(lane, match, provenance?.provisional));
-  }
-
-  lines.push(`  overall_confidence: ${board.overall_confidence}`);
-  lines.push(`  Model sides — actionable: ${board.pick_count} | slight: ${board.lean_count} | monitor: ${board.watch_count}`);
   lines.push('');
   return lines.join('\n');
 }
 
 export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const date = meta.date ?? new Date().toISOString().slice(0, 10);
-  const packetStage = meta.packet_stage ?? 'morning_board';
-
   const provenance = meta.composite_provenance ?? null;
+  const research = meta.research ?? null;
+  const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
   const lines = [];
-  lines.push(header(packetStage === 'lineup_locked' ? 'LINEUP-LOCKED BOARD' : 'MATCHDAY MORNING BOARD', date));
+  lines.push(header('MATCHDAY FORECAST', date));
   if (provenance?.provisional) {
-    lines.push(`MODEL BASIS: PRIOR_TEAM_COMPOSITE (last available baseline ${provenance.source_date}) — PRE_LOCK / PROVISIONAL.`);
-    lines.push('Composites are carried from the most recent prior baseline; not yet refreshed for today. Confidence is provisional until lineups lock.\n');
+    lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's confirmed XI.`);
+    lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
   }
 
-  // 1. TLDR BOARD
-  lines.push(section('1. TLDR BOARD'));
-  const allPicks = [];
-  const allLeans = [];
-  const allWatches = [];
+  // 1. Matchday Forecast
+  lines.push(section('1. Matchday Forecast'));
   for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
     const board = boards[i];
-    for (const lane of board.lanes || []) {
-      if (lane.recommendation.startsWith('PICK')) allPicks.push({ match: matches[i], lane });
-      else if (lane.recommendation.startsWith('LEAN')) allLeans.push({ match: matches[i], lane });
-      else if (lane.recommendation === 'WATCH') allWatches.push({ match: matches[i], lane });
+    const projection = projectionFor(board);
+    const edge = resultEdgePhrase(board, match);
+    if (projection) {
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${edge}; projected goals ${projection.projected_home_goals}-${projection.projected_away_goals}; projected total ${projection.projected_total_goals}`);
+    } else {
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${edge}; projected goals Model unavailable: missing model layer`);
     }
   }
+  lines.push('');
 
-  if (allPicks.length === 0 && allLeans.length === 0) {
-    lines.push('  No clear model sides today. Board is monitor-only.\n');
-  } else {
-    for (const { match, lane } of [...allPicks, ...allLeans].slice(0, 5)) {
-      const strength = lane.recommendation.startsWith('PICK') ? 'clear model side' : 'slight model side';
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: ${laneSidePhrase(lane, match)} (${strength}, confidence ${lane.confidence})`);
-    }
-    lines.push('');
-  }
-
-  // 1b. MATCH BOARDS — model half and market half per lane
-  lines.push(section('MATCH BOARDS (model vs market)'));
+  // 2. Match Breakdowns
+  lines.push(section('2. Match Breakdowns'));
   for (let i = 0; i < matches.length; i++) {
     lines.push(formatMatch(matches[i], boards[i], provenance));
   }
 
-  // 2. MODEL vs MARKET — LARGEST GAPS (post-model comparison; market is NOT IN SCORE)
-  lines.push(section('2. MODEL vs MARKET — LARGEST GAPS'));
-  const edges = [];
-  for (let i = 0; i < matches.length; i++) {
-    const board = boards[i];
-    for (const lane of board.lanes || []) {
-      if (lane.edge_home_pp != null || lane.edge_away_pp != null) {
-        const e = Math.abs(lane.edge_home_pp ?? 0) > Math.abs(lane.edge_away_pp ?? 0)
-          ? lane.edge_home_pp
-          : lane.edge_away_pp;
-        edges.push({ match: matches[i], lane, edge: e });
-      }
-    }
-  }
-  edges.sort((a, b) => Math.abs(b.edge ?? 0) - Math.abs(a.edge ?? 0));
-  if (edges.length === 0) {
-    lines.push('  No market context available for comparison.\n');
-  } else {
-    for (const { match, lane, edge } of edges.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: model−market gap ${edge > 0 ? '+' : ''}${edge}pp`);
-    }
+  // 3. Market Comparison
+  lines.push(section('3. Market Comparison'));
+  if (!hasMarketContext) {
+    lines.push('  Market comparison: no market lines attached; model output shown as forecast only.');
     lines.push('');
-  }
-
-  // 3. MONITOR — NO CLEAR SIDE
-  lines.push(section('3. MONITOR — NO CLEAR SIDE'));
-  if (allWatches.length === 0) {
-    lines.push('  Nothing to monitor.\n');
   } else {
-    for (const { match, lane } of allWatches.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: monitor / no clear side`);
-    }
-    lines.push('');
+    lines.push('  Market comparison: market lines attached; model output shown as forecast only.');
+    lines.push('  Market prices are display-only when present and are NOT IN SCORE.\n');
   }
 
-  // 4. OPPOSITE-SIDE VALUE (model points opposite the market)
-  lines.push(section('4. OPPOSITE-SIDE VALUE'));
-  const fades = edges.filter(e => (e.edge ?? 0) < -5);
-  if (fades.length === 0) {
-    lines.push('  No opposite-side value today.\n');
-  } else {
-    for (const { match, lane, edge } of fades.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${displayLabel(lane)}: model points opposite the market by ${Math.abs(edge)}pp (possible opposite-side value)`);
-    }
-    lines.push('');
-  }
+  // 4. Model Limits
+  lines.push(section('4. Model Limits'));
+  lines.push('  First-half markets are unavailable because no half-split model layer is sourced.');
+  lines.push('  Pre-lock forecasts use the latest prior team composite until starting XI data is available.\n');
 
-  // 4b. Market context note
-  lines.push(section('Market Context — NOT IN SCORE'));
-  lines.push('  All market pricing is display context only and never enters composite scoring.\n');
-
-  // 5. BLOCKED / NEEDS SOURCE
-  lines.push(section('5. BLOCKED / NEEDS SOURCE'));
-  let blockedCount = 0;
-  for (let i = 0; i < matches.length; i++) {
-    const board = boards[i];
-    const match = matches[i];
-    if (board.overall_confidence === 'low' || match.lineup_status === 'lineup_pending') {
-      blockedCount++;
-      const missing = [];
-      if (match.lineup_status === 'lineup_pending') missing.push('lineups');
-      if (board.composite_score_home == null) missing.push('home composite');
-      if (board.composite_score_away == null) missing.push('away composite');
-      lines.push(`  • ${match.home_team} vs ${match.away_team}: blocked — missing ${missing.join(', ')}`);
-    }
-    const blockedLanes = (board.lanes || []).filter(l => l.recommendation === 'BLOCKED_MODEL_LAYER_MISSING');
-    if (blockedLanes.length > 0) {
-      blockedCount++;
-      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${blockedLanes.length} model lane(s) unavailable (missing model layer) — ${blockedLanes.map(l => displayLabel(l)).join(', ')}`);
-    }
-  }
-  if (blockedCount === 0) lines.push('  No blocked matches.\n');
-  else lines.push('');
-
-  // 6. AUDIT ARTIFACTS
-  lines.push(section('6. AUDIT ARTIFACTS'));
-  lines.push('  Full raw market inventory, source JSON, and model layers are stored');
-  lines.push('  in the audit directory alongside this packet.\n');
-
-  // 7. SOURCE QUALITY / MODEL COMPLETENESS
-  lines.push(section('7. SOURCE QUALITY / MODEL COMPLETENESS'));
+  // 5. Source Quality
+  lines.push(section('5. Source Quality'));
   let totalLayers = 0;
   let presentLayers = 0;
   for (const board of boards) {
     totalLayers += (board.layers_total ?? 14) * 2;
     presentLayers += (board.layers_present_home ?? 0) + (board.layers_present_away ?? 0);
   }
+  const researchStatus = research?.status ?? 'PERPLEXITY_UNAVAILABLE';
   lines.push(`  Matches evaluated: ${matches.length}`);
-  lines.push(`  Packet stage: ${packetStage}`);
-  lines.push(`  Overall data coverage: ${presentLayers}/${totalLayers} side-layers present`);
-  lines.push(`  Pre-lineup confidence downgrade: ${packetStage === 'morning_board' ? 'YES' : 'NO'}`);
+  lines.push(`  Side-layer coverage: ${presentLayers}/${totalLayers}`);
+  lines.push('  Pre-lock status: lineups are not confirmed');
+  lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's confirmed XI.`);
+  if (researchStatus === 'ok') {
+    const summary = research?.source_quality
+      ? `confirmed=${research.source_quality.confirmed ?? 0}, not_confirmed=${research.source_quality.not_confirmed ?? 0}, unknown=${research.source_quality.unknown ?? 0}`
+      : 'context captured';
+    lines.push(`  Perplexity research: live supplemental context captured and saved to ${research?.outPath ?? 'state/worldcup/<date>/research/perplexity_research.json'} (${summary})`);
+  } else {
+    lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
+  }
+  lines.push('  Market prices are display-only when present and are not used in the model.');
   lines.push('');
 
   lines.push('─'.repeat(70));
-  lines.push('No trades placed by this workflow.');
-  lines.push('No bankroll advice. No order placement. Research only.');
+  lines.push('Market prices are display-only when present and are NOT IN SCORE.');
+  lines.push('No trades placed. Research only.');
   lines.push('─'.repeat(70));
 
   return lines.join('\n');
