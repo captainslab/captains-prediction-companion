@@ -68,12 +68,23 @@ function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function scrubCustomerText(text) {
+export function scrubCustomerText(text) {
   let out = String(text ?? '');
   for (const [term, replacement] of TERM_REPLACEMENTS) {
     out = out.replace(new RegExp(`\\b${escapeRegExp(term)}\\b`, 'gi'), replacement);
   }
   return out;
+}
+
+// Returns the banned customer word found in `text`, or null if clean.
+export function findBannedCustomerWord(text) {
+  const haystack = String(text ?? '');
+  for (const term of BANNED_CUSTOMER_PREVIEW_WORDS) {
+    if (new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i').test(haystack)) {
+      return term;
+    }
+  }
+  return null;
 }
 
 function countWords(text) {

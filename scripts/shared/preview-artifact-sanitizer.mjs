@@ -1,25 +1,33 @@
 // Sanitizer for research artifacts before they are fed into preview builders.
 // Pure ESM. No I/O.
 
+export const SANITIZER_VERSION = 'preview-artifact-sanitizer-v2';
+
 export const BANNED_MODEL_INPUT_KEYS = Object.freeze([
   'price',
   'prices',
+  'market_price',
   'odds',
   'bid',
   'ask',
   'bid_ask',
+  'no_bid',
+  'no_ask',
   'spread',
   'spread_price',
   'spreads',
+  'sportsbook_lines',
   'volume',
   'open_interest',
   'oi',
   'liquidity',
   'orderbook',
+  'order_book',
   'ladder',
   'ladders',
   'implied',
   'implied_prob',
+  'implied_probability',
   'money_line',
   'moneyline',
   'last_price',
