@@ -6,7 +6,9 @@
 # Stderr (hard errors) is both logged and surfaced to cron for alerting.
 
 cd /home/jordan/captains-prediction-companion || exit 1
-TODAY=$(date -u +%F)
+# America/Chicago operating timezone — keep the synced slate date aligned with
+# the dispatcher's Chicago-local match selection.
+TODAY=$(TZ=America/Chicago date +%F)
 LOG_FILE="logs/worldcup-daily-sync.log"
 mkdir -p logs
 

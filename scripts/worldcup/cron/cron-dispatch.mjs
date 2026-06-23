@@ -26,8 +26,14 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { filterMatchesForLocalDate, CPC_MATCHDAY_TIMEZONE } from '../lib/matchday-window.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GENERATOR = join(__dirname, '..', 'generate-matchday-packet.mjs');
+const LINEUP_FETCHER = join(__dirname, '..', 'source-adapters', 'fetch-official-lineups.mjs');
+// Phases where official starting XIs may be published — refresh the lineup
+// cache from source before generating so the packet can reach lineup_locked.
+const LINEUP_FETCH_PHASES = new Set(['lineup_window', 'post_lineup_final']);
 
 const MIN = 60 * 1000;
 
@@ -149,6 +155,18 @@ function runGenerator({ date, stateRoot, dryRun }) {
   return r.status === 0;
 }
 
+// Best-effort: pull official starting XIs into the matchday cache so the
+// generator can lock the lineup. Failure (e.g. source down / XIs not yet
+// posted) is non-fatal — the generator falls back to the pre-lock board.
+function runLineupFetch({ date, stateRoot }) {
+  const args = [LINEUP_FETCHER, '--date', date, '--state-root', stateRoot];
+  const r = spawnSync(process.execPath, args, { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error(`[worldcup-dispatch] lineup fetch non-zero (status ${r.status}); proceeding with pre-lock fallback`);
+  }
+  return r.status === 0;
+}
+
 /**
  * Grade the model call against the final score. Reads the latest audit
  * artifact (model favored_side) and the refreshed structure (result).
@@ -190,7 +208,10 @@ async function main() {
     return;
   }
 
-  const todayMatches = (structure.matches || []).filter(m => m.kickoff_utc && m.kickoff_utc.startsWith(date));
+  // Select today's matches by America/Chicago local date (the CPC operating
+  // timezone), not raw UTC. A late kickoff such as 02:00Z belongs to the prior
+  // Chicago date; a UTC startsWith() would orphan it from its slate.
+  const todayMatches = filterMatchesForLocalDate(structure.matches || [], date, CPC_MATCHDAY_TIMEZONE);
   const { actions, note } = computeDueActions({ matches: todayMatches, now: nowDate, stateRoot, date });
 
   if (note) console.log(`[worldcup-dispatch] ${nowDate.toISOString()} ${date}: ${note}`);
@@ -201,6 +222,9 @@ async function main() {
     if (dryRun) continue;
 
     if (action.kind === 'generate_packet') {
+      if (LINEUP_FETCH_PHASES.has(action.phase)) {
+        runLineupFetch({ date, stateRoot });
+      }
       const ok = runGenerator({ date, stateRoot, dryRun: false });
       if (ok && action.marker) writeMarker(stateRoot, date, action.marker, { action });
       if (!ok) console.error(`[worldcup-dispatch] generator failed for phase ${action.phase}`);

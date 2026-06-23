@@ -8,7 +8,9 @@
 # Stderr (hard errors) is both logged and surfaced to cron for alerting.
 
 cd /home/jordan/captains-prediction-companion || exit 1
-TODAY=$(date -u +%F)
+# Operating timezone is America/Chicago, not UTC — a late kickoff (e.g. 02:00Z)
+# belongs to the prior Chicago date and must dispatch against that slate.
+TODAY=$(TZ=America/Chicago date +%F)
 LOG_FILE="logs/worldcup-dispatch.log"
 mkdir -p logs
 
