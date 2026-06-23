@@ -32,12 +32,17 @@ import { renderWorldCupPacket, writeWorldCupPacket } from './lib/packet-renderer
 import { CPC_MATCHDAY_TIMEZONE, localDateInTimeZone, filterMatchesForLocalDate } from './lib/matchday-window.mjs';
 import { findLatestPriorBaseline } from './lib/composite-baseline.mjs';
 
+function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false };
+  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
     else if (a === '--state-root') opts.stateRoot = argv[++i];
+    else if (a === '--match-id') opts.matchId = argv[++i];
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${a}`);
@@ -60,7 +65,7 @@ function readJsonIfExists(path) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--dry-run]');
+    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--dry-run]');
     process.exit(0);
   }
 
@@ -106,7 +111,21 @@ async function main() {
   const teamBaselines = Object.fromEntries((baseline.teams || []).map(t => [t.team_name, t]));
 
   // 3. Filter matches for today (operating timezone = America/Chicago, not UTC).
-  const todayMatches = filterMatchesForLocalDate(structure.matches, date, CPC_MATCHDAY_TIMEZONE);
+  let todayMatches = filterMatchesForLocalDate(structure.matches, date, CPC_MATCHDAY_TIMEZONE);
+
+  // Optional single-match mode: emit a standalone packet for one fixture,
+  // written under a distinct base name so it never collides with or
+  // overwrites the full-slate packet/audit.
+  let nameSuffix = '';
+  if (opts.matchId) {
+    todayMatches = todayMatches.filter(m => String(m.match_id) === String(opts.matchId));
+    if (todayMatches.length === 0) {
+      console.error(`[worldcup] --match-id ${opts.matchId} not in today's slate (${date}). Exiting.`);
+      process.exit(1);
+    }
+    const m = todayMatches[0];
+    nameSuffix = `-${slugify(`${m.home_team}-${m.away_team}`)}`;
+  }
 
   if (todayMatches.length === 0) {
     console.log(`[worldcup] no matches today (${date}). Exiting.`);
@@ -271,7 +290,7 @@ async function main() {
   if (!opts.dryRun) {
     const { txtPath, metaPath } = writeWorldCupPacket({
       dir: packetDir,
-      baseName: `worldcup-${date}-${packetStage}`,
+      baseName: `worldcup-${date}-${packetStage}${nameSuffix}`,
       packetText,
       meta: {
         date,
@@ -285,7 +304,7 @@ async function main() {
     console.log(`[worldcup] meta written: ${metaPath}`);
 
     // Audit artifact
-    const auditPath = resolve(packetDir, `worldcup-${date}-audit.json`);
+    const auditPath = resolve(packetDir, `worldcup-${date}-audit${nameSuffix}.json`);
     writeFileSync(auditPath, JSON.stringify({
       generated_at: new Date().toISOString(),
       date,
