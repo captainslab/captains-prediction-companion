@@ -119,12 +119,27 @@ async function main() {
     matches: todayMatches,
     stateRoot,
   });
+  // "captured" = research records that actually carry sourced context (a known
+  // lineup posture or non-Low source quality), as opposed to the lineup-confirm
+  // count. Without this the Source Quality line under-reports real capture as 0.
+  const researchRecords = research.artifact?.records ?? [];
+  const capturedCount = researchRecords.filter((r) => {
+    const ls = String(r?.lineup_status || '').toLowerCase();
+    const sq = String(r?.source_quality || '').toLowerCase();
+    // Source-quality values are verbose ("High - ...", "Low - No search ...");
+    // match on prefix, not exact, so a Low/Unknown record never counts as
+    // captured context.
+    const lsCaptured = ls && !ls.startsWith('unknown') && !ls.startsWith('not ');
+    const sqCaptured = sq && !sq.startsWith('low') && !sq.startsWith('unknown') && !sq.startsWith('none');
+    return lsCaptured || sqCaptured;
+  }).length;
   const researchSummary = {
     status: research.status,
     ok: research.ok,
     outPath: research.outPath,
     match_count: research.artifact?.match_count ?? todayMatches.length,
     source_quality: research.artifact?.source_quality ?? null,
+    captured: researchRecords.length ? capturedCount : null,
     reason: research.artifact?.reason ?? null,
   };
 
@@ -148,6 +163,9 @@ async function main() {
       ? (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending')
       : 'lineup_pending';
     match.lineup_status = lineupStatus;
+    // Expose the (price-free) lineup payload to the renderer for the
+    // lineup-locked block. Only specific fields are read downstream.
+    match.matchday = matchday.ok ? matchday : null;
 
     // 3c. Build composite input
     // Layer scores must be 0-100. Team baselines carry normalized 0-100

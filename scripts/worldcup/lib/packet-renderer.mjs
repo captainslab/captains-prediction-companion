@@ -411,13 +411,94 @@ function formatLane(lane, match, provisional) {
   return lines.join('\n');
 }
 
+// Favored side label for a match, derived from model output only (price-free).
+function favoredTeam(board, match) {
+  const phrase = resultEdgePhrase(board, match);
+  if (phrase === `${match.home_team} result edge`) return match.home_team;
+  if (phrase === `${match.away_team} result edge`) return match.away_team;
+  if (phrase === 'Draw edge') return 'even (draw edge)';
+  return 'no clear edge';
+}
+
+function slateStatusLabel(match) {
+  return match?.lineup_status === 'lineup_confirmed'
+    ? 'LINEUP LOCKED (official XIs)'
+    : 'scheduled — lineups not yet announced';
+}
+
+// Unnumbered daily slate preview. Pure model/structure data; no advancement
+// math is invented, no market/price content is referenced.
+function slatePreviewBlock(matches = [], boards = []) {
+  const lines = [];
+  lines.push(section('Daily Slate Preview — Why Today Matters'));
+  lines.push("  Today's matches:");
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    lines.push(`   • ${m.home_team} vs ${m.away_team} [${safeStage(m)}] — ${kickoffDisplay(m).replace(/^Kickoff: /, '')} — ${slateStatusLabel(m)}`);
+  }
+  // Group rollup.
+  const groups = new Map();
+  for (const m of matches) {
+    const g = m.group ?? m.stage ?? 'Group stage';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(`${m.home_team} vs ${m.away_team}`);
+  }
+  lines.push('');
+  for (const [g, fixtures] of groups) {
+    lines.push(`  ${g} today: ${fixtures.join('; ')}.`);
+  }
+  // Model-projected favorites (forecast only).
+  const favs = matches.map((m, i) => favoredTeam(boards[i], m)).filter((f) => f && f !== 'no clear edge');
+  if (favs.length) {
+    lines.push(`  Model-projected edges (forecast only): ${favs.join(', ')}.`);
+  }
+  const lockedNames = matches.filter((m) => m.lineup_status === 'lineup_confirmed').map((m) => `${m.home_team} vs ${m.away_team}`);
+  lines.push('  Advancement / standings math: not sourced — omitted rather than invented.');
+  if (lockedNames.length) {
+    lines.push(`  Lineup/source: official starting XIs confirmed for ${lockedNames.join(', ')}; remaining matches are pre-lineup and use the prior team composite.`);
+  } else {
+    lines.push('  Lineup/source: no official starting XIs confirmed yet; all matches use the prior team composite.');
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+// Confirmed starting-XI lines for the lineup-locked match block. Reads only
+// name/position/number/formation and the source label — never price fields.
+function lineupLockedLines(match) {
+  const md = match?.matchday;
+  if (!md) return [];
+  const out = [];
+  for (const side of ['home', 'away']) {
+    const lu = md[side]?.lineup;
+    if (!lu || !Array.isArray(lu.starting_xi) || !lu.starting_xi.length) continue;
+    const team = lu.team_name ?? md[side]?.team ?? (side === 'home' ? match.home_team : match.away_team);
+    const xi = lu.starting_xi
+      .map((p) => `${p.number ?? '-'} ${p.name ?? '?'}`)
+      .join(', ');
+    out.push(`  Confirmed XI — ${team}${lu.formation ? ` (${lu.formation})` : ''}: ${xi}`);
+  }
+  if (md.source?.provider) {
+    const ev = md.source.event_id ? ` (event ${md.source.event_id})` : '';
+    const label = `${md.source.provider.toUpperCase()} ${md.source.league ?? ''}`.trim().replace(/\s+/g, ' ');
+    out.push(`  Lineup source: ${label}${ev}`);
+  }
+  return out;
+}
+
 function formatMatch(match, board, provenance = null, previewLines = null) {
   const lines = [];
+  const locked = match?.lineup_status === 'lineup_confirmed';
   const gp = projectionFor(board);
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
   lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
-  lines.push('  Status: Pre-lock, lineups not confirmed');
-  lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's confirmed XI`);
+  if (locked) {
+    lines.push('  Status: LINEUP LOCKED — official starting XI confirmed');
+    lines.push(`  Model basis: lineups confirmed; projection still uses the latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''} (no lineup-adjusted model path)`);
+  } else {
+    lines.push('  Status: Pre-lock, lineups not confirmed');
+    lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's confirmed XI`);
+  }
   lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
   if (gp) {
     lines.push(`  ${goalForecastLine(match, board).replace(/^Goal forecast: /, 'Goal forecast: ')}`);
@@ -432,6 +513,9 @@ function formatMatch(match, board, provenance = null, previewLines = null) {
     lines.push('  Goal-spread forecast: Model unavailable: missing model layer');
     lines.push('  Score-grid check: model unavailable');
   }
+  if (locked) {
+    for (const line of lineupLockedLines(match)) lines.push(line);
+  }
   if (Array.isArray(previewLines) && previewLines.length) {
     for (const line of previewLines) lines.push(line);
   }
@@ -444,14 +528,25 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const provenance = meta.composite_provenance ?? null;
   const research = meta.research ?? null;
   const researchRoot = meta.research_root ?? undefined;
+  const packetStage = meta.packet_stage ?? null;
+  const confirmedCount = (matches || []).filter((m) => m?.lineup_status === 'lineup_confirmed').length;
+  const isLineupLocked = packetStage === 'lineup_locked' || confirmedCount > 0;
   const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
   const lines = [];
   lines.push(header('MATCHDAY FORECAST', date));
   if (provenance?.provisional) {
-    lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's confirmed XI.`);
-    lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
+    if (isLineupLocked) {
+      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}; ${confirmedCount} match(es) now carry confirmed official starting XIs (see per-match status).`);
+      lines.push('Lineup-aware note: confirmed lineups are shown per match; projections still use the prior team composite because no lineup-adjusted model path is sourced yet.\n');
+    } else {
+      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's confirmed XI.`);
+      lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
+    }
   }
+
+  // Daily slate preview — why today matters (unnumbered; precedes section 1).
+  lines.push(slatePreviewBlock(matches, boards));
 
   // 1. Matchday Forecast
   lines.push(section('1. Matchday Forecast'));
@@ -501,12 +596,19 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const researchStatus = research?.status ?? 'PERPLEXITY_UNAVAILABLE';
   lines.push(`  Matches evaluated: ${matches.length}`);
   lines.push(`  Side-layer coverage: ${presentLayers}/${totalLayers}`);
-  lines.push('  Pre-lock status: lineups are not confirmed');
+  if (confirmedCount > 0) {
+    lines.push(`  Lineup status: official starting XIs confirmed for ${confirmedCount}/${matches.length} match(es); the rest are pre-lineup.`);
+  } else {
+    lines.push('  Pre-lock status: lineups are not confirmed');
+  }
   lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's confirmed XI.`);
   if (researchStatus === 'ok') {
     const confirmed = research?.source_quality?.confirmed;
     const matchCount = matches.length;
-    const capturedCount = Number.isFinite(confirmed) ? confirmed : matchCount;
+    const captured = research?.captured;
+    const capturedCount = Number.isFinite(captured)
+      ? captured
+      : (Number.isFinite(confirmed) ? confirmed : matchCount);
     lines.push(`  Perplexity research: live supplemental context captured for ${capturedCount}/${matchCount} matches.`);
   } else {
     lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
