@@ -107,3 +107,108 @@ export function writeResearchBankArtifacts({
 
   return { dir, files };
 }
+
+function readJsonIfExists(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Days between two ISO-ish timestamps; returns null if either is unparseable.
+function daysBetween(fromIso, toIso) {
+  const a = new Date(fromIso);
+  const b = new Date(toIso);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  return Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
+}
+
+/**
+ * Classify how fresh a banked artifact is RELATIVE to a packet date.
+ * The research bank is historical memory, NOT live truth: an artifact is only
+ * treated as a confirmed fresh fact when its sources are recent AND its
+ * generated_at is within the freshness window of the packet date. Anything
+ * older, undated, or self-labeled stale is returned as a non-fresh status so
+ * callers render it as labeled historical context, never as fresh evidence.
+ *
+ * @returns {{ status: 'fresh'|'aging'|'stale'|'unknown', fresh: boolean, reason: string }}
+ */
+export function classifyResearchFreshness({ metadata, sanitized, packetDate, freshWindowDays = 1, agingWindowDays = 7 } = {}) {
+  const meta = metadata || {};
+  const freshnessEntries = Array.isArray(meta.source_freshness)
+    ? meta.source_freshness
+    : Array.isArray(sanitized?.source_freshness)
+      ? sanitized.source_freshness
+      : [];
+  const generatedAt = meta.generated_at ?? sanitized?.generated_at ?? 'unavailable';
+
+  if (!generatedAt || generatedAt === 'unavailable') {
+    return { status: 'unknown', fresh: false, reason: 'no generated_at timestamp on banked artifact' };
+  }
+
+  const labels = freshnessEntries
+    .map((entry) => String(entry?.freshness ?? '').trim().toLowerCase())
+    .filter(Boolean);
+  const hasRecentLabel = labels.some((l) => l === 'same_day' || l === '1d');
+  const allStaleOrUndated = labels.length > 0 && labels.every((l) => l === 'stale' || l === 'undated');
+
+  // Age of the artifact relative to the packet date (or now if no packetDate).
+  const reference = packetDate ? `${packetDate}T23:59:59Z` : new Date().toISOString();
+  const ageDays = daysBetween(generatedAt, reference);
+
+  if (allStaleOrUndated) {
+    return { status: 'stale', fresh: false, reason: 'all banked sources are stale/undated' };
+  }
+  if (ageDays === null) {
+    return { status: 'unknown', fresh: false, reason: 'unparseable timestamps' };
+  }
+  if (ageDays <= freshWindowDays && (hasRecentLabel || labels.length === 0)) {
+    return { status: 'fresh', fresh: true, reason: `artifact within ${freshWindowDays}d of packet date` };
+  }
+  if (ageDays <= agingWindowDays) {
+    return { status: 'aging', fresh: false, reason: `artifact ${ageDays.toFixed(1)}d old; within aging window` };
+  }
+  return { status: 'stale', fresh: false, reason: `artifact ${ageDays.toFixed(1)}d old; beyond ${agingWindowDays}d` };
+}
+
+/**
+ * Read a banked artifact for one event, if present. Returns the sanitized
+ * artifact, its lineage metadata, and a freshness classification. Returns null
+ * when no artifact has been banked for the identity. Never throws on missing
+ * or malformed files — a missing artifact is a clean "no research" signal.
+ *
+ * @returns {{ dir: string, sanitized: object|null, metadata: object|null, builderInput: object|null, previewText: string|null, freshness: object }|null}
+ */
+export function readResearchBankArtifact({ date, packet_family, packet_type, event_id, root, freshWindowDays, agingWindowDays } = {}) {
+  const dir = researchBankDir({ date, packet_family, packet_type, event_id, root });
+  const sanitized = readJsonIfExists(path.join(dir, RESEARCH_BANK_FILES.sanitized));
+  const metadata = readJsonIfExists(path.join(dir, RESEARCH_BANK_FILES.metadata));
+  if (!sanitized && !metadata) return null;
+
+  let previewText = null;
+  try {
+    const p = path.join(dir, RESEARCH_BANK_FILES.preview);
+    if (fs.existsSync(p)) previewText = fs.readFileSync(p, 'utf8');
+  } catch {
+    previewText = null;
+  }
+
+  const freshness = classifyResearchFreshness({
+    metadata,
+    sanitized,
+    packetDate: date,
+    freshWindowDays,
+    agingWindowDays,
+  });
+
+  return {
+    dir,
+    sanitized: sanitized ?? null,
+    metadata: metadata ?? null,
+    builderInput: readJsonIfExists(path.join(dir, RESEARCH_BANK_FILES.builderInput)),
+    previewText,
+    freshness,
+  };
+}

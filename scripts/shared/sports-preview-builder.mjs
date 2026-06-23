@@ -139,6 +139,7 @@ function pickWhy(research, model, sport) {
       research.why_this_game_matters,
       research.why_this_match_matters,
       research.why_it_matters,
+      research.why_this_matters,
     ) || 'unavailable';
   }
   return firstText(

@@ -21,8 +21,104 @@
 import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
+import { buildPacketPreviewBlock } from '../../shared/cpc-preview-adapter.mjs';
+
 const CHICAGO_TZ = 'America/Chicago';
 const EASTERN_TZ = 'America/New_York';
+
+// --- Source-backed preview integration ---------------------------------------
+// Resolve a Kalshi World Cup event ticker (KXWCGAME-<YYMONDD><HOME3><AWAY3>)
+// from the match's Chicago-local kickoff date + team names, then look up the
+// banked, sanitized research artifact for a customer-safe preview block. Price /
+// market fields never enter this path — the sanitizer + adapter strip and guard
+// them, and the model summary below carries model-side projection language only.
+
+const MONTHS_3 = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+// FIFA 3-letter codes for nations whose code is NOT the first three letters.
+// Anything not listed falls back to first-three-uppercase (Norway→NOR, etc.).
+const FIFA_CODE_OVERRIDES = {
+  'South Africa': 'RSA',
+  'South Korea': 'KOR',
+  'Korea Republic': 'KOR',
+  'Saudi Arabia': 'KSA',
+  'United States': 'USA',
+  'Netherlands': 'NED',
+  'Switzerland': 'SUI',
+  'Ivory Coast': 'CIV',
+  'Costa Rica': 'CRC',
+  'New Zealand': 'NZL',
+  'Cape Verde': 'CPV',
+};
+
+function teamCode(name) {
+  const clean = String(name ?? '').trim();
+  if (FIFA_CODE_OVERRIDES[clean]) return FIFA_CODE_OVERRIDES[clean];
+  return clean.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'UNK';
+}
+
+function chicagoYmd(value, fallbackDate) {
+  const d = value ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) {
+    const [y, m, day] = String(fallbackDate ?? '').split('-');
+    return { y, m, d: day };
+  }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CHICAGO_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return { y: get('year'), m: get('month'), d: get('day') };
+}
+
+function worldCupEventTicker(match, packetDate) {
+  const { y, m, d } = chicagoYmd(match?.kickoff_utc, packetDate);
+  if (!y || !m || !d) return null;
+  const mon = MONTHS_3[parseInt(m, 10) - 1];
+  if (!mon) return null;
+  return `KXWCGAME-${y.slice(2)}${mon}${d}${teamCode(match?.home_team)}${teamCode(match?.away_team)}`;
+}
+
+// Market-neutral model summary for the preview's model-read fields. Only
+// model-side (price-free) projection language is passed; never odds/price.
+function worldCupModelSummary(match, board) {
+  const gp = projectionFor(board);
+  const summary = { result_edge: resultEdgePhrase(board, match) };
+  if (gp) {
+    summary.projection = `${match.home_team} ${gp.projected_home_goals}-${gp.projected_away_goals} ${match.away_team}`;
+    summary.total_environment = totalProfile(gp.projected_total_goals);
+  }
+  summary.caveat = 'Pre-lineup; latest prior team composite, not confirmed XI.';
+  return summary;
+}
+
+// Build the indented "Source-backed preview" sub-block for one match, or null
+// when no banked artifact exists (the existing model forecast lines stand on
+// their own — we never invent a source-backed block without a source).
+function matchPreviewLines(match, board, packetDate, researchRoot) {
+  const eventTicker = worldCupEventTicker(match, packetDate);
+  if (!eventTicker) return null;
+  let block;
+  try {
+    block = buildPacketPreviewBlock({
+      date: packetDate,
+      packet_family: 'sports',
+      packet_type: 'worldcup-match',
+      route: 'worldcup_match',
+      submarket: 'match_preview',
+      event_id: eventTicker,
+      model: worldCupModelSummary(match, board),
+      root: researchRoot,
+    });
+  } catch {
+    return null;
+  }
+  if (!block || !block.artifact_found || !block.text) return null;
+  const lines = ['', '  Source-backed preview:'];
+  for (const line of String(block.text).split('\n')) {
+    lines.push(line ? `    ${line}` : '');
+  }
+  return lines;
+}
 
 function generatedDisplay(d = new Date()) {
   const ct = new Intl.DateTimeFormat('en-US', {
@@ -315,7 +411,7 @@ function formatLane(lane, match, provisional) {
   return lines.join('\n');
 }
 
-function formatMatch(match, board, provenance = null) {
+function formatMatch(match, board, provenance = null, previewLines = null) {
   const lines = [];
   const gp = projectionFor(board);
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
@@ -336,6 +432,9 @@ function formatMatch(match, board, provenance = null) {
     lines.push('  Goal-spread forecast: Model unavailable: missing model layer');
     lines.push('  Score-grid check: model unavailable');
   }
+  if (Array.isArray(previewLines) && previewLines.length) {
+    for (const line of previewLines) lines.push(line);
+  }
   lines.push('');
   return lines.join('\n');
 }
@@ -344,6 +443,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const date = meta.date ?? new Date().toISOString().slice(0, 10);
   const provenance = meta.composite_provenance ?? null;
   const research = meta.research ?? null;
+  const researchRoot = meta.research_root ?? undefined;
   const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
   const lines = [];
@@ -371,7 +471,8 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   // 2. Match Breakdowns
   lines.push(section('2. Match Breakdowns'));
   for (let i = 0; i < matches.length; i++) {
-    lines.push(formatMatch(matches[i], boards[i], provenance));
+    const previewLines = matchPreviewLines(matches[i], boards[i], date, researchRoot);
+    lines.push(formatMatch(matches[i], boards[i], provenance, previewLines));
   }
 
   // 3. Market Comparison
