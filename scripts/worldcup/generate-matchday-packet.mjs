@@ -37,12 +37,13 @@ function slugify(s) {
 }
 
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null };
+  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null, packetStage: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
     else if (a === '--state-root') opts.stateRoot = argv[++i];
     else if (a === '--match-id') opts.matchId = argv[++i];
+    else if (a === '--packet-stage') opts.packetStage = argv[++i];
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${a}`);
@@ -65,7 +66,7 @@ function readJsonIfExists(path) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--dry-run]');
+    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--packet-stage STAGE] [--dry-run]');
     process.exit(0);
   }
 
@@ -268,9 +269,10 @@ async function main() {
   }
 
   // 4. Render packet
-  const packetStage = todayMatches.some(m => m.lineup_status === 'lineup_confirmed')
-    ? 'lineup_locked'
-    : 'morning_board';
+  const packetStage = opts.packetStage
+    || (todayMatches.some(m => m.lineup_status === 'lineup_confirmed')
+      ? 'lineup_locked'
+      : 'morning_board');
 
   const packetText = renderWorldCupPacket({
     matches: todayMatches,

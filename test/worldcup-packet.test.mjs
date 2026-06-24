@@ -8,6 +8,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { composeEvidenceLedgerForGame } from '../scripts/worldcup/lib/evidence-ledger.mjs';
 import { composeMultiLaneCeilingBoard } from '../scripts/worldcup/lib/multi-lane-ceiling.mjs';
@@ -157,6 +158,76 @@ function makeGoalFixture() {
   return { match, board };
 }
 
+function makeBlockedGoalFixture() {
+  const match = {
+    match_id: '400021481',
+    home_team: 'France',
+    away_team: 'Japan',
+    group: 'H',
+    stage: 'group',
+    kickoff_utc: '2026-06-22T17:00:00Z',
+    lineup_status: 'lineup_pending',
+  };
+  const mk = (score) => ({ present: true, score });
+  const home = {
+    team_quality_baseline: mk(84),
+    recent_form: mk(84),
+    attacking_strength: { present: false, score: null },
+    defensive_strength: mk(84),
+    opponent_adjusted_attack: mk(84),
+    opponent_adjusted_defense: mk(84),
+    opponent_style_fit: mk(84),
+    set_piece_matchup: mk(84),
+    goalkeeper_edge: mk(84),
+    squad_availability: mk(84),
+    lineup_strength_delta: mk(84),
+    rest_travel_venue_climate: mk(84),
+    tournament_incentive_state: mk(84),
+    knockout_extra_time_penalty: mk(84),
+  };
+  const away = fullSide(52);
+  const ledger = composeEvidenceLedgerForGame(home, away);
+  const board = composeMultiLaneCeilingBoard({
+    homeLedger: ledger.home,
+    awayLedger: ledger.away,
+    marketContexts: [],
+    isKnockout: false,
+    lineupConfirmed: false,
+  });
+  return { match, board };
+}
+
+function makeConfirmedGoalscorerFixture() {
+  const { match, board } = makeGoalFixture();
+  match.matchday = {
+    home: {
+      lineup_status: 'lineup_confirmed',
+      lineup: {
+        team_name: 'Brazil',
+        starting_xi: [
+          { name: 'Player One', position: 'F', number: '9' },
+          { name: 'Player Two', position: 'M', number: '10' },
+          { name: 'Player Three', position: 'F', number: '11' },
+          { name: 'Player Four', position: 'M', number: '8' },
+        ],
+      },
+    },
+    away: {
+      lineup_status: 'lineup_confirmed',
+      lineup: {
+        team_name: 'Serbia',
+        starting_xi: [
+          { name: 'Player Five', position: 'F', number: '9' },
+          { name: 'Player Six', position: 'M', number: '10' },
+          { name: 'Player Seven', position: 'F', number: '11' },
+          { name: 'Player Eight', position: 'M', number: '8' },
+        ],
+      },
+    },
+  };
+  return { match, board };
+}
+
 test('packet renders projected goals, total, both-score, spread, and score-grid check in soccer language', () => {
   const { match, board } = makeGoalFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
@@ -166,6 +237,72 @@ test('packet renders projected goals, total, both-score, spread, and score-grid 
   assert.ok(/Goal-spread forecast: \w+ \+[\d.]+ goals/.test(text), 'goal-spread forecast must render');
   assert.ok(/Score-grid check: (models aligned|model disagreement|model check limited)/.test(text), 'score-grid check must render');
   assert.ok(!/Poisson 1X2 cross-check/.test(text), 'no "Poisson 1X2 cross-check" jargon in user packet');
+});
+
+test('packet renders Why it matters and a blocked goalscorer sidecar when player pool is missing', () => {
+  const { match, board } = makeGoalFixture();
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22', packet_stage: 'morning_pre_lock' } });
+  assert.ok(text.includes('Why it matters'), 'Why it matters section must render');
+  assert.ok(text.includes('Anytime Goalscorer Model — PRICE FREE'), 'goalscorer section must render');
+  assert.ok(text.includes('BLOCKED_PLAYER_DATA_MISSING'), 'missing player pool must be called out');
+});
+
+test('confirmed XI packet can render READY goalscorer players', () => {
+  const { match, board } = makeConfirmedGoalscorerFixture();
+  const text = renderWorldCupPacket({
+    matches: [match],
+    boards: [board],
+    meta: { date: '2026-06-22', packet_stage: 'lineup_locked' },
+  });
+  assert.ok(text.includes('Why it matters'), 'Why it matters section must render');
+  assert.ok(text.includes('Anytime Goalscorer Model — PRICE FREE'), 'goalscorer section must render');
+  assert.ok(text.includes('READY'), 'confirmed XI players should be able to render READY');
+  assert.ok(/Player One|Player Five/.test(text), 'confirmed starter names should appear');
+});
+
+test('goalscorer section is bounded to top 3 per team', () => {
+  const { match, board } = makeConfirmedGoalscorerFixture();
+  match.matchday.home.lineup.starting_xi.push(
+    { name: 'Player Nine', position: 'F', number: '19' },
+    { name: 'Player Ten', position: 'F', number: '20' },
+  );
+  match.matchday.away.lineup.starting_xi.push(
+    { name: 'Player Eleven', position: 'F', number: '19' },
+    { name: 'Player Twelve', position: 'F', number: '20' },
+  );
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22', packet_stage: 'lineup_locked' } });
+  const goalSection = text.split('Anytime Goalscorer Model — PRICE FREE')[1];
+  const playerLines = (goalSection.match(/^\s+- /gm) || []);
+  assert.ok(playerLines.length <= 6, `goalscorer section must stay bounded; got ${playerLines.length}`);
+});
+
+test('missing team goal projection renders BLOCKED_TEAM_GOALS_MISSING', () => {
+  const { match, board } = makeBlockedGoalFixture();
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22', packet_stage: 'morning_pre_lock' } });
+  assert.ok(text.includes('BLOCKED_TEAM_GOALS_MISSING'), 'team goal block must render explicitly');
+});
+
+test('Canada vs Switzerland single-match packet renders Why it matters and READY goalscorer output', () => {
+  const structure = JSON.parse(readFileSync('state/worldcup/2026-06-24/discovery/static_structure.json', 'utf8'));
+  const match = structure.matches.find((m) => String(m.match_id) === '400021451');
+  const matchday = JSON.parse(readFileSync('state/worldcup/2026-06-24/matchday/400021451.json', 'utf8'));
+  const ledger = composeEvidenceLedgerForGame(fullSide(79), fullSide(55));
+  const board = composeMultiLaneCeilingBoard({
+    homeLedger: ledger.home,
+    awayLedger: ledger.away,
+    marketContexts: [],
+    isKnockout: false,
+    lineupConfirmed: true,
+  });
+  const text = renderWorldCupPacket({
+    matches: [{ ...match, lineup_status: 'lineup_confirmed', matchday }],
+    boards: [board],
+    meta: { date: '2026-06-24', packet_stage: 'lineup_lock' },
+  });
+  assert.ok(text.includes('Why it matters'), 'single-match packet must include Why it matters');
+  assert.ok(text.includes('Anytime Goalscorer Model — PRICE FREE'), 'single-match packet must include goalscorer section');
+  assert.ok(text.includes('READY'), 'Canada vs Switzerland test packet should render READY goalscorer players');
+  assert.ok(text.includes('Switzerland') && text.includes('Canada'), 'match teams should appear in the packet');
 });
 
 test('Total Goals with no line shows projection, no fabricated over/under (no banned label)', () => {
