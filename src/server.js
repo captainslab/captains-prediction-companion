@@ -3,6 +3,7 @@ import { handleCaptainLabsApiRequest } from './captainLabsApi.js'
 import { createPipelineService } from './pipelineService.js'
 import { createNoteStore } from './noteStore.js'
 import { loadDotEnv } from './env.js'
+import { ensurePerplexityEnvLoaded, hasPerplexityKey } from '../scripts/mentions/mentions-research-perplexity.mjs'
 import { fetchKalshiMarkets } from './marketSources.js'
 import { buildEventMarketPlan, buildEventMarketPlanSummary, buildFocusedKalshiMarketPlan } from './eventMarketTool.js'
 import { buildEventMarketWorkflowPrompt } from './eventMarketPrompt.js'
@@ -18,6 +19,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import * as z from 'zod/v4'
 
 loadDotEnv()
+// Make the Perplexity key available to the mentions research tools from boot,
+// sourcing it from the repo .env/.env.local (read-only, silent, never logged).
+// The home-dir key file (~/.config/cpc/perplexity.key) stays as a fallback.
+ensurePerplexityEnvLoaded()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -112,6 +117,7 @@ function createServer(options = {}) {
         noteCount: noteStore.stats().count,
         launchedAt: new Date().toISOString(),
         transport: 'streamable-http',
+        perplexityKeyAvailable: hasPerplexityKey(),
       }
 
       return {
