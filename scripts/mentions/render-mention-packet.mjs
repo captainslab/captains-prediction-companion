@@ -37,7 +37,9 @@ const GAP_LABEL = 'RESEARCH GAP';
 const QUALIFICATION_STATE = 'qualification fallback';
 const QUALIFICATION_LABEL = 'QUALIFICATION RISK';
 const TIER_RANK = Object.freeze({ 'STRONG YES': 4, 'WEAK YES': 3, 'WEAK NO': 2, 'STRONG NO': 1, [GAP_LABEL]: 0 });
-const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|PICK|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
+const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
+const COLD_CURRENT_CONTEXT_RE = /\b(no direct current context|weak current context|not a topic|not a focus|not a primary|not primary|not central|not relevant|irrelevant|cold|no current context|current context cold)\b/i;
+const SOURCES_META_NOTE = 'Sources: see packet meta/audit artifact.';
 
 function scoreToTier(score) {
   if (score === null || score === undefined || !Number.isFinite(Number(score))) return GAP_LABEL;
@@ -152,7 +154,7 @@ function pushWrapped(lines, label, value, width = 76, indent = '   ') {
 function sectionLabelHeader(rank, term, score, tier) {
   // "#N" rank prefix keeps per-strike cards visually distinct from the numbered
   // section headers (e.g. section "3. WEAK YES WATCHLIST" vs card "#3 Democrat").
-  return `#${rank} ${term} — P(YES) ${score} — ${tier}`;
+  return `#${rank} ${term} — ${score} — ${tier}`;
 }
 
 function cpcCell(term) {
@@ -170,12 +172,56 @@ function renderedPosture(term) {
   return scoreToTier(numericScore(term));
 }
 
-function cardResearchLabel(term) {
-  return isResearchBacked(term) ? 'source-backed / fresh' : 'research gap';
+function termNarrativeText(term, note = {}) {
+  return [
+    note.reason,
+    note.catalyst,
+    term?.research_reason,
+    term?.catalyst,
+    term?.research_term_note?.catalyst,
+  ].filter(Boolean).join(' ').trim();
 }
 
-function cardReasonLabel(tier) {
-  return tier === 'STRONG NO' || tier === 'WEAK NO' ? 'Why it reads NO' : 'Why it could hit';
+function termHasSourceRefs(term, note = {}) {
+  const narrative = termNarrativeText(term, note);
+  return /\[\d+\]/.test(narrative)
+    || (Array.isArray(note.citations) && note.citations.length > 0)
+    || (Array.isArray(term?.research_term_note?.citations) && term.research_term_note.citations.length > 0);
+}
+
+function cardEvidenceLabel(term, note = {}) {
+  const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
+  const hasHistory = Boolean(provenance);
+  const narrative = termNarrativeText(term, note);
+  const coldCurrent = COLD_CURRENT_CONTEXT_RE.test(narrative);
+  const hasCurrent = Boolean(narrative) && !coldCurrent;
+  const short = String(term?._short ?? term?.short_term ?? term?.full_strike_text ?? '').trim();
+  const isCountTerm = (Number.isFinite(Number(term?.required_count)) && Number(term.required_count) > 1)
+    || /\(\s*\d+\+\s*times\s*\)/i.test(short)
+    || /\brepeat_requirement\b/i.test(String(term?.repeat_requirement ?? ''));
+
+  if (hasHistory && isCountTerm) return 'comparable history only; weak current context.';
+  if (hasHistory && coldCurrent) return 'comparable history only; weak current context.';
+  if (hasHistory && hasCurrent) return 'current-event context + comparable history.';
+  if (hasHistory) return 'comparable history only.';
+  if (hasCurrent) return 'current-event context.';
+  return 'no direct current context.';
+}
+
+function pushCardBlock(lines, label, value, width = 76) {
+  const safeValue = safeCustomerText(value, 'MISSING');
+  const wrapped = wrapText(safeValue, width);
+  lines.push(label);
+  if (!wrapped.length) {
+    lines.push('MISSING');
+    lines.push('');
+    return;
+  }
+  lines.push(wrapped[0]);
+  for (const continuation of wrapped.slice(1)) {
+    lines.push(continuation);
+  }
+  lines.push('');
 }
 
 function renderTermCard(lines, term, index, note = {}, { tierOverride = null } = {}) {
@@ -183,13 +229,14 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   const rank = index + 1;
   const score = cpcCell(term);
   lines.push(sectionLabelHeader(rank, term._short, score, tier));
-  pushWrapped(lines, `${cardReasonLabel(tier)}:`, note.catalyst ?? term.catalyst ?? 'MISSING');
-  pushWrapped(lines, 'Settlement fit:', note.settlement_fit ?? term.settlement_fit ?? 'MISSING');
+  lines.push('');
+  pushCardBlock(lines, 'Why:', note.catalyst ?? term.catalyst ?? 'MISSING');
+  pushCardBlock(lines, 'Settlement:', note.settlement_fit ?? term.settlement_fit ?? 'MISSING');
+  pushCardBlock(lines, 'Evidence:', cardEvidenceLabel(term, note));
   const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
   if (provenance) {
-    pushWrapped(lines, 'Provenance:', provenance);
+    pushCardBlock(lines, 'Provenance:', provenance);
   }
-  lines.push(`   Research: ${cardResearchLabel(term)}`);
 }
 
 function renderGapSummary(lines, gapTerms) {
@@ -215,10 +262,15 @@ function renderQualificationRiskSection(lines, qualificationTerms) {
     const status = String(term?.qualification_status ?? '').trim().toLowerCase();
     const proven = status === 'high' || status === 'medium';
     lines.push(`- ${maybe(term._short)}`);
-    lines.push('  Settlement fit: EDNQ is a separate settlement path if the event/rules do not qualify. This is not a content-term pick.');
-    lines.push(`  Read: ${proven ? `YES-leaning qualification risk proven (${status || 'unknown'})` : 'neutral fallback, not a pick.'}`);
+    lines.push('');
+    pushCardBlock(lines, 'Settlement:', 'EDNQ is a separate settlement path if the event/rules do not qualify. This is not a content-term pick.');
+    pushCardBlock(lines, 'Read:', proven ? `YES-leaning qualification risk proven (${status || 'unknown'})` : 'Neutral fallback, not a pick.');
   }
-  lines.push('');
+}
+
+function renderInventoryLabel(term) {
+  if (isQualificationRisk(term)) return 'Event does not qualify';
+  return maybe(term?._short ?? term?.short_term ?? shortTerm(term?.full_strike_text, ''));
 }
 
 // Best rendered tier from the customer board. Research gaps sort last.
@@ -274,6 +326,7 @@ function collectNotes(ranked, analyst) {
 
 function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = null, includeWeakYesLead = false } = {}) {
   lines.push(heading);
+  lines.push('');
   if (!terms.length) {
     lines.push('- none');
     lines.push('');
@@ -282,10 +335,7 @@ function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = 
   terms.forEach((term) => {
     const idx = ranked.indexOf(term);
     renderTermCard(lines, term, idx, notes[term._short] ?? {}, tierFilter ? { tierOverride: tierFilter(term) } : {});
-    lines.push('');
   });
-  if (lines[lines.length - 1] === '') lines.pop();
-  lines.push('');
 }
 
 /**
@@ -386,10 +436,13 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   } else {
     lines.push('- none');
   }
+  if (ranked.some((term) => termHasSourceRefs(term, notes[term._short] ?? {}))) {
+    lines.push(SOURCES_META_NOTE);
+  }
   lines.push('');
 
   lines.push('8. FULL STRIKE INVENTORY');
-  for (const t of ranked) lines.push(`- ${maybe(t.full_strike_text)}`);
+  for (const t of ranked) lines.push(`- ${renderInventoryLabel(t)}`);
   lines.push('');
 
   lines.push('---');
@@ -407,10 +460,6 @@ export function validateRenderedPacket(text, input) {
     if (idx < lastIdx) throw new Error(`rendered packet section out of order: "${section}"`);
     lastIdx = idx;
   }
-  for (const term of input?.terms ?? []) {
-    const full = String(term.full_strike_text ?? '').trim();
-    if (full && !text.includes(full)) throw new Error(`rendered packet omitted full strike text: ${full}`);
-  }
   if (!/research only/i.test(text)) throw new Error('rendered packet omitted research-only footer');
   if (!text.includes(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`)) {
     throw new Error(`rendered packet omitted ${CUSTOMER_PACKET_CONTRACT_V2} contract marker`);
@@ -423,5 +472,16 @@ export function validateRenderedPacket(text, input) {
   }
   if (/Most likely mention terms/i.test(text)) throw new Error('rendered packet leaked old Most likely mention terms scaffold format');
   if (/\|\s*scaffold\s*\|/i.test(text)) throw new Error('rendered packet leaked scaffold in board column');
+  if (/\[\d+\]/.test(text)) {
+    if (!text.includes(SOURCES_META_NOTE)) {
+      throw new Error('rendered packet included bracket refs but omitted compact sources note');
+    }
+  }
+  for (const term of input?.terms ?? []) {
+    const label = String(term?.is_qualification_term === true
+      ? 'Event does not qualify'
+      : term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
+    if (label && !text.includes(label)) throw new Error(`rendered packet omitted short strike text: ${label}`);
+  }
   return true;
 }

@@ -208,10 +208,10 @@ test('mentions daily packet renders stacked cards instead of the old wide board'
   assert.match(text, /1\. FAST READ/);
   assert.match(text, /2\. TOP YES CASE/);
   assert.match(text, /PowerEdge/);
-  assert.match(text, /PowerEdge — P\(YES\) 88 — STRONG YES/);
-  assert.match(text, /Why it could hit:/);
-  assert.match(text, /Settlement fit:/);
-  assert.match(text, /Research: source-backed \/ fresh/);
+  assert.match(text, /PowerEdge — 88 — STRONG YES/);
+  assert.match(text, /Why:/);
+  assert.match(text, /Settlement:/);
+  assert.match(text, /Evidence:[\s\S]*no direct current context\./);
   assert.doesNotMatch(text, /RANKED BOARD|TOP RESEARCHED TERMS|TLDR BOARD|TOP EDGE CANDIDATES|LOW-SOURCE WATCH/);
 });
 
@@ -227,7 +227,7 @@ test('mentions daily packet keeps market context display-only / NOT IN SCORE', (
   assert.doesNotMatch(text, /Market Context - NOT IN SCORE[\s\S]*bid range/);
 });
 
-test('mentions daily packet uses full strike text, not abbreviation-only labels', () => {
+test('mentions daily packet uses clean strike terms, not repeated market titles', () => {
   const text = buildKalshiEventPacket({
     date: '2026-06-11',
     event: trumpTeleRallyEvent(),
@@ -235,9 +235,10 @@ test('mentions daily packet uses full strike text, not abbreviation-only labels'
   }).text;
 
   const inventory = text.split('8. FULL STRIKE INVENTORY')[1];
-  assert.match(inventory, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  assert.match(inventory, /- Biden/);
+  assert.doesNotMatch(inventory, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
   assert.doesNotMatch(inventory, /Biden — P\(YES\)/);
-  assert.match(text, /8\. FULL STRIKE INVENTORY[\s\S]*What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+  assert.match(text, /8\. FULL STRIKE INVENTORY[\s\S]*- Biden/);
 });
 
 test('Trump housing packet cleans settlement wording and keeps comparable-history provenance separate from settled_history', () => {
@@ -247,19 +248,31 @@ test('Trump housing packet cleans settlement wording and keeps comparable-histor
     sourceUrl: '/tmp/housing.json',
   }).text;
 
-  assert.match(text, /#1 Single Family — P\(YES\) 75 — STRONG YES/);
-  assert.match(text, /Settlement fit: YES if Trump says "Single Family"[\s\S]*qualifying event window\./);
-  assert.match(text, /#2 Permit \/ Zoning — P\(YES\) \d+ — WEAK YES/);
-  assert.match(text, /Settlement fit: YES if Trump says either "Permit" or "Zoning"[\s\S]*qualifying event window\./);
-  assert.match(text, /#3 Iran \(3\+ times\) — P\(YES\) 53 — WEAK YES/);
-  assert.match(text, /Settlement fit: YES if Trump says "Iran"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event window\./);
-  assert.match(text, /Provenance: comparable_event_history: source=kalshi_native n=14 yes=10[\s\S]*hit_rate=0\.71/);
-  assert.match(text, /Settlement fit: EDNQ is a separate settlement path if the event\/rules do not qualify\. This is not a content-term pick\./);
-  assert.match(text, /Read: neutral fallback, not a pick\./);
+  assert.match(text, /#1 Single Family — 75 — STRONG YES/);
+  assert.match(text, /#1 Single Family — 75 — STRONG YES\n\nWhy:/);
+  assert.match(text, /Settlement:[\s\S]*YES if Trump says "Single Family"[\s\S]*qualifying event[\s\S]*window\./);
+  assert.match(text, /Evidence:[\s\S]*current-event context \+ comparable history\./);
+  assert.match(text, /#2 Permit \/ Zoning — \d+ — WEAK YES/);
+  assert.match(text, /Settlement:[\s\S]*YES if Trump says either "Permit" or "Zoning"[\s\S]*qualifying event[\s\S]*window\./);
+  assert.match(text, /Evidence:[\s\S]*current-event context\./);
+  assert.match(text, /#3 Iran \(3\+ times\) — 53 — WEAK YES/);
+  assert.match(text, /Settlement:[\s\S]*YES if Trump says "Iran"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event window\./);
+  assert.match(text, /Evidence:[\s\S]*current-event context\./);
+  assert.match(text, /Provenance:[\s\S]*comparable_event_history: source=kalshi_native n=14 yes=10[\s\S]*hit_rate=0\.71/);
+  assert.match(text, /Settlement:[\s\S]*EDNQ is a separate settlement path if the event\/rules do not qualify\.[\s\S]*This[\s\S]*is not a content-term pick\./);
+  assert.match(text, /Read:[\s\S]*Neutral fallback, not a pick\./);
   assert.match(text, /settled_history: tier=none n=0 hits=0 misses=0 hit_rate=n\/a/);
   assert.doesNotMatch(text, /YES only if the exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Single Family"[\s\S]*is said/);
   assert.doesNotMatch(text, /YES if either exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Permit"[\s\S]*"Zoning" is said/);
   assert.doesNotMatch(text, /YES only if the exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Iran"[\s\S]*is said/);
+  assert.doesNotMatch(text, /^\s*\|.*\|\s*$/m);
+  assert.match(text, /- Single Family/);
+  assert.match(text, /- Permit \/ Zoning/);
+  assert.match(text, /- Iran \(3\+ times\)/);
+  assert.match(text, /- Event does not qualify/);
+  assert.doesNotMatch(text, /What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Single Family/);
+  assert.doesNotMatch(text, /What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Permit \/ Zoning/);
+  assert.doesNotMatch(text, /What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Iran \(3\+ times\)/);
   assert.doesNotMatch(text, /\/home\/jordan\//);
   assert.doesNotMatch(text, /\b2026-06-24T\d{2}:\d{2}:\d{2}\.\d{3}Z\b/);
 });

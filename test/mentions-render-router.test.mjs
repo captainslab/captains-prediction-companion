@@ -96,7 +96,7 @@ function cardHeaders(block) {
   return block
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => /^#\d+\s/.test(line) && /—\s*P\(YES\)\s*(?:\d+|--)\s*—\s*(?:STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)/.test(line));
+    .filter((line) => /^#\d+\s/.test(line) && /—\s*(?:\d+|--)\s*—\s*(?:STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)/.test(line));
 }
 
 test('same input renders the same packet text (deterministic)', () => {
@@ -129,9 +129,10 @@ test('stacked cards render each researched term once with mobile-friendly sectio
     assert.equal(occurrences.length, 1, `${word} appears once in the top-yes cards`);
   }
   for (const header of headers) assert.ok(!header.includes('Will Biden say it? --'), 'card headers use short terms');
-  assert.ok(topYes.includes('Why it could hit:'));
-  assert.ok(topYes.includes('Settlement fit:'));
-  assert.ok(topYes.includes('Research: source-backed / fresh'));
+  assert.match(topYes, /#1 Democracy — 73 — STRONG YES\n\nWhy:\nMISSING\n\nSettlement:\nMISSING\n\nEvidence:\nno direct current context\./);
+  assert.match(topYes, /\n\n#2 Folks — 73 — STRONG YES\n\nWhy:\nMISSING/);
+  assert.match(topYes, /\n\n#3 Malarkey — 73 — STRONG YES\n\nWhy:\nMISSING/);
+  assert.doesNotMatch(topYes, /^\s*\|.*\|\s*$/m);
   assert.doesNotMatch(topYes, /\|/);
 });
 
@@ -149,7 +150,7 @@ test('market prices are excluded from score inputs (composite core throws on pri
   const mutated = JSON.parse(JSON.stringify(input));
   for (const t of mutated.terms) t.market_context = { bid_cents: 90, ask_cents: 99, implied: 0.95, note: 'NOT IN SCORE' };
   const text2 = renderMentionPacket(mutated, { generatedAtUtc: NOW });
-  const headers = (t) => t.split('\n').filter((l) => /^#\d+\s/.test(l.trim()) && /—\s*P\(YES\)\s*/.test(l));
+  const headers = (t) => t.split('\n').filter((l) => /^#\d+\s/.test(l.trim()));
   assert.deepEqual(headers(text1), headers(text2));
 });
 
@@ -188,14 +189,14 @@ test('research-backed Trump/Axios fixture ranks by research P(YES), not event pr
   const traps = sectionBlock(packet, '4. WEAK NO / STRONG NO TRAPS', '5. SOURCE GAPS');
   const headers = cardHeaders(topYes);
   const trapHeaders = cardHeaders(traps);
-  const order = [...headers, ...trapHeaders].map((row) => row.match(/^#\d+\s+(.+?)\s+—\s+P\(YES\)/)?.[1]);
+  const order = [...headers, ...trapHeaders].map((row) => row.match(/^#\d+\s+(.+?)\s+—\s+(?:\d+|--)\s+—/)?.[1]);
   assert.deepEqual(order, ['Biden', 'Bibi', 'Democrat', 'Terminate']);
-  assert.deepEqual(headers.map((row) => row.match(/^#\d+\s+(.+?)\s+—\s+P\(YES\)/)?.[1]), ['Biden', 'Bibi', 'Democrat']);
-  assert.deepEqual(trapHeaders.map((row) => row.match(/^#\d+\s+(.+?)\s+—\s+P\(YES\)/)?.[1]), ['Terminate']);
-  assert.match(headers[0], /—\s*P\(YES\)\s*88\s*—\s*STRONG YES/);
-  assert.match(headers[1], /—\s*P\(YES\)\s*79\s*—\s*STRONG YES/);
-  assert.match(headers[2], /—\s*P\(YES\)\s*72\s*—\s*STRONG YES/);
-  assert.match(trapHeaders[0], /—\s*P\(YES\)\s*41\s*—\s*WEAK NO/);
+  assert.deepEqual(headers.map((row) => row.match(/^#\d+\s+(.+?)\s+—\s+(?:\d+|--)\s+—/)?.[1]), ['Biden', 'Bibi', 'Democrat']);
+  assert.deepEqual(trapHeaders.map((row) => row.match(/^#\d+\s+(.+?)\s+—\s+(?:\d+|--)\s+—/)?.[1]), ['Terminate']);
+  assert.match(headers[0], /—\s*88\s*—\s*STRONG YES/);
+  assert.match(headers[1], /—\s*79\s*—\s*STRONG YES/);
+  assert.match(headers[2], /—\s*72\s*—\s*STRONG YES/);
+  assert.match(trapHeaders[0], /—\s*41\s*—\s*WEAK NO/);
   assert.doesNotMatch(packet, /\b(?:LEAN|NO_CLEAR_PICK|EVIDENCE_LEAN|composite score|source layer(?:s)?|proximity-only|stub|scaffold)\b/i);
 });
 
@@ -219,10 +220,10 @@ test('P(YES) tier buckets render as STRONG YES, WEAK YES, WEAK NO, STRONG NO', (
     ],
   };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  assert.match(text, /Tier Alpha — P\(YES\) 70 — STRONG YES/);
-  assert.match(text, /Tier Beta — P\(YES\) 55 — WEAK YES/);
-  assert.match(text, /Tier Gamma — P\(YES\) 40 — WEAK NO/);
-  assert.match(text, /Tier Delta — P\(YES\) 20 — STRONG NO/);
+  assert.match(text, /#1 Tier Alpha — 70 — STRONG YES/);
+  assert.match(text, /#2 Tier Beta — 55 — WEAK YES/);
+  assert.match(text, /#3 Tier Gamma — 40 — WEAK NO/);
+  assert.match(text, /#4 Tier Delta — 20 — STRONG NO/);
 });
 
 test('count thresholds and EDNQ render in separate sections', () => {
@@ -279,18 +280,22 @@ test('count thresholds and EDNQ render in separate sections', () => {
   };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   assert.match(text, /Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify\./);
+  assert.doesNotMatch(text, /^\s*\|.*\|\s*$/m);
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
   assert.match(topYes, /rally/);
   assert.doesNotMatch(topYes, /Event does not qualify/);
 
   const traps = sectionBlock(text, '4. WEAK NO \/ STRONG NO TRAPS', '5. SOURCE GAPS');
   assert.match(traps, /tariff/);
-  assert.match(traps, /YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during the event window\./);
+  assert.match(traps, /#2 tariff — 42 — WEAK NO/);
+  assert.match(traps, /Why:[\s\S]*repeat pressure and repeated references/);
+  assert.match(traps, /Settlement:[\s\S]*YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event[\s\S]*window\./);
+  assert.match(traps, /Evidence:[\s\S]*comparable history only; weak current context\./);
 
   const qualification = sectionBlock(text, '6. QUALIFICATION RISK', '7. SETTLEMENT NOTES');
   assert.match(qualification, /Event does not qualify/);
-  assert.match(qualification, /EDNQ is a separate settlement path if the event\/rules do not qualify\. This is not a content-term pick\./);
-  assert.match(qualification, /YES-leaning qualification risk proven \(high\)/);
+  assert.match(qualification, /Settlement:[\s\S]*EDNQ is a separate settlement path if the event\/rules do not qualify\.[\s\S]*This[\s\S]*is not a content-term pick\./);
+  assert.match(qualification, /Read:[\s\S]*YES-leaning qualification risk proven \(high\)/);
   assert.doesNotMatch(qualification, /P\(YES\)/);
 });
 
@@ -331,8 +336,10 @@ test('threshold-supported repeated mention evidence can still render a YES tier'
   };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
-  assert.match(topYes, /tariff — P\(YES\) 66 — STRONG YES/);
-  assert.match(topYes, /YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during the event window\./);
+  assert.match(topYes, /tariff — 66 — STRONG YES/);
+  assert.match(topYes, /Why:[\s\S]*repeated references in the appearance/);
+  assert.match(topYes, /Settlement:[\s\S]*YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event[\s\S]*window\./);
+  assert.match(topYes, /Evidence:[\s\S]*comparable history only; weak current context\./);
 });
 
 test('customer packet omits retired jargon and keeps event proximity out of the text', () => {
@@ -408,10 +415,12 @@ test('valid analyst JSON lands in card catalyst/settlement-fit text', () => {
     analystTier: 'standard',
   });
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
-  assert.match(topYes, /Malarkey — P\(YES\) \d+ — STRONG YES/);
-  assert.match(topYes, /habit\/news-cycle pressure/);
-  assert.match(topYes, /YES only if the exact token "Malarkey" is said/);
-  assert.match(topYes, /Provenance: comparable_event_history: source=kalshi_native n=5 yes=3[\s\S]*hit_rate=0\.60/);
+  assert.match(topYes, /#3 Malarkey — 73 — STRONG YES/);
+  assert.match(topYes, /Why:[\s\S]*habit\/news-cycle pressure/);
+  assert.match(topYes, /Settlement:[\s\S]*YES only if the exact token "Malarkey" is said/);
+  assert.match(topYes, /Evidence:[\s\S]*current-event context \+ comparable history\./);
+  assert.match(topYes, /Provenance:[\s\S]*comparable_event_history: source=kalshi_native n=5 yes=3[\s\S]*hit_rate=0\.60/);
+  assert.match(text, /Sources: see packet meta\/audit artifact\./);
   assert.ok(!topYes.includes('…'), 'full catalyst and settlement fit text should not truncate');
 
   const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
@@ -432,13 +441,14 @@ test('source gaps stay compact and settlement notes preserve provenance', () => 
   assert.ok(!notes.includes('yes_bid'));
 });
 
-test('full strike inventory preserves every exact strike text', () => {
+test('full strike inventory preserves clean strike terms and compact sources note', () => {
   const input = builtInput({ sourceBacked: true });
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   const inventory = text.split('8. FULL STRIKE INVENTORY')[1];
   for (const term of ['Malarkey', 'Folks', 'Democracy']) {
-    assert.match(inventory, new RegExp(`Will Biden say it\\? -- ${term}`));
+    assert.match(inventory, new RegExp(`- ${term}\\b`));
   }
+  assert.doesNotMatch(inventory, /Will Biden say it\? --/);
 });
 
 test('proximity-only packet renders with NO model call and still fails closed on no research', async () => {
@@ -456,7 +466,7 @@ test('proximity-only packet renders with NO model call and still fails closed on
   assert.ok(!composed.text.includes('LOW-SOURCE WATCH only -- no pick'));
 });
 
-test('market prices never change the rendered score/order and full strike text remains present', () => {
+test('market prices never change the rendered score/order and term labels remain present', () => {
   const input = builtInput({ sourceBacked: true });
   const base = renderMentionPacket(input, { generatedAtUtc: NOW });
   const mutated = JSON.parse(JSON.stringify(input));
@@ -464,10 +474,10 @@ test('market prices never change the rendered score/order and full strike text r
     term.market_context = { bid_cents: 90, ask_cents: 99, implied: 0.95, note: 'NOT IN SCORE' };
   });
   const changed = renderMentionPacket(mutated, { generatedAtUtc: NOW });
-  const baseHeaders = base.split('\n').filter((l) => /^#\d+\s/.test(l.trim()) && /—\s*P\(YES\)\s*/.test(l));
-  const changedHeaders = changed.split('\n').filter((l) => /^#\d+\s/.test(l.trim()) && /—\s*P\(YES\)\s*/.test(l));
+  const baseHeaders = base.split('\n').filter((l) => /^#\d+\s/.test(l.trim()));
+  const changedHeaders = changed.split('\n').filter((l) => /^#\d+\s/.test(l.trim()));
   assert.deepEqual(baseHeaders, changedHeaders);
-  for (const term of ['Will Biden say it? -- Malarkey', 'Will Biden say it? -- Folks', 'Will Biden say it? -- Democracy']) {
+  for (const term of ['Malarkey', 'Folks', 'Democracy']) {
     assert.ok(changed.includes(term));
   }
 });
