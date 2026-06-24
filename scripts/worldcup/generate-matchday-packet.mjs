@@ -25,22 +25,31 @@ import { fetchTeamBaseline } from './source-adapters/team-baseline.mjs';
 import { buildOpponentMatchup, loadCachedMatchup } from './source-adapters/opponent-matchup.mjs';
 import { fetchMatchdayData, loadCachedMatchday } from './source-adapters/matchday-data.mjs';
 import { loadCachedMarketContext, normalizeMarketContext } from './source-adapters/market-context.mjs';
+import { runWorldCupPerplexityResearch } from './source-adapters/perplexity-research.mjs';
 import { composeEvidenceLedgerForGame } from './lib/evidence-ledger.mjs';
 import { composeMultiLaneCeilingBoard } from './lib/multi-lane-ceiling.mjs';
 import { renderWorldCupPacket, writeWorldCupPacket } from './lib/packet-renderer.mjs';
+import { CPC_MATCHDAY_TIMEZONE, localDateInTimeZone, filterMatchesForLocalDate } from './lib/matchday-window.mjs';
+import { findLatestPriorBaseline } from './lib/composite-baseline.mjs';
+
+function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false };
+  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
     else if (a === '--state-root') opts.stateRoot = argv[++i];
+    else if (a === '--match-id') opts.matchId = argv[++i];
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${a}`);
   }
   if (!opts.date) {
-    opts.date = new Date().toISOString().slice(0, 10);
+    // Default to "today" in the operating timezone, not UTC.
+    opts.date = localDateInTimeZone(new Date().toISOString(), CPC_MATCHDAY_TIMEZONE);
   }
   return opts;
 }
@@ -56,7 +65,7 @@ function readJsonIfExists(path) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--dry-run]');
+    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--dry-run]');
     process.exit(0);
   }
 
@@ -78,23 +87,45 @@ async function main() {
   }
 
   // 2. Load team baselines
+  let compositeProvenance = null;
   const baselinePath = resolve(stateRoot, 'worldcup', date, 'discovery', 'team_baseline.json');
   let baseline = readJsonIfExists(baselinePath);
   if (!baseline) {
     console.log(`[worldcup] no cached baseline; fetching...`);
     baseline = await fetchTeamBaseline({ stateRoot, date });
     if (!baseline.ok) {
-      console.log(`[worldcup] WARNING: team baseline unavailable. Using empty fallback.`);
-      baseline = { teams: [], team_count: 0 };
+      // Pre-lock fallback: reuse the most recent PRIOR baseline (last available
+      // composite) rather than emitting an empty all-BLOCKED board. Labeled
+      // provisional in the packet; never fabricated.
+      const prior = findLatestPriorBaseline(stateRoot, date);
+      if (prior) {
+        console.log(`[worldcup] team baseline unavailable for ${date}; using PRIOR baseline from ${prior.sourceDate} (PRE_LOCK / provisional).`);
+        baseline = prior.baseline;
+        compositeProvenance = { source_date: prior.sourceDate, provisional: true };
+      } else {
+        console.log(`[worldcup] WARNING: no team baseline (current or prior) available. Using empty fallback.`);
+        baseline = { teams: [], team_count: 0 };
+      }
     }
   }
   const teamBaselines = Object.fromEntries((baseline.teams || []).map(t => [t.team_name, t]));
 
-  // 3. Filter matches for today
-  const todayMatches = (structure.matches || []).filter(m => {
-    if (!m.kickoff_utc) return false;
-    return m.kickoff_utc.startsWith(date);
-  });
+  // 3. Filter matches for today (operating timezone = America/Chicago, not UTC).
+  let todayMatches = filterMatchesForLocalDate(structure.matches, date, CPC_MATCHDAY_TIMEZONE);
+
+  // Optional single-match mode: emit a standalone packet for one fixture,
+  // written under a distinct base name so it never collides with or
+  // overwrites the full-slate packet/audit.
+  let nameSuffix = '';
+  if (opts.matchId) {
+    todayMatches = todayMatches.filter(m => String(m.match_id) === String(opts.matchId));
+    if (todayMatches.length === 0) {
+      console.error(`[worldcup] --match-id ${opts.matchId} not in today's slate (${date}). Exiting.`);
+      process.exit(1);
+    }
+    const m = todayMatches[0];
+    nameSuffix = `-${slugify(`${m.home_team}-${m.away_team}`)}`;
+  }
 
   if (todayMatches.length === 0) {
     console.log(`[worldcup] no matches today (${date}). Exiting.`);
@@ -102,6 +133,34 @@ async function main() {
   }
 
   console.log(`[worldcup] ${todayMatches.length} match(es) today`);
+  const research = await runWorldCupPerplexityResearch({
+    date,
+    matches: todayMatches,
+    stateRoot,
+  });
+  // "captured" = research records that actually carry sourced context (a known
+  // lineup posture or non-Low source quality), as opposed to the lineup-confirm
+  // count. Without this the Source Quality line under-reports real capture as 0.
+  const researchRecords = research.artifact?.records ?? [];
+  const capturedCount = researchRecords.filter((r) => {
+    const ls = String(r?.lineup_status || '').toLowerCase();
+    const sq = String(r?.source_quality || '').toLowerCase();
+    // Source-quality values are verbose ("High - ...", "Low - No search ...");
+    // match on prefix, not exact, so a Low/Unknown record never counts as
+    // captured context.
+    const lsCaptured = ls && !ls.startsWith('unknown') && !ls.startsWith('not ');
+    const sqCaptured = sq && !sq.startsWith('low') && !sq.startsWith('unknown') && !sq.startsWith('none');
+    return lsCaptured || sqCaptured;
+  }).length;
+  const researchSummary = {
+    status: research.status,
+    ok: research.ok,
+    outPath: research.outPath,
+    match_count: research.artifact?.match_count ?? todayMatches.length,
+    source_quality: research.artifact?.source_quality ?? null,
+    captured: researchRecords.length ? capturedCount : null,
+    reason: research.artifact?.reason ?? null,
+  };
 
   const boards = [];
   const auditRecords = [];
@@ -123,6 +182,9 @@ async function main() {
       ? (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending')
       : 'lineup_pending';
     match.lineup_status = lineupStatus;
+    // Expose the (price-free) lineup payload to the renderer for the
+    // lineup-locked block. Only specific fields are read downstream.
+    match.matchday = matchday.ok ? matchday : null;
 
     // 3c. Build composite input
     // Layer scores must be 0-100. Team baselines carry normalized 0-100
@@ -213,7 +275,12 @@ async function main() {
   const packetText = renderWorldCupPacket({
     matches: todayMatches,
     boards,
-    meta: { date, packet_stage: packetStage },
+    meta: {
+      date,
+      packet_stage: packetStage,
+      composite_provenance: compositeProvenance,
+      research: researchSummary,
+    },
   });
 
   // 5. Write packet + audit artifacts
@@ -223,20 +290,27 @@ async function main() {
   if (!opts.dryRun) {
     const { txtPath, metaPath } = writeWorldCupPacket({
       dir: packetDir,
-      baseName: `worldcup-${date}-${packetStage}`,
+      baseName: `worldcup-${date}-${packetStage}${nameSuffix}`,
       packetText,
-      meta: { date, packet_stage: packetStage, match_count: todayMatches.length },
+      meta: {
+        date,
+        packet_stage: packetStage,
+        match_count: todayMatches.length,
+        composite_provenance: compositeProvenance,
+        research: researchSummary,
+      },
     });
     console.log(`[worldcup] packet written: ${txtPath}`);
     console.log(`[worldcup] meta written: ${metaPath}`);
 
     // Audit artifact
-    const auditPath = resolve(packetDir, `worldcup-${date}-audit.json`);
+    const auditPath = resolve(packetDir, `worldcup-${date}-audit${nameSuffix}.json`);
     writeFileSync(auditPath, JSON.stringify({
       generated_at: new Date().toISOString(),
       date,
       packet_stage: packetStage,
       records: auditRecords,
+      research: research.artifact,
     }, null, 2), 'utf8');
     console.log(`[worldcup] audit written: ${auditPath}`);
   } else {

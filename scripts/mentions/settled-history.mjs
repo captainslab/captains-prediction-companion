@@ -260,6 +260,54 @@ const TIER_PENALTIES = Object.freeze({
 });
 
 /**
+ * selectHistoryTier — pure. Route-aware tier selection over settled history.
+ *
+ * Returns { tier, matched } where matched is the full record pool (including
+ * soft/unsettled outcomes) selected at the winning tier. Shared by both
+ * buildHistoryMatch (aggregate hit/miss) and buildSettledHistoryArtifact
+ * (full settlement-class breakdown), so the priority ordering lives in one
+ * place. NEVER reads price/bid/ask/volume/etc. — only route/entity/horizon/
+ * series identity fields.
+ *
+ *   exact_horizon    — same entity AND same horizon, or same series ticker (penalty 0)
+ *   same_family      — same entity OR same route, horizon differs (penalty 0.15)
+ *   broader_fallback — same route only, or same entity at any context (penalty 0.30)
+ */
+export function selectHistoryTier({
+  records = [],
+  route = null,
+  entity = null,
+  horizon = null,
+  seriesTicker = null,
+} = {}) {
+  if (!Array.isArray(records) || records.length === 0) return { tier: 'none', matched: [] };
+
+  const sameEntity = (r) => entity !== null && r.entity === entity;
+  const sameRoute = (r) => route !== null && r.route === route;
+  const sameHorizon = (r) => horizon !== null && r.horizon === horizon;
+  const sameSeries = (r) => seriesTicker !== null && r.series_ticker === seriesTicker;
+  // Same series only counts as exact when horizons do not conflict — a series
+  // hosting both weekly and monthly markets must not match cross-horizon at
+  // penalty 0.
+  const horizonCompatible = (r) => horizon === null || r.horizon == null || sameHorizon(r);
+
+  const isExact = (r) => (sameSeries(r) && horizonCompatible(r)) || (sameEntity(r) && sameHorizon(r));
+
+  let matched = records.filter(isExact);
+  if (matched.length > 0) return { tier: 'exact_horizon', matched };
+
+  // same_family: same entity OR same route, horizon differs
+  matched = records.filter((r) => (sameEntity(r) || sameRoute(r)) && !sameHorizon(r));
+  if (matched.length > 0) return { tier: 'same_family', matched };
+
+  // broader_fallback: same route only, or same entity at any context
+  matched = records.filter((r) => sameRoute(r) || sameEntity(r));
+  if (matched.length > 0) return { tier: 'broader_fallback', matched };
+
+  return { tier: 'none', matched: [] };
+}
+
+/**
  * buildHistoryMatch — pure. Tiered match over settled history records.
  *
  *   exact_horizon    — same entity AND same horizon, or same series ticker (penalty 0)
@@ -285,32 +333,7 @@ export function buildHistoryMatch({
   };
   if (!Array.isArray(records) || records.length === 0) return empty;
 
-  const sameEntity = (r) => entity !== null && r.entity === entity;
-  const sameRoute = (r) => route !== null && r.route === route;
-  const sameHorizon = (r) => horizon !== null && r.horizon === horizon;
-  const sameSeries = (r) => seriesTicker !== null && r.series_ticker === seriesTicker;
-  // Same series only counts as exact when horizons do not conflict — a series
-  // hosting both weekly and monthly markets must not match cross-horizon at
-  // penalty 0.
-  const horizonCompatible = (r) => horizon === null || r.horizon == null || sameHorizon(r);
-
-  const isExact = (r) => (sameSeries(r) && horizonCompatible(r)) || (sameEntity(r) && sameHorizon(r));
-
-  let tier = 'none';
-  let matched = records.filter(isExact);
-  if (matched.length > 0) {
-    tier = 'exact_horizon';
-  } else {
-    // same_family: same entity OR same route, horizon differs
-    matched = records.filter((r) => (sameEntity(r) || sameRoute(r)) && !sameHorizon(r));
-    if (matched.length > 0) {
-      tier = 'same_family';
-    } else {
-      // broader_fallback: same route only, or same entity at any context
-      matched = records.filter((r) => sameRoute(r) || sameEntity(r));
-      if (matched.length > 0) tier = 'broader_fallback';
-    }
-  }
+  const { tier, matched } = selectHistoryTier({ records, route, entity, horizon, seriesTicker });
   if (tier === 'none') return empty;
 
   // Only settled outcomes consume sample slots — null-result records
@@ -565,4 +588,91 @@ export function historyToLayerScore(match) {
     detail: `${note}; penalty=${penalty}; samples=${match.sample_size}`,
     missing_note: null,
   };
+}
+
+function uniqueStrings(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (typeof item !== 'string') continue;
+    const v = item.trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * buildSettledHistoryArtifact — pure. Route-aware, PRICE-FREE settled-history
+ * artifact for buildMentionCompositeForMarket to attach as an explicit field.
+ *
+ * Wraps the tested buildHistoryMatch (tier + aggregate hits/misses/penalty) and
+ * adds a full settlement-class breakdown (resolved_yes/resolved_no/ednq/
+ * ambiguous/unresolved) computed over the SAME tiered pool via settlementOf, so
+ * EDNQ/ambiguous/unresolved are recorded but NEVER counted as confident hit or
+ * miss (only resolved YES/NO feed hits/misses/hit_rate, n<2 → not usable).
+ *
+ * Empty / no-match / insufficient (n<2) history fails safe: usable=false,
+ * fail_safe=true, hit_rate=null — no fake conviction.
+ *
+ * Reads only identity + settlement fields. Output is re-scanned for forbidden
+ * price-shaped keys before return (defense in depth).
+ *
+ * @param {object} opts
+ * @param {Array<object>} opts.records        prior SANITIZED settled records
+ * @param {string|null} opts.route            research route / rule family
+ * @param {string|null} opts.entity           speaker/company/show/sport/format
+ * @param {string|null} opts.horizon          weekly/monthly/event horizon
+ * @param {string|null} opts.seriesTicker     exact event/series family
+ * @param {string[]} opts.acceptedForms       accepted lexical forms (provenance)
+ * @param {number} opts.maxSamples            most-recent settled cap (default 5)
+ */
+export function buildSettledHistoryArtifact({
+  records = [],
+  route = null,
+  entity = null,
+  horizon = null,
+  seriesTicker = null,
+  acceptedForms = [],
+  maxSamples = 5,
+} = {}) {
+  const match = buildHistoryMatch({ records, route, entity, horizon, seriesTicker, maxSamples });
+  const { tier, matched } = selectHistoryTier({ records, route, entity, horizon, seriesTicker });
+
+  const settlement_breakdown = {
+    resolved_yes: 0, resolved_no: 0, ednq: 0, ambiguous: 0, unresolved: 0,
+  };
+  for (const rec of matched) {
+    const s = settlementOf(rec);
+    if (s in settlement_breakdown) settlement_breakdown[s] += 1;
+  }
+
+  const usable = match.match_tier !== 'none' && match.hit_rate !== null && match.sample_size >= 2;
+  const note = usable
+    ? `settled history ${match.hits}/${match.hits + match.misses} resolved hits, tier=${match.match_tier}, penalty=${match.match_quality_penalty}`
+    : (match.sample_size === 1
+        ? 'insufficient settled history (n<2 settled outcomes); fail-safe (no conviction)'
+        : 'no usable settled history; fail-safe (no conviction)');
+
+  const artifact = {
+    match_tier: match.match_tier,
+    match_quality_penalty: match.match_quality_penalty,
+    sample_size: match.sample_size,
+    hits: match.hits,
+    misses: match.misses,
+    hit_rate: match.hit_rate,
+    source_tickers: match.source_tickers,
+    settlement_breakdown,
+    matched_count: matched.length,
+    accepted_forms: uniqueStrings(acceptedForms),
+    usable,
+    fail_safe: !usable,
+    note,
+  };
+
+  // Defense in depth: no price-shaped key may ride out of the artifact.
+  assertNoForbiddenFields(artifact, 'buildSettledHistoryArtifact output');
+  return artifact;
 }

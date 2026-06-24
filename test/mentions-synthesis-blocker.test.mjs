@@ -43,16 +43,7 @@ function proximityOnlyEvent(ticker = 'KXWCMENTION-26JUN12CANBIH') {
 }
 
 function compliantPacketText(event) {
-  const built = buildKalshiEventPacket({ date: DATE, event, sourceUrl: '/tmp/x.json' });
-  const fullStrike = built.synthesisInput.terms[0].full_strike_text;
-  return [
-    `Event title: ${event.title}`,
-    `Date/time: ${DATE}`,
-    'Setup: LOW-SOURCE WATCH only -- no pick.',
-    `Watch-only terms: ${fullStrike} - LOW-SOURCE WATCH only -- no pick.`,
-    'Market Context - NOT IN SCORE: bid/ask context only.',
-    'Research-only footer: No trades placed. Research-only.',
-  ].join('\n');
+  return buildKalshiEventPacket({ date: DATE, event, sourceUrl: '/tmp/x.json' }).text;
 }
 
 function violatingPacketText(event) {

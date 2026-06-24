@@ -24,6 +24,12 @@ import {
   mergeExtractedLayers,
 } from './source-research.mjs';
 import { ensureSourcesManifest, SOURCE_STATUS } from './discover-sources.mjs';
+import {
+  runResearchForEvent,
+  perplexityRowsToLayers,
+  hasPerplexityKey,
+} from './mentions-research-perplexity.mjs';
+import { buildMarketRulesSnapshot } from './rules-analyst.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -244,6 +250,47 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     }
   }
 
+  // Perplexity research pass (Kalshi-native-first + two-pass literal-utterance
+  // forecast). This is the primary cron research path — it runs per event when
+  // PERPLEXITY_API_KEY is available (loaded from .env.local), independent of
+  // whether declared official source URLs were discovered. Produces PRICE-FREE
+  // per-phrase evidence layers (direct_mention_pathway + historical_tendency).
+  // It fails soft: any error leaves declared-source/stub results untouched.
+  let pplxLayers = { byTerm: {}, usableTerms: 0 };
+  // Raw Perplexity rows keyed by exact strike phrase, so the per-market research
+  // artifact can persist the reasoning fields (reason/base-rate/proof/handicap)
+  // that the packet renders as Catalyst/Settlement Fit. Layers alone drop these.
+  let pplxRowsByTerm = {};
+  let pplxRan = false;
+  const hasKey = (deps.hasPerplexityKey ?? hasPerplexityKey)(env);
+  if (date && allKeywords.length && hasKey) {
+    try {
+      const research = await (deps.runResearchForEvent ?? runResearchForEvent)({
+        event,
+        date,
+        stateRoot,
+        env,
+        ...(deps.perplexityImpl ? { perplexityImpl: deps.perplexityImpl } : {}),
+        ...(deps.fetcherImpl ? { fetcherImpl: deps.fetcherImpl } : {}),
+      });
+      pplxLayers = perplexityRowsToLayers(research.rows ?? []);
+      for (const row of research.rows ?? []) {
+        if (row && typeof row.phrase === 'string') pplxRowsByTerm[row.phrase] = row;
+      }
+      pplxRan = true;
+      if (pplxLayers.usableTerms > 0) {
+        sourceStatus = SOURCE_STATUS.SOURCE_FETCHED;
+      }
+      console.log(`[collect-mentions-research] ${eventTicker}: perplexity research usable_terms=${pplxLayers.usableTerms}`);
+    } catch (err) {
+      sourceResearch.notes.push(`perplexity research failed closed: ${err.message}`);
+      console.error(`[collect-mentions-research] ${eventTicker}: perplexity research failed closed: ${err.message}`);
+    }
+  } else if (date && allKeywords.length && !hasKey) {
+    sourceResearch.notes.push('PERPLEXITY_KEY_MISSING: set PERPLEXITY_API_KEY to enable mention research');
+    console.log(`[collect-mentions-research] ${eventTicker}: PERPLEXITY_KEY_MISSING (no live mention research performed)`);
+  }
+
   const marketResearches = [];
 
   for (const market of markets) {
@@ -251,6 +298,7 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     if (!keyword || keyword === 'Event does not qualify') continue;
 
     const marketTicker = market.ticker;
+    const rulesSnapshot = buildMarketRulesSnapshot(event, market);
     let layerRecords = {};
     let sourceLadderInputs = {};
     let researchQuality = 'source_backed';
@@ -355,13 +403,44 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       researchQuality = 'no_source';
     }
 
+    // Merge Perplexity per-phrase evidence (fills missing layers only; never
+    // overwrites adapter/declared-source evidence; pricing excluded by
+    // construction). A term with usable Perplexity layers is source_backed;
+    // a term Perplexity ran on but found nothing for is a verified gap.
+    const pplxForTerm = pplxLayers.byTerm[keyword];
+    if (pplxForTerm && Object.keys(pplxForTerm).length) {
+      layerRecords = mergeExtractedLayers(layerRecords, pplxForTerm);
+      researchQuality = 'source_backed';
+    } else if (pplxRan && researchQuality === 'stub') {
+      researchQuality = 'no_source';
+    }
+
+    // Persist the per-strike research reasoning so the packet can render a real,
+    // research-sourced Catalyst/Settlement Fit (never a fabricated stub).
+    const pplxRow = pplxRowsByTerm[keyword] ?? null;
+
     marketResearches.push({
       market_ticker: marketTicker,
       keyword,
       profile,
       research_quality: researchQuality,
       source_status: sourceStatus,
-      research_gap_notes: extracted && Object.keys(extracted).length ? [] : sourceResearch.notes,
+      market_type: rulesSnapshot.market_type ?? null,
+      required_count: Number.isFinite(Number(rulesSnapshot.required_count)) ? Number(rulesSnapshot.required_count) : null,
+      repeat_requirement: Number.isFinite(Number(rulesSnapshot.required_count)) && Number(rulesSnapshot.required_count) > 1
+        ? `${Number(rulesSnapshot.required_count)}+ times`
+        : null,
+      is_qualification_term: rulesSnapshot.market_type === 'ednq',
+      blended_pct: pplxForTerm?.direct_mention_pathway?.score ?? null,
+      reason: pplxRow?.reason ?? null,
+      proof_reason: pplxRow?.proof_reason ?? null,
+      handicap_reason: pplxRow?.handicap_reason ?? null,
+      kalshi_native_pct: pplxRow?.kalshi_native_pct ?? null,
+      kalshi_native_n: pplxRow?.kalshi_native_n ?? null,
+      proof_pct: pplxRow?.proof_pct ?? null,
+      handicap_pct: pplxRow?.handicap_pct ?? null,
+      confidence: pplxRow?.confidence ?? null,
+      research_gap_notes: (extracted && Object.keys(extracted).length) || (pplxForTerm && Object.keys(pplxForTerm).length) ? [] : sourceResearch.notes,
       layer_records: layerRecords,
       source_ladder_inputs: sourceLadderInputs,
       rules_primary: market.rules_primary || null,

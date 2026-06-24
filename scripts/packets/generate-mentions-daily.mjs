@@ -37,6 +37,7 @@ import {
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
+import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
 import {
   PROFILE_KEY as POLITICAL_PROFILE,
   LAYER_DEFS as POLITICAL_LAYERS,
@@ -79,10 +80,12 @@ import {
   CUSTOMER_RENDERER_ID,
 } from '../mentions/render-mention-packet.mjs';
 import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
+import { gateMentionMarket } from '../mentions/lexical-gate.mjs';
 import {
   loadHistory,
   buildHistoryMatch,
   historyToLayerScore,
+  buildSettledHistoryArtifact,
 } from '../mentions/settled-history.mjs';
 import {
   resolveEarningsFamily,
@@ -131,6 +134,21 @@ const POSTURE_RANK = Object.freeze({
   EVIDENCE_LEAN: 3,
   PICK: 4,
 });
+
+// Source-status values that mean the research layer did NOT produce usable
+// source evidence for this market: either it never ran (no declared official
+// source URL), or every fetch path was blocked/timed out. A market carrying one
+// of these AND no source-backed (beyond-proximity) evidence layer must FAIL
+// CLOSED — it can never become a valid customer row from event proximity alone.
+const NO_RESEARCH_SOURCE_STATUSES = Object.freeze(new Set([
+  'NO_DECLARED_SOURCES',
+  'SOURCE_FETCH_BLOCKED_BY_SITE',
+  'SOURCE_FETCH_TIMEOUT',
+]));
+
+export function isNoResearchSourceStatus(status) {
+  return typeof status === 'string' && NO_RESEARCH_SOURCE_STATUSES.has(status);
+}
 
 function asText(value) {
   return value == null ? '' : String(value).trim();
@@ -298,6 +316,13 @@ function targetMentionFromMarket(market = {}) {
   );
 }
 
+// A market is the structural EDNQ ("Event does not qualify") fallback only when
+// its OWN strike text says so — never from the event-level cancellation boilerplate
+// that detectMarketType folds into every market's combined text (which would wrongly
+// flag normal content terms like "Biden" as qualification terms).
+const EDNQ_STRIKE_RE = /event does not qualify|does not occur/i;
+function strikeIsEdnq(text) { return EDNQ_STRIKE_RE.test(String(text ?? '')); }
+
 function eventNameForComposite(event = {}, legacy = null) {
   return (
     asText(legacy?.event_context) ||
@@ -368,10 +393,7 @@ function applyEarningsPostureHint(posture, hint) {
   const bumped = POSTURE_LADDER[Math.min(POSTURE_LADDER.length - 1, rank + 1)];
   if (hint.direction === 'upgrade_capped') {
     const capped = POSTURE_RANK[bumped] > POSTURE_RANK.LEAN ? 'LEAN' : bumped;
-    const capNote = String(hint.reason ?? '').includes(CAPPED_MAX_POSTURE)
-      ? hint.reason
-      : `${hint.reason} (capped at ${CAPPED_MAX_POSTURE})`;
-    return { posture: capped, applied: capped !== posture, reason: capNote };
+    return { posture: capped, applied: capped !== posture, reason: hint.reason ?? 'capped upward adjustment' };
   }
   return { posture: bumped, applied: bumped !== posture, reason: hint.reason };
 }
@@ -451,7 +473,7 @@ function buildSportsVenueTeamSync(sportRecords, term, teams, venue) {
   return { present: true, score, source_basis: `venue/team phrase relevance: ${hits}/${settled.length} YES for "${term}" with ${teams.join('/')}`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null } = {}) {
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -461,6 +483,26 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     asText(legacy?.keyword) ||
     'MISSING'
   );
+
+  // ---- Lexical pre-evidence gate (HARD) --------------------------------------
+  // The literal lexical engine decides whether this market is even valid before
+  // ANY evidence layer is built or any composite/posture is produced. Hard
+  // blocks (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE_ROLLING) short-circuit here and
+  // never reach scoring or rendering. An evaluated NO_MATCH suppresses
+  // conviction downstream. MATCH / PENDING proceed to the layer build below.
+  const lexicalGate = gateMentionMarket({ event, market, legacy, candidateText });
+  if (lexicalGate.hard_blocked) {
+    return blockedMentionComposite({
+      event,
+      market,
+      legacy,
+      targetMention,
+      profileResolution,
+      route,
+      lexicalGate,
+    });
+  }
+
   let layerRecords = firstLayerRecordMap(market, event, legacy);
 
   // Phase 2 priority-one alpha (earnings_call only): last-four-quarter per-term
@@ -527,14 +569,30 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   // Settled-history alpha: price-free hit/miss records (settled YES/NO only)
   // feed the historical_tendency layer when no research-supplied record exists.
   // Empty/no-match history stays absent — never fake conviction.
+  //
+  // ORDER (Phase 4): Rules Analyst -> lexical gate -> settled history. History
+  // lookup runs ONLY after the lexical gate clears the market to evidence
+  // (MATCH / PENDING / ROLLING_SUPPORTED). It NEVER runs for a hard block
+  // (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE — already short-circuited above) nor
+  // for an evaluated NO_MATCH (suppress_conviction): a literal non-occurrence
+  // must not pull in settled comparables and manufacture conviction.
   let historyMatch = null;
-  if (route && Array.isArray(historyRecords) && historyRecords.length) {
+  let settledHistory = null;
+  if (route && !lexicalGate.suppress_conviction && Array.isArray(historyRecords) && historyRecords.length) {
     historyMatch = buildHistoryMatch({
       records: historyRecords,
       route: route.route,
       entity: route.entity,
       horizon: route.horizon,
       seriesTicker: event?.series_ticker ?? null,
+    });
+    settledHistory = buildSettledHistoryArtifact({
+      records: historyRecords,
+      route: route.route,
+      entity: route.entity,
+      horizon: route.horizon,
+      seriesTicker: event?.series_ticker ?? null,
+      acceptedForms: lexicalGate.lexical_result?.matched_forms ?? [],
     });
     const historyLayer = historyToLayerScore(historyMatch);
     if (historyLayer.present && !(layerRecords?.historical_tendency?.present)) {
@@ -548,7 +606,19 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     layerDefs: profileConfig.layerDefs,
     layerRecords,
     marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
+    researchScore: Number.isFinite(Number(market?.blended_pct)) ? Number(market.blended_pct) : null,
   });
+
+  // Lexical NO_MATCH suppression: an evaluated literal NO_MATCH means the target
+  // did not literally occur in the evidence text, so downstream may NOT invent
+  // conviction from context. Force the composite back to NO_CLEAR_PICK with no
+  // score/confidence before any source-ladder upgrade can run.
+  if (lexicalGate.suppress_conviction) {
+    result.posture = 'NO_CLEAR_PICK';
+    result.composite_score = null;
+    result.confidence = null;
+    result.reasoning_summary = `NO_CLEAR_PICK — lexical NO_MATCH: "${targetMention}" not literally present in evaluated evidence.`;
+  }
 
   // Source ladder (optional — runs if explicit inputs are supplied via market/event/legacy)
   let ladder = null;
@@ -565,7 +635,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   // Earnings context-delta posture adjustment runs AFTER the qualification cap
   // and is fully code-owned/deterministic (see applyEarningsPostureHint).
   let earningsAdjustment = null;
-  if (earningsHint) {
+  if (earningsHint && !lexicalGate.suppress_conviction) {
     const adjusted = applyEarningsPostureHint(postureFinal, earningsHint);
     earningsAdjustment = {
       direction: earningsHint.direction,
@@ -584,6 +654,15 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    market_type: lexicalGate.lexical_result?.market_type ?? null,
+    required_count: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) ? Number(lexicalGate.lexical_result.required_count) : null,
+    repeat_requirement: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) && Number(lexicalGate.lexical_result.required_count) > 1
+      ? `${Number(lexicalGate.lexical_result.required_count)}+ times`
+      : null,
+    is_qualification_term: strikeIsEdnq(
+      market ? targetMentionFromMarket(market) : (legacy?.target_phrase ?? legacy?.target_mention ?? '')
+    ),
+    settled_history: settledHistory,
     history_match_tier: historyMatch?.match_tier ?? null,
     history_sample_size: historyMatch?.sample_size ?? null,
     history_hits: historyMatch?.hits ?? null,
@@ -608,16 +687,109 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     } : null,
     sports_game_context: sportsGameCtx?.gameContext ?? null,
     result,
+    proof_pct: market?.proof_pct ?? null,
+    handicap_pct: market?.handicap_pct ?? null,
+    kalshi_native_pct: market?.kalshi_native_pct ?? null,
+    kalshi_native_n: market?.kalshi_native_n ?? null,
+    confidence: market?.confidence ?? null,
+    reason: market?.research_reason ?? null,
+    proof_reason: market?.proof_reason ?? null,
+    handicap_reason: market?.handicap_reason ?? null,
+    research_citations: Array.isArray(market?.research_citations) ? market.research_citations : [],
+    research_term_note: market?.research_term_note ?? null,
     source_ladder: ladder,
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
+    source_status: market?.source_status ?? legacy?.source_status ?? null,
+    lexical_gate: lexicalGate,
+  };
+}
+
+// Hard-blocked composite result for a market the lexical pre-evidence gate
+// rejected (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE_ROLLING). No evidence layers
+// are built and composeMentionLedger is never called — the market can never
+// surface a soft verdict (WATCH/LEAN/etc.) or any score/confidence. The shape
+// mirrors the normal return so downstream rank/summary/render code is unchanged.
+function blockedMentionComposite({ event, market, legacy, targetMention, profileResolution, route, lexicalGate }) {
+  const decision = lexicalGate.lexical_result?.status === 'BLOCKED' ? lexicalGate.decision : 'BLOCK';
+  const blockReasons = Array.isArray(lexicalGate.lexical_result?.block_reasons)
+    ? lexicalGate.lexical_result.block_reasons
+    : [];
+  const result = {
+    event: eventNameForComposite(event ?? {}, legacy),
+    target_mention: targetMention,
+    profile: profileResolution.profile,
+    composite_score: null,
+    confidence: null,
+    posture: 'NO_CLEAR_PICK',
+    top_supporting_layers: [],
+    missing_layers: [],
+    source_notes: [],
+    market_context: null,
+    evidence_ledger: [],
+    reasoning_summary: `NO_CLEAR_PICK — lexical gate ${decision} (${blockReasons.join(', ') || 'rules unclear'}); market blocked before scoring.`,
+    lexical_blocked: true,
+    _meta: {
+      schema_version: 'mention_composite_v1',
+      layers_present: 0,
+      layers_total: 0,
+      pricing_excluded: true,
+      lexical_gate_decision: decision,
+    },
+  };
+  return {
+    market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
+    profile_basis: profileResolution.basis,
+    research_route: route?.route ?? null,
+    route_basis: route?.basis ?? null,
+    route_entity: route?.entity ?? null,
+    route_horizon: route?.horizon ?? null,
+    market_type: lexicalGate.lexical_result?.market_type ?? null,
+    required_count: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) ? Number(lexicalGate.lexical_result.required_count) : null,
+    repeat_requirement: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) && Number(lexicalGate.lexical_result.required_count) > 1
+      ? `${Number(lexicalGate.lexical_result.required_count)}+ times`
+      : null,
+    is_qualification_term: strikeIsEdnq(
+      market ? targetMentionFromMarket(market) : (legacy?.target_phrase ?? legacy?.target_mention ?? '')
+    ),
+    settled_history: null,
+    history_match_tier: null,
+    history_sample_size: null,
+    history_hits: null,
+    history_misses: null,
+    history_hit_rate: null,
+    history_match_quality_penalty: null,
+    history_source_tickers: null,
+    last_four_quarter_hit_rate: null,
+    earnings_quarter_terms: null,
+    earnings_quarter_sample_size: null,
+    earnings_context_delta: null,
+    earnings_posture_adjustment: null,
+    sports_history: null,
+    sports_game_context: null,
+    result,
+    proof_pct: market?.proof_pct ?? null,
+    handicap_pct: market?.handicap_pct ?? null,
+    kalshi_native_pct: market?.kalshi_native_pct ?? null,
+    kalshi_native_n: market?.kalshi_native_n ?? null,
+    confidence: market?.confidence ?? null,
+    reason: market?.research_reason ?? null,
+    proof_reason: market?.proof_reason ?? null,
+    handicap_reason: market?.handicap_reason ?? null,
+    research_citations: Array.isArray(market?.research_citations) ? market.research_citations : [],
+    research_term_note: market?.research_term_note ?? null,
+    source_ladder: null,
+    posture_final: 'NO_CLEAR_PICK',
+    posture_cap_reason: `lexical_gate:${decision}`,
+    research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
+    lexical_gate: lexicalGate,
   };
 }
 
 function bestComposite(composites) {
   const ranked = composites
-    .filter(c => c?.result)
+    .filter(c => c?.result && !c?.is_qualification_term)
     .slice()
     .sort((a, b) => {
       const postureDiff = (POSTURE_RANK[b.result.posture] ?? -1) - (POSTURE_RANK[a.result.posture] ?? -1);
@@ -645,11 +817,12 @@ function hasBeyondProximityEvidence(composite) {
 
 function summarizeCompositeRun(composites) {
   const best = bestComposite(composites);
+  const contentComposites = composites.filter((c) => !c?.is_qualification_term);
   return {
     market_count: composites.length,
-    scored_count: composites.filter(c => c?.result?.composite_score !== null).length,
-    source_backed_count: composites.filter(hasBeyondProximityEvidence).length,
-    proximity_only_count: composites.filter(isProximityOnlyComposite).length,
+    scored_count: contentComposites.filter(c => c?.result?.composite_score !== null).length,
+    source_backed_count: contentComposites.filter(hasBeyondProximityEvidence).length,
+    proximity_only_count: contentComposites.filter(isProximityOnlyComposite).length,
     best_posture: best?.result?.posture ?? 'NO_CLEAR_PICK',
     best_score: best?.result?.composite_score ?? null,
     best_target: best?.result?.target_mention ?? null,
@@ -687,6 +860,11 @@ export function mentionCompositeToDecisionRow(composite) {
   const layersPresent = Number(meta.layers_present ?? 0);
   const layersTotal = Number(meta.layers_total ?? 0);
   const mc = r.market_context ?? {};
+  const lexical = composite?.lexical_gate?.lexical_result ?? null;
+  const marketType = lexical?.market_type ?? null;
+  const requiredCount = Number.isFinite(Number(lexical?.required_count)) ? Number(lexical.required_count) : null;
+  const qualificationStatus = composite?.source_ladder?.qualification_status ?? null;
+  const qualificationPostureCap = composite?.source_ladder?.posture_cap ?? null;
 
   // market half (cents from composite core; buildDecisionRow treats >1.5 as cents)
   const market = {
@@ -708,6 +886,18 @@ export function mentionCompositeToDecisionRow(composite) {
   // No source-backed evidence at all -> BLOCKED on the missing source layers.
   const sourceBlocked = layersPresent === 0;
   const proximityOnly = layersPresent === 1 && presentCats.length === 1 && presentCats[0] === 'event_proximity';
+  // Beyond-proximity source evidence = any present layer that is not the
+  // event_proximity scaffold. This is what separates a real researched row from
+  // a "schedule confirmed, nothing else" row.
+  const hasBeyondProximityEvidence = presentCats.some((c) => c !== 'event_proximity');
+  // FAIL-CLOSED gate: when the research layer never produced usable source
+  // evidence for this market (no declared source / blocked / timed-out fetch)
+  // AND there is no beyond-proximity evidence layer, the row is NOT a valid
+  // customer WATCH — it is a research gap. event_proximity (schedule confirmed)
+  // alone can never carry a customer row. This is the product-failure fix: a
+  // NO_DECLARED_SOURCES / no-live-research event must fail closed, not render.
+  const noResearchPerformed = isNoResearchSourceStatus(composite?.source_status);
+  const noUsableSources = !hasBeyondProximityEvidence && noResearchPerformed;
   let postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
 
   // Stub cap: never allow LEAN/EVIDENCE_LEAN/PICK from stub-only research
@@ -721,21 +911,28 @@ export function mentionCompositeToDecisionRow(composite) {
   let analysis;
   let trigger;
 
-  if (sourceBlocked) {
+  if (sourceBlocked || noUsableSources) {
+    postureFinal = 'NO_CLEAR_PICK';
     statusOverride = EDGE_STATUS.BLOCKED;
-    blocker = `BLOCKED_SOURCE_LAYER_MISSING: no source-backed evidence layers for "${target}"`;
-    analysis = `Market priced; mention composite has 0/${layersTotal} source layers. Not a pick or a pass — research gap. Missing: ${missingCats.join(', ') || 'all source layers'}.`;
+    const reasonCode = sourceBlocked && !noResearchPerformed
+      ? 'BLOCKED_SOURCE_LAYER_MISSING'
+      : 'NO_USABLE_SOURCES';
+    const why = noResearchPerformed
+      ? `research did not run or returned no usable evidence for this event (source_status=${composite?.source_status})`
+      : `no usable evidence channels present`;
+    blocker = `${reasonCode}: no usable evidence channels for "${target}" (${why})`;
+    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a pick or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
     trigger = {
       price: null,
-        event: `run mentions research for "${target}" (transcripts > quotes > context > prompt source ladder), then re-score`,
+        event: `run mentions research for "${target}" (transcripts > quotes > context), then re-score`,
     };
   } else if (proximityOnly) {
     postureFinal = 'WATCH';
     statusOverride = EDGE_STATUS.WATCH;
-    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic/source layers are missing for "${target}". Missing: ${missingCats.join(', ') || 'source research layers'}.`;
+    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic evidence is missing for "${target}". Missing: ${missingCats.join(', ') || 'evidence channels'}.`;
     trigger = {
       price: null,
-      event: 'upgrade only after exact-source research adds transcript, direct quote, historical tendency, or topic-path evidence',
+      event: 'upgrade only after transcript, direct quote, historical tendency, or topic-path evidence lands',
     };
   } else {
     statusOverride = MENTION_POSTURE_TO_EDGE[postureFinal] ?? EDGE_STATUS.WATCH;
@@ -745,11 +942,11 @@ export function mentionCompositeToDecisionRow(composite) {
       price: null,
       event: postureFinal === 'PICK' || postureFinal === 'EVIDENCE_LEAN'
         ? 'confirm exact settlement wording + official event source, then enter on value'
-        : 'await stronger source layer (transcript/quote confirmation)',
+        : 'await stronger evidence (transcript/quote confirmation)',
     };
   }
 
-  return buildDecisionRow({
+  const row = buildDecisionRow({
     marketTicker: composite?.market_ticker ?? 'MISSING',
     sideTarget: target,
     marketType: `mention_${r.profile ?? 'unknown'}`,
@@ -772,6 +969,25 @@ export function mentionCompositeToDecisionRow(composite) {
     statusOverride,
     blocker,
   });
+  return {
+    ...row,
+    proof_pct: composite?.proof_pct ?? null,
+    handicap_pct: composite?.handicap_pct ?? null,
+    kalshi_native_pct: composite?.kalshi_native_pct ?? null,
+    kalshi_native_n: composite?.kalshi_native_n ?? null,
+    confidence: composite?.confidence ?? row.confidence ?? null,
+    reason: composite?.reason ?? null,
+    proof_reason: composite?.proof_reason ?? null,
+    handicap_reason: composite?.handicap_reason ?? null,
+    research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
+    research_term_note: composite?.research_term_note ?? null,
+    market_type: marketType,
+    required_count: requiredCount,
+    repeat_requirement: requiredCount && requiredCount > 1 ? `${requiredCount}+ times` : null,
+    qualification_status: qualificationStatus,
+    qualification_posture_cap: qualificationPostureCap,
+    is_qualification_term: strikeIsEdnq(r.target_mention),
+  };
 }
 
 /**
@@ -807,14 +1023,69 @@ function renderEarningsAlphaProvenance(composites) {
       lines.push(`    ${shortTerm(String(c.result?.target_mention ?? c.market_ticker)).padEnd(21)} | delta=${d.earnings_context_delta?.value ?? 'absent'} continuity=${d.transcript_theme_continuity?.value ?? 'n/a'} qa_likelihood=${d.analyst_question_likelihood?.value ?? 'n/a'} catalyst=${d.current_quarter_catalyst?.value ?? 'n/a'} settlement_fit=${d.settlement_fit?.value ?? 'unknown'} sources=${provSrc}`);
       if (c.earnings_posture_adjustment?.applied) {
         const adj = c.earnings_posture_adjustment;
-        lines.push(`      posture_adjustment: ${adj.direction} ${adj.from} -> ${adj.to} (${adj.reason})`);
+        lines.push(`      context_adjustment: capped upward adjustment (${adj.reason})`);
       }
     }
   }
   return lines.join('\n');
 }
 
-export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null }) {
+// Most-recent source tickers shown per settled_history line; the rest collapse
+// to a bounded "+N more" count so a long comparable list can never blow up the
+// rendered packet.
+const SETTLED_HISTORY_TICKER_CAP = 8;
+
+// Deterministic settled-history provenance block. Surfaces the PRICE-FREE
+// settled_history artifact attached after the lexical gate clears a market to
+// evidence (Phase 4) so the rendered packet shows match tier, sample size,
+// hits/misses, hit rate, the full settlement-class breakdown
+// (resolved_yes/resolved_no/ednq/ambiguous/unresolved), bounded source tickers,
+// and the usable/fail_safe flag. n<2 / soft-only history renders as fail_safe
+// (never a bullish signal); a null settled_history (hard block, Truth Social
+// out-of-scope, or evaluated NO_MATCH suppression) renders NOTHING — no invented
+// confidence. This is render-only: it reads the existing artifact and never
+// re-scores. Prices never appear; the artifact carries no price-shaped field.
+function renderSettledHistoryProvenance(composites) {
+  const withHistory = composites.filter((c) => c && c.settled_history);
+  if (!withHistory.length) return [];
+  const lines = ['settled_history (Kalshi settled comparables; outcomes only, prices excluded):'];
+  for (const c of withHistory) {
+    const h = c.settled_history;
+    const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker ?? 'unknown'));
+    const hitRate = h.hit_rate === null || h.hit_rate === undefined ? 'n/a' : Number(h.hit_rate).toFixed(2);
+    lines.push(`  - ${label}: tier=${h.match_tier} n=${h.sample_size} hits=${h.hits} misses=${h.misses} hit_rate=${hitRate} usable=${h.usable === true} fail_safe=${h.fail_safe === true}`);
+    const b = h.settlement_breakdown ?? {};
+    lines.push(`      settlement_breakdown: resolved_yes=${b.resolved_yes ?? 0} resolved_no=${b.resolved_no ?? 0} ednq=${b.ednq ?? 0} ambiguous=${b.ambiguous ?? 0} unresolved=${b.unresolved ?? 0}`);
+    const tickers = Array.isArray(h.source_tickers) ? h.source_tickers : [];
+    const shown = tickers.slice(0, SETTLED_HISTORY_TICKER_CAP);
+    const more = tickers.length - shown.length;
+    const tickerText = shown.length
+      ? `${shown.join(',')}${more > 0 ? ` (+${more} more)` : ''}`
+      : 'none';
+    lines.push(`      source_tickers: ${tickerText} (count=${tickers.length})`);
+    if (h.note) lines.push(`      note: ${h.note}`);
+  }
+  return lines;
+}
+
+function renderResearchCitationProvenance(composites) {
+  const ranked = composites
+    .filter((c) => Array.isArray(c?.research_citations) && c.research_citations.length)
+    .slice()
+    .sort((a, b) => (b?.result?.composite_score ?? -1) - (a?.result?.composite_score ?? -1))
+    .slice(0, 3);
+  if (!ranked.length) return [];
+  const lines = ['research_citations (proof + handicapping, URLs only):'];
+  for (const c of ranked) {
+    const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker ?? 'unknown'));
+    const citations = c.research_citations.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()).slice(0, 4);
+    if (!citations.length) continue;
+    lines.push(`  - ${label}: ${citations.join(', ')}`);
+  }
+  return lines.length > 1 ? lines : [];
+}
+
+export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
   const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
@@ -826,6 +1097,8 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   if (prov?.research_route) {
     provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`);
   }
+  provenanceLines.push(...renderSettledHistoryProvenance(composites));
+  provenanceLines.push(...renderResearchCitationProvenance(composites));
   const earningsNote = renderEarningsAlphaProvenance(composites);
   if (earningsNote) provenanceLines.push(...earningsNote.split('\n'));
   const synthesisInput = buildMentionsSynthesisInput({
@@ -836,6 +1109,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     inventoryPath,
     compositeSummary: summary,
     provenanceLines,
+    sourceHealthDisclosure,
   });
   const text = renderMentionPacket(synthesisInput, {
     generatedAtUtc: new Date().toISOString(),
@@ -871,21 +1145,24 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
 }
 
 function termBucketForRow(row) {
-  const analysis = String(row.analysis ?? '').toLowerCase();
   if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
-  if (analysis.includes('low-source watch only')) return 'watch-only';
-  if (row.edge_status === EDGE_STATUS.PICK || row.edge_status === EDGE_STATUS.LEAN) return 'most-likely';
-  return 'watch-only';
+  if (row.composite_score === null || row.composite_score === undefined) return 'research-gap';
+  return 'research-backed';
 }
 
 function evidenceStatusForRow(row) {
-  const analysis = String(row.analysis ?? '');
-  if (row.edge_status === EDGE_STATUS.BLOCKED) return 'blocked/no-source';
-  if (/LOW-SOURCE WATCH only/i.test(analysis)) return 'proximity-only source cap -- no pick';
-  if (Array.isArray(row.top_evidence_layers) && row.top_evidence_layers.length) {
-    return `source evidence present: ${row.top_evidence_layers.map((x) => x.category ?? x.label ?? String(x)).join(', ')}`;
-  }
-  return 'missing source-backed research';
+  if (row.edge_status === EDGE_STATUS.BLOCKED) return 'research gap';
+  if (row.composite_score === null || row.composite_score === undefined) return 'research gap';
+  return 'research-backed';
+}
+
+function scoreToTier(score) {
+  const s = Number(score);
+  if (!Number.isFinite(s)) return 'RESEARCH GAP';
+  if (s >= 65) return 'STRONG YES';
+  if (s >= 50) return 'WEAK YES';
+  if (s >= 35) return 'WEAK NO';
+  return 'STRONG NO';
 }
 
 function compactMarketContext(row) {
@@ -920,22 +1197,42 @@ export function normalizeLayerList(value) {
   return [];
 }
 
-export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [] } = {}) {
+export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null } = {}) {
   const s = summarizeEvent(event);
   const rules = firstMarketRules(event);
+  const contentRows = rows.filter((row) => row.is_qualification_term !== true);
+  const qualificationRows = rows.filter((row) => row.is_qualification_term === true);
   // Compact each term to only what the model needs for the article.
   const terms = rows.map((row) => ({
     full_strike_text: row.side_target,
     short_term: shortTerm(row.side_target, s.title),
     cpc_score: row.composite_score ?? null,
-    bucket: termBucketForRow(row),
-    evidence_status: evidenceStatusForRow(row),
+    p_yes_tier: scoreToTier(row.composite_score),
+    bucket: row.is_qualification_term ? 'qualification/fallback' : termBucketForRow(row),
+    evidence_status: row.is_qualification_term ? 'qualification fallback' : evidenceStatusForRow(row),
+    research_state: row.is_qualification_term ? 'qualification fallback' : evidenceStatusForRow(row),
     layers_present: normalizeLayerList(row.layers_present),
     composite_posture: row.composite_posture,
     missing_research_layers: Array.isArray(row.missing_layers)
       ? row.missing_layers.map((l) => l.category ?? l.label ?? String(l)).slice(0, 5)
       : [],
     upgrade_trigger: row.trigger_event,
+    research_reason: row.reason ?? null,
+    market_type: row.market_type ?? null,
+    required_count: Number.isFinite(Number(row.required_count)) ? Number(row.required_count) : null,
+    repeat_requirement: row.repeat_requirement ?? null,
+    qualification_status: row.qualification_status ?? null,
+    qualification_posture_cap: row.qualification_posture_cap ?? null,
+    is_qualification_term: row.is_qualification_term === true,
+    proof_pct: row.proof_pct ?? null,
+    handicap_pct: row.handicap_pct ?? null,
+    kalshi_native_pct: row.kalshi_native_pct ?? null,
+    kalshi_native_n: row.kalshi_native_n ?? null,
+    confidence: row.confidence ?? null,
+    proof_reason: row.proof_reason ?? null,
+    handicap_reason: row.handicap_reason ?? null,
+    research_citations: Array.isArray(row.research_citations) ? row.research_citations : [],
+    research_term_note: row.research_term_note ?? null,
     market_context: {
       implied: row.implied_probability,
       bid_cents: row.market_yes_bid,
@@ -944,7 +1241,7 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     },
   }));
   const nonBlocked = terms.filter((term) => term.bucket !== 'blocked/no-source');
-  const allProximityOnly = nonBlocked.length > 0 && nonBlocked.every((term) => term.evidence_status === 'proximity-only source cap -- no pick');
+  const allResearchGap = nonBlocked.length > 0 && nonBlocked.every((term) => term.research_state === 'research gap');
 
   return {
     packet_kind: 'mentions_customer_packet_v2',
@@ -963,17 +1260,24 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
       model_written_final_packet_allowed: false,
       use_full_strike_text_only: true,
       market_context_not_in_score: true,
-      all_terms_proximity_only: allProximityOnly,
-      proximity_only_label: allProximityOnly ? 'LOW-SOURCE WATCH only -- no pick' : null,
-      forbidden_claims_when_all_terms_proximity_only: ['source-backed composite', 'source backed composite'],
+      all_terms_proximity_only: allResearchGap,
+      all_terms_research_gap: allResearchGap,
+      research_gap_label: allResearchGap ? 'research gap only -- no score' : null,
+      forbidden_claims_when_all_terms_proximity_only: ['source-backed composite', 'source backed composite', 'composite score'],
     },
     summary: {
       market_count: compositeSummary.market_count ?? rows.length,
       source_backed_count: compositeSummary.source_backed_count ?? null,
+      research_backed_count: compositeSummary.source_backed_count ?? null,
       proximity_only_count: compositeSummary.proximity_only_count ?? null,
+      content_term_count: contentRows.length,
+      qualification_term_count: qualificationRows.length,
+      research_gap_count: contentRows.length - (compositeSummary.source_backed_count ?? 0),
       best_posture: compositeSummary.best_posture ?? null,
+      best_tier: scoreToTier(compositeSummary.best_score ?? null),
     },
     deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
+    source_health_disclosure: sourceHealthDisclosure || null,
     terms,
   };
 }
@@ -1019,8 +1323,9 @@ export function appendFullStrikeInventory(text, input) {
 
 export function validateSynthesizedMentionPacket(text, input) {
   if (!text || !text.trim()) throw new Error('Hermes returned an empty mentions packet');
-  if (input?.synthesis_rules?.all_terms_proximity_only && /source-backed composite/i.test(text)) {
-    throw new Error('Hermes packet violated proximity-only labeling: used "source-backed composite"');
+  const forbiddenJargon = /\b(EVIDENCE_LEAN|LEAN|WATCH|NO_CLEAR_PICK|source-backed composite|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score)\b/i;
+  if ((input?.synthesis_rules?.all_terms_proximity_only || input?.synthesis_rules?.all_terms_research_gap) && forbiddenJargon.test(text)) {
+    throw new Error('Hermes packet violated research-gap labeling: used legacy customer jargon');
   }
   for (const term of input?.terms ?? []) {
     const full = String(term.full_strike_text ?? '').trim();
@@ -1198,7 +1503,7 @@ function renderCompositeEvidence(composites) {
       lines.push(`    settled_history: tier=${c.history_match_tier} n=${c.history_sample_size} hits=${c.history_hits} misses=${c.history_misses} hit_rate=${c.history_hit_rate ?? 'n/a'}`);
     }
     lines.push(`    composite_score: ${r.composite_score === null ? 'MISSING' : r.composite_score}`);
-    lines.push(`    composite_posture: ${r.posture}`);
+    lines.push(`    composite_tier: ${scoreToTier(r.composite_score)}`);
     lines.push(`    layers_present: ${r._meta.layers_present}/${r._meta.layers_total}`);
     lines.push('    top_support:');
     if (r.top_supporting_layers.length) {
@@ -1206,7 +1511,7 @@ function renderCompositeEvidence(composites) {
         lines.push(`      - ${layer.category}: value=${layer.value} contribution=${layer.contribution}`);
       }
     } else {
-      lines.push('      - MISSING: no source-backed layers supplied');
+      lines.push('      - MISSING: no evidence channels supplied');
     }
     lines.push('    missing_layers:');
     if (r.missing_layers.length) {
@@ -1291,15 +1596,69 @@ export function discoverMentionEvents(stateRoot, date) {
 // Research merge: read state/mentions/<date>/research/*.json and merge
 // layer_records + source_ladder_inputs into the Kalshi event/market objects.
 // ---------------------------------------------------------------------------
-function loadResearchForDate(stateRoot, date) {
+function utcMs(value) {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// Research is collected by the orchestrator immediately BEFORE generation (collect
+// -> generate, minutes apart), so a fresh artifact is produced slightly earlier
+// than the generation run start — never after it. "Fresh" therefore means "from
+// the current collection cycle": produced within MAX_RESEARCH_AGE_MS of the run.
+// Genuinely stale (prior-day / prior-cycle) artifacts are rejected so the packet
+// fails closed rather than rendering yesterday's research. Exact per-cycle
+// freshness (threading a cycle id from the orchestrator) is tracked separately.
+const MAX_RESEARCH_AGE_MS = 6 * 60 * 60 * 1000;
+function researchArtifactIsFresh(entry, runStartedAtUtc) {
+  const runStart = utcMs(runStartedAtUtc);
+  if (runStart === null) return false;
+  const cutoff = runStart - MAX_RESEARCH_AGE_MS;
+  const generated = utcMs(entry?.generated_utc);
+  const produced = utcMs(entry?.produced_at);
+  const stamp = Math.max(
+    generated ?? Number.NEGATIVE_INFINITY,
+    produced ?? Number.NEGATIVE_INFINITY,
+  );
+  return Number.isFinite(stamp) && stamp >= cutoff;
+}
+
+function researchRowHasUsableSignal(row) {
+  if (!row || typeof row !== 'object') return false;
+  const layerRecords = row.layer_records && typeof row.layer_records === 'object' ? row.layer_records : null;
+  const sourceLadderInputs = row.source_ladder_inputs && typeof row.source_ladder_inputs === 'object' ? row.source_ladder_inputs : null;
+  return [
+    row.blended_pct,
+    row.proof_pct,
+    row.handicap_pct,
+    row.kalshi_native_pct,
+    layerRecords && Object.keys(layerRecords).length ? 1 : null,
+    sourceLadderInputs && Object.keys(sourceLadderInputs).length ? 1 : null,
+  ].some((v) => Number.isFinite(Number(v)))
+    && (!Number.isFinite(Number(row.kalshi_native_n)) || Number(row.kalshi_native_n) >= 0);
+}
+
+function researchEntryHasUsableSignal(entry) {
+  return Array.isArray(entry?.markets) && entry.markets.some(researchRowHasUsableSignal);
+}
+
+function loadResearchForDate(stateRoot, date, { runStartedAtUtc = null } = {}) {
   const researchDir = resolve(stateRoot, 'mentions', date, 'research');
-  if (!existsSync(researchDir)) return new Map();
+  if (!existsSync(researchDir)) {
+    const empty = new Map();
+    empty._staleTickers = new Set();
+    return empty;
+  }
   const map = new Map();
+  map._staleTickers = new Set();
   for (const entry of readdirSync(researchDir)) {
     if (!entry.endsWith('.json')) continue;
     const p = join(researchDir, entry);
     const data = readJsonIfExists(p);
     if (!data || !data.event_ticker) continue;
+    if (runStartedAtUtc && !researchArtifactIsFresh(data, runStartedAtUtc)) {
+      map._staleTickers.add(data.event_ticker);
+      continue;
+    }
     // Build a per-market-ticker lookup
     const marketMap = new Map();
     for (const m of data.markets || []) {
@@ -1335,7 +1694,7 @@ function localOnlyDiscoveryStats(events) {
   };
 }
 
-function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = [] } = {}) {
+function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = [], runStartedAtUtc = null } = {}) {
   const roots = uniqueResolved(stateRoots.length ? stateRoots : ['state']);
   const events = [];
   const loaded = [];
@@ -1346,9 +1705,11 @@ function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = 
       const eventPath = resolve(root, 'mentions', date, 'kalshi-events', `${ticker}.json`);
       const event = readJsonIfExists(eventPath);
       if (!event?.event_ticker) continue;
-      const researchEntry = loadResearchForDate(root, date).get(ticker);
+      const researchMap = loadResearchForDate(root, date, { runStartedAtUtc });
+      const researchEntry = researchMap.get(ticker);
+      const staleResearch = researchMap._staleTickers?.has(ticker) ?? false;
       found = {
-        event: mergeResearchIntoEvent(event, researchEntry),
+        event: mergeResearchIntoEvent(event, researchEntry, { staleResearch }),
         root,
         eventPath,
         researchPath: resolve(root, 'mentions', date, 'research', `${ticker}.json`),
@@ -1373,6 +1734,7 @@ export async function resolveOnlyMentionEvents({
   allowUndated = false,
   env = process.env,
   deps = {},
+  runStartedAtUtc = null,
 } = {}) {
   const stateRoots = deps.stateRoots ?? [stateRoot, 'state'];
   const loadExactMentionEventsFromArtifactsImpl = deps.loadExactMentionEventsFromArtifacts || loadExactMentionEventsFromArtifacts;
@@ -1385,6 +1747,7 @@ export async function resolveOnlyMentionEvents({
     date,
     tickers,
     stateRoots,
+    runStartedAtUtc,
   });
   const hasAllRequestedArtifacts = tickers.length > 0
     && localOnlyLoad.loaded.length === tickers.length
@@ -1434,6 +1797,7 @@ export async function resolveOnlyMentionEvents({
     date,
     tickers,
     stateRoots,
+    runStartedAtUtc,
   });
 
   return {
@@ -1451,17 +1815,54 @@ export async function resolveOnlyMentionEvents({
   };
 }
 
-function mergeResearchIntoEvent(event, researchEntry) {
-  if (!researchEntry) return event;
+function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } = {}) {
+  const keepOnlyEventProximity = (layerRecords = {}) => {
+    if (!layerRecords || typeof layerRecords !== 'object') return {};
+    return layerRecords.event_proximity ? { event_proximity: layerRecords.event_proximity } : {};
+  };
+  if (!researchEntry && !staleResearch) {
+    return { ...event };
+  }
+  if (staleResearch || (researchEntry && !researchEntryHasUsableSignal(researchEntry))) {
+    const cloned = { ...event };
+    cloned.source_status = 'NO_DECLARED_SOURCES';
+    cloned.markets = (Array.isArray(cloned.markets) ? cloned.markets : []).map((m) => ({
+      ...m,
+      source_status: 'NO_DECLARED_SOURCES',
+      layer_records: keepOnlyEventProximity(m.layer_records),
+      source_ladder_inputs: null,
+      research_quality: 'stub',
+      blended_pct: null,
+    }));
+    return cloned;
+  }
   const cloned = { ...event };
   const markets = Array.isArray(cloned.markets) ? cloned.markets.slice() : [];
   const marketMap = researchEntry._marketMap || new Map();
+  const hasUsableResearch = researchEntryHasUsableSignal(researchEntry);
+  const eventSourceStatus = hasUsableResearch ? (researchEntry.source_status ?? null) : 'NO_DECLARED_SOURCES';
+  const proofCitations = Array.isArray(researchEntry.proof_pass?.citations) ? researchEntry.proof_pass.citations : [];
+  const handicappingCitations = Array.isArray(researchEntry.handicapping_pass?.citations) ? researchEntry.handicapping_pass.citations : [];
+  const combinedCitations = [...new Set([...proofCitations, ...handicappingCitations].filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()))];
+  if (eventSourceStatus) {
+    cloned.source_status = eventSourceStatus;
+  }
 
   cloned.markets = markets.map(m => {
     const ticker = m.ticker;
     const r = marketMap.get(ticker);
-    if (!r) return m;
     const merged = { ...m };
+    if (eventSourceStatus) {
+      merged.source_status = eventSourceStatus;
+    }
+    if (!r) return merged;
+    if (!hasUsableResearch) {
+      merged.layer_records = keepOnlyEventProximity(m.layer_records);
+      merged.source_ladder_inputs = null;
+      merged.research_quality = 'stub';
+      merged.blended_pct = null;
+      return merged;
+    }
     if (r.layer_records) {
       merged.layer_records = r.layer_records;
     }
@@ -1471,13 +1872,74 @@ function mergeResearchIntoEvent(event, researchEntry) {
     if (r.research_quality) {
       merged.research_quality = r.research_quality;
     }
+    if (Number.isFinite(Number(r.blended_pct))) {
+      merged.blended_pct = Number(r.blended_pct);
+    }
+    if (r.proof_pct !== undefined) {
+      merged.proof_pct = r.proof_pct;
+    }
+    if (r.handicap_pct !== undefined) {
+      merged.handicap_pct = r.handicap_pct;
+    }
+    if (r.kalshi_native_pct !== undefined) {
+      merged.kalshi_native_pct = r.kalshi_native_pct;
+    }
+    if (r.kalshi_native_n !== undefined) {
+      merged.kalshi_native_n = r.kalshi_native_n;
+    }
+    if (r.confidence) {
+      merged.confidence = r.confidence;
+    }
+    if (r.proof_reason) {
+      merged.proof_reason = r.proof_reason;
+    }
+    if (r.handicap_reason) {
+      merged.handicap_reason = r.handicap_reason;
+    }
+    if (r.reason) {
+      merged.research_reason = r.reason;
+    }
+    if (r.market_type !== undefined) {
+      merged.market_type = r.market_type;
+    }
+    if (r.required_count !== undefined) {
+      merged.required_count = r.required_count;
+    }
+    if (r.repeat_requirement !== undefined) {
+      merged.repeat_requirement = r.repeat_requirement;
+    }
+    if (r.is_qualification_term !== undefined) {
+      merged.is_qualification_term = r.is_qualification_term;
+    }
+    if (r.qualification_status !== undefined) {
+      merged.qualification_status = r.qualification_status;
+    }
+    if (r.qualification_posture_cap !== undefined) {
+      merged.qualification_posture_cap = r.qualification_posture_cap;
+    }
+    if (combinedCitations.length) {
+      merged.research_citations = combinedCitations;
+    }
+    const researchNote = buildResearchTermNote({
+      phrase: targetMentionFromMarket(m),
+      reason: r.reason ?? null,
+      kalshiNativePct: r.kalshi_native_pct ?? null,
+      kalshiNativeN: r.kalshi_native_n ?? null,
+      proofPct: r.proof_pct ?? null,
+      handicapPct: r.handicap_pct ?? null,
+      requiredCount: r.required_count ?? null,
+      citations: combinedCitations,
+    });
+    if (researchNote) {
+      merged.research_term_note = researchNote;
+    }
     return merged;
   });
 
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
 
@@ -1540,7 +2002,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     });
   });
   const compositeSummary = summarizeCompositeRun(composites);
-  const prov = composites[0] ?? null;
+  const prov = composites.find((c) => !c?.is_qualification_term) ?? bestComposite(composites) ?? null;
   const researchProvenance = prov ? {
     research_route: prov.research_route ?? null,
     route_basis: prov.route_basis ?? null,
@@ -1582,6 +2044,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     composites,
     sourcePath: sourceUrl,
     inventoryPath,
+    sourceHealthDisclosure,
   });
   if (slate) {
     if (researchProvenance) slate.synthesisInput.research_provenance = researchProvenance;
@@ -1641,7 +2104,7 @@ function buildLegacyEventPacket({ date, event }) {
   lines.push(`  decision_status: ${process.decisionStatus}`);
   lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
   lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
-  lines.push('  note: legacy artifact uses mention-composite only when source layer records are present.');
+  lines.push('  note: legacy artifact uses mention-composite only when evidence records are present.');
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');
@@ -1941,6 +2404,7 @@ export async function writeKalshiEventPackets({
   dryRun = false,
   allPrimeAttempts = [],
   synthesizeImpl = composeMentionPacketDeterministic,
+  runStartedAtUtc = null,
 }) {
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
@@ -1948,7 +2412,7 @@ export async function writeKalshiEventPackets({
   const items = [];
   const failedTickers = [];
   const seen = new Set();
-  const researchMap = loadResearchForDate(stateRoot, date);
+  const researchMap = loadResearchForDate(stateRoot, date, { runStartedAtUtc });
   // Settled-history records (price-free, outcomes only) load once per run and
   // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
   const historyRecords = await loadHistory({ stateRoot });
@@ -1957,7 +2421,8 @@ export async function writeKalshiEventPackets({
     if (!ticker || seen.has(ticker)) continue;
     seen.add(ticker);
     const researchEntry = researchMap.get(ticker);
-    const mergedEvent = mergeResearchIntoEvent(ev, researchEntry);
+    const staleResearch = researchMap._staleTickers?.has(ticker) ?? false;
+    const mergedEvent = mergeResearchIntoEvent(ev, researchEntry, { staleResearch });
     const sourcePath = resolve(stateRoot, 'mentions', date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
     const inventoryName = `${date}-${ticker}.inventory`;
     const inventoryPath = `${inventoryName}.txt`;
@@ -1979,6 +2444,48 @@ export async function writeKalshiEventPackets({
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
+
+    // EVENT-LEVEL FAIL-CLOSED gate: if every decision row is BLOCKED (no usable
+    // source evidence anywhere on the board — the NO_DECLARED_SOURCES /
+    // no-live-research case), this event has no customer-deliverable research.
+    // Write a source-research blocker artifact and skip the .txt entirely, the
+    // same isolation the model-synthesis blocker path uses. A normal board
+    // (real WATCH/LEAN/PICK rows alongside the EDNQ blocked row) is unaffected.
+    const counts = built.counts ?? null;
+    const allRowsBlocked = counts && counts.total > 0 && counts.blocked >= counts.total;
+    if (allRowsBlocked) {
+      const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+      mkdirSync(blockerDir, { recursive: true });
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      const evSourceStatus = mergedEvent?.markets?.find?.((m) => m?.source_status)?.source_status
+        ?? researchEntry?.source_status ?? null;
+      writeFileSync(blockerPath, JSON.stringify({
+        event_ticker: ticker,
+        date,
+        stage: 'source_research',
+        reason: isNoResearchSourceStatus(evSourceStatus) ? 'NO_USABLE_SOURCES' : 'SOURCE_RESEARCH_MISSING',
+        source_status: evSourceStatus,
+        rows_total: counts.total,
+        rows_blocked: counts.blocked,
+        error: `no usable source-backed evidence for any market on ${ticker} (source_status=${evSourceStatus}); customer packet failed closed`,
+        blocked_at_utc: new Date().toISOString(),
+        delivered: false,
+      }, null, 2));
+      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: no usable source evidence on any row (source_status=${evSourceStatus}); fail-closed, no customer .txt (blocker: ${blockerPath})`);
+      failedTickers.push(ticker);
+      // Inventory audit may still be written below for traceability; do not
+      // write a customer packet for this event.
+      if (built.inventoryText) {
+        const invW = audit(dir, inventoryName, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+          fail_closed: true,
+        });
+        items.push({ name: inventoryName, ...invW });
+      }
+      continue;
+    }
+
     // Raw per-contract inventory -> audit artifact only (never the packet body).
     if (built.inventoryText) {
       const invW = audit(dir, inventoryName, built.inventoryText, {
@@ -2052,6 +2559,7 @@ export async function writeKalshiEventPackets({
 }
 
 async function main() {
+  const runStartedAtUtc = new Date().toISOString();
   const { passthrough, extra } = parseExtraArgs(process.argv.slice(2));
   const opts = parsePacketArgs(passthrough);
   if (opts.help) {
@@ -2084,6 +2592,7 @@ async function main() {
       tickers: extra.only,
       windowDays: extra.windowDays,
       allowUndated: extra.allowUndated,
+      runStartedAtUtc,
     });
     localOnlyLoad = onlyResolution.localOnlyLoad;
     allEvents = onlyResolution.allEvents;
@@ -2125,7 +2634,12 @@ async function main() {
   // events stay persisted as research/state, they just don't get a packet (or
   // a send) until their event date arrives.
   if (!extra.watchlist) {
-    const todayGuard = filterByEventDate(opts.date, { windowDays: extra.windowDays, allowUndated: false });
+    // Dry-run --only previews may target a local artifact that has no derived
+    // event date yet. Keep that previewable without widening normal runs.
+    const todayGuard = filterByEventDate(opts.date, {
+      windowDays: extra.windowDays,
+      allowUndated: opts.dryRun && Boolean(extra.only),
+    });
     const deferred = events.filter((ev) => !todayGuard(ev));
     if (deferred.length) {
       console.log(`[${PACKET_TYPE}] deferred ${deferred.length} non-today event(s): ${deferred.map(e => e.event_ticker).join(', ')} (watchlist scope — no packet on the cron path)`);
@@ -2175,6 +2689,7 @@ async function main() {
       audit,
       dryRun: opts.dryRun,
       allPrimeAttempts,
+      runStartedAtUtc,
     });
     totalMarketCount += kalshiResult.totalMarketCount;
     missingMarketEventCount += kalshiResult.missingMarketEventCount;

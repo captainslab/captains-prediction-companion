@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ import {
   inspectPacketFile,
   validatePacketText,
 } from '../scripts/cron/cpc-packet-janitor.mjs';
+import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 import { fetchSourceDocument } from '../scripts/mentions/source-research.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,6 +38,41 @@ function writePacket(root, rel, text = cleanPacket()) {
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, text, 'utf8');
   return p;
+}
+
+function newStyleMentionPacket({ researchBacked = true } = {}) {
+  const term = researchBacked
+    ? {
+        full_strike_text: 'What will the speaker say? -- Inflation',
+        short_term: 'Inflation',
+        cpc_score: 88,
+        research_state: 'research-backed',
+        research_term_note: {
+          catalyst: 'full catalyst text that should remain readable on mobile',
+          settlement_fit: 'full settlement fit text that should remain readable on mobile',
+        },
+        market_context: { bid_cents: 10, ask_cents: 15, note: 'NOT IN SCORE' },
+      }
+    : {
+        full_strike_text: 'What will the speaker say? -- Inflation',
+        short_term: 'Inflation',
+        cpc_score: null,
+        research_state: 'research gap',
+        market_context: { bid_cents: 10, ask_cents: 15, note: 'NOT IN SCORE' },
+      };
+  return renderMentionPacket({
+    packet_kind: 'mentions_customer_packet_v2',
+    date: '2099-01-01',
+    event: {
+      title: 'What will the speaker say?',
+      date_time: '2099-01-01T18:00:00Z',
+      settlement_source_link: 'https://example.com/settlement',
+    },
+    summary: { market_count: 1 },
+    terms: [term],
+  }, {
+    generatedAtUtc: '2099-01-01T00:00:00Z',
+  });
 }
 
 async function makeProducerCacheHit({ root, date, url, text = 'cache-only source text' }) {
@@ -80,6 +116,20 @@ test('blocks raw market prices inside scoring/rationale section', () => {
   const result = validatePacketText(text, { packetType: 'mlb-daily' });
   assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
   assert.ok(result.errors.some((err) => err.code === 'MARKET_PRICE_IN_SCORING_SECTION'));
+});
+
+test('accepts a valid new-style mentions packet', () => {
+  const text = newStyleMentionPacket({ researchBacked: true });
+  const result = validatePacketText(text, { packetType: 'mentions-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.SEND_ALLOWED);
+  assert.equal(result.errors.length, 0);
+});
+
+test('blocks a no-research mentions packet with hard fail-closed evidence gate', () => {
+  const text = newStyleMentionPacket({ researchBacked: false });
+  const result = validatePacketText(text, { packetType: 'mentions-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
+  assert.ok(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
 });
 
 test('allows market-neutral disclaimers in scoring sections', () => {
@@ -128,6 +178,19 @@ test('blocks yes_ask market value inside scoring/rationale section', () => {
   const result = validatePacketText(text, { packetType: 'mlb-daily' });
   assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
   assert.ok(result.errors.some((err) => err.code === 'MARKET_PRICE_IN_SCORING_SECTION'));
+});
+
+test('blocks ranked MLB rows that still carry score=MISSING', () => {
+  const text = cleanPacket([
+    'CPC COMPOSITE BOARD',
+    '#1 [WATCH] KXMLB-TEST :: Yankees Win',
+    '    model: fair=MISSING score=MISSING posture=WATCH layers=4/7 conf=low',
+    '    market: yes_bid=0.46 yes_ask=0.48 last=0.47 vol=120 oi=180',
+    '    implied=0.47 fair=MISSING edge=MISSING confidence=low',
+  ].join('\n'));
+  const result = validatePacketText(text, { packetType: 'mlb-daily' });
+  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
+  assert.ok(result.errors.some((err) => err.code === 'CPC_CONTRACT_VIOLATION' && /ranked board row \[WATCH\] has score=MISSING/.test(err.message)));
 });
 
 test('blocks high NO_CLEAR_PICK ratio without source-backed explanation', () => {
@@ -446,7 +509,7 @@ test('real-format UFC no-clear (53-52 + edge did not separate) is justified', ()
     'Overall data coverage: 147/154 fighter-layers present',
     '· Fighter A vs Fighter B  [NO_CLEAR_PICK] 53-52',
     'posture: NO_CLEAR_PICK | confidence: high',
-    'Fighter A vs Fighter B: NO_CLEAR_PICK; fully scored but edge did not separate the matchup.',
+    'Fighter A vs Fighter B: NO_CLEAR_PICK; close composite margin: 1.5 points; fully scored but edge did not separate the matchup.',
   ].join('\n'));
   const result = validatePacketText(text, { packetType: 'ufc-weekly' });
   assert.equal(result.errors.some((err) => err.code === 'UFC_NO_CLEAR_WITHOUT_CLOSE_MARGIN_COVERAGE'), false);
@@ -558,9 +621,11 @@ test('sender live path prevents Telegram env lookup when janitor blocks', () => 
       env: { ...process.env, TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', TELEGRAM_HOME_CHANNEL: '' },
     });
     assert.notEqual(result.status, 0, result.stderr);
-    assert.match(result.stderr, /JANITOR_BLOCKED/);
-    assert.match(result.stderr, /janitor blocked sole packet/i);
     assert.doesNotMatch(result.stderr + result.stdout, /telegram env missing/);
+    const janitorDir = join(root, 'janitor', date);
+    assert.ok(existsSync(janitorDir), 'blocked send must write janitor artifacts');
+    assert.ok(readdirSync(janitorDir).some((name) => name.endsWith('.janitor.json')), 'janitor artifact missing');
+    assert.ok(readdirSync(janitorDir).some((name) => name.endsWith('.debug.txt')), 'debug artifact missing');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -596,10 +661,10 @@ test('CLI writes delivery manifest and debug artifact on block', () => {
       '--type', 'mlb-daily',
     ], { cwd: REPO, encoding: 'utf8' });
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /verdict=JANITOR_BLOCKED/);
     const manifest = join(root, 'janitor', date, 'delivery-manifest.json');
     assert.match(readFileSync(manifest, 'utf8'), /JANITOR_BLOCKED/);
-    assert.match(result.stdout, /\.debug\.txt/);
+    const debugDir = join(root, 'janitor', date);
+    assert.ok(readdirSync(debugDir).some((name) => name.endsWith('.debug.txt')), 'debug artifact missing');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

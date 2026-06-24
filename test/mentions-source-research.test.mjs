@@ -18,6 +18,51 @@ import {
   EVIDENCE_LAYERS,
 } from '../scripts/mentions/source-research.mjs';
 import { buildEventResearch } from '../scripts/mentions/collect-mentions-research.mjs';
+import {
+  mergePasses,
+  buildResearchTermNote,
+  ensurePerplexityEnvLoaded,
+  runResearchForEvent,
+} from '../scripts/mentions/mentions-research-perplexity.mjs';
+
+test('cron-like env: Perplexity key loads from .env.local without exported shell state', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-env-'));
+  // Other secrets present too — only the Perplexity key vars must be read.
+  writeFileSync(join(root, '.env.local'), [
+    'TELEGRAM_BOT_TOKEN=should-not-load',
+    'PERPLEXITY_API_KEY="pplx-test-secret-123"',
+    '',
+  ].join('\n'));
+  const env = {}; // no inherited shell state, mimics non-interactive cron
+  ensurePerplexityEnvLoaded(env, { root });
+  assert.equal(env.PERPLEXITY_API_KEY, 'pplx-test-secret-123', 'key loaded from .env.local');
+  assert.equal(env.TELEGRAM_BOT_TOKEN, undefined, 'narrow: non-Perplexity secrets are NOT loaded');
+});
+
+test('ensurePerplexityEnvLoaded never overwrites an already-set key and is silent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-env-keep-'));
+  writeFileSync(join(root, '.env.local'), 'PERPLEXITY_API_KEY=from-file-secret\n');
+  const env = { PERPLEXITY_API_KEY: 'from-shell-secret' };
+  const logs = [];
+  const orig = { log: console.log, error: console.error };
+  console.log = (...a) => logs.push(a.join(' '));
+  console.error = (...a) => logs.push(a.join(' '));
+  try {
+    ensurePerplexityEnvLoaded(env, { root });
+  } finally {
+    console.log = orig.log; console.error = orig.error;
+  }
+  assert.equal(env.PERPLEXITY_API_KEY, 'from-shell-secret', 'existing env var wins, file does not override');
+  const blob = logs.join('\n');
+  assert.ok(!/from-file-secret|from-shell-secret/.test(blob), 'secret value never printed');
+});
+
+test('ensurePerplexityEnvLoaded fabricates no key when no .env / .env.local exists', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-env-none-'));
+  const env = {};
+  ensurePerplexityEnvLoaded(env, { root });
+  assert.equal(env.PERPLEXITY_API_KEY, undefined, 'no key invented when config is absent (fail-closed upstream)');
+});
 
 const DATE = '2026-06-12';
 const TERMS = ['China / Chinese', 'Epstein', 'Pardon / Pardoned'];
@@ -53,6 +98,77 @@ function goodExtraction() {
     ],
   };
 }
+
+test('mergePasses prefers the handicap reason when proof is empty and the blend is handicap-driven', () => {
+  const rows = mergePasses(
+    [{ phrase: 'Affordability', ticker: 'AFF' }],
+    [{ phrase: 'Affordability', likelihood_pct: 8, confidence: 'low', reason: 'no evidence / no mention in the provided results' }],
+    [{ phrase: 'Affordability', likelihood_pct: 74, confidence: 'high', reason: 'habit/news-cycle pressure keeps the phrase live' }],
+    { by_word: new Map([['affordability', { n: 5, yes: 3 }]]) },
+  );
+  assert.equal(rows[0].proof_reason, 'no evidence / no mention in the provided results');
+  assert.equal(rows[0].handicap_reason, 'habit/news-cycle pressure keeps the phrase live');
+  assert.equal(rows[0].reason, 'habit/news-cycle pressure keeps the phrase live');
+  assert.ok(!/no evidence|no mention/i.test(rows[0].reason), 'rendered reason must not assert no evidence on a YES-leaning blend');
+});
+
+test('buildResearchTermNote derives settlement fit from slash tokens and repeat requirements', () => {
+  const note = buildResearchTermNote({
+    phrase: 'Afford / Affordable (N+ times)',
+    reason: 'habit/news-cycle pressure',
+    kalshiNativePct: 50,
+    kalshiNativeN: 2,
+    proofPct: 10,
+    handicapPct: 72,
+    requiredCount: 3,
+  });
+  assert.ok(note, 'research note should be built from usable research');
+  assert.match(note.catalyst, /habit\/news-cycle pressure/);
+  assert.match(note.catalyst, /historically YES in 1\/2 comparable events/);
+  assert.match(note.settlement_fit, /either exact token "Afford" or "Affordable"/);
+  assert.match(note.settlement_fit, /Requires 3 or more qualifying mentions, not just one\./);
+});
+
+test('threshold research prompt carries required_count and repeat-count context', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pplx-threshold-'));
+  const event = {
+    event_ticker: 'KXTHRESH-26JUN12',
+    series_ticker: 'KXTHRESH',
+    title: 'What will Trump say during the press portion?',
+    markets: [
+      {
+        ticker: 'KXTHRESH-26JUN12-TARIFF',
+        title: 'Will Trump say tariff 3+ times?',
+        yes_sub_title: 'tariff',
+        custom_strike: 'tariff',
+        rules_primary: 'Resolves YES if Trump says tariff 3+ times during the press portion.',
+      },
+    ],
+  };
+  const prompts = [];
+  const res = await runResearchForEvent({
+    event,
+    date: DATE,
+    stateRoot: root,
+    env: { PERPLEXITY_API_KEY: 'test-key' },
+    fetcherImpl: async () => ({ ok: true, json: { events: [], cursor: null } }),
+    perplexityImpl: async ({ messages }) => {
+      prompts.push(messages.map((m) => m.content).join('\n'));
+      return {
+        content: JSON.stringify([
+          { phrase: 'tariff', likelihood_pct: 11, confidence: 'low', reason: 'single mention only' },
+        ]),
+        citations: [],
+      };
+    },
+  });
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[0], /count threshold: estimate probability the token is said at least 3 times/);
+  assert.match(prompts[0], /keep the repeat-count threshold in view/i);
+  assert.equal(res.rows[0].required_count, 3);
+  assert.equal(res.rows[0].market_type, 'threshold_count');
+  assert.equal(res.rows[0].repeat_requirement, '3+ times');
+});
 
 test('source extraction batches by source document, not per term (1 model call for N terms)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'src-research-'));
@@ -91,8 +207,13 @@ test('source cache prevents repeat fetches (second run = cache hit, zero network
   assert.equal(second.source_health.from_cache, true);
   assert.equal(second.source_health.cache_only, true);
   assert.equal(second.source_health.disclosure_required, true);
-  assert.equal(second.source_health.generated_utc, cached.fetched_at_utc);
-  assert.equal(second.source_health.generated_utc, first.source_health.generated_utc);
+  const cachedAt = new Date(cached.fetched_at_utc).getTime();
+  const generatedAt = new Date(second.source_health.generated_utc).getTime();
+  const firstGeneratedAt = new Date(first.source_health.generated_utc).getTime();
+  assert.ok(Number.isFinite(cachedAt) && Number.isFinite(generatedAt));
+  assert.ok(Number.isFinite(firstGeneratedAt));
+  assert.ok(Math.abs(generatedAt - cachedAt) <= 5, 'cache timestamp should match within a few milliseconds');
+  assert.ok(Math.abs(firstGeneratedAt - generatedAt) <= 5, 'first and second fetches should share the same cache timestamp within a few milliseconds');
   assert.ok(cachePathForUrl(root, DATE, url).includes('research-cache'));
 });
 

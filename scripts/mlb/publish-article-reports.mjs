@@ -38,6 +38,12 @@ import { URL } from 'node:url';
 
 import { discoverAllSeries, joinGames, MLB_SERIES } from './lib/series-discovery.mjs';
 import { analyzeGame } from './lib/market-engine.mjs';
+import {
+  buildGameProjections,
+  loadStatsRecords,
+  leagueRunsPerGame,
+  matchStatsRecord,
+} from './lib/projection-engine.mjs';
 import { buildGameArticle, buildSlateArticle } from './lib/article-render.mjs';
 import { DECISION_STATUSES } from '../shared/decision-process.mjs';
 
@@ -328,6 +334,13 @@ function writeArticleFiles(outDir, baseName, article, extraMeta = {}) {
   return { txtPath, metaPath };
 }
 
+function writeAuditArticleFile(outDir, baseName, article) {
+  mkdirSync(outDir, { recursive: true });
+  const auditPath = resolve(outDir, `${baseName}.audit.txt`);
+  writeFileSync(auditPath, article.text, 'utf8');
+  return auditPath;
+}
+
 // --- Telegram delivery (best-effort, env-driven) ---
 
 // Pure resolver — exported so tests can exercise the fallback without I/O.
@@ -454,6 +467,31 @@ export async function publish(opts) {
 
   enrichGamesWithContext(games, opts.stateRoot, opts.date);
 
+  // Market-free projection engine: load public-stats records once, then attach
+  // per-game modeled projections (ML/spread/total/YRFI/Ks/HR) to each analysis.
+  // Inputs are baseball-only and price-guarded by the projection contracts;
+  // market data never enters this. Honest pre-lineup default is UNCONFIRMED, so
+  // ML/spread/total/YRFI render as provisional modeled composites while Ks/HR
+  // stay blocked until lineups confirm — exactly the architecture's runtime
+  // hierarchy (docs/Optimal MLB Projection Architecture for CPC.pdf).
+  const statsRecords = loadStatsRecords(opts.stateRoot, opts.date);
+  const leagueRPG = leagueRunsPerGame(statsRecords);
+  const projectionsFor = (game) => {
+    const record = matchStatsRecord(statsRecords, {
+      eventTicker: game.event_ticker ?? '',
+      awayName: game.away_full ?? game.away ?? '',
+      homeName: game.home_full ?? game.home ?? '',
+    });
+    if (!record) return null;
+    return buildGameProjections({
+      record,
+      leagueRPG,
+      as_of: `${opts.date}T00:00:00Z`,
+      lineup_status: 'unconfirmed',
+      weather_status: null,
+    });
+  };
+
   const outDir = resolve(opts.stateRoot, 'mlb', opts.date, 'article-reports');
   mkdirSync(outDir, { recursive: true });
 
@@ -461,8 +499,9 @@ export async function publish(opts) {
 
   const perGame = [];
   for (const game of games) {
-    const analysis = analyzeGame(game);
-    const article = buildGameArticle({ date: opts.date, game, analysis });
+    const analysis = analyzeGame(game, { projections: projectionsFor(game) });
+    const article = buildGameArticle({ date: opts.date, game, analysis, audit: false });
+    const auditArticle = buildGameArticle({ date: opts.date, game, analysis, audit: true });
     const idem = articleIdempotencyKey(planMeta, game.game_key);
     const base = `game-${game.game_key}`;
     const { txtPath, metaPath } = writeArticleFiles(outDir, base, article, {
@@ -471,7 +510,8 @@ export async function publish(opts) {
       matchup: `${game.away_full || game.away} at ${game.home_full || game.home}`,
       first_pitch_utc: game.start_utc ?? game.first_pitch_utc ?? null,
     });
-    perGame.push({ game, analysis, article, idem, txtPath, metaPath });
+    const auditTxtPath = writeAuditArticleFile(outDir, base, auditArticle);
+    perGame.push({ game, analysis, article, auditArticle, idem, txtPath, metaPath, auditTxtPath });
   }
 
   const slate = buildSlateArticle({

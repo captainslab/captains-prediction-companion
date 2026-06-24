@@ -9,6 +9,14 @@
 
 import { analyzeGame } from './market-engine.mjs';
 import {
+  describeMoneyline,
+  describeRunline,
+  describeTotal,
+  describeTeamRuns,
+  describeYrfi,
+  describeKs,
+} from './projection-language.mjs';
+import {
   LINEUP_STATUS,
   PACKET_DOWNGRADE,
   resolveDowngrade,
@@ -105,6 +113,30 @@ function renderStartersSection(starters) {
   const home = resolveStarter(starters.home);
   lines.push(`Away starter: ${away.name ?? 'MISSING'}${away.notes ? `  — ${away.notes}` : ''}`);
   lines.push(`Home starter: ${home.name ?? 'MISSING'}${home.notes ? `  — ${home.notes}` : ''}`);
+  return lines;
+}
+
+function renderProjectionFirstSection(game, projections, modelFreshness) {
+  if (!projections) return [];
+
+  const awayName = game.away_full ?? game.away ?? 'Away';
+  const homeName = game.home_full ?? game.home ?? 'Home';
+  const lines = [];
+
+  if (modelFreshness === 'live' || modelFreshness === 'final') {
+    lines.push('STALE_PREGAME_MODEL: these are pregame projections not recomputed from live inputs.');
+  }
+
+  lines.push('--- PROJECTION-FIRST READ (model layer, market-free) ---');
+  lines.push(describeMoneyline(projections.score, { home_team: homeName, away_team: awayName }));
+  lines.push(describeRunline(projections.score, { home_team: homeName }));
+  lines.push(describeTotal(projections.score));
+  lines.push(describeTeamRuns(projections.score, 'away', awayName));
+  lines.push(describeTeamRuns(projections.score, 'home', homeName));
+  lines.push(describeYrfi(projections.yrfi));
+  lines.push(describeKs(projections.ks_away, `${awayName} starter`));
+  lines.push(describeKs(projections.ks_home, `${homeName} starter`));
+
   return lines;
 }
 
@@ -397,9 +429,11 @@ export function renderPerGamePacket(game, options = {}) {
   const lineupNotes  = options.lineupNotes  ?? null;
   const starters     = options.starters     ?? null;
   const venueWeather = options.venueWeather ?? null;
+  const projections  = options.projections  ?? null;
+  const modelFreshness = options.modelFreshness ?? 'pregame';
 
   const downgrade = resolveDowngrade(lineupStatus);
-  const analysis  = analyzeGame(game);
+  const analysis  = analyzeGame(game, { projections });
 
   const gameMatchup = game.away_full && game.home_full
     ? `${game.away_full} at ${game.home_full}`
@@ -415,6 +449,14 @@ export function renderPerGamePacket(game, options = {}) {
     '',
     ...renderStartersSection(starters),
     '',
+    ...renderProjectionFirstSection(game, projections, modelFreshness),
+  ];
+
+  if (projections) {
+    sections.push('');
+  }
+
+  sections.push(
     ...renderEdgeBasisSection(analysis, downgrade, lineupStatus),
     '',
     ...renderResearchCompleteness(starters, lineupStatus),
@@ -424,7 +466,7 @@ export function renderPerGamePacket(game, options = {}) {
     ...renderOverallDecision(analysis.final, starters, lineupStatus),
     '',
     'No trades placed. No bankroll sizing. Research only.',
-  ];
+  );
 
   return {
     text: sections.join('\n'),

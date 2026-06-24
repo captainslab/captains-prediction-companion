@@ -174,6 +174,10 @@ const POSITIVE_OVERRIDE_STATUSES = Object.freeze(
   new Set([EDGE_STATUS.PICK, EDGE_STATUS.LEAN]),
 );
 
+const RANKED_EDGE_STATUSES = Object.freeze(
+  new Set([EDGE_STATUS.PICK, EDGE_STATUS.LEAN, EDGE_STATUS.WATCH]),
+);
+
 /**
  * Reconcile a domain scorer's authoritative statusOverride against the numeric
  * edge so an override can never assert a misleading positive verdict.
@@ -243,6 +247,8 @@ function reconcileOverrideWithEdge(override, thresholdStatus, edgePp) {
  *                                              decision vocabulary without overstating edge.
  * @param {number} [input.edgeOverridePp]     - domain-computed edge in pp (e.g. MLB edge_pp);
  *                                              used when no model fair probability is available.
+ * @param {boolean} [input.requireModelScore]  - when true, ranked PICK/LEAN/WATCH rows are
+ *                                              forced to BLOCKED if composite.score is missing.
  */
 export function buildDecisionRow(input = {}) {
   const composite = input.composite ?? {};
@@ -262,17 +268,22 @@ export function buildDecisionRow(input = {}) {
   }
   const edgeCents = edgePp === null ? null : Math.round(edgePp); // 1pp == 1 cent on Kalshi
 
-  const blocker = input.blocker && String(input.blocker).trim() ? String(input.blocker).trim() : null;
+  let blocker = input.blocker && String(input.blocker).trim() ? String(input.blocker).trim() : null;
   const override = (input.statusOverride && Object.values(EDGE_STATUS).includes(input.statusOverride))
     ? input.statusOverride
     : null;
-  const edgeStatus = blocker
+  let edgeStatus = blocker
     ? EDGE_STATUS.BLOCKED
     : reconcileOverrideWithEdge(
         override,
         decideEdgeStatus({ blocker, edgePp, confidence, posture: composite.posture }),
         edgePp,
       );
+  const compositeScore = composite.score ?? null;
+  if (input.requireModelScore && compositeScore === null && RANKED_EDGE_STATUSES.has(edgeStatus)) {
+    edgeStatus = EDGE_STATUS.BLOCKED;
+    blocker = blocker ?? 'model score missing for ranked row';
+  }
 
   const layersPresent = num(composite.layersPresent ?? composite.layers_present);
   const layersTotal = num(composite.layersTotal ?? composite.layers_total);
@@ -283,7 +294,7 @@ export function buildDecisionRow(input = {}) {
     market_type: input.marketType ?? 'MISSING',
     settlement_summary: input.settlementSummary ?? 'MISSING',
     // --- composite / model half (no market price inside) ---
-    composite_score: composite.score ?? null,
+    composite_score: compositeScore,
     composite_posture: composite.posture ?? 'NO_CLEAR_PICK',
     layers_present: (layersPresent !== null && layersTotal !== null)
       ? `${layersPresent}/${layersTotal}`
@@ -425,6 +436,45 @@ function compactRowLines(r, idx) {
   return out;
 }
 
+function compactBlockedNotes(rows = [], limit = 8) {
+  if (!rows.length) return ['  (none)'];
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = String(row.side_target ?? row.market_ticker ?? 'MISSING').trim() || 'MISSING';
+    const bucket = grouped.get(key) ?? {
+      count: 0,
+      reasons: new Set(),
+    };
+    bucket.count += 1;
+    if (row.blocker_if_any && row.blocker_if_any !== 'none') {
+      bucket.reasons.add(String(row.blocker_if_any));
+    }
+    const missingLayers = Array.isArray(row.missing_layers) ? row.missing_layers : [];
+    if (missingLayers.length) {
+      bucket.reasons.add(`missing: ${fmtList(missingLayers, 3)}`);
+    }
+    if (row.analysis && /missing|source|blocked/i.test(String(row.analysis))) {
+      bucket.reasons.add(String(row.analysis).replace(/\s+/g, ' ').slice(0, 160));
+    }
+    grouped.set(key, bucket);
+  }
+
+  const entries = [...grouped.entries()].sort((a, b) => {
+    if (b[1].count !== a[1].count) return b[1].count - a[1].count;
+    return a[0].localeCompare(b[0]);
+  });
+
+  const lines = [];
+  for (const [eventLabel, bucket] of entries.slice(0, limit)) {
+    const reasons = [...bucket.reasons].slice(0, 2).join(' | ') || 'source gap';
+    lines.push(`  - ${eventLabel}: ${bucket.count} blocked row(s); ${reasons}`);
+  }
+  if (entries.length > limit) {
+    lines.push(`  ... ${entries.length - limit} more blocked event(s) compacted`);
+  }
+  return lines;
+}
+
 /**
  * Render the full sectioned, mobile-friendly decision packet body. This is the
  * single shared "enjoyable packet" layout used by every cron packet type:
@@ -477,7 +527,10 @@ export function renderSectionedPacket(rows = [], options = {}) {
   section('1. TOP EDGE CANDIDATES', buckets.topEdge, { note: 'Model fair beats market by a strong margin. Confirm trigger before acting.' });
   section('2. WATCHLIST / TRIGGER BOARD', buckets.watchlist, { note: 'Edge thin or evidence incomplete; each row lists what makes it playable.' });
   section('3. FADES / OVERPRICED', buckets.fades, { showEmpty: true, note: 'Market implied runs above model fair.' });
-  section('4. BLOCKED / NEEDS SOURCE', buckets.blocked, { showEmpty: true, note: 'Settlement- or model-critical input missing. Not a pick or a pass — research gap.' });
+  lines.push(`=== 4. BLOCKED / NEEDS SOURCE (${buckets.blocked.length}) ===`);
+  lines.push('  Settlement- or model-critical input missing. Not a pick or a pass — compact event-level notes only.');
+  lines.push(...compactBlockedNotes(buckets.blocked, limit));
+  lines.push('');
 
   lines.push('=== 5. AUDIT ARTIFACTS ===');
   lines.push(`  pass_rows_not_shown: ${buckets.passes.length} (efficient/no-edge; full list in audit inventory)`);

@@ -72,6 +72,23 @@ All five fields or it does not get dispatched:
 
 Every deployed subagent has either returned its proof and passed its failure check, OR failed and been recorded as failed. No infinite retries.
 
+## Agent Execution Protocol — Claude Controls Codex
+
+For repo **implementation** work, Claude is the controller/QA and **Codex is the executor**. Codex writes the code; Claude verifies the diff, tests, and no-touch constraints, then decides whether to commit. The detailed controller spec (proof gates, classification labels, bounded `/goal` writing, stop conditions) lives in `.claude/agents/goal-dispatcher.md` — follow it; do not duplicate it here.
+
+Division of labor: **Codex = default executor** for code/test edits. **Claude Agent-tool fan-out** (the Master Subagent Controller above) stays for QA, research, and independent verification — never let Codex verify its own work.
+
+### Default behavior
+
+- Before any execution, run the start gate: branch, HEAD, `git status --short`, staged files, untracked files.
+- If the task needs code edits and the repo state is safe, **dispatch Codex directly** with a focused `/goal` (use `scripts/agent/dispatch-codex.sh`). Do **not** ask the user to relay Codex prompts unless direct execution is unavailable, unsafe, blocked by auth, or the tree is dirty in a risky way.
+- One Codex implementation pass by default; **one** focused repair pass allowed only if the failure is concrete and bounded. More passes need explicit user approval.
+- Claude commits **only** after QA passes and only expected files changed. **Never** push, merge, send, deploy, edit cron/Hermes/credentials, or use `git add -A` unless the user explicitly authorizes that specific action.
+
+### Codex `/goal` shape
+
+Use `scripts/agent/goal-template.md`: objective, branch/HEAD, no-touch, inspect-first, behavior, tests, proof, stop conditions.
+
 ## No-Touch Zones
 
 These files and systems must never be modified by any agent or subagent:

@@ -205,13 +205,14 @@ test('all market families route to lanes and render on the sectioned board', () 
   const match = { match_id: 'm1', home_team: 'Mexico', away_team: 'South Africa', stage: 'group', kickoff_utc: '2026-06-11T19:00:00Z', lineup_status: 'lineup_confirmed' };
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
 
-  assert.ok(text.includes('[1X2 Match Result]'), '1X2 lane row rendered');
-  assert.ok(/1X2: H \d+% \/ D \d+% \/ A \d+%/.test(text), '1X2 probabilities incl. Draw rendered');
-  assert.ok(text.includes('[Goal Spread (Full Game)]'), 'spread lane rendered');
+  assert.ok(text.includes('[Match Result]'), 'match-result lane row rendered');
+  assert.ok(/Home win profile: \d+%/.test(text) && /Draw risk: \d+%/.test(text) && /Away win profile: \d+%/.test(text),
+    'match-result probabilities incl. Draw rendered in soccer language');
+  assert.ok(text.includes('[Goal Spread]'), 'spread lane rendered');
   assert.ok(text.includes('[Total Goals]'), 'total lane rendered');
-  assert.ok(text.includes('[Both Teams to Score]'), 'BTTS lane rendered');
-  assert.ok(text.includes('Total Goals (1st Half)') && text.includes('BLOCKED_MODEL_LAYER_MISSING'),
-    '1H lanes render as blocked, not modeled');
+  assert.ok(text.includes('[BTTS]'), 'BTTS lane rendered');
+  assert.ok(text.includes('Total Goals (1st Half)') && text.includes('Model unavailable: missing model layer'),
+    '1H lanes render as model-unavailable, not modeled');
   assert.ok(text.includes('settles:regulation_90_plus_stoppage (default)'), 'settlement scope shown with default marker');
 });
 

@@ -36,17 +36,17 @@ const TELEGRAM_DOC_SAFE_CHARS = 3500;
 
 const MENTION_REQUIRED_SECTIONS = [
   'FAST READ',
-  'CPC COMPOSITE BOARD',
-  'TOP WATCH TERMS',
-  'LOW-SOURCE / TRAP WATCH',
-  'MARKET CONTEXT - NOT IN SCORE',
+  'TOP YES CASE',
+  'WEAK YES WATCHLIST',
+  'WEAK NO / STRONG NO TRAPS',
   'SOURCE GAPS',
-  'UPGRADE / DOWNGRADE TRIGGERS',
-  'FINAL CPC READ',
+  'QUALIFICATION RISK',
+  'SETTLEMENT NOTES',
+  'FULL STRIKE INVENTORY',
 ];
 
 const SCORING_SECTION_RE =
-  /(CPC COMPOSITE BOARD|MODEL|MODEL SCORE|SCORING|SCORECARD|RATIONALE|EDGE BASIS|FINAL READ|DECISION BASIS)/i;
+  /(CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|TOP YES CASE|WEAK YES WATCHLIST|WEAK NO \/ STRONG NO TRAPS|QUALIFICATION RISK|MODEL|MODEL SCORE|SCORING|SCORECARD|RATIONALE|EDGE BASIS|FINAL READ|DECISION BASIS)/i;
 const MARKET_SECTION_RE = /(MARKET CONTEXT|NOT IN SCORE|DISPLAY ONLY|DISPLAY-ONLY|LIQUIDITY|INVENTORY ARTIFACT ONLY|INVENTORY-ARTIFACT-ONLY)/i;
 const MARKET_ROW_RE = /^\s*(?:[-*]\s*)?(?:raw\s+)?(?:market|market context|liquidity)\s*[:|-]/i;
 const MARKET_PLACEHOLDER_RE = /\b(?:price|bid|ask|yes_ask|yes_bid|no_ask|no_bid|last[_ -]?price|volume|open[_ -]?interest|oi)\s*[:=]\s*(?:MISSING|PENDING|N\/A|NA|null|none|unknown)\b/i;
@@ -57,7 +57,7 @@ const WRAPPER_RE = /^\s*(Cronjob Response:|Hermes cron response:|Command output:
 const BAD_SCAFFOLD_RE =
   /\b(scaffold|placeholder|todo:|insert evidence|rewrite this|model-written final packet|final customer text draft)\b/i;
 const MENTIONS_LEGACY_RE =
-  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|PICK\s*:\s*|EVIDENCE_LEAN\s*:)\b/i;
+  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|PICK\s*:\s*|EVIDENCE_LEAN\s*:|LEAN\b|WATCH\b|NO_CLEAR_PICK\b|source layer(?:s)?\b|event_proximity\b|proximity-only\b|stub\b|scaffold\b|composite score\b|source-backed composite\b)\b/i;
 const SOURCE_STALE_MS = 36 * 60 * 60 * 1000;
 
 function nowIso() {
@@ -515,6 +515,46 @@ function hasModelScaffoldLeak(text, packetType) {
   return false;
 }
 
+// Detects a mentions customer packet that carries NO usable source evidence —
+// the product-failure signature where the whole board is proximity-only / no
+// research ran (e.g. "0/12 term(s) carry source evidence beyond event
+// proximity"). This is a HARD send-time gate and is intentionally NOT
+// downgradable by a cache-only / stale-source disclosure: disclosing that the
+// cache is stale does not turn "no research" into a valid customer packet.
+// Returns a finding object or null. Reads only the customer text — no prices.
+export function noUsableSourceEvidenceFinding(text, packetType) {
+  if (!/mention/i.test(packetType ?? '')) return null;
+  const body = String(text ?? '');
+  // Explicit renderer summary: "<n>/<total> term(s) have research-backed P(YES)".
+  const m = body.match(/(\d+)\s*\/\s*(\d+)\s+term\(s\)\s+have\s+research-backed\s+P\(YES\)/i);
+  if (m) {
+    const withEvidence = Number(m[1]);
+    const total = Number(m[2]);
+    if (Number.isFinite(withEvidence) && Number.isFinite(total) && total > 0 && withEvidence === 0) {
+      return {
+        code: 'NO_USABLE_SOURCE_EVIDENCE',
+        message: `mentions packet has 0/${total} terms with research-backed P(YES) (research gap / no research performed); not a valid customer packet`,
+      };
+    }
+  }
+  return null;
+}
+
+function mlbAlphaPendingFinding(text, packetType) {
+  if (!/mlb/i.test(packetType ?? '')) return null;
+  const body = String(text ?? '');
+  const mainProjectionSection = body.split(/(?:^|\n)Source Ledger\b/i)[0] ?? body;
+  const mainProjectionMissing =
+    /(?:^|\n)\s*(?:Win probability|Projected win probability|Run line|Projected run-line|Total runs|Projected total|Projected runs \(Home\)|Projected runs \(Away\)|First-inning run \(YRFI\))\s+—\s+BLOCKED_MODEL_LAYER_MISSING\b/i.test(mainProjectionSection) ||
+    /(?:^|\n)\s*MODEL_OUTPUT:\s+UNAVAILABLE\b/i.test(body) ||
+    /(?:^|\n)\s*Model summary:\s*model outputs are unavailable\./i.test(body);
+  if (!/provisional/i.test(body) && !mainProjectionMissing) return null;
+  return {
+    code: 'MLB_ALPHA_PENDING',
+    message: 'MLB packet is still provisional; required alpha is not fully pulled',
+  };
+}
+
 function priceLeaksInScoring(text) {
   const leaks = [];
   let inScoreSection = false;
@@ -559,9 +599,9 @@ function countNoClear(text) {
   let noClear = 0;
   let total = 0;
   for (const line of lines) {
-    if (/\b(NO_CLEAR_PICK|NO CLEAR PICK|NO CLEAR PICKS|PASS|WATCH)\b/i.test(line)) {
+    if (/\b(?:RESEARCH GAP|NO_CLEAR_PICK)\b/i.test(line)) {
       total += 1;
-      if (/\b(NO_CLEAR_PICK|NO CLEAR PICK|NO CLEAR PICKS)\b/i.test(line)) noClear += 1;
+      noClear += 1;
     } else if (/^\s*(?:#\d+|\*|-|[★◆◇○])\s+/u.test(line)) {
       total += 1;
     }
@@ -593,16 +633,57 @@ function hasUfcClosenessSignal(scope) {
 }
 
 function hasNoClearJustification(text, packetType) {
-  const hasCoverage = /(source layer coverage|source coverage|source-backed|layers(?:_present)?\s*[:=]\s*\d+\/\d+|layers present|coverage\s*[:=])/i.test(text);
-  const hasCancellation = /(cancel(?:ing|lation)? evidence|evidence cancels|offsetting|close composite margin|close margin|score margin|margin\s*(?:<=|<|:)|missing layer list|missing layers?)/i.test(text);
-  const hasBlocker = /(BLOCKED_|blocker artifact|fail-closed|source gap|missing source)/i.test(text);
+  const hasCoverage = /(research-backed terms|research coverage|research-backed|terms? have research-backed P\(YES\)|research gap section|source layer coverage|source coverage|source-backed|data coverage|coverage\s*[:=])/i.test(text);
+  const hasCancellation = /(cancel(?:ing|lation)? evidence|evidence cancels|offsetting|settlement wording|event schedule|research gap|missing research|missing source)/i.test(text);
+  const hasBlocker = /(BLOCKED_|blocker artifact|fail-closed|research gap|missing source|NO_USABLE_SOURCE_EVIDENCE)/i.test(text);
   if (/ufc/i.test(packetType ?? '')) return hasCoverage && hasUfcClosenessSignal(text);
-  if (/mentions/i.test(packetType ?? '')) return hasBlocker;
+  if (/mentions/i.test(packetType ?? '')) return hasBlocker || hasCoverage;
   return hasCoverage && (hasCancellation || hasBlocker);
 }
 
-function hasCacheOnlyDisclosure(text) {
+export function hasCacheOnlyDisclosure(text) {
   return /\b(?:cache-only|cache only|from cache|cached coverage|stale cache|stale-source|stale source|stale coverage|live fetch unavailable|live source unavailable|using cached)\b/i.test(text);
+}
+
+// Canonical, price-free disclosure line the renderer emits when source health is
+// cache-only / stale / partial. It deliberately contains phrases that
+// hasCacheOnlyDisclosure() recognizes ("Live fetch unavailable", "cache-only",
+// "stale-source", "cached"), so the renderer's disclosure trigger can never drift
+// from the janitor's block trigger. Contains NO price/odds/volume tokens — it is
+// a freshness statement only and is safe under the price-isolation invariant.
+export const CACHE_ONLY_DISCLOSURE_LINE =
+  'Source freshness: Live fetch unavailable this run — packet built from cache-only / stale-source coverage; treat research as cached/provisional until live research lands. NOT a score input.';
+
+// Pure detector reused by the mentions renderer. Runs the SAME date-wide source-
+// health discovery the janitor uses at send time and reports whether the packet
+// must carry a cache/stale-source disclosure. Read-only: it never mutates state,
+// never rewrites packets, and never weakens any janitor verdict. Returns
+// needsDisclosure=true when any discovered source-health artifact is cache-only,
+// stale, or partial — a superset that exactly covers the three janitor branches
+// gated by hasCacheOnlyDisclosure (FETCH_CACHE_ONLY, FETCH_SOURCE_STALE,
+// FETCH_PARTIAL_COVERAGE).
+export function detectSourceHealthDisclosure(context = {}) {
+  const packetType = inferPacketType(context.filePath, context.packetType);
+  const paths = discoverSourceHealthPaths({ ...context, packetType });
+  let cacheOnly = false;
+  let stale = false;
+  let partial = false;
+  for (const sourcePath of paths) {
+    const parsed = readJsonIfExists(sourcePath);
+    if (!parsed) continue;
+    if (cacheOnlyFinding(parsed)) cacheOnly = true;
+    const ts = sourceTimestamp(parsed);
+    if (ts && Date.now() - ts > SOURCE_STALE_MS) stale = true;
+    if (sourceCoverageFinding(parsed)) partial = true;
+  }
+  const needsDisclosure = cacheOnly || stale || partial;
+  return {
+    needsDisclosure,
+    cacheOnly,
+    stale,
+    partial,
+    disclosureLine: needsDisclosure ? CACHE_ONLY_DISCLOSURE_LINE : null,
+  };
 }
 
 function ufcNoClearGaps(text) {
@@ -627,14 +708,18 @@ function contradictionFindings(text) {
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const scoreMatch = line.match(/\b(?:score|cpc_score|composite_score)\s*[:=]\s*(\d{1,3})\b/i);
+    const scoreMatch =
+      line.match(/^\s*#?\d+\.?\s+.+?\s+—\s+P\(YES\)\s*(\d{1,3}|--)\s+—\s+(STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)\b/i)
+      || line.match(/\bP\(YES\)\s*[:=]?\s*(\d{1,3})\b/i)
+      || line.match(/\|\s*(\d{1,3}|--)\s*\|\s*(STRONG YES|WEAK YES|WEAK NO|STRONG NO|RESEARCH GAP)\s*\|/i);
     if (!scoreMatch) continue;
-    const score = Number(scoreMatch[1]);
-    if (score >= 70 && /\b(NO_CLEAR_PICK|NO CLEAR PICK|PASS)\b/i.test(line)) {
-      findings.push({ line: i + 1, reason: `high score ${score} paired with no-clear/pass posture` });
+    const score = scoreMatch[1] === '--' ? null : Number(scoreMatch[1]);
+    const tier = String(scoreMatch[2] ?? '').toUpperCase();
+    if (score !== null && score >= 65 && tier !== 'STRONG YES') {
+      findings.push({ line: i + 1, reason: `high P(YES) ${score} paired with ${tier || 'missing'} tier` });
     }
-    if (score <= 30 && /\b(PICK|PLAY|CLEAR|TRADE_YES)\b/i.test(line)) {
-      findings.push({ line: i + 1, reason: `low score ${score} paired with pick/play posture` });
+    if (score !== null && score < 35 && tier !== 'STRONG NO') {
+      findings.push({ line: i + 1, reason: `low P(YES) ${score} paired with ${tier || 'missing'} tier` });
     }
   }
   return findings;
@@ -738,6 +823,20 @@ export function validatePacketText(text, context = {}) {
     });
   }
 
+  const noSourceEvidence = noUsableSourceEvidenceFinding(text, packetType);
+  if (noSourceEvidence) {
+    // Hard send-time gate: a mentions packet with zero source-backed terms is a
+    // research gap, never a deliverable customer packet. A cache-only / stale
+    // disclosure does NOT clear this — disclosing stale cache cannot manufacture
+    // research that was never performed.
+    errors.push(noSourceEvidence);
+  }
+
+  const alphaPending = mlbAlphaPendingFinding(text, packetType);
+  if (alphaPending) {
+    errors.push(alphaPending);
+  }
+
   const leaks = priceLeaksInScoring(text);
   if (leaks.length) {
     errors.push({
@@ -751,7 +850,7 @@ export function validatePacketText(text, context = {}) {
   if (noClear.total >= 3 && noClear.ratio >= 0.6 && !hasNoClearJustification(text, packetType)) {
     errors.push({
       code: 'HIGH_NO_CLEAR_PICK_RATIO_WITHOUT_EXPLANATION',
-      message: `NO_CLEAR_PICK ratio ${noClear.noClear}/${noClear.total} requires source coverage, cancellation/margin, and missing-layer explanation`,
+      message: `research gap ratio ${noClear.noClear}/${noClear.total} requires research-backed coverage and gap explanation`,
     });
   }
   const ufcNoClearMissing = /ufc/i.test(packetType) ? ufcNoClearGaps(text) : [];
@@ -924,6 +1023,7 @@ export function inspectPacketFile(filePath, options = {}) {
     date: options.date ?? inferDateFromPath(filePath),
     packetType: inferPacketType(filePath, options.packetType),
   };
+  const dryRun = context.dryRun === true;
   let text = readTextIfExists(filePath);
   let generator_result = null;
   if (text == null && options.generatorCommand && !options.generatorAlreadyRan) {
@@ -949,21 +1049,26 @@ export function inspectPacketFile(filePath, options = {}) {
       result.repair_rule = repair.rule;
       if (repairedValidation.ok) {
         const repairedPath = filePath.replace(/\.txt$/i, '.janitor-repaired.txt');
-        atomicWriteText(repairedPath, repair.text.endsWith('\n') ? repair.text : `${repair.text}\n`);
-        const metaPath = rebuildMetaIfMissing(repairedPath, repair.text, context);
-        const chunkPaths = chunkCleanPacket(repairedPath, repair.text);
         result = {
           ...repairedValidation,
           verdict: DELIVERY_VERDICTS.SEND_ALLOWED_AFTER_REPAIR,
           repair_attempted: true,
           repair_attempt_count: MAX_REPAIR_ATTEMPTS,
           repair_rule: repair.rule,
-          repaired_path: repairedPath,
+          repaired_path: dryRun ? null : repairedPath,
           repaired_sha256: sha256(repair.text),
           original_sha256,
-          meta_rebuilt_path: metaPath,
-          chunk_paths: chunkPaths,
+          meta_rebuilt_path: null,
+          chunk_paths: [],
+          dry_run: dryRun,
         };
+        if (!dryRun) {
+          atomicWriteText(repairedPath, repair.text.endsWith('\n') ? repair.text : `${repair.text}\n`);
+          const metaPath = rebuildMetaIfMissing(repairedPath, repair.text, context);
+          const chunkPaths = chunkCleanPacket(repairedPath, repair.text);
+          result.meta_rebuilt_path = metaPath;
+          result.chunk_paths = chunkPaths;
+        }
       } else {
         result.errors = [
           ...(result.errors ?? []),
@@ -976,6 +1081,11 @@ export function inspectPacketFile(filePath, options = {}) {
         result.verdict = DELIVERY_VERDICTS.JANITOR_BLOCKED;
       }
     }
+  }
+
+  if (dryRun) {
+    result.dry_run = true;
+    return result;
   }
 
   const record = writeJanitorArtifacts(result, context);

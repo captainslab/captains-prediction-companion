@@ -423,6 +423,41 @@ test('cpcPacketCaption works for non-mentions types', () => {
   assert.ok(caption.endsWith('-- attached .txt'));
 });
 
+test('cpcPacketCaption prefers event titles over generic packet headers', () => {
+  const caption = cpcPacketCaption(
+    [
+      'Captain MLB — MIL @ ATL Game Board',
+      'Milwaukee Brewers at Atlanta Braves',
+      'Date: 2026-06-20 | First pitch: MISSING | Venue: MISSING',
+      'CPC Packet: Game Board | generated_utc: 2026-06-20T00:00:00Z',
+      '',
+      'TLDR',
+      '  Call: NO CLEAR PICK.',
+    ].join('\n'),
+    '2026-06-20-KXMLBGAME-26JUN201610MILATL',
+    'mlb-daily',
+  );
+  assert.equal(
+    caption,
+    'New CPC packet: MIL @ ATL Game Board -- attached .txt',
+  );
+});
+
+test('cpcPacketCaption keeps Daily Slate Board as a slate caption', () => {
+  const caption = cpcPacketCaption(
+    [
+      'Captain MLB — Daily Slate Board',
+      'CPC Packet: Daily Slate Board',
+      'date: 2026-06-20',
+      'packet_type: mlb-daily',
+      'generated_utc: 2026-06-20T00:00:00Z',
+    ].join('\n'),
+    '2026-06-20-mlb-daily-board',
+    'mlb-daily',
+  );
+  assert.equal(caption, 'New CPC packet: Daily Slate Board -- attached .txt');
+});
+
 test('cpcPacketCaption falls back to stem', () => {
   const caption = cpcPacketCaption('', '2026-06-14-my-event', '');
   assert.equal(caption, 'New CPC packet: 2026-06-14-my-event -- attached .txt');

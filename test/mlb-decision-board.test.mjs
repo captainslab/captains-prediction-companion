@@ -47,6 +47,20 @@ test('pending lineup downgrades confidence but does NOT collapse to WATCH', () =
   assert.match(row.trigger_event, /lineup/i);
 });
 
+test('missing MLB model score blocks ranked PICK/LEAN/WATCH rows before render', () => {
+  const row = mlbPickToDecisionRow(prelineupPick({
+    classification: 'LEAN',
+    fair_value: null,
+    market_reference_prob: 0.7438,
+    kalshi_ask: 0.70,
+    edge_pp: 4.382,
+  }));
+  assert.equal(row.edge_status, 'BLOCKED', 'ranked row without a model score must be blocked');
+  assert.match(row.blocker_if_any, /model score missing/i);
+  assert.match(row.analysis, /book-ref \(not composite\)/, 'book reference remains honest in analysis');
+  assert.equal(row.composite_score, null);
+});
+
 test('MLB slate packet renders sectioned board and excludes raw inventory', () => {
   const scoring = {
     picks: [
@@ -60,9 +74,9 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
   assert.ok(slate, 'slate packet built');
 
-  // 1. main packet does NOT contain a raw inventory dump
-  assert.doesNotMatch(slate.text, /RAW CONTRACT INVENTORY/);
-  // raw inventory lives in its own artifact and is flagged
+  // 1. main packet does NOT contain audit artifacts; raw inventory lives in
+  // its own artifact and stays separate from the customer-facing slate.
+  assert.doesNotMatch(slate.text, /AUDIT ARTIFACTS/);
   assert.match(slate.inventoryText, /RAW CONTRACT INVENTORY/);
 
   // 2. sectioned board present (TLDR + named sections)
@@ -71,7 +85,7 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.match(slate.text, /WATCHLIST \/ TRIGGER BOARD/);
   assert.match(slate.text, /FADES \/ OVERPRICED/);
   assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
-  assert.match(slate.text, /AUDIT ARTIFACTS/);
+  assert.doesNotMatch(slate.text, /AUDIT ARTIFACTS/);
 
   // 3. rows carry both composite/model fields AND market/implied/edge fields
   assert.match(slate.text, /model: fair=/);
@@ -79,13 +93,75 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.match(slate.text, /edge=/);
 
   // 4. PASS rows are summarized out of the headline (not dumped row-by-row)
-  assert.match(slate.text, /pass_rows_not_shown:/);
+  assert.doesNotMatch(slate.text, /pass_rows_not_shown:/);
 
   // 5. FADE row routed into the FADES section
   const fadesIdx = slate.text.indexOf('FADES / OVERPRICED');
   const blockedIdx = slate.text.indexOf('BLOCKED / NEEDS SOURCE');
   const fadeRow = slate.text.indexOf('KXMLBGAME-2');
   assert.ok(fadeRow > fadesIdx && fadeRow < blockedIdx, 'FADE row sits in the FADES section');
+});
+
+test('BLOCKED MLB rows compact into event-level notes and never render score=MISSING rows', () => {
+  const blockedPick = (market_ticker) => ({
+    market_ticker,
+    contract_title: 'Blocked HR market',
+    game: 'Toronto Blue Jays at Baltimore Orioles',
+    market_lane: 'home_run_hitter',
+    classification: 'BLOCKED',
+    fair_value: null,
+    kalshi_ask: null,
+    edge_pp: null,
+    primary_pick: false,
+    missing_confirmations: ['statcast_hr_optional_source_unavailable'],
+    gates_passed: [],
+  });
+
+  const scoring = {
+    picks: [
+      blockedPick('KXMLB-HR-1'),
+      blockedPick('KXMLB-HR-2'),
+    ],
+    source: '/tmp/picks.json',
+    summaryCounts: { blocked: 2 },
+  };
+  const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
+  assert.ok(slate, 'slate packet built');
+  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
+  assert.match(slate.text, /2 blocked row\(s\)/);
+  assert.doesNotMatch(slate.text, /#\d+\s+\[BLOCKED\]/);
+  assert.doesNotMatch(slate.text, /score=MISSING/);
+});
+
+test('ranked MLB rows with score=MISSING compact into blocked notes instead of ranked rows', () => {
+  const missingScorePick = (market_ticker, classification) => ({
+    market_ticker,
+    contract_title: 'Missing score market',
+    game: 'Toronto Blue Jays at Baltimore Orioles',
+    market_lane: 'moneyline',
+    classification,
+    fair_value: null,
+    kalshi_ask: 0.51,
+    edge_pp: 1.8,
+    primary_pick: false,
+    missing_confirmations: ['model_fair_missing'],
+    gates_passed: ['starters'],
+  });
+
+  const scoring = {
+    picks: [
+      missingScorePick('KXMLB-MISS-1', 'LEAN'),
+      missingScorePick('KXMLB-MISS-2', 'WATCH_FOR_LISTING'),
+    ],
+    source: '/tmp/picks.json',
+    summaryCounts: { lean: 1, watch_for_listing: 1 },
+  };
+  const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
+  assert.ok(slate, 'slate packet built');
+  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
+  assert.match(slate.text, /blocked row\(s\)/);
+  assert.doesNotMatch(slate.text, /\[\s*(LEAN|WATCH)\s*\]/, 'ranked rows must not survive with missing score');
+  assert.doesNotMatch(slate.text, /score=MISSING/, 'missing-score rows must stay out of ranked sections');
 });
 
 test('market price is never folded into the composite score', () => {

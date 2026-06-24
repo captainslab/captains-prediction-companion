@@ -149,6 +149,33 @@ test('market_context pricing is stored separately and never enters score', () =>
   }
 });
 
+test('event_proximity changes do not move the composite score or posture', () => {
+  const baseLayers = {
+    direct_mention_pathway: { present: true, score: 88, source_basis: 'direct research anchor' },
+    historical_tendency: { present: true, score: 72, source_basis: 'historical research anchor' },
+  };
+  const lowProximity = composeMentionLedger({
+    event: 'Axios interview', targetMention: 'Biden',
+    profile: POL_KEY, layerDefs: POL_LAYERS,
+    layerRecords: {
+      ...baseLayers,
+      event_proximity: { present: true, score: 5, source_basis: 'schedule is distant' },
+    },
+  });
+  const highProximity = composeMentionLedger({
+    event: 'Axios interview', targetMention: 'Biden',
+    profile: POL_KEY, layerDefs: POL_LAYERS,
+    layerRecords: {
+      ...baseLayers,
+      event_proximity: { present: true, score: 99, source_basis: 'schedule is imminent' },
+    },
+  });
+
+  assert.equal(lowProximity.composite_score, highProximity.composite_score);
+  assert.equal(lowProximity.posture, highProximity.posture);
+  assert.equal(lowProximity.composite_score, 80);
+});
+
 // ─── Missing layers / no fabrication ─────────────────────────────────────────
 
 test('all-missing layers → composite_score null and NO_CLEAR_PICK', () => {

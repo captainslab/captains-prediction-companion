@@ -29,7 +29,6 @@ import {
   buildScoreEngineProjection,
   buildYrfiProjection,
   buildKsProjection,
-  buildHrProjection,
 } from './projection-contracts.mjs';
 
 // --- Documented model constants (transparent, not tuned to any market) -------
@@ -256,14 +255,7 @@ export function buildGameProjections({
   const ks_home = ksFor(hp, 'home');
   const ks_away = ksFor(ap, 'away');
 
-  // ---- HR: requires confirmed lineup + per-batter rate (not in this feed) →
-  // stays honestly blocked. No fabricated batter outputs. ----
-  const hr = buildHrProjection({
-    game_id, as_of: stamp, lineup_status, weather_status,
-    inputs: { park }, outputs: null,
-  });
-
-  return { score, yrfi, ks_home, ks_away, hr, means };
+  return { score, yrfi, ks_home, ks_away, hr: null, means };
 }
 
 // --- Loader + matcher --------------------------------------------------------

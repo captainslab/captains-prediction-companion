@@ -37,6 +37,7 @@ import { evaluateDecisionProcess, MARKET_TYPES, DECISION_STATUSES } from '../../
 import { composeBaseFundamentals } from './base-fundamentals.mjs';
 import { composeEvidenceLedgerForGame } from './evidence-ledger.mjs';
 import { buildFundamentalEnvelopes, buildLayerRecords } from '../source-adapters/research-agent-adapter.mjs';
+import { distributionFloorMean } from './projection-contracts.mjs';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -979,6 +980,82 @@ function coverageDetailForModel(status, hasContext) {
   return 'display-only board read; no non-market composite exists';
 }
 
+// ---------------------------------------------------------------------------
+// Projection-engine wiring (price-free).
+//
+// The board analyzers above read market shape and are display-only. The real
+// non-market composites for spread / total / YRFI / Ks come from the shared
+// projection engine (scripts/mlb/lib/projection-engine.mjs), which reads ONLY
+// baseball inputs and is price-guarded by the projection contracts. When a
+// family's projection is non-blocked AND carries model outputs, that family is
+// promoted to a modeled composite; otherwise it stays board-only/blocked.
+//
+// Architecture: docs/Optimal MLB Projection Architecture for CPC.pdf — ML/
+// spread/total share one score engine; YRFI/Ks/HR are specialized. Provisional
+// (pre-lineup) ML/spread/total/YRFI are still real modeled reads, surfaced with
+// the provisional caveat. Ks blocks until starter + leash + confirmed lineup;
+// HR blocks until a confirmed lineup with a per-PA rate (not in this feed), so
+// HR is never promoted here.
+function projHasModel(proj) {
+  return Boolean(proj && proj.status !== 'blocked' && proj.outputs != null);
+}
+
+function provisionalCaveat(proj) {
+  if (proj?.status !== 'provisional') return '';
+  const why = [];
+  if (proj.lineup_status && proj.lineup_status !== 'confirmed') why.push('lineup unconfirmed');
+  if (proj.weather_status && proj.weather_status !== 'complete') why.push('weather incomplete');
+  return ` (provisional${why.length ? ` — ${why.join(', ')}` : ''})`;
+}
+
+function pctText(p) {
+  return (typeof p === 'number' && Number.isFinite(p)) ? `${(p * 100).toFixed(0)}%` : null;
+}
+
+// Build the override block for a family that has a real modeled composite, or
+// null to fall back to the existing board-only/blocked status. Details carry
+// ONLY model-derived numbers — never a market price, odds, or board line.
+function modeledFamilyOverride(kind, projections) {
+  if (!projections) return null;
+  const mk = (detail) => ({
+    status: FAMILY_COVERAGE_STATUSES.NON_MARKET_COMPOSITE_READY,
+    detail,
+    board_only: false,
+    modeled: true,
+  });
+  if (kind === 'spread') {
+    const s = projections.score;
+    if (!projHasModel(s)) return null;
+    const p = pctText(s.outputs?.runline_home_minus_1_5);
+    return mk(`modeled run-line composite — home -1.5 cover ${p ?? 'n/a'} from the shared score engine; board ladder display-only, NOT IN SCORE${provisionalCaveat(s)}`);
+  }
+  if (kind === 'total') {
+    const s = projections.score;
+    if (!projHasModel(s)) return null;
+    const mean = distributionFloorMean(s.outputs?.total_runs_distribution);
+    const meanText = (typeof mean === 'number') ? `~${mean.toFixed(1)} projected total runs` : 'projected run environment';
+    return mk(`modeled total composite — ${meanText} from the shared score engine; board ladder display-only, NOT IN SCORE${provisionalCaveat(s)}`);
+  }
+  if (kind === 'yfri') {
+    const y = projections.yrfi;
+    if (!projHasModel(y)) return null;
+    const yp = pctText(y.outputs?.yrfi_prob);
+    const np = pctText(y.outputs?.nrfi_prob);
+    return mk(`modeled first-inning composite — YRFI ${yp ?? 'n/a'} / NRFI ${np ?? 'n/a'} (top-of-order vs starter); board display-only, NOT IN SCORE${provisionalCaveat(y)}`);
+  }
+  if (kind === 'ks') {
+    // Promote if EITHER starter has a modeled K projection.
+    const candidates = [projections.ks_home, projections.ks_away].filter(projHasModel);
+    if (!candidates.length) return null;
+    const means = candidates
+      .map((k) => distributionFloorMean(k.outputs?.distribution))
+      .filter((m) => typeof m === 'number');
+    const meanText = means.length ? `~${Math.max(...means).toFixed(1)} projected Ks (top starter)` : 'projected strikeout count';
+    return mk(`modeled strikeout composite — ${meanText} from the BF×K% count model; board ladder display-only, NOT IN SCORE`);
+  }
+  return null;
+}
+
 export function buildMarketFamilyCoverage(game, analysis = null) {
   const final = analysis?.final ?? {};
   const contextBundle = final.context_bundle ?? null;
@@ -1059,6 +1136,18 @@ export function buildMarketFamilyCoverage(game, analysis = null) {
     },
   };
 
+  // Promote families that carry a real modeled (non-market) composite from the
+  // projection engine. Board analyzers stay display-only behind them. ML is
+  // intentionally left to its own decision_status path; HR is never promoted
+  // here (no per-PA rate input in this feed → stays honestly blocked).
+  const projections = final.projections ?? null;
+  if (projections) {
+    for (const kind of ['spread', 'total', 'yfri', 'ks']) {
+      const override = modeledFamilyOverride(kind, projections);
+      if (override) families[kind] = { ...families[kind], ...override };
+    }
+  }
+
   const hasFullCoverage = Object.values(families).every((family) => family.status === FAMILY_COVERAGE_STATUSES.NON_MARKET_COMPOSITE_READY);
   const coverageMode = hasFullCoverage ? 'FULL' : 'LIMITED';
   const summary = [
@@ -1080,7 +1169,7 @@ export function buildMarketFamilyCoverage(game, analysis = null) {
 
 // ---- whole-game aggregation -------------------------------------------------
 
-export function analyzeGame(game) {
+export function analyzeGame(game, { projections = null } = {}) {
   const gameMeta = { away: game.away, home: game.home };
   const mlAnalysis = analyzeMl(game.series.ml?.markets || []);
   const spreadAnalysis = analyzeSpread(game.series.spread?.markets || [], gameMeta);
@@ -1243,6 +1332,7 @@ export function analyzeGame(game) {
     final: {
       decision_status: process.decisionStatus,
       context_bundle: contextBundle,
+      projections,
     },
   });
   if (finalDecision === 'NO CLEAR PICK') {
@@ -1273,6 +1363,7 @@ export function analyzeGame(game) {
       game_pick_decision: finalDecision,
       prop_watchlist: propAlerts,
       context_bundle: contextBundle,
+      projections,
       coverage,
     },
     clear_lean_count: gameClearLean.length, // game-level only

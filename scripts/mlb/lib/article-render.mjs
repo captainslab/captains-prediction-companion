@@ -20,6 +20,14 @@
 import { MLB_SERIES } from './series-discovery.mjs';
 import { DECISION_STATUSES, renderDecisionProcess } from '../../shared/decision-process.mjs';
 import { buildMarketFamilyCoverage } from './market-engine.mjs';
+import {
+  describeKs,
+  describeRunline,
+  describeTeamRuns,
+  describeTotal,
+  describeYrfi,
+} from './projection-language.mjs';
+import { distributionFloorMean } from './projection-contracts.mjs';
 
 function dollarsToCents(v) {
   if (v == null) return null;
@@ -443,16 +451,25 @@ function familyStatusLines(it) {
       : mlCoverage.status === 'BOARD_ANALYZER_ONLY'
         ? `composite ${composite}; ${mlCoverage.status} — board signal only, not evidence, not a pick.`
         : `composite ${composite}; ${mlCoverage.status} — no ML market to model.`;
-  const hrStatus = propCounts.hr
-    ? `BOARD_ANALYZER_ONLY — ${propCounts.hr} HR market anomaly(ies); HR ladder analyzer only; display-only board context, not a non-market composite.`
-    : coverage.families.hr.status === 'BLOCKED_MODEL_LAYER_MISSING'
-      ? 'BLOCKED_MODEL_LAYER_MISSING — HR markets missing; no HR board analyzer to render.'
-      : 'BOARD_ANALYZER_ONLY — HR ladder analyzer only; display-only board context, not a non-market composite.';
-  const kStatus = propCounts.k
-    ? `BOARD_ANALYZER_ONLY — ${propCounts.k} K market anomaly(ies); K ladder analyzer only; display-only board context, not a non-market composite.`
-    : coverage.families.ks.status === 'BLOCKED_MODEL_LAYER_MISSING'
-      ? 'BLOCKED_MODEL_LAYER_MISSING — K markets missing; no K board analyzer to render.'
-      : 'BOARD_ANALYZER_ONLY — K ladder analyzer only; display-only board context, not a non-market composite.';
+  // Ks/HR: a real modeled composite (from the projection engine) wins over the
+  // board-analyzer fallback. Board anomaly counts are display-only context and
+  // never override a modeled read.
+  const hrFamily = coverage.families.hr;
+  const hrStatus = hrFamily.modeled
+    ? `${hrFamily.status} — ${hrFamily.detail}.`
+    : propCounts.hr
+      ? `BOARD_ANALYZER_ONLY — ${propCounts.hr} HR market anomaly(ies); HR ladder analyzer only; display-only board context, not a non-market composite.`
+      : hrFamily.status === 'BLOCKED_MODEL_LAYER_MISSING'
+        ? 'BLOCKED_MODEL_LAYER_MISSING — HR markets missing; no HR board analyzer to render.'
+        : 'BOARD_ANALYZER_ONLY — HR ladder analyzer only; display-only board context, not a non-market composite.';
+  const ksFamily = coverage.families.ks;
+  const kStatus = ksFamily.modeled
+    ? `${ksFamily.status} — ${ksFamily.detail}.`
+    : propCounts.k
+      ? `BOARD_ANALYZER_ONLY — ${propCounts.k} K market anomaly(ies); K ladder analyzer only; display-only board context, not a non-market composite.`
+      : ksFamily.status === 'BLOCKED_MODEL_LAYER_MISSING'
+        ? 'BLOCKED_MODEL_LAYER_MISSING — K markets missing; no K board analyzer to render.'
+        : 'BOARD_ANALYZER_ONLY — K ladder analyzer only; display-only board context, not a non-market composite.';
   return [
     `${matchup}:`,
     `ML/game-side: ${mlStatus}`,
@@ -464,7 +481,7 @@ function familyStatusLines(it) {
   ];
 }
 
-function renderFamilyStatusBlock(game, analysis) {
+export function renderFamilyStatusBlock(game, analysis) {
   const coverage = getFamilyCoverage({ game, analysis });
   const lines = ['Market-family coverage'];
   lines.push(`  Coverage mode: ${coverage.mode} — ${coverage.mode === 'LIMITED' ? 'limited coverage; board analyzers remain display-only and NOT IN SCORE.' : 'full modeled coverage.'}`);
@@ -672,7 +689,7 @@ function renderWhyPick(analysis, mlSnap, spreadConf, status, game, coverage) {
   }
   // PASS / NO CLEAR PICK
   if (coverage?.mode === 'LIMITED') {
-    return 'Limited coverage: only the ML/game-side family has a modeled composite; spread, total, YFRI/NRFI, Ks, and HR remain board-only or blocked. No side here is defensible without outside context (lineups, weather, starters, park).';
+    return `${limitedCoverageSentence(coverage)} spread, total, YFRI/NRFI, Ks, and HR remain board-only or blocked. No side here is defensible without outside context (lineups, weather, starters, park).`;
   }
   if (hasContext) {
     return 'Context reviewed, no defensible edge.';
@@ -694,7 +711,7 @@ function renderBottomLine(analysis, mlSnap, status, game, coverage) {
     return `Call: ${CONTEXT_WATCH} — ${side}. Board signal only, not evidence, not a pick. Market context is display-only and NOT IN SCORE. No trades placed, no sizing.`;
   }
   if (coverage?.mode === 'LIMITED') {
-    return 'Call: NO CLEAR PICK — limited coverage. Only the ML/game-side family has a modeled composite; spread, total, YFRI/NRFI, Ks, and HR remain board-only or blocked. No trades placed, no sizing.';
+    return `Call: NO CLEAR PICK — limited coverage. ${limitedCoverageSentence(coverage)} spread, total, YFRI/NRFI, Ks, and HR remain board-only or blocked. No trades placed, no sizing.`;
   }
   const hasCtx = hasRenderableContext(game, analysis?.final?.context_bundle ?? null);
   if (hasCtx) {
@@ -703,7 +720,331 @@ function renderBottomLine(analysis, mlSnap, status, game, coverage) {
   return 'Call: PASS — board only. Nothing actionable from the market alone. No trades placed, no sizing.';
 }
 
-export function buildGameArticle({ date, game, analysis }) {
+const FAMILY_LABELS = Object.freeze({
+  ml: 'ML/game-side',
+  spread: 'Spread',
+  total: 'Total',
+  yfri: 'YRFI/NRFI',
+  ks: 'Ks props',
+  hr: 'HR props',
+});
+
+const FAMILY_STATUS_LABELS = Object.freeze({
+  NON_MARKET_COMPOSITE_READY: 'MODELED',
+  BOARD_ANALYZER_ONLY: 'BOARD_ONLY_DISPLAY',
+  BLOCKED_MODEL_LAYER_MISSING: 'BLOCKED_MODEL',
+  PARTIAL_NEEDS_PATCH: 'NOT_READY',
+});
+
+function familyLabel(key) {
+  return FAMILY_LABELS[key] ?? key;
+}
+
+function familyStateLabel(status) {
+  return FAMILY_STATUS_LABELS[status] ?? 'UNAVAILABLE';
+}
+
+function familyGroups(coverage) {
+  const groups = {
+    modeled: [],
+    board_only: [],
+    blocked: [],
+    not_ready: [],
+    unavailable: [],
+  };
+  for (const [key, family] of Object.entries(coverage?.families ?? {})) {
+    const label = familyLabel(key);
+    const state = familyStateLabel(family?.status);
+    if (state === 'MODELED') groups.modeled.push(label);
+    else if (state === 'BOARD_ONLY_DISPLAY') groups.board_only.push(label);
+    else if (state === 'BLOCKED_MODEL') groups.blocked.push(label);
+    else if (state === 'NOT_READY') groups.not_ready.push(label);
+    else groups.unavailable.push(label);
+  }
+  return groups;
+}
+
+function coverageSummaryLine(coverage) {
+  const groups = familyGroups(coverage);
+  const parts = [];
+  if (groups.modeled.length) parts.push(`Modeled families: ${groups.modeled.join(', ')}.`);
+  if (groups.board_only.length) parts.push(`BOARD_ONLY_DISPLAY families: ${groups.board_only.join(', ')}.`);
+  if (groups.not_ready.length) parts.push(`NOT_READY families: ${groups.not_ready.join(', ')}.`);
+  if (groups.blocked.length) parts.push(`BLOCKED_MODEL families: ${groups.blocked.join(', ')}.`);
+  if (groups.unavailable.length) parts.push(`UNAVAILABLE families: ${groups.unavailable.join(', ')}.`);
+  if (!parts.length) return 'No family coverage available.';
+  return parts.join(' ');
+}
+
+function limitedCoverageSentence(coverage) {
+  const groups = familyGroups(coverage);
+  const modeled = groups.modeled.length ? groups.modeled.join(', ') : 'none';
+  return `Limited coverage: modeled families are ${modeled}.`;
+}
+
+function formatGameSideComposite(game, bundle) {
+  const awayScore = bundle?.side_scores?.away;
+  const homeScore = bundle?.side_scores?.home;
+  if (awayScore == null || homeScore == null) {
+    return 'BLOCKED_CONTEXT_MISSING';
+  }
+  const away = game.away ?? 'away';
+  const home = game.home ?? 'home';
+  const lead = awayScore === homeScore ? 'even' : awayScore > homeScore ? away : home;
+  const margin = Math.abs(Number(awayScore) - Number(homeScore));
+  return `${away} ${fmtPoints(awayScore)} vs ${home} ${fmtPoints(homeScore)}; leading ${lead}; margin ${fmtPoints(margin)}.`;
+}
+
+function projectionFallbackLabel(family) {
+  return familyStateLabel(family?.status);
+}
+
+function lineupIsReady(status) {
+  const text = String(status ?? '').toLowerCase();
+  return text.includes('confirm') || text === 'complete';
+}
+
+function modelConsistencyCheck(game, analysis) {
+  const bundle = analysis?.final?.context_bundle ?? null;
+  const projections = analysis?.final?.projections ?? null;
+  const sideScores = bundle?.side_scores ?? null;
+  const scoreProj = projections?.score ?? null;
+  const yrfiProj = projections?.yrfi ?? null;
+  const awayRuns = distributionFloorMean(scoreProj?.outputs?.team_runs_distribution?.away);
+  const homeRuns = distributionFloorMean(scoreProj?.outputs?.team_runs_distribution?.home);
+  const totalRuns = distributionFloorMean(scoreProj?.outputs?.total_runs_distribution);
+  const awaySide = Number(sideScores?.away);
+  const homeSide = Number(sideScores?.home);
+  const lineupStatus = bundle?.provenance?.lineup?.status ?? game?.lineup_status ?? null;
+  const awayEra = Number(game?.starters?.away?.era);
+  const homeEra = Number(game?.starters?.home?.era);
+  const avgEra = Number.isFinite(awayEra) && Number.isFinite(homeEra) ? (awayEra + homeEra) / 2 : null;
+
+  const checkA = (() => {
+    if (!Number.isFinite(awaySide) || !Number.isFinite(homeSide) || !Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) {
+      return ['INSUFFICIENT_DATA', 'missing side scores or projected team runs'];
+    }
+    const compositeLead = awaySide === homeSide ? 'even' : awaySide > homeSide ? 'away' : 'home';
+    const projectedLead = awayRuns === homeRuns ? 'even' : awayRuns > homeRuns ? 'away' : 'home';
+    // Run-line cover probability is a magnitude detail, not a direction signal:
+    // a sub-50% home -1.5 cover only means the projected margin is under 1.5,
+    // not that the other side is favored. So it is reported, never a mismatch trigger.
+    const runlineHomeFav = scoreProj?.outputs?.runline_home_minus_1_5;
+    const coverNote = Number.isFinite(runlineHomeFav)
+      ? ` home -1.5 cover ${Math.round(runlineHomeFav * 100)}%`
+      : '';
+    if (compositeLead === 'even' || projectedLead === 'even') {
+      return ['INSUFFICIENT_DATA', `composite lead ${compositeLead}; projected runs ${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)}.`];
+    }
+    if (compositeLead === projectedLead) {
+      return ['CONSISTENT', `both favor ${compositeLead}; projected runs ${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)};${coverNote}.`];
+    }
+    return ['MISMATCH', `composite leads ${compositeLead} but projected runs favor ${projectedLead} (${awayRuns.toFixed(1)} vs ${homeRuns.toFixed(1)}).`];
+  })();
+
+  const checkB = (() => {
+    // Compare the projected total against the sum of projected team runs — both
+    // are run-scale model outputs. (Side scores are evidence composites, not
+    // runs, so they must not be summed into a "run environment" here.)
+    if (!Number.isFinite(totalRuns) || !Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) {
+      return ['INSUFFICIENT_DATA', 'missing total projection or projected team runs'];
+    }
+    const envTotal = awayRuns + homeRuns;
+    const delta = Math.abs(totalRuns - envTotal);
+    if (delta <= 1.0) return ['CONSISTENT', `projected total ${totalRuns.toFixed(1)} vs summed team runs ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
+    if (delta >= 1.5) return ['MISMATCH', `projected total ${totalRuns.toFixed(1)} vs summed team runs ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
+    return ['INSUFFICIENT_DATA', `projected total ${totalRuns.toFixed(1)} vs summed team runs ${envTotal.toFixed(1)} (gap ${delta.toFixed(1)}).`];
+  })();
+
+  const checkC = (() => {
+    if (!Number.isFinite(yrfiProj?.outputs?.yrfi_prob)) {
+      return ['INSUFFICIENT_DATA', 'YRFI projection unavailable'];
+    }
+    if (!lineupIsReady(lineupStatus)) {
+      return ['INSUFFICIENT_DATA', 'starter/top-order assumptions stay provisional while lineup is not confirmed'];
+    }
+    if (!Number.isFinite(avgEra)) {
+      return ['INSUFFICIENT_DATA', 'starter ERAs unavailable'];
+    }
+    const yrfiProb = Number(yrfiProj.outputs.yrfi_prob);
+    const yrfiHigh = yrfiProb >= 0.5;
+    const weakStarters = avgEra >= 4.0;
+    if ((yrfiHigh && weakStarters) || (!yrfiHigh && !weakStarters)) {
+      return ['CONSISTENT', `YRFI ${Math.round(yrfiProb * 100)}% with starter ERA average ${avgEra.toFixed(2)}.`];
+    }
+    return ['MISMATCH', `YRFI ${Math.round(yrfiProb * 100)}% with starter ERA average ${avgEra.toFixed(2)}.`];
+  })();
+
+  return [
+    `  Game-side vs projections: ${checkA[0]} — ${checkA[1]}`,
+    `  Total vs run environment: ${checkB[0]} — ${checkB[1]}`,
+    `  YRFI/NRFI vs starter assumptions: ${checkC[0]} — ${checkC[1]}`,
+  ].join('\n');
+}
+
+function sourceLedger(game, analysis) {
+  const bundle = analysis?.final?.context_bundle ?? null;
+  const coverage = analysis?.final?.coverage ?? buildMarketFamilyCoverage(game, analysis);
+  const provenance = bundle?.provenance ?? {};
+  const projections = analysis?.final?.projections ?? null;
+  const backed = (keys) => keys.some((key) => provenance?.[key]?.status && provenance[key].status !== 'missing');
+  const lines = ['Source Ledger'];
+  lines.push(`  MLB_OFFICIAL: ${backed(['starters', 'lineup']) ? 'BACKED' : 'UNAVAILABLE'}${backed(['starters', 'lineup']) ? ' via starters/lineup provenance.' : ' (starters/lineup provenance missing).'}`);
+  lines.push(`  STATS_ADAPTER: ${backed(['recent_form', 'bullpen', 'matchup_model']) ? 'BACKED' : 'UNAVAILABLE'}${backed(['recent_form', 'bullpen', 'matchup_model']) ? ' via recent_form/bullpen/matchup provenance.' : ' (stats provenance missing).'}`);
+  lines.push(`  WEATHER_ADAPTER: ${backed(['weather']) ? 'BACKED' : 'UNAVAILABLE'}${backed(['weather']) ? ' via weather provenance.' : ' (weather provenance missing).'}`);
+  lines.push(`  CONTEXT_ADAPTER: ${backed(['lineup', 'injuries']) ? 'BACKED' : 'UNAVAILABLE'}${backed(['lineup', 'injuries']) ? ' via lineup/injury provenance.' : ' (context provenance missing).'}`);
+  const modelStatuses = Object.values(coverage?.families ?? {}).filter((family) => family?.status === 'NON_MARKET_COMPOSITE_READY');
+  if (projections && modelStatuses.length) {
+    lines.push(`  MODEL_OUTPUT: BACKED via ${modelStatuses.map((family) => family.label).join(', ')}.`);
+  } else if (projections) {
+    lines.push('  MODEL_OUTPUT: BACKED via projection outputs.');
+  } else {
+    lines.push('  MODEL_OUTPUT: UNAVAILABLE (projection outputs missing).');
+  }
+  lines.push('  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).');
+  return lines.join('\n');
+}
+
+function renderDefaultModelSection(game, analysis) {
+  const coverage = analysis?.final?.coverage ?? buildMarketFamilyCoverage(game, analysis);
+  const bundle = analysis?.final?.context_bundle ?? null;
+  const projections = analysis?.final?.projections ?? null;
+  const awayName = game.away_full ?? game.away ?? 'Away';
+  const homeName = game.home_full ?? game.home ?? 'Home';
+  const scoreProj = projections?.score ?? null;
+  const yrfiProj = projections?.yrfi ?? null;
+  const ksAway = projections?.ks_away ?? null;
+  const ksHome = projections?.ks_home ?? null;
+  const hrProj = projections?.hr ?? null;
+  const lines = ['Game Model Results'];
+  lines.push(`  Game-side composite: ${formatGameSideComposite(game, bundle)}`);
+  if (bundle?.side_scores?.home != null && bundle?.side_scores?.away != null) {
+    lines.push(`  Home composite score: ${fmtPoints(bundle.side_scores.home)}`);
+    lines.push(`  Away composite score: ${fmtPoints(bundle.side_scores.away)}`);
+  } else {
+    lines.push('  Home composite score: BLOCKED_CONTEXT_MISSING');
+    lines.push('  Away composite score: BLOCKED_CONTEXT_MISSING');
+  }
+  lines.push(`  Coverage: ${coverageSummaryLine(coverage)}`);
+  lines.push('  Projected runs:');
+  if (scoreProj) {
+    const winLine = describeMoneyline(scoreProj, { home_team: homeName, away_team: awayName })
+      .replace(/^Projected win probability —\s*/i, '');
+    lines.push(`  Win probability: ${winLine}`);
+    lines.push(`    Away: ${describeTeamRuns(scoreProj, 'away', awayName)}`);
+    lines.push(`    Home: ${describeTeamRuns(scoreProj, 'home', homeName)}`);
+    lines.push(`    Total: ${describeTotal(scoreProj)}`);
+    lines.push(`    Spread/run differential: ${describeRunline(scoreProj, { home_team: homeName })}`);
+  } else {
+    lines.push(`  Win probability: ${projectionFallbackLabel(coverage?.families?.ml)}`);
+    const spreadState = projectionFallbackLabel(coverage?.families?.spread);
+    const totalState = projectionFallbackLabel(coverage?.families?.total);
+    lines.push(`    Away: ${spreadState}`);
+    lines.push(`    Home: ${spreadState}`);
+    lines.push(`    Total: ${totalState}`);
+    lines.push(`    Spread/run differential: ${spreadState}`);
+  }
+  if (yrfiProj) {
+    lines.push(`  YRFI/NRFI: ${describeYrfi(yrfiProj)}`);
+  } else {
+    lines.push(`  YRFI/NRFI: ${projectionFallbackLabel(coverage?.families?.yfri)}`);
+  }
+  if (ksAway || ksHome) {
+    lines.push('  K status: MODELED');
+    lines.push(`    Away starter: ${describeKs(ksAway, `${awayName} starter`)}`);
+    lines.push(`    Home starter: ${describeKs(ksHome, `${homeName} starter`)}`);
+  } else {
+    lines.push(`  K status: ${projectionFallbackLabel(coverage?.families?.ks)}`);
+  }
+  return lines.join('\n');
+}
+
+function defaultNoPickReason(game, analysis) {
+  const bundle = analysis?.final?.context_bundle ?? null;
+  const coverage = analysis?.final?.coverage ?? buildMarketFamilyCoverage(game, analysis);
+  const projections = analysis?.final?.projections ?? null;
+  const lineupStatus = bundle?.provenance?.lineup?.status ?? game?.lineup_status ?? null;
+  if (!lineupIsReady(lineupStatus)) {
+    return 'lineup pending keeps projections provisional';
+  }
+  const modeledFamilies = Object.values(coverage?.families ?? {}).filter((family) => family?.status === 'NON_MARKET_COMPOSITE_READY');
+  if (modeledFamilies.length > 1) {
+    return 'modeled families disagree';
+  }
+  if (modeledFamilies.length === 1) {
+    return 'single modeled family only';
+  }
+  if (projections?.score?.status === 'provisional' || projections?.yrfi?.status === 'provisional') {
+    return 'lineup pending keeps projections provisional';
+  }
+  return 'no modeled family crosses the decision threshold';
+}
+
+function renderCleanGameArticle({ date, game, analysis }) {
+  const matchup = safeMatchup(game);
+  const finalLabel = processStatus(analysis);
+  const shownLabel = displayStatus(finalLabel);
+  const contextBundle = analysis?.final?.context_bundle ?? null;
+  const coverage = analysis?.final?.coverage ?? buildMarketFamilyCoverage(game, analysis);
+  const gameSide = (() => {
+    const awayScore = contextBundle?.side_scores?.away;
+    const homeScore = contextBundle?.side_scores?.home;
+    if (awayScore == null || homeScore == null) return null;
+    if (awayScore === homeScore) return game.away ?? null;
+    return awayScore > homeScore ? (game.away ?? null) : (game.home ?? null);
+  })();
+  const lines = [];
+  lines.push(`${matchup} — ${isEvidenceLean(finalLabel) ? `${shownLabel} ${gameSide ?? ''}`.trim() : 'NO CLEAR PICK'}`);
+  lines.push('='.repeat(Math.min(lines[0].length, 80)));
+  lines.push('');
+  lines.push('TLDR');
+  if (isEvidenceLean(finalLabel)) {
+    lines.push(`  Call: ${shownLabel} — ${gameSide ?? 'favorite'}.`);
+    lines.push(`  Side / market: ${gameSide ?? 'favorite'} (non-market evidence only).`);
+    lines.push('  Why: non-market evidence and the projection model point the same way.');
+  } else {
+    lines.push('  Call: NO CLEAR PICK.');
+    lines.push(`  Why: ${defaultNoPickReason(game, analysis)}.`);
+  }
+  lines.push('  Market board: available for display-only audit; not used in score. Market data is display-only and NOT IN SCORE.');
+  if (contextBundle) {
+    lines.push('  Context: starters, lineup status, weather/park, and recent form sourced from adapters.');
+  } else {
+    lines.push('  Context: no sourced non-market game context was attached.');
+  }
+  lines.push('');
+  lines.push('Game info');
+  lines.push(`  Date: ${date}`);
+  lines.push(`  Matchup: ${matchup}`);
+  lines.push(`  First pitch: ${game.start_ct ?? game.first_pitch_ct ?? 'MISSING'}  /  ${game.start_utc ?? game.first_pitch_utc ?? 'MISSING'}`);
+  lines.push(`  Game key: ${game.game_key ?? 'MISSING'}`);
+  lines.push('');
+  lines.push(renderGameContext(game, contextBundle));
+  lines.push('');
+  lines.push(renderDefaultModelSection(game, analysis));
+  lines.push('');
+  lines.push('Model Consistency Check');
+  lines.push(modelConsistencyCheck(game, analysis));
+  lines.push('');
+  lines.push(sourceLedger(game, analysis));
+  lines.push('');
+  lines.push('Bottom Line');
+  if (isEvidenceLean(finalLabel)) {
+    lines.push(`  Call: ${shownLabel} — ${gameSide ?? 'favorite'}.`);
+  } else {
+    lines.push(`  Call: NO CLEAR PICK — ${defaultNoPickReason(game, analysis)}.`);
+  }
+  return {
+    headline: lines[0],
+    text: lines.join('\n'),
+    decision: shownLabel,
+    best_angle: analysis?.final?.best_angle ?? null,
+    reason: analysis?.final?.reason ?? null,
+    game_key: game.game_key ?? null,
+  };
+}
+
+function buildAuditGameArticle({ date, game, analysis }) {
   const matchup = safeMatchup(game);
   const tickers = eventTickersFor(game);
   const best = bestSection(analysis);
@@ -756,7 +1097,7 @@ export function buildGameArticle({ date, game, analysis }) {
   } else {
     lines.push(`  Call: NO CLEAR PICK${coverage.mode === 'LIMITED' ? ' — limited coverage' : ''}.`);
     lines.push('  Side / market: none — no defensible side on the board.');
-    lines.push(`  Why: ${coverage.mode === 'LIMITED' ? 'limited coverage: only the ML/game-side family has a modeled composite; the rest are board-only or blocked' : 'prices and depth read close to fair'}; no side stands out cleanly.`);
+    lines.push(`  Why: ${coverage.mode === 'LIMITED' ? coverageSummaryLine(coverage) : 'prices and depth read close to fair'}; no side stands out cleanly.`);
   }
   if (hasContext) {
     lines.push('  Context: starters, lineup status, weather/park, and recent form sourced from adapters.');
@@ -891,6 +1232,12 @@ export function buildGameArticle({ date, game, analysis }) {
   };
 }
 
+export function buildGameArticle({ date, game, analysis, audit = false }) {
+  return audit
+    ? buildAuditGameArticle({ date, game, analysis })
+    : renderCleanGameArticle({ date, game, analysis });
+}
+
 function rankPriority(d) {
   const order = {
     [DECISION_STATUSES.STRONG_EVIDENCE_LEAN]: 0,
@@ -984,7 +1331,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   if (passes.length) {
     lines.push('  Pass / no-pick:');
     for (const r of passes) lines.push(`    - ${r.matchup}`);
-    lines.push('  Coverage note: limited coverage; only the ML/game-side family has a modeled composite.');
+    lines.push(`  Coverage note: ${coverageSummaryLine(getFamilyCoverage(passes[0]._it))}`);
   } else {
     lines.push('  Pass / no-pick: none — every game produced at least a watch-level read.');
   }
@@ -993,7 +1340,7 @@ export function buildSlateArticle({ date, items, planMeta = {} }) {
   } else if (marketOnly.length) {
     lines.push(`  Takeaway: ${marketOnly.length} context watch(es), but no evidence picks. Market context is NOT IN SCORE.`);
   } else if (passes.length) {
-    lines.push('  Takeaway: limited coverage; only the ML/game-side family has a modeled composite, and the slate still has no evidence picks.');
+    lines.push(`  Takeaway: ${limitedCoverageSentence(getFamilyCoverage(passes[0]._it))} and the slate still has no evidence picks.`);
   } else {
     lines.push('  Takeaway: no defensible side stands out.');
   }

@@ -21,12 +21,132 @@
 import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
+import { buildPacketPreviewBlock } from '../../shared/cpc-preview-adapter.mjs';
+
+const CHICAGO_TZ = 'America/Chicago';
+const EASTERN_TZ = 'America/New_York';
+
+// --- Source-backed preview integration ---------------------------------------
+// Resolve a Kalshi World Cup event ticker (KXWCGAME-<YYMONDD><HOME3><AWAY3>)
+// from the match's Chicago-local kickoff date + team names, then look up the
+// banked, sanitized research artifact for a customer-safe preview block. Price /
+// market fields never enter this path — the sanitizer + adapter strip and guard
+// them, and the model summary below carries model-side projection language only.
+
+const MONTHS_3 = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+// FIFA 3-letter codes for nations whose code is NOT the first three letters.
+// Anything not listed falls back to first-three-uppercase (Norway→NOR, etc.).
+const FIFA_CODE_OVERRIDES = {
+  'South Africa': 'RSA',
+  'South Korea': 'KOR',
+  'Korea Republic': 'KOR',
+  'Saudi Arabia': 'KSA',
+  'United States': 'USA',
+  'Netherlands': 'NED',
+  'Switzerland': 'SUI',
+  'Ivory Coast': 'CIV',
+  'Costa Rica': 'CRC',
+  'New Zealand': 'NZL',
+  'Cape Verde': 'CPV',
+};
+
+function teamCode(name) {
+  const clean = String(name ?? '').trim();
+  if (FIFA_CODE_OVERRIDES[clean]) return FIFA_CODE_OVERRIDES[clean];
+  return clean.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'UNK';
+}
+
+function chicagoYmd(value, fallbackDate) {
+  const d = value ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) {
+    const [y, m, day] = String(fallbackDate ?? '').split('-');
+    return { y, m, d: day };
+  }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CHICAGO_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return { y: get('year'), m: get('month'), d: get('day') };
+}
+
+function worldCupEventTicker(match, packetDate) {
+  const { y, m, d } = chicagoYmd(match?.kickoff_utc, packetDate);
+  if (!y || !m || !d) return null;
+  const mon = MONTHS_3[parseInt(m, 10) - 1];
+  if (!mon) return null;
+  return `KXWCGAME-${y.slice(2)}${mon}${d}${teamCode(match?.home_team)}${teamCode(match?.away_team)}`;
+}
+
+// Market-neutral model summary for the preview's model-read fields. Only
+// model-side (price-free) projection language is passed; never odds/price.
+function worldCupModelSummary(match, board) {
+  const gp = projectionFor(board);
+  const summary = { result_edge: resultEdgePhrase(board, match) };
+  if (gp) {
+    summary.projection = `${match.home_team} ${gp.projected_home_goals}-${gp.projected_away_goals} ${match.away_team}`;
+    summary.total_environment = totalProfile(gp.projected_total_goals);
+  }
+  summary.caveat = 'Pre-lineup; latest prior team composite, not confirmed XI.';
+  return summary;
+}
+
+// Build the indented "Source-backed preview" sub-block for one match, or null
+// when no banked artifact exists (the existing model forecast lines stand on
+// their own — we never invent a source-backed block without a source).
+function matchPreviewLines(match, board, packetDate, researchRoot) {
+  const eventTicker = worldCupEventTicker(match, packetDate);
+  if (!eventTicker) return null;
+  let block;
+  try {
+    block = buildPacketPreviewBlock({
+      date: packetDate,
+      packet_family: 'sports',
+      packet_type: 'worldcup-match',
+      route: 'worldcup_match',
+      submarket: 'match_preview',
+      event_id: eventTicker,
+      model: worldCupModelSummary(match, board),
+      root: researchRoot,
+    });
+  } catch {
+    return null;
+  }
+  if (!block || !block.artifact_found || !block.text) return null;
+  const lines = ['', '  Source-backed preview:'];
+  for (const line of String(block.text).split('\n')) {
+    lines.push(line ? `    ${line}` : '');
+  }
+  return lines;
+}
+
+function generatedDisplay(d = new Date()) {
+  const ct = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  const et = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  return `${ct} / ${et}`;
+}
+
 function header(title, date) {
   return [
     `=== Captain World Cup — CPC Packet: ${title} ===`,
     `date: ${date}`,
     `packet_type: worldcup-matchday`,
-    `Generated: ${new Date().toISOString()}`,
+    `Generated: ${generatedDisplay()}`,
     `No trades placed by this workflow. Research only.`,
     ``,
   ].join('\n');
@@ -40,201 +160,465 @@ function pct(p) {
   return p == null ? 'N/A' : `${(p * 100).toFixed(0)}%`;
 }
 
-function formatLane(lane) {
-  // Blocked lanes render as a single honest line — no fake model half.
+function safeStage(match) {
+  return match?.group ?? match?.stage ?? 'Group stage';
+}
+
+function kickoffDisplay(match) {
+  if (!match?.kickoff_utc) return 'Kickoff: TBD';
+  const d = new Date(match.kickoff_utc);
+  if (Number.isNaN(d.getTime())) return 'Kickoff: TBD';
+  const ct = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ,
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  const et = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d);
+  return `Kickoff: ${ct} / ${et}`;
+}
+
+function resultEdgePhrase(board, match) {
+  const lane = (board?.lanes || []).find((entry) => entry.lane === 'match_winner');
+  if (!lane || lane.recommendation === 'N/A') return 'No clear result edge';
+  if (/HOME/.test(lane.recommendation)) return `${match.home_team} result edge`;
+  if (/AWAY/.test(lane.recommendation)) return `${match.away_team} result edge`;
+  if (/DRAW/.test(lane.recommendation)) return 'Draw edge';
+  return 'No clear result edge';
+}
+
+function projectionFor(board) {
+  const gp = board?.goal_projection;
+  return gp && gp.projection_status === 'PROJECTED' ? gp : null;
+}
+
+function goalForecastLine(match, board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Goal forecast: Model unavailable: missing model layer';
+  return `Goal forecast: Projected goals: ${match.home_team} ${gp.projected_home_goals}, ${match.away_team} ${gp.projected_away_goals}`;
+}
+
+function totalGoalsForecastLine(board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Total goals forecast: Model unavailable: missing model layer';
+  return `Total goals forecast: Projected total ${gp.projected_total_goals}`;
+}
+
+function bttsForecastLine(board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Both-score forecast: Model unavailable: missing model layer';
+  const lane = (board?.lanes || []).find((entry) => entry.lane === 'both_teams_to_score');
+  return `Both-score forecast: ${pct(lane?.p_btts_yes, 0)}`;
+}
+
+function spreadForecastLine(match, board) {
+  const gp = projectionFor(board);
+  if (!gp) return 'Goal-spread forecast: Model unavailable: missing model layer';
+  const margin = gp.projected_goal_margin_home >= 0
+    ? `${match.home_team} +${gp.projected_goal_margin_home.toFixed(2)} goals`
+    : `${match.away_team} +${Math.abs(gp.projected_goal_margin_home).toFixed(2)} goals`;
+  return `Goal-spread forecast: ${margin}; no line available to grade`;
+}
+
+function scoreGridCheck(board) {
+  const verdict = board?.goal_projection?.cross_check_1x2?.verdict;
+  if (verdict === 'CONSISTENT') return 'Score-grid check: models aligned';
+  if (verdict === 'MISMATCH') return 'Score-grid check: model disagreement';
+  if (verdict) return 'Score-grid check: model check limited';
+  return 'Score-grid check: model unavailable';
+}
+
+// --- Customer-facing translation of internal model enums ---------------------
+// Internal enum names (PICK / LEAN / WATCH / FADE, CONSISTENT / MISMATCH, …) are
+// kept on the board objects for compatibility but are NEVER rendered raw. The
+// customer reads soccer / handicapping language only; the raw enums live in the
+// audit JSON. Price/market fields still never touch any model value here.
+
+const DISPLAY_LABELS = {
+  match_winner: 'Match Result',
+  spread_full_game: 'Goal Spread',
+  total_goals: 'Total Goals',
+  both_teams_to_score: 'BTTS',
+};
+function displayLabel(lane) {
+  return DISPLAY_LABELS[lane.lane] ?? lane.label;
+}
+
+function confidenceLine(confidence, provisional) {
+  return `    Confidence: ${confidence ?? 'low'}${provisional ? ', pre-lock' : ''}`;
+}
+
+// Side + strength for a result-style recommendation, in soccer language.
+function modelSidePhrase(rec, match) {
+  const side = /HOME/.test(rec) ? match.home_team
+    : /AWAY/.test(rec) ? match.away_team
+    : /DRAW/.test(rec) ? 'Draw'
+    : null;
+  if (rec.startsWith('PICK') && side) return `Clear model side: ${side}`;
+  if (rec.startsWith('LEAN') && side) return `Slight model side: ${side}`;
+  return 'No clear side';
+}
+
+// Generic translated model state for any non-main lane (last-resort fallback).
+function modelStatePhrase(rec) {
+  if (rec.startsWith('PICK')) return 'Actionable model edge';
+  if (rec === 'LEAN_FADE') return 'Opposite-side value (model rejects price)';
+  if (rec.startsWith('LEAN')) return 'Slight model advantage';
+  if (rec === 'WATCH') return 'Monitor — no clear actionable edge';
+  if (rec === 'BLOCKED_MODEL_LAYER_MISSING') return 'Model unavailable: missing model layer';
+  return rec;
+}
+
+function crossCheckPhrase(verdict) {
+  if (verdict === 'CONSISTENT') return 'models aligned';
+  if (verdict === 'MISMATCH') return 'model disagreement';
+  return 'monitor model disagreement';
+}
+function crossCheckSentence(verdict) {
+  if (verdict === 'CONSISTENT') return 'The goal-distribution model and match-result model point to the same side.';
+  if (verdict === 'MISMATCH') return 'The goal-distribution model and match-result model point to different sides.';
+  return 'The goal-distribution model and match-result model differ slightly; monitor before lock.';
+}
+
+function drawReadPhrase(evaluation) {
+  if (evaluation === 'ACTIONABLE') return 'draw in play';
+  if (evaluation === 'WATCH_ONLY') return 'draw monitor';
+  if (evaluation === 'BLOCKED_MODEL_LAYER_MISSING') return 'unavailable';
+  return evaluation ?? 'n/a';
+}
+
+function totalProfile(total) {
+  if (total == null) return 'unknown goal environment';
+  if (total >= 3.0) return 'high-scoring profile';
+  if (total >= 2.7) return 'neutral-to-over goal environment';
+  if (total >= 2.4) return 'neutral total profile';
+  if (total >= 2.1) return 'neutral-to-under goal environment';
+  return 'low-scoring profile';
+}
+
+// Short side phrase for the summary/list sections (TLDR etc.).
+function laneSidePhrase(lane, match) {
+  const rec = lane.recommendation;
+  if (lane.lane === 'match_winner') {
+    return /HOME/.test(rec) ? match.home_team : /AWAY/.test(rec) ? match.away_team
+      : /DRAW/.test(rec) ? 'Draw' : 'no clear side';
+  }
+  if (lane.lane === 'total_goals') {
+    return /OVER/.test(rec) ? `Over ${lane.total_line}` : /UNDER/.test(rec) ? `Under ${lane.total_line}` : 'no clear total side';
+  }
+  if (lane.lane === 'spread_full_game') {
+    return /COVER_HOME/.test(rec) ? `${match.home_team} cover` : /COVER_AWAY/.test(rec) ? `${match.away_team} cover`
+      : rec === 'LEAN_FADE' ? 'underdog cushion' : 'no clear spread side';
+  }
+  if (lane.lane === 'both_teams_to_score') {
+    return rec === 'YES' ? 'Both teams to score' : rec === 'NO' ? 'No / clean sheet' : 'no clear BTTS side';
+  }
+  return 'model side';
+}
+
+function formatLane(lane, match, provisional) {
+  // Model-unavailable lanes render as a single honest line — no fake model half.
   if (lane.recommendation === 'BLOCKED_MODEL_LAYER_MISSING') {
     const ref = lane.market_context
       ? ` | market ref (NOT IN SCORE): ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
       : '';
-    return `  [${lane.label}] BLOCKED_MODEL_LAYER_MISSING — ${lane.explanation}${ref}\n`;
+    return `  [${displayLabel(lane)}] Model unavailable: missing model layer.${ref}\n`;
   }
 
   const lines = [];
-  lines.push(`  [${lane.label}] MODEL: ${lane.recommendation} | composite H:${lane.composite_score_home ?? 'MISSING'} A:${lane.composite_score_away ?? 'MISSING'} | confidence:${lane.confidence}`);
+  const label = displayLabel(lane);
+
   if (lane.lane === 'match_winner' && lane.p_home != null) {
-    lines.push(`    1X2: H ${pct(lane.p_home)} / D ${pct(lane.p_draw)} / A ${pct(lane.p_away)} | winner_lean:${lane.winner_lean} | draw_risk:${lane.draw_risk} | draw:${lane.draw_evaluation}`);
+    lines.push(`  [${label}] ${modelSidePhrase(lane.recommendation, match)}`);
+    lines.push(`    Home win profile: ${pct(lane.p_home)}`);
+    lines.push(`    Draw risk: ${pct(lane.p_draw)}`);
+    lines.push(`    Away win profile: ${pct(lane.p_away)}`);
+    if (lane.cross_check_1x2) {
+      lines.push(`    Score-grid cross-check: ${crossCheckPhrase(lane.cross_check_1x2.verdict)}`);
+    }
+    lines.push(`    Basis: composite H ${lane.composite_score_home ?? 'MISSING'} vs A ${lane.composite_score_away ?? 'MISSING'}`);
+    if (lane.explanation && /Downgraded from PICK/.test(lane.explanation)) {
+      lines.push('    Pre-lineup: model side held back until lineups confirm');
+    }
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'total_goals' && lane.projected_total_goals != null) {
+    lines.push(`  [${label}] Goal projection: ${lane.projected_total_goals}`);
+    if (lane.p_over != null) {
+      const view = /OVER/.test(lane.recommendation) ? `Over ${lane.total_line} profile`
+        : /UNDER/.test(lane.recommendation) ? `Under ${lane.total_line} profile`
+        : 'no clear total side';
+      lines.push(`    Total view: ${view}`);
+      lines.push(`    Over profile: ${pct(lane.p_over)} / Under profile: ${pct(lane.p_under)}`);
+    } else {
+      lines.push('    Total view: no line available to grade');
+    }
+    lines.push(`    Profile: ${totalProfile(lane.projected_total_goals)}`);
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'both_teams_to_score' && lane.p_btts_yes != null) {
+    lines.push(`  [${label}] Both-score probability: ${pct(lane.p_btts_yes)}`);
+    const view = lane.recommendation === 'YES' ? 'Yes profile'
+      : lane.recommendation === 'NO' ? 'No profile'
+      : 'balanced profile / no clear BTTS side';
+    lines.push(`    BTTS view: ${view}`);
+    const csr = lane.p_btts_no >= 0.6 ? 'high' : lane.p_btts_no >= 0.45 ? 'moderate' : 'low';
+    lines.push(`    Clean-sheet risk: ${csr}`);
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'spread_full_game' && lane.projected_goal_margin_home != null) {
+    const m = lane.projected_goal_margin_home;
+    const marginPhrase = m === 0 ? 'even (0.0 goals)'
+      : m > 0 ? `${match.home_team} +${m.toFixed(2)} goals`
+      : `${match.away_team} +${Math.abs(m).toFixed(2)} goals`;
+    lines.push(`  [${label}] Projected margin: ${marginPhrase}`);
+    if (lane.p_cover != null) {
+      const view = /COVER_HOME/.test(lane.recommendation) ? 'home cover profile'
+        : /COVER_AWAY/.test(lane.recommendation) ? 'away cover profile'
+        : lane.recommendation === 'LEAN_FADE' ? 'underdog cushion profile'
+        : 'no clear spread side';
+      lines.push(`    Spread view: ${view}`);
+      lines.push(`    Cover profile: ${pct(lane.p_cover)} (${lane.spread_side} ${lane.spread_line})`);
+    } else {
+      lines.push('    Spread view: no line available to grade');
+      lines.push(`    Profile: ${m === 0 ? 'even matchup' : 'favorite advantage'}, not enough line context for a cover call`);
+    }
+    lines.push(confidenceLine(lane.confidence, provisional));
+  } else {
+    lines.push(`  [${label}] ${modelStatePhrase(lane.recommendation)} | confidence:${lane.confidence}`);
   }
+
+  // Market half — display only, always labeled NOT IN SCORE.
   if (lane.market_context) {
     const mc = lane.market_context;
     const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
-    const edges = [
+    const gaps = [
       lane.edge_home_pp != null ? `H:${lane.edge_home_pp}pp` : null,
       lane.edge_draw_pp != null ? `D:${lane.edge_draw_pp}pp` : null,
       lane.edge_away_pp != null ? `A:${lane.edge_away_pp}pp` : null,
-    ].filter(Boolean).join(' ') || 'none (no model fair probability)';
-    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | edge ${edges}`);
+    ].filter(Boolean).join(' ') || 'n/a (no model fair probability)';
+    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model−market gap ${gaps}`);
   } else {
-    lines.push(`    MARKET (NOT IN SCORE): no market context attached`);
+    lines.push('    MARKET (NOT IN SCORE): no market context attached');
   }
-  lines.push(`    why: ${lane.explanation}`);
   lines.push('');
   return lines.join('\n');
 }
 
-function formatMatch(match, board) {
+// Favored side label for a match, derived from model output only (price-free).
+function favoredTeam(board, match) {
+  const phrase = resultEdgePhrase(board, match);
+  if (phrase === `${match.home_team} result edge`) return match.home_team;
+  if (phrase === `${match.away_team} result edge`) return match.away_team;
+  if (phrase === 'Draw edge') return 'even (draw edge)';
+  return 'no clear edge';
+}
+
+function slateStatusLabel(match) {
+  return match?.lineup_status === 'lineup_confirmed'
+    ? 'LINEUP LOCKED (official XIs)'
+    : 'scheduled — lineups not yet announced';
+}
+
+// Unnumbered daily slate preview. Pure model/structure data; no advancement
+// math is invented, no market/price content is referenced.
+function slatePreviewBlock(matches = [], boards = []) {
   const lines = [];
-  lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${match.stage}]`);
-  lines.push(`  kickoff: ${match.kickoff_utc ?? 'TBD'}`);
-  lines.push(`  lineup_status: ${match.lineup_status ?? 'unknown'}`);
+  lines.push(section('Daily Slate Preview — Why Today Matters'));
+  lines.push("  Today's matches:");
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    lines.push(`   • ${m.home_team} vs ${m.away_team} [${safeStage(m)}] — ${kickoffDisplay(m).replace(/^Kickoff: /, '')} — ${slateStatusLabel(m)}`);
+  }
+  // Group rollup.
+  const groups = new Map();
+  for (const m of matches) {
+    const g = m.group ?? m.stage ?? 'Group stage';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(`${m.home_team} vs ${m.away_team}`);
+  }
   lines.push('');
-
-  const probs = board.probabilities;
-  if (probs && probs.p_home != null) {
-    lines.push(`  1X2 model: H ${Math.round(probs.p_home * 100)}% / D ${Math.round(probs.p_draw * 100)}% / A ${Math.round(probs.p_away * 100)}% | draw_risk:${probs.draw_risk} | draw read:${probs.draw_evaluation}`);
-    if (probs.goal_environment) {
-      lines.push(`  goal environment (proxy): total ${probs.goal_environment.xg_total} (H ${probs.goal_environment.xg_home} / A ${probs.goal_environment.xg_away})`);
-    }
-    lines.push('');
-  } else if (probs?.blocked_reason) {
-    lines.push(`  1X2 model: BLOCKED — ${probs.blocked_reason}`);
-    lines.push('');
+  for (const [g, fixtures] of groups) {
+    lines.push(`  ${g} today: ${fixtures.join('; ')}.`);
   }
-
-  for (const lane of board.lanes || []) {
-    // Keep the board compact: skip not-applicable lanes and lanes the model
-    // has no logic for (empty explanation) — they live in the audit JSON.
-    if (lane.recommendation === 'N/A' || !lane.explanation) continue;
-    lines.push(formatLane(lane));
+  // Model-projected favorites (forecast only).
+  const favs = matches.map((m, i) => favoredTeam(boards[i], m)).filter((f) => f && f !== 'no clear edge');
+  if (favs.length) {
+    lines.push(`  Model-projected edges (forecast only): ${favs.join(', ')}.`);
   }
+  const lockedNames = matches.filter((m) => m.lineup_status === 'lineup_confirmed').map((m) => `${m.home_team} vs ${m.away_team}`);
+  lines.push('  Advancement / standings math: not sourced — omitted rather than invented.');
+  if (lockedNames.length) {
+    lines.push(`  Lineup/source: official starting XIs confirmed for ${lockedNames.join(', ')}; remaining matches are pre-lineup and use the prior team composite.`);
+  } else {
+    lines.push('  Lineup/source: no official starting XIs confirmed yet; all matches use the prior team composite.');
+  }
+  lines.push('');
+  return lines.join('\n');
+}
 
-  lines.push(`  overall_confidence: ${board.overall_confidence}`);
-  lines.push(`  pick_count:${board.pick_count} lean_count:${board.lean_count} watch_count:${board.watch_count}`);
+// Confirmed starting-XI lines for the lineup-locked match block. Reads only
+// name/position/number/formation and the source label — never price fields.
+function lineupLockedLines(match) {
+  const md = match?.matchday;
+  if (!md) return [];
+  const out = [];
+  for (const side of ['home', 'away']) {
+    const lu = md[side]?.lineup;
+    if (!lu || !Array.isArray(lu.starting_xi) || !lu.starting_xi.length) continue;
+    const team = lu.team_name ?? md[side]?.team ?? (side === 'home' ? match.home_team : match.away_team);
+    const xi = lu.starting_xi
+      .map((p) => `${p.number ?? '-'} ${p.name ?? '?'}`)
+      .join(', ');
+    out.push(`  Confirmed XI — ${team}${lu.formation ? ` (${lu.formation})` : ''}: ${xi}`);
+  }
+  if (md.source?.provider) {
+    const ev = md.source.event_id ? ` (event ${md.source.event_id})` : '';
+    const label = `${md.source.provider.toUpperCase()} ${md.source.league ?? ''}`.trim().replace(/\s+/g, ' ');
+    out.push(`  Lineup source: ${label}${ev}`);
+  }
+  return out;
+}
+
+function formatMatch(match, board, provenance = null, previewLines = null) {
+  const lines = [];
+  const locked = match?.lineup_status === 'lineup_confirmed';
+  const gp = projectionFor(board);
+  lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
+  lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
+  if (locked) {
+    lines.push('  Status: LINEUP LOCKED — official starting XI confirmed');
+    lines.push(`  Model basis: lineups confirmed; projection still uses the latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''} (no lineup-adjusted model path)`);
+  } else {
+    lines.push('  Status: Pre-lock, lineups not confirmed');
+    lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's confirmed XI`);
+  }
+  lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
+  if (gp) {
+    lines.push(`  ${goalForecastLine(match, board).replace(/^Goal forecast: /, 'Goal forecast: ')}`);
+    lines.push(`  ${totalGoalsForecastLine(board).replace(/^Total goals forecast: /, 'Total goals forecast: ')}`);
+    lines.push(`  ${bttsForecastLine(board).replace(/^Both-score forecast: /, 'Both-score forecast: ')}`);
+    lines.push(`  ${spreadForecastLine(match, board).replace(/^Goal-spread forecast: /, 'Goal-spread forecast: ')}`);
+    lines.push(`  ${scoreGridCheck(board)}`);
+  } else {
+    lines.push('  Goal forecast: Model unavailable: missing model layer');
+    lines.push('  Total goals forecast: Model unavailable: missing model layer');
+    lines.push('  Both-score forecast: Model unavailable: missing model layer');
+    lines.push('  Goal-spread forecast: Model unavailable: missing model layer');
+    lines.push('  Score-grid check: model unavailable');
+  }
+  if (locked) {
+    for (const line of lineupLockedLines(match)) lines.push(line);
+  }
+  if (Array.isArray(previewLines) && previewLines.length) {
+    for (const line of previewLines) lines.push(line);
+  }
   lines.push('');
   return lines.join('\n');
 }
 
 export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const date = meta.date ?? new Date().toISOString().slice(0, 10);
-  const packetStage = meta.packet_stage ?? 'morning_board';
+  const provenance = meta.composite_provenance ?? null;
+  const research = meta.research ?? null;
+  const researchRoot = meta.research_root ?? undefined;
+  const packetStage = meta.packet_stage ?? null;
+  const confirmedCount = (matches || []).filter((m) => m?.lineup_status === 'lineup_confirmed').length;
+  const isLineupLocked = packetStage === 'lineup_locked' || confirmedCount > 0;
+  const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
   const lines = [];
-  lines.push(header(packetStage === 'lineup_locked' ? 'LINEUP-LOCKED BOARD' : 'MATCHDAY MORNING BOARD', date));
+  lines.push(header('MATCHDAY FORECAST', date));
+  if (provenance?.provisional) {
+    if (isLineupLocked) {
+      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}; ${confirmedCount} match(es) now carry confirmed official starting XIs (see per-match status).`);
+      lines.push('Lineup-aware note: confirmed lineups are shown per match; projections still use the prior team composite because no lineup-adjusted model path is sourced yet.\n');
+    } else {
+      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's confirmed XI.`);
+      lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
+    }
+  }
 
-  // 1. TLDR BOARD
-  lines.push(section('1. TLDR BOARD'));
-  const allPicks = [];
-  const allLeans = [];
-  const allWatches = [];
+  // Daily slate preview — why today matters (unnumbered; precedes section 1).
+  lines.push(slatePreviewBlock(matches, boards));
+
+  // 1. Matchday Forecast
+  lines.push(section('1. Matchday Forecast'));
   for (let i = 0; i < matches.length; i++) {
-    const board = boards[i];
-    for (const lane of board.lanes || []) {
-      if (lane.recommendation.startsWith('PICK')) allPicks.push({ match: matches[i], lane });
-      else if (lane.recommendation.startsWith('LEAN')) allLeans.push({ match: matches[i], lane });
-      else if (lane.recommendation === 'WATCH') allWatches.push({ match: matches[i], lane });
-    }
-  }
-
-  if (allPicks.length === 0 && allLeans.length === 0) {
-    lines.push('  No PICKs or LEANs today. Board is WATCH or PASS.\n');
-  } else {
-    for (const { match, lane } of [...allPicks, ...allLeans].slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: ${lane.recommendation} (confidence:${lane.confidence})`);
-    }
-    lines.push('');
-  }
-
-  // 1b. MATCH BOARDS — model half and market half per lane
-  lines.push(section('MATCH BOARDS (model vs market)'));
-  for (let i = 0; i < matches.length; i++) {
-    lines.push(formatMatch(matches[i], boards[i]));
-  }
-
-  // 2. TOP EDGE CANDIDATES
-  lines.push(section('2. TOP EDGE CANDIDATES'));
-  const edges = [];
-  for (let i = 0; i < matches.length; i++) {
-    const board = boards[i];
-    for (const lane of board.lanes || []) {
-      if (lane.edge_home_pp != null || lane.edge_away_pp != null) {
-        const e = Math.abs(lane.edge_home_pp ?? 0) > Math.abs(lane.edge_away_pp ?? 0)
-          ? lane.edge_home_pp
-          : lane.edge_away_pp;
-        edges.push({ match: matches[i], lane, edge: e });
-      }
-    }
-  }
-  edges.sort((a, b) => Math.abs(b.edge ?? 0) - Math.abs(a.edge ?? 0));
-  if (edges.length === 0) {
-    lines.push('  No market context available for edge calculation.\n');
-  } else {
-    for (const { match, lane, edge } of edges.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: edge=${edge > 0 ? '+' : ''}${edge}pp`);
-    }
-    lines.push('');
-  }
-
-  // 3. WATCHLIST / TRIGGER BOARD
-  lines.push(section('3. WATCHLIST / TRIGGER BOARD'));
-  if (allWatches.length === 0) {
-    lines.push('  Nothing on watchlist.\n');
-  } else {
-    for (const { match, lane } of allWatches.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: ${lane.recommendation}`);
-    }
-    lines.push('');
-  }
-
-  // 4. FADES / OVERPRICED
-  lines.push(section('4. FADES / OVERPRICED'));
-  const fades = edges.filter(e => (e.edge ?? 0) < -5);
-  if (fades.length === 0) {
-    lines.push('  No clear fades today.\n');
-  } else {
-    for (const { match, lane, edge } of fades.slice(0, 5)) {
-      lines.push(`  • ${match.home_team} vs ${match.away_team} — ${lane.label}: model below market by ${Math.abs(edge)}pp`);
-    }
-    lines.push('');
-  }
-
-  // 4b. Market context note
-  lines.push(section('Market Context — NOT IN SCORE'));
-  lines.push('  All market pricing is display context only and never enters composite scoring.\n');
-
-  // 5. BLOCKED / NEEDS SOURCE
-  lines.push(section('5. BLOCKED / NEEDS SOURCE'));
-  let blockedCount = 0;
-  for (let i = 0; i < matches.length; i++) {
-    const board = boards[i];
     const match = matches[i];
-    if (board.overall_confidence === 'low' || match.lineup_status === 'lineup_pending') {
-      blockedCount++;
-      const missing = [];
-      if (match.lineup_status === 'lineup_pending') missing.push('lineups');
-      if (board.composite_score_home == null) missing.push('home composite');
-      if (board.composite_score_away == null) missing.push('away composite');
-      lines.push(`  • ${match.home_team} vs ${match.away_team}: blocked — missing ${missing.join(', ')}`);
-    }
-    const blockedLanes = (board.lanes || []).filter(l => l.recommendation === 'BLOCKED_MODEL_LAYER_MISSING');
-    if (blockedLanes.length > 0) {
-      blockedCount++;
-      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${blockedLanes.length} market lane(s) BLOCKED_MODEL_LAYER_MISSING — ${blockedLanes.map(l => l.label).join(', ')}`);
+    const board = boards[i];
+    const projection = projectionFor(board);
+    const edge = resultEdgePhrase(board, match);
+    if (projection) {
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${edge}; projected goals ${projection.projected_home_goals}-${projection.projected_away_goals}; projected total ${projection.projected_total_goals}`);
+    } else {
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: ${edge}; projected goals Model unavailable: missing model layer`);
     }
   }
-  if (blockedCount === 0) lines.push('  No blocked matches.\n');
-  else lines.push('');
+  lines.push('');
 
-  // 6. AUDIT ARTIFACTS
-  lines.push(section('6. AUDIT ARTIFACTS'));
-  lines.push('  Full raw market inventory, source JSON, and model layers are stored');
-  lines.push('  in the audit directory alongside this packet.\n');
+  // 2. Match Breakdowns
+  lines.push(section('2. Match Breakdowns'));
+  for (let i = 0; i < matches.length; i++) {
+    const previewLines = matchPreviewLines(matches[i], boards[i], date, researchRoot);
+    lines.push(formatMatch(matches[i], boards[i], provenance, previewLines));
+  }
 
-  // 7. SOURCE QUALITY / MODEL COMPLETENESS
-  lines.push(section('7. SOURCE QUALITY / MODEL COMPLETENESS'));
+  // 3. Market Comparison
+  lines.push(section('3. Market Comparison'));
+  if (!hasMarketContext) {
+    lines.push('  Market comparison: no market lines attached; model output shown as forecast only.');
+    lines.push('');
+  } else {
+    lines.push('  Market comparison: market lines attached; model output shown as forecast only.');
+    lines.push('  Market prices are display-only when present and are NOT IN SCORE.\n');
+  }
+
+  // 4. Model Limits
+  lines.push(section('4. Model Limits'));
+  lines.push('  First-half markets are unavailable because no half-split model layer is sourced.');
+  lines.push('  Pre-lock forecasts use the latest prior team composite until starting XI data is available.\n');
+
+  // 5. Source Quality
+  lines.push(section('5. Source Quality'));
   let totalLayers = 0;
   let presentLayers = 0;
   for (const board of boards) {
     totalLayers += (board.layers_total ?? 14) * 2;
     presentLayers += (board.layers_present_home ?? 0) + (board.layers_present_away ?? 0);
   }
+  const researchStatus = research?.status ?? 'PERPLEXITY_UNAVAILABLE';
   lines.push(`  Matches evaluated: ${matches.length}`);
-  lines.push(`  Packet stage: ${packetStage}`);
-  lines.push(`  Overall data coverage: ${presentLayers}/${totalLayers} side-layers present`);
-  lines.push(`  Pre-lineup confidence downgrade: ${packetStage === 'morning_board' ? 'YES' : 'NO'}`);
+  lines.push(`  Side-layer coverage: ${presentLayers}/${totalLayers}`);
+  if (confirmedCount > 0) {
+    lines.push(`  Lineup status: official starting XIs confirmed for ${confirmedCount}/${matches.length} match(es); the rest are pre-lineup.`);
+  } else {
+    lines.push('  Pre-lock status: lineups are not confirmed');
+  }
+  lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's confirmed XI.`);
+  if (researchStatus === 'ok') {
+    const confirmed = research?.source_quality?.confirmed;
+    const matchCount = matches.length;
+    const captured = research?.captured;
+    const capturedCount = Number.isFinite(captured)
+      ? captured
+      : (Number.isFinite(confirmed) ? confirmed : matchCount);
+    lines.push(`  Perplexity research: live supplemental context captured for ${capturedCount}/${matchCount} matches.`);
+  } else {
+    lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
+  }
+  lines.push('  Market prices are display-only when present and are not used in the model.');
   lines.push('');
 
   lines.push('─'.repeat(70));
-  lines.push('No trades placed by this workflow.');
-  lines.push('No bankroll advice. No order placement. Research only.');
+  lines.push('Market prices are display-only when present and are NOT IN SCORE.');
+  lines.push('No trades placed. Research only.');
   lines.push('─'.repeat(70));
 
   return lines.join('\n');

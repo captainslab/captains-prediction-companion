@@ -3,10 +3,12 @@ import { handleCaptainLabsApiRequest } from './captainLabsApi.js'
 import { createPipelineService } from './pipelineService.js'
 import { createNoteStore } from './noteStore.js'
 import { loadDotEnv } from './env.js'
+import { ensurePerplexityEnvLoaded, hasPerplexityKey } from '../scripts/mentions/mentions-research-perplexity.mjs'
 import { fetchKalshiMarkets } from './marketSources.js'
 import { buildEventMarketPlan, buildEventMarketPlanSummary, buildFocusedKalshiMarketPlan } from './eventMarketTool.js'
 import { buildEventMarketWorkflowPrompt } from './eventMarketPrompt.js'
 import { analyzeCompositeMarketLink } from '../scripts/mlb/link-composite-card.mjs'
+import { buildResearchTools } from './researchTools.js'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
@@ -17,6 +19,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import * as z from 'zod/v4'
 
 loadDotEnv()
+// Make the Perplexity key available to the mentions research tools from boot,
+// sourcing it from the repo .env/.env.local (read-only, silent, never logged).
+// The home-dir key file (~/.config/cpc/perplexity.key) stays as a fallback.
+ensurePerplexityEnvLoaded()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -111,6 +117,7 @@ function createServer(options = {}) {
         noteCount: noteStore.stats().count,
         launchedAt: new Date().toISOString(),
         transport: 'streamable-http',
+        perplexityKeyAvailable: hasPerplexityKey(),
       }
 
       return {
@@ -141,16 +148,14 @@ function createServer(options = {}) {
     )
   }
 
-  server.registerTool(
-    'analyze_kalshi_market_url',
-    {
-      description:
-        'Call this immediately when the user pastes a kalshi.com/markets URL. This is the primary read-only URL analysis tool for Captains Prediction Companion. Input: one Kalshi market URL. Output: the authoritative compact user-facing card JSON only.',
-      annotations: { readOnlyHint: true },
-      inputSchema: { url: z.string().min(1) },
-    },
-    async ({ url }) => analyzeKalshiMarketUrlTool({ url }, { pipelineService: options.pipelineService })
-  )
+  // Full-output research tools (analyze, mentions, settled history, MLB preview).
+  // Each returns complete text + full structured object; pass compact:true for the short card.
+  for (const tool of buildResearchTools({
+    pipelineService: options.pipelineService,
+    marketLinkAnalyzer: options.marketLinkAnalyzer,
+  })) {
+    server.registerTool(tool.name, tool.config, tool.handler)
+  }
 
   return server
 }
