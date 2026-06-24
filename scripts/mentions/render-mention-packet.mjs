@@ -36,6 +36,7 @@ const GAP_STATE = 'research gap';
 const GAP_LABEL = 'RESEARCH GAP';
 const QUALIFICATION_STATE = 'qualification fallback';
 const QUALIFICATION_LABEL = 'QUALIFICATION RISK';
+const TRUMP_QUALIFICATION_CHECK = '0. QUALIFICATION CHECK';
 const TIER_RANK = Object.freeze({ 'STRONG YES': 4, 'WEAK YES': 3, 'WEAK NO': 2, 'STRONG NO': 1, [GAP_LABEL]: 0 });
 const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
 const COLD_CURRENT_CONTEXT_RE = /\b(no direct current context|weak current context|not a topic|not a focus|not a primary|not primary|not central|not relevant|irrelevant|cold|no current context|current context cold)\b/i;
@@ -189,6 +190,184 @@ function termHasSourceRefs(term, note = {}) {
     || (Array.isArray(term?.research_term_note?.citations) && term.research_term_note.citations.length > 0);
 }
 
+function lowerJoined(parts) {
+  return parts.map((part) => String(part ?? '').trim()).filter(Boolean).join(' ').toLowerCase();
+}
+
+function packetRouteText(input = {}) {
+  return lowerJoined([
+    input?.research_provenance?.research_route,
+    input?.event?.title,
+    input?.event?.subtitle ?? input?.event?.sub_title,
+  ]);
+}
+
+function packetQualificationText(input = {}) {
+  return lowerJoined([
+    input?.research_provenance?.research_route,
+    input?.event?.title,
+    input?.event?.subtitle ?? input?.event?.sub_title,
+    input?.event?.rules_primary,
+    input?.event?.rules_secondary,
+  ]);
+}
+
+function isTrumpPacket(input = {}) {
+  const route = String(input?.research_provenance?.research_route ?? '').trim().toLowerCase();
+  if (route.startsWith('trump_')) return true;
+  return /\btrump\b/.test(packetRouteText(input));
+}
+
+export function buildTrumpQualificationCheck(input = {}) {
+  if (!isTrumpPacket(input)) return null;
+  const text = packetQualificationText(input);
+
+  const highReason = 'Foreign-leader or diplomatic appearances can turn into photo ops, bilateral moments, or side events without stable remarks.';
+  const mediumHighReason = 'Formal signing events can be canceled, moved, or converted to non-qualifying paperwork/photo release.';
+  const mediumReason = 'Press conferences and formal remarks usually qualify, but the speaking block can narrow or shift.';
+  const lowReason = 'Rallies and long-form interviews usually keep Trump speaking continuously, so qualification risk is low.';
+
+  const matches = [
+    {
+      risk: 'HIGH',
+      event_type: 'foreign-leader joint appearance / bilateral / summit side event',
+      reason: highReason,
+      patterns: [
+        /\bpool spray\b/i,
+        /\bphoto op\b/i,
+        /\bbilateral meeting\b/i,
+        /\bforeign[- ]leader(?:\s+joint appearance)?\b/i,
+        /\bjoint appearance\b/i,
+        /\bforeign[- ]leader press availability\b/i,
+        /\bpress availability\b/i,
+        /\bsummit side event\b/i,
+        /\bclosed[- ]door\b/i,
+        /\bschedule[- ]unstable\b/i,
+        /\btrade\/treaty\/diplomacy signing\b/i,
+        /\btrade signing\b/i,
+        /\btreaty signing\b/i,
+        /\bdiplomacy signing\b/i,
+      ],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'executive order signing',
+      reason: mediumHighReason,
+      patterns: [/\bexecutive order signing\b/i],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'proclamation signing',
+      reason: mediumHighReason,
+      patterns: [/\bproclamation signing\b/i],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'formal signing ceremony',
+      reason: mediumHighReason,
+      patterns: [/\bformal signing ceremony\b/i],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'bill signing',
+      reason: mediumHighReason,
+      patterns: [
+        /\bsigning\b/i,
+      ],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'press conference',
+      reason: mediumReason,
+      patterns: [/\bpress conference\b/i],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'major policy speech',
+      reason: mediumReason,
+      patterns: [/\bmajor policy speech\b/i],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'cabinet meeting remarks',
+      reason: mediumReason,
+      patterns: [/\bcabinet meeting remarks\b/i, /\bcabinet meeting\b/i],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'formal public remarks',
+      reason: mediumReason,
+      patterns: [/\bformal public remarks\b/i, /\bpublic remarks\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'major campaign speech',
+      reason: lowReason,
+      patterns: [/\bmajor campaign speech\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'campaign rally',
+      reason: lowReason,
+      patterns: [/\bcampaign rally\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'major rally',
+      reason: lowReason,
+      patterns: [/\bmajor rally\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'rally',
+      reason: lowReason,
+      patterns: [/\brally\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'town hall',
+      reason: lowReason,
+      patterns: [/\btown hall\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'debate',
+      reason: lowReason,
+      patterns: [/\bdebate\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'long-form TV interview',
+      reason: lowReason,
+      patterns: [/\blong[- ]form tv interview\b/i, /\btv interview\b/i, /\binterview\b/i],
+    },
+  ];
+
+  for (const candidate of matches) {
+    if (candidate.patterns.some((re) => re.test(text))) {
+      const hasSpecificSigning = /\bexecutive order\b/i.test(text)
+        || /\bproclamation\b/i.test(text)
+        || /\bformal signing ceremony\b/i.test(text);
+      const eventType = candidate.event_type === 'bill signing' && !hasSpecificSigning
+        ? 'bill signing'
+        : candidate.event_type;
+      return {
+        event_type: eventType,
+        ednq_risk: candidate.risk,
+        reason: candidate.reason,
+        content_term_note: 'Content-term reads are conditional on a qualifying spoken event.',
+      };
+    }
+  }
+
+  return {
+    event_type: 'Trump event',
+    ednq_risk: 'MEDIUM',
+    reason: mediumReason,
+    content_term_note: 'Content-term reads are conditional on a qualifying spoken event.',
+  };
+}
+
 function cardEvidenceLabel(term, note = {}) {
   const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
   const hasHistory = Boolean(provenance);
@@ -222,6 +401,18 @@ function pushCardBlock(lines, label, value, width = 76) {
     lines.push(continuation);
   }
   lines.push('');
+}
+
+function renderTrumpQualificationCheck(lines, input) {
+  const gate = buildTrumpQualificationCheck(input);
+  if (!gate) return false;
+  lines.push(TRUMP_QUALIFICATION_CHECK);
+  lines.push('');
+  pushCardBlock(lines, 'Event type:', gate.event_type ?? 'MISSING');
+  pushCardBlock(lines, 'EDNQ risk:', gate.ednq_risk ?? 'MISSING');
+  pushCardBlock(lines, 'Reason:', gate.reason ?? 'MISSING');
+  pushCardBlock(lines, 'Content-term reads:', gate.content_term_note ?? 'Content-term reads are conditional on a qualifying spoken event.');
+  return true;
 }
 
 function renderTermCard(lines, term, index, note = {}, { tierOverride = null } = {}) {
@@ -369,6 +560,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push('Market Context - NOT IN SCORE: display-only context; never a score input.');
   lines.push('Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify.');
   lines.push('');
+  renderTrumpQualificationCheck(lines, input);
 
   const bestTier = postCapBestPosture(contentTerms);
   const researchedCount = contentTerms.filter(isResearchBacked).length;
@@ -453,12 +645,23 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
 // Render-time invariants, enforced by code (never a model).
 export function validateRenderedPacket(text, input) {
+  const trumpGate = buildTrumpQualificationCheck(input);
   let lastIdx = -1;
-  for (const section of SECTION_ORDER) {
+  const sections = trumpGate ? [TRUMP_QUALIFICATION_CHECK, ...SECTION_ORDER] : SECTION_ORDER;
+  for (const section of sections) {
     const idx = text.indexOf(`\n${section}\n`) >= 0 ? text.indexOf(`\n${section}\n`) : text.indexOf(section);
     if (idx < 0) throw new Error(`rendered packet missing section "${section}"`);
     if (idx < lastIdx) throw new Error(`rendered packet section out of order: "${section}"`);
     lastIdx = idx;
+  }
+  if (trumpGate) {
+    const gateIdx = text.indexOf(TRUMP_QUALIFICATION_CHECK);
+    const fastReadIdx = text.indexOf('1. FAST READ');
+    if (gateIdx < 0 || gateIdx > fastReadIdx) {
+      throw new Error('rendered packet omitted Trump qualification check before FAST READ');
+    }
+  } else if (text.includes(TRUMP_QUALIFICATION_CHECK)) {
+    throw new Error('rendered packet rendered Trump qualification check for a non-Trump packet');
   }
   if (!/research only/i.test(text)) throw new Error('rendered packet omitted research-only footer');
   if (!text.includes(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`)) {

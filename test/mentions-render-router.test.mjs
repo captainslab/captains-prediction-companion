@@ -7,6 +7,7 @@ import {
   shortTerm,
   formatCentral,
   SECTION_ORDER,
+  buildTrumpQualificationCheck,
 } from '../scripts/mentions/render-mention-packet.mjs';
 import { buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
 import {
@@ -84,6 +85,31 @@ function axiosTrumpFixture() {
         direct_mention_pathway: { present: true, score: blendedPct, source_basis: 'direct mention pathway calibration' },
       },
     })),
+  };
+}
+
+function trumpQualificationInput({ title, subtitle = null, route = 'trump_event' } = {}) {
+  return {
+    packet_kind: 'mentions_customer_packet_v2',
+    date: DATE,
+    research_provenance: { research_route: route },
+    event: {
+      title,
+      subtitle,
+      date_time: NOW,
+      settlement_source_link: 'https://kalshi.com/events/KXTRUMPQUAL',
+      rules_primary: 'If Trump speaks the listed strike term, the market resolves Yes.',
+    },
+    summary: { market_count: 1 },
+    terms: [
+      {
+        full_strike_text: `${title} -- Biden`,
+        short_term: 'Biden',
+        cpc_score: 72,
+        research_state: 'research-backed',
+        market_context: { note: 'NOT IN SCORE' },
+      },
+    ],
   };
 }
 
@@ -226,6 +252,32 @@ test('P(YES) tier buckets render as STRONG YES, WEAK YES, WEAK NO, STRONG NO', (
   assert.match(text, /#4 Tier Delta — 20 — STRONG NO/);
 });
 
+test('Trump qualification gate classifies low, medium-high, and high-risk event types', () => {
+  const rally = buildTrumpQualificationCheck(trumpQualificationInput({ title: 'Trump campaign rally in Iowa' }));
+  assert.deepEqual(rally, {
+    event_type: 'campaign rally',
+    ednq_risk: 'LOW',
+    reason: 'Rallies and long-form interviews usually keep Trump speaking continuously, so qualification risk is low.',
+    content_term_note: 'Content-term reads are conditional on a qualifying spoken event.',
+  });
+
+  const billSigning = buildTrumpQualificationCheck(trumpQualificationInput({ title: 'The Road to Housing Act signing' }));
+  assert.equal(billSigning?.event_type, 'bill signing');
+  assert.equal(billSigning?.ednq_risk, 'MEDIUM-HIGH');
+
+  const executiveOrder = buildTrumpQualificationCheck(trumpQualificationInput({ title: 'Trump executive order signing' }));
+  assert.deepEqual(executiveOrder, {
+    event_type: 'executive order signing',
+    ednq_risk: 'MEDIUM-HIGH',
+    reason: 'Formal signing events can be canceled, moved, or converted to non-qualifying paperwork/photo release.',
+    content_term_note: 'Content-term reads are conditional on a qualifying spoken event.',
+  });
+
+  const foreignLeader = buildTrumpQualificationCheck(trumpQualificationInput({ title: 'Trump bilateral meeting with foreign leader' }));
+  assert.equal(foreignLeader?.event_type, 'foreign-leader joint appearance / bilateral / summit side event');
+  assert.equal(foreignLeader?.ednq_risk, 'HIGH');
+});
+
 test('count thresholds and EDNQ render in separate sections', () => {
   const input = {
     packet_kind: 'mentions_customer_packet_v2',
@@ -280,6 +332,8 @@ test('count thresholds and EDNQ render in separate sections', () => {
   };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   assert.match(text, /Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify\./);
+  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*Event type:[\s\S]*Trump event/);
+  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*EDNQ risk:[\s\S]*MEDIUM/);
   assert.doesNotMatch(text, /^\s*\|.*\|\s*$/m);
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
   assert.match(topYes, /rally/);
@@ -297,6 +351,46 @@ test('count thresholds and EDNQ render in separate sections', () => {
   assert.match(qualification, /Settlement:[\s\S]*EDNQ is a separate settlement path if the event\/rules do not qualify\.[\s\S]*This[\s\S]*is not a content-term pick\./);
   assert.match(qualification, /Read:[\s\S]*YES-leaning qualification risk proven \(high\)/);
   assert.doesNotMatch(qualification, /P\(YES\)/);
+});
+
+test('Trump packets render a qualification check before FAST READ without changing scores or ordering', () => {
+  const input = trumpQualificationInput({ title: 'What will Trump say during the Road to Housing Act signing?' });
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const gate = sectionBlock(text, '0. QUALIFICATION CHECK', '1. FAST READ');
+  assert.match(gate, /Event type:[\s\S]*bill signing/);
+  assert.match(gate, /EDNQ risk:[\s\S]*MEDIUM-HIGH/);
+  assert.match(gate, /Content-term reads:[\s\S]*conditional on a qualifying spoken event/);
+  assert.ok(text.indexOf('0. QUALIFICATION CHECK') < text.indexOf('1. FAST READ'));
+  assert.match(text, /#1 Biden — 72 — STRONG YES/);
+});
+
+test('non-Trump packets do not get the Trump qualification check unless the route requires it', () => {
+  const nonTrump = renderMentionPacket(builtInput({ sourceBacked: true }), { generatedAtUtc: NOW });
+  assert.doesNotMatch(nonTrump, /0\. QUALIFICATION CHECK/);
+
+  const routedTrump = renderMentionPacket({
+    packet_kind: 'mentions_customer_packet_v2',
+    date: DATE,
+    research_provenance: { research_route: 'trump_event' },
+    event: {
+      title: 'The Road to Housing Act signing',
+      subtitle: 'Housing Act signing',
+      date_time: NOW,
+      settlement_source_link: 'https://kalshi.com/events/KXTRUMPQUAL',
+      rules_primary: 'If Trump speaks the strike term, the market resolves Yes.',
+    },
+    summary: { market_count: 1 },
+    terms: [
+      {
+        full_strike_text: 'The Road to Housing Act signing -- Biden',
+        short_term: 'Biden',
+        cpc_score: 71,
+        research_state: 'research-backed',
+        market_context: { note: 'NOT IN SCORE' },
+      },
+    ],
+  }, { generatedAtUtc: NOW });
+  assert.match(routedTrump, /0\. QUALIFICATION CHECK/);
 });
 
 test('threshold-supported repeated mention evidence can still render a YES tier', () => {

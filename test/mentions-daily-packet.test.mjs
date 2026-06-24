@@ -248,6 +248,10 @@ test('Trump housing packet cleans settlement wording and keeps comparable-histor
     sourceUrl: '/tmp/housing.json',
   }).text;
 
+  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*1\. FAST READ/);
+  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*Event type:[\s\S]*bill signing/);
+  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*EDNQ risk:[\s\S]*MEDIUM-HIGH/);
+  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*Content-term reads:[\s\S]*qualifying spoken event/);
   assert.match(text, /#1 Single Family — 75 — STRONG YES/);
   assert.match(text, /#1 Single Family — 75 — STRONG YES\n\nWhy:/);
   assert.match(text, /Settlement:[\s\S]*YES if Trump says "Single Family"[\s\S]*qualifying event[\s\S]*window\./);
