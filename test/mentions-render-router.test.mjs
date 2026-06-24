@@ -332,8 +332,7 @@ test('count thresholds and EDNQ render in separate sections', () => {
   };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   assert.match(text, /Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify\./);
-  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*Event type:[\s\S]*Trump event/);
-  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*EDNQ risk:[\s\S]*MEDIUM/);
+  assert.doesNotMatch(text, /0\. QUALIFICATION CHECK/);
   assert.doesNotMatch(text, /^\s*\|.*\|\s*$/m);
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
   assert.match(topYes, /rally/);
@@ -353,44 +352,18 @@ test('count thresholds and EDNQ render in separate sections', () => {
   assert.doesNotMatch(qualification, /P\(YES\)/);
 });
 
-test('Trump packets render a qualification check before FAST READ without changing scores or ordering', () => {
+test('Trump packets keep the approved stacked-card format without an extra qualification preface', () => {
   const input = trumpQualificationInput({ title: 'What will Trump say during the Road to Housing Act signing?' });
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const gate = sectionBlock(text, '0. QUALIFICATION CHECK', '1. FAST READ');
-  assert.match(gate, /Event type:[\s\S]*bill signing/);
-  assert.match(gate, /EDNQ risk:[\s\S]*MEDIUM-HIGH/);
-  assert.match(gate, /Content-term reads:[\s\S]*conditional on a qualifying spoken event/);
-  assert.ok(text.indexOf('0. QUALIFICATION CHECK') < text.indexOf('1. FAST READ'));
+  assert.doesNotMatch(text, /0\. QUALIFICATION CHECK/);
+  assert.match(text, /1\. FAST READ/);
   assert.match(text, /#1 Biden — 72 — STRONG YES/);
 });
 
-test('non-Trump packets do not get the Trump qualification check unless the route requires it', () => {
+test('non-Trump packets stay on the same stacked-card format', () => {
   const nonTrump = renderMentionPacket(builtInput({ sourceBacked: true }), { generatedAtUtc: NOW });
   assert.doesNotMatch(nonTrump, /0\. QUALIFICATION CHECK/);
-
-  const routedTrump = renderMentionPacket({
-    packet_kind: 'mentions_customer_packet_v2',
-    date: DATE,
-    research_provenance: { research_route: 'trump_event' },
-    event: {
-      title: 'The Road to Housing Act signing',
-      subtitle: 'Housing Act signing',
-      date_time: NOW,
-      settlement_source_link: 'https://kalshi.com/events/KXTRUMPQUAL',
-      rules_primary: 'If Trump speaks the strike term, the market resolves Yes.',
-    },
-    summary: { market_count: 1 },
-    terms: [
-      {
-        full_strike_text: 'The Road to Housing Act signing -- Biden',
-        short_term: 'Biden',
-        cpc_score: 71,
-        research_state: 'research-backed',
-        market_context: { note: 'NOT IN SCORE' },
-      },
-    ],
-  }, { generatedAtUtc: NOW });
-  assert.match(routedTrump, /0\. QUALIFICATION CHECK/);
+  assert.match(nonTrump, /1\. FAST READ/);
 });
 
 test('threshold-supported repeated mention evidence can still render a YES tier', () => {

@@ -100,6 +100,7 @@ function trumpHousingEvent() {
     event_ticker: 'KXTRUMPMENTIONB-26JUN24',
     title: 'What will Trump say during the Road to Housing Act signing?',
     sub_title: 'Donald Trump - Road to Housing Act signing',
+    close_time: '2026-07-09T14:00:00Z',
     series_ticker: 'KXTRUMPMENTIONB',
     markets: [
       {
@@ -248,10 +249,8 @@ test('Trump housing packet cleans settlement wording and keeps comparable-histor
     sourceUrl: '/tmp/housing.json',
   }).text;
 
-  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*1\. FAST READ/);
-  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*Event type:[\s\S]*bill signing/);
-  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*EDNQ risk:[\s\S]*MEDIUM-HIGH/);
-  assert.match(text, /0\. QUALIFICATION CHECK[\s\S]*Content-term reads:[\s\S]*qualifying spoken event/);
+  assert.doesNotMatch(text, /0\. QUALIFICATION CHECK/);
+  assert.match(text, /1\. FAST READ/);
   assert.match(text, /#1 Single Family — 75 — STRONG YES/);
   assert.match(text, /#1 Single Family — 75 — STRONG YES\n\nWhy:/);
   assert.match(text, /Settlement:[\s\S]*YES if Trump says "Single Family"[\s\S]*qualifying event[\s\S]*window\./);
