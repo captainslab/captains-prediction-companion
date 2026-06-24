@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   watch,
@@ -80,7 +81,7 @@ test('lock is released even when discovery throws', async () => {
 
 // ─── per-step timeout with process-group cleanup ─────────────────────────────
 
-test('generator timeout kills the whole child process group, including grandchildren', () => {
+test('generator timeout kills the whole child process group, including grandchildren', async () => {
   const root = mkdtempSync(join(tmpdir(), 'mw-timeout-'));
   const pidFile = join(root, 'grandchild.pid');
   assert.throws(
@@ -94,12 +95,21 @@ test('generator timeout kills the whole child process group, including grandchil
   );
   const grandchild = Number(readFileSync(pidFile, 'utf8').trim());
   assert.ok(grandchild > 0);
-  // Give the kernel a beat, then the grandchild must be gone.
-  assert.throws(
-    () => process.kill(grandchild, 0),
-    { code: 'ESRCH' },
-    `grandchild ${grandchild} must be killed with the process group`,
-  );
+  // Process-group teardown and reaping are asynchronous in the kernel, so a
+  // single immediate check races the reap (flaky under load). Poll until the
+  // grandchild is gone (ESRCH) with a deadline instead of guessing a delay.
+  const deadline = Date.now() + 5000;
+  let reaped = false;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(grandchild, 0);
+    } catch (err) {
+      if (err.code === 'ESRCH') { reaped = true; break; }
+      throw err;
+    }
+    await delay(50);
+  }
+  assert.ok(reaped, `grandchild ${grandchild} must be killed with the process group`);
 });
 
 test('sender timeout blocks the event: no delivery, blocker artifact, ledger not delivered', async () => {
