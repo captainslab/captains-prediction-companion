@@ -4,8 +4,8 @@ Use Captains Prediction Companion as a private ChatGPT app with Developer mode e
 
 ## Current endpoint
 
-- MCP: `https://YOUR_DEPLOYMENT_URL/mcp`
-- Health: `https://YOUR_DEPLOYMENT_URL/healthz`
+- MCP: `https://captainlabs.io/mcp`
+- Health: `https://captainlabs.io/healthz`
 
 ## Steps
 
@@ -20,16 +20,40 @@ Use Captains Prediction Companion as a private ChatGPT app with Developer mode e
 
 ## Expected app surfaces
 
-- `app_status`
-- `event_market_plan`
-- `event_market_workflow`
+- `app_status` — compact status report
+- `analyze_kalshi_market_url` — paste a Kalshi URL, get the full plan
+- `mentions_research` — fresh mentions research for ANY family (Trump/Fed/sports/earnings), full
+  rendered packet (fails closed, never cached, no sends)
+- `earnings_mention_research` — manual single-event earnings-call mention path (full packet)
+- `settled_event_history` — price-free settled base rates; `family=sports|earnings|general`
+- `run_composite_model` — run the MLB composite model for a market URL, full board
+- `mlb_sports_preview` — full MLB slate preview packet for a date
+- `sports_preview` — latest banked preview packet for `sport=nascar|ufc|worldcup` (read-only)
 
 ## Important
 
 - The app is read-only by default.
 - Note tools are only exposed if `ENABLE_NOTE_TOOLS=true` is set on the server.
-- The MCP server returns a compact user-facing card and keeps the workflow memo internal.
-- That keeps ChatGPT from classifying the app as a writable connector unless you intentionally turn that on later.
+- Research tools return **full output** to ChatGPT: complete human-readable text plus the
+  full structured object. Pass `compact: true` on any tool (or set `MCP_COMPACT_DEFAULT=true`
+  on the server) to get the short card instead.
+- `mentions_research` runs fresh every call and fails closed — it never serves a cached render.
+
+## Deploy (captainlabs.io)
+
+The server is plain Node + the MCP streamable-HTTP transport, so deploying is just
+"run it behind the existing TLS reverse proxy":
+
+1. Pull this repo onto the `captainlabs.io` host.
+2. `npm ci` (only deps are `@modelcontextprotocol/sdk` and `zod`).
+3. Run it: `npm start` (listens on `PORT`, default `3000`). For a managed service,
+   adapt `deploy/systemd/captainlabs-api.service.example` — set `PORT` to match the
+   nginx upstream (`127.0.0.1:3000` in `deploy/nginx/captainlabs.io.conf.example`).
+4. nginx already proxies `/` (incl. `/mcp` and `/healthz`) to the node port, so once
+   the service is up, `https://captainlabs.io/mcp` is live.
+5. Verify: `curl https://captainlabs.io/healthz` should return `{"ok":true,...}`.
+
+Then add `https://captainlabs.io/mcp` in ChatGPT as above.
 
 ## Notes
 
