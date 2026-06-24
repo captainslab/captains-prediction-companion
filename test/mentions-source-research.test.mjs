@@ -127,6 +127,7 @@ test('buildResearchTermNote derives settlement fit from slash tokens and repeat 
   assert.match(note.catalyst, /historically YES in 1\/2 comparable events/);
   assert.match(note.settlement_fit, /either exact token "Afford" or "Affordable"/);
   assert.match(note.settlement_fit, /Requires 3 or more qualifying mentions, not just one\./);
+  assert.match(note.provenance, /comparable_event_history: source=kalshi_native n=2 yes=1 hit_rate=0\.50/);
 });
 
 test('threshold research prompt carries required_count and repeat-count context', async () => {

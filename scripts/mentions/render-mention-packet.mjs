@@ -85,6 +85,10 @@ export function formatCentral(isoOrDate) {
   return fmt.format(d);
 }
 
+function formatGeneratedStamp(isoOrDate) {
+  return formatCentral(isoOrDate);
+}
+
 // Short display term: the strike word, not the repeated event title.
 export function shortTerm(fullStrikeText, eventTitle = '') {
   const full = String(fullStrikeText ?? '').trim();
@@ -181,6 +185,10 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   lines.push(sectionLabelHeader(rank, term._short, score, tier));
   pushWrapped(lines, `${cardReasonLabel(tier)}:`, note.catalyst ?? term.catalyst ?? 'MISSING');
   pushWrapped(lines, 'Settlement fit:', note.settlement_fit ?? term.settlement_fit ?? 'MISSING');
+  const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
+  if (provenance) {
+    pushWrapped(lines, 'Provenance:', provenance);
+  }
   lines.push(`   Research: ${cardResearchLabel(term)}`);
 }
 
@@ -207,7 +215,7 @@ function renderQualificationRiskSection(lines, qualificationTerms) {
     const status = String(term?.qualification_status ?? '').trim().toLowerCase();
     const proven = status === 'high' || status === 'medium';
     lines.push(`- ${maybe(term._short)}`);
-    lines.push('  Settlement fit: separate settlement path if the event or rules do not qualify.');
+    lines.push('  Settlement fit: EDNQ is a separate settlement path if the event/rules do not qualify. This is not a content-term pick.');
     lines.push(`  Read: ${proven ? `YES-leaning qualification risk proven (${status || 'unknown'})` : 'neutral fallback, not a pick.'}`);
   }
   lines.push('');
@@ -305,7 +313,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
   lines.push(`event_time_central: ${formatCentral(e.date_time)}`);
   lines.push(`date: ${maybe(input.date)}`);
-  if (generatedAtUtc) lines.push(`generated_utc: ${generatedAtUtc}`);
+  if (generatedAtUtc) lines.push(`generated_utc: ${formatGeneratedStamp(generatedAtUtc)}`);
   lines.push(`settlement_source: ${maybe(e.settlement_source_link)}`);
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('Market Context - NOT IN SCORE: display-only context; never a score input.');

@@ -74,6 +74,9 @@ import {
   fetchRedteamFields,
 } from '../mentions/model-router.mjs';
 import {
+  detectSourceHealthDisclosure,
+} from '../cron/cpc-packet-janitor.mjs';
+import {
   renderMentionPacket,
   validateRenderedPacket,
   shortTerm,
@@ -161,6 +164,12 @@ function validProfile(value) {
 
 function lowerJoined(parts) {
   return parts.map(asText).filter(Boolean).join(' ').toLowerCase();
+}
+
+function speakerLabelForEvent(event = {}) {
+  const text = lowerJoined([event?.title, event?.sub_title, event?.event_ticker, event?.series_ticker]);
+  if (/\btrump\b/.test(text)) return 'Trump';
+  return null;
 }
 
 // Adapter: fold event + market + legacy text fields into the event-like shape
@@ -1085,6 +1094,20 @@ function renderResearchCitationProvenance(composites) {
   return lines.length > 1 ? lines : [];
 }
 
+function injectSourceHealthDisclosure(text, sourceHealthDisclosure) {
+  const disclosure = String(sourceHealthDisclosure ?? '').trim();
+  if (!disclosure) return text;
+  const body = String(text ?? '');
+  const anchor = '\n---\nrenderer_contract:';
+  const idx = body.lastIndexOf(anchor);
+  if (idx < 0) {
+    return `${body.trimEnd()}\n${disclosure}\n`;
+  }
+  const head = body.slice(0, idx).trimEnd();
+  const tail = body.slice(idx);
+  return `${head}\n\n${disclosure}\n${tail}`;
+}
+
 export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
@@ -1115,7 +1138,8 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     generatedAtUtc: new Date().toISOString(),
     analystTier: 'none',
   });
-  validateRenderedPacket(text, synthesisInput);
+  const finalText = injectSourceHealthDisclosure(text, sourceHealthDisclosure);
+  validateRenderedPacket(finalText, synthesisInput);
 
   // Raw per-contract inventory + market context -> audit artifact only.
   const inventoryLines = rows.map((r, i) =>
@@ -1135,7 +1159,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   });
 
   return {
-    text,
+    text: finalText,
     rows,
     synthesisInput,
     inventoryText,
@@ -1928,6 +1952,7 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
       proofPct: r.proof_pct ?? null,
       handicapPct: r.handicap_pct ?? null,
       requiredCount: r.required_count ?? null,
+      speaker: speakerLabelForEvent(event),
       citations: combinedCitations,
     });
     if (researchNote) {
@@ -2416,6 +2441,11 @@ export async function writeKalshiEventPackets({
   // Settled-history records (price-free, outcomes only) load once per run and
   // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
   const historyRecords = await loadHistory({ stateRoot });
+  const sourceHealthDisclosure = detectSourceHealthDisclosure({
+    stateRoot,
+    date,
+    packetType: PACKET_TYPE,
+  }).disclosureLine;
   for (const ev of events) {
     const ticker = ev?.event_ticker;
     if (!ticker || seen.has(ticker)) continue;
@@ -2440,7 +2470,16 @@ export async function writeKalshiEventPackets({
         );
       }
     }
-    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources });
+    const built = buildKalshiEventPacket({
+      date,
+      event: mergedEvent,
+      sourceUrl: sourcePath,
+      inventoryPath,
+      historyRecords,
+      earningsQuarters,
+      earningsContextSources,
+      sourceHealthDisclosure,
+    });
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
@@ -2495,6 +2534,9 @@ export async function writeKalshiEventPackets({
       items.push({ name: inventoryName, ...invW });
     }
     let packetText = built.text;
+    if (sourceHealthDisclosure && !packetText.includes(sourceHealthDisclosure)) {
+      packetText = injectSourceHealthDisclosure(packetText, sourceHealthDisclosure);
+    }
     let modelSynthesisInvocation = null;
     if (!dryRun) {
       try {

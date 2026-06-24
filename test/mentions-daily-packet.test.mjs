@@ -12,6 +12,7 @@ import {
   appendFullStrikeInventory,
   validateSynthesizedMentionPacket,
 } from '../scripts/packets/generate-mentions-daily.mjs';
+import { buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
 
 function strongEarningsEvent() {
   return {
@@ -94,6 +95,109 @@ function trumpTeleRallyEvent() {
   };
 }
 
+function trumpHousingEvent() {
+  return {
+    event_ticker: 'KXTRUMPMENTIONB-26JUN24',
+    title: 'What will Trump say during the Road to Housing Act signing?',
+    sub_title: 'Donald Trump - Road to Housing Act signing',
+    series_ticker: 'KXTRUMPMENTIONB',
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTIONB-26JUN24-SING',
+        title: 'What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act?',
+        yes_sub_title: 'Single Family',
+        yes_bid_dollars: '0.64',
+        yes_ask_dollars: '0.69',
+        last_price_dollars: '0.67',
+        volume_fp: '172',
+        open_interest_fp: '172',
+        rules_primary: 'Resolves Yes if Trump says Single Family during the housing act signing.',
+        mention_profile: 'political_mentions',
+        research_term_note: buildResearchTermNote({
+          phrase: 'Single Family',
+          reason: 'Core of bill: ban institutional buyers of single-family homes.',
+          kalshiNativePct: 71,
+          kalshiNativeN: 14,
+          proofPct: 75,
+          handicapPct: 78,
+          speaker: 'Trump',
+        }),
+        layer_records: {
+          event_proximity: { present: true, score: 95, source_basis: 'official signing calendar' },
+          historical_tendency: { present: true, score: 75, source_basis: 'source-backed housing history' },
+          direct_mention_pathway: { present: true, score: 75, source_basis: 'direct policy language' },
+        },
+      },
+      {
+        ticker: 'KXTRUMPMENTIONB-26JUN24-PERM',
+        title: 'What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act?',
+        yes_sub_title: 'Permit / Zoning',
+        yes_bid_dollars: '0.69',
+        yes_ask_dollars: '0.76',
+        last_price_dollars: '0.72',
+        volume_fp: '41',
+        open_interest_fp: '41',
+        rules_primary: 'Resolves Yes if Trump says permit or zoning during the housing act signing.',
+        mention_profile: 'political_mentions',
+        research_term_note: buildResearchTermNote({
+          phrase: 'Permit / Zoning',
+          reason: 'Trump cites permits and zoning as barriers.',
+          proofPct: 63,
+          handicapPct: 64,
+          speaker: 'Trump',
+        }),
+        layer_records: {
+          event_proximity: { present: true, score: 72, source_basis: 'official signing calendar' },
+          historical_tendency: { present: true, score: 64, source_basis: 'permit/zoning references in prior remarks' },
+          direct_mention_pathway: { present: true, score: 53, source_basis: 'housing policy remarks' },
+        },
+      },
+      {
+        ticker: 'KXTRUMPMENTIONB-26JUN24-IRAN',
+        title: 'What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act?',
+        yes_sub_title: 'Iran (3+ times)',
+        yes_bid_dollars: '0.53',
+        yes_ask_dollars: '0.54',
+        last_price_dollars: '0.53',
+        volume_fp: '42.79',
+        open_interest_fp: '42.79',
+        rules_primary: 'Resolves Yes if Trump says Iran 3+ times during the housing act signing.',
+        mention_profile: 'political_mentions',
+        research_term_note: buildResearchTermNote({
+          phrase: 'Iran (3+ times)',
+          reason: 'Iran not a focus in current housing policy context.',
+          proofPct: 53,
+          handicapPct: 53,
+          requiredCount: 3,
+          speaker: 'Trump',
+        }),
+        layer_records: {
+          event_proximity: { present: true, score: 70, source_basis: 'official signing calendar' },
+          historical_tendency: { present: true, score: 53, source_basis: 'Iran references in prior remarks' },
+          direct_mention_pathway: { present: true, score: 53, source_basis: 'foreign-policy references in housing remarks' },
+        },
+      },
+      {
+        ticker: 'KXTRUMPMENTIONB-26JUN24-NQE',
+        title: 'What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act?',
+        yes_sub_title: 'Event does not qualify',
+        last_price_dollars: '0.10',
+        yes_bid_dollars: '0.07',
+        yes_ask_dollars: '0.08',
+        volume_fp: '620',
+        open_interest_fp: '420',
+        rules_primary: 'Event does not qualify resolves Yes if the signing does not qualify.',
+        mention_profile: 'political_mentions',
+        is_qualification_term: true,
+        qualification_status: 'high',
+        layer_records: {
+          event_proximity: { present: true, score: 10, source_basis: 'qualifying-path rules only' },
+        },
+      },
+    ],
+  };
+}
+
 test('mentions daily packet renders stacked cards instead of the old wide board', () => {
   const text = buildKalshiEventPacket({
     date: '2099-01-01',
@@ -134,6 +238,30 @@ test('mentions daily packet uses full strike text, not abbreviation-only labels'
   assert.match(inventory, /What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
   assert.doesNotMatch(inventory, /Biden — P\(YES\)/);
   assert.match(text, /8\. FULL STRIKE INVENTORY[\s\S]*What will Donald Trump say during Burt Jones Tele-Rally\? -- Biden/);
+});
+
+test('Trump housing packet cleans settlement wording and keeps comparable-history provenance separate from settled_history', () => {
+  const text = buildKalshiEventPacket({
+    date: '2026-06-24',
+    event: trumpHousingEvent(),
+    sourceUrl: '/tmp/housing.json',
+  }).text;
+
+  assert.match(text, /#1 Single Family — P\(YES\) 75 — STRONG YES/);
+  assert.match(text, /Settlement fit: YES if Trump says "Single Family"[\s\S]*qualifying event window\./);
+  assert.match(text, /#2 Permit \/ Zoning — P\(YES\) \d+ — WEAK YES/);
+  assert.match(text, /Settlement fit: YES if Trump says either "Permit" or "Zoning"[\s\S]*qualifying event window\./);
+  assert.match(text, /#3 Iran \(3\+ times\) — P\(YES\) 53 — WEAK YES/);
+  assert.match(text, /Settlement fit: YES if Trump says "Iran"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event window\./);
+  assert.match(text, /Provenance: comparable_event_history: source=kalshi_native n=14 yes=10[\s\S]*hit_rate=0\.71/);
+  assert.match(text, /Settlement fit: EDNQ is a separate settlement path if the event\/rules do not qualify\. This is not a content-term pick\./);
+  assert.match(text, /Read: neutral fallback, not a pick\./);
+  assert.match(text, /settled_history: tier=none n=0 hits=0 misses=0 hit_rate=n\/a/);
+  assert.doesNotMatch(text, /YES only if the exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Single Family"[\s\S]*is said/);
+  assert.doesNotMatch(text, /YES if either exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Permit"[\s\S]*"Zoning" is said/);
+  assert.doesNotMatch(text, /YES only if the exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Iran"[\s\S]*is said/);
+  assert.doesNotMatch(text, /\/home\/jordan\//);
+  assert.doesNotMatch(text, /\b2026-06-24T\d{2}:\d{2}:\d{2}\.\d{3}Z\b/);
 });
 
 test('proximity-only mention rows are low-source capped, not source-backed composite', () => {

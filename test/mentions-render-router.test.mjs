@@ -246,11 +246,16 @@ test('count thresholds and EDNQ render in separate sections', () => {
         market_type: 'threshold_count',
         required_count: 3,
         repeat_requirement: '3+ times',
-        research_term_note: {
-          catalyst: 'repeat pressure and repeated references',
-          settlement_fit: 'YES only if the exact token "tariff" is said; Requires 3 or more qualifying mentions, not just one.',
-          trap_risk: 'single mention is insufficient',
-        },
+        research_term_note: buildResearchTermNote({
+          phrase: 'tariff',
+          reason: 'repeat pressure and repeated references',
+          kalshiNativePct: 67,
+          kalshiNativeN: 3,
+          proofPct: 42,
+          handicapPct: 55,
+          requiredCount: 3,
+          speaker: 'Trump',
+        }),
         market_context: { note: 'NOT IN SCORE' },
       },
       {
@@ -280,10 +285,11 @@ test('count thresholds and EDNQ render in separate sections', () => {
 
   const traps = sectionBlock(text, '4. WEAK NO \/ STRONG NO TRAPS', '5. SOURCE GAPS');
   assert.match(traps, /tariff/);
-  assert.match(traps, /Requires 3[\s\S]*not just one\./);
+  assert.match(traps, /YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during the event window\./);
 
   const qualification = sectionBlock(text, '6. QUALIFICATION RISK', '7. SETTLEMENT NOTES');
   assert.match(qualification, /Event does not qualify/);
+  assert.match(qualification, /EDNQ is a separate settlement path if the event\/rules do not qualify\. This is not a content-term pick\./);
   assert.match(qualification, /YES-leaning qualification risk proven \(high\)/);
   assert.doesNotMatch(qualification, /P\(YES\)/);
 });
@@ -309,11 +315,16 @@ test('threshold-supported repeated mention evidence can still render a YES tier'
         market_type: 'threshold_count',
         required_count: 3,
         repeat_requirement: '3+ times',
-        research_term_note: {
-          catalyst: 'repeated references in the appearance',
-          settlement_fit: 'YES only if the exact token "tariff" is said; Requires 3 or more qualifying mentions, not just one.',
-          trap_risk: 'single mention is insufficient',
-        },
+        research_term_note: buildResearchTermNote({
+          phrase: 'tariff',
+          reason: 'repeated references in the appearance',
+          kalshiNativePct: 67,
+          kalshiNativeN: 3,
+          proofPct: 66,
+          handicapPct: 72,
+          requiredCount: 3,
+          speaker: 'Trump',
+        }),
         market_context: { note: 'NOT IN SCORE' },
       },
     ],
@@ -321,7 +332,7 @@ test('threshold-supported repeated mention evidence can still render a YES tier'
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
   assert.match(topYes, /tariff — P\(YES\) 66 — STRONG YES/);
-  assert.match(topYes, /Requires 3[\s\S]*not just one\./);
+  assert.match(topYes, /YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during the event window\./);
 });
 
 test('customer packet omits retired jargon and keeps event proximity out of the text', () => {
@@ -400,6 +411,7 @@ test('valid analyst JSON lands in card catalyst/settlement-fit text', () => {
   assert.match(topYes, /Malarkey — P\(YES\) \d+ — STRONG YES/);
   assert.match(topYes, /habit\/news-cycle pressure/);
   assert.match(topYes, /YES only if the exact token "Malarkey" is said/);
+  assert.match(topYes, /Provenance: comparable_event_history: source=kalshi_native n=5 yes=3[\s\S]*hit_rate=0\.60/);
   assert.ok(!topYes.includes('…'), 'full catalyst and settlement fit text should not truncate');
 
   const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RISK');

@@ -266,12 +266,37 @@ function requiredCountSentence(requiredCount) {
   return `Requires ${count} or more qualifying mentions, not just one.`;
 }
 
-function describeSettlementFit(phrase, requiredCount = null) {
-  const raw = String(phrase ?? '').trim();
+function cleanSettlementPhrase(phrase) {
+  let raw = String(phrase ?? '').trim();
+  if (!raw) return '';
+  const sep = raw.lastIndexOf(' -- ');
+  if (sep >= 0) {
+    raw = raw.slice(sep + 4).trim();
+  }
+  raw = raw.replace(/\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*$/i, '').trim();
+  raw = raw.replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+  return raw;
+}
+
+function describeSettlementFit(phrase, requiredCount = null, speaker = null) {
+  const original = String(phrase ?? '').trim();
+  const repeat = detectRepeatRequirement(original);
+  const raw = cleanSettlementPhrase(original);
   if (!raw) return null;
-  const repeat = detectRepeatRequirement(raw);
-  const base = raw.replace(/\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*$/i, '').trim();
+  const base = raw;
   const slashParts = base.split('/').map((part) => part.trim()).filter(Boolean);
+  if (speaker) {
+    if (Number.isFinite(Number(requiredCount)) && Number(requiredCount) > 1) {
+      if (slashParts.length >= 2) {
+        return `YES if ${speaker} says either "${slashParts[0]}" or "${slashParts[1]}" ${requiredCount} or more qualifying times during the event window.`;
+      }
+      return `YES if ${speaker} says "${base}" ${requiredCount} or more qualifying times during the event window.`;
+    }
+    if (slashParts.length >= 2) {
+      return `YES if ${speaker} says either "${slashParts[0]}" or "${slashParts[1]}" during the qualifying event window.`;
+    }
+    return `YES if ${speaker} says "${base}" during the qualifying event window.`;
+  }
   let fit;
   if (slashParts.length >= 2) {
     fit = `YES if either exact token "${slashParts[0]}" or "${slashParts[1]}" is said`;
@@ -295,6 +320,7 @@ export function buildResearchTermNote({
   proofPct = null,
   handicapPct = null,
   requiredCount = null,
+  speaker = null,
   citations = [],
 } = {}) {
   const baseReason = trimWords(reason, 20);
@@ -308,11 +334,21 @@ export function buildResearchTermNote({
     catalyst = `${baseReason}; historically YES in ${yes}/${total} comparable events`;
   }
 
+  let provenance = null;
+  if (Number.isFinite(Number(kalshiNativePct)) && Number.isFinite(Number(kalshiNativeN)) && Number(kalshiNativeN) >= 2) {
+    const total = Number(kalshiNativeN);
+    const yes = Math.max(0, Math.min(total, Math.round((Number(kalshiNativePct) / 100) * total)));
+    provenance = `comparable_event_history: source=kalshi_native n=${total} yes=${yes} hit_rate=${(yes / total).toFixed(2)}`;
+  }
+
   const note = {
     catalyst: trimWords(catalyst, 28),
-    settlement_fit: describeSettlementFit(phrase, requiredCount),
+    settlement_fit: describeSettlementFit(phrase, requiredCount, speaker),
     trap_risk: null,
   };
+  if (provenance) {
+    note.provenance = provenance;
+  }
   if (Array.isArray(citations) && citations.length) {
     note.citations = citations.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()).slice(0, 6);
   }
