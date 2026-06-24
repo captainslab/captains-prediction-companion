@@ -128,6 +128,28 @@ test('detects trump_event for single event with 10-day window', () => {
   assert.ok(res.close_window_days > 8 && res.close_window_days < 21);
 });
 
+test('detects KXTRUMPMENTIONB event JSON as trump_event, not political_general', () => {
+  const event = fixture({
+    event_ticker: 'KXTRUMPMENTIONB-26MAR27',
+    series_ticker: 'KXTRUMPMENTIONB',
+    title: 'What will Trump say during the Road to Housing Act signing?',
+    sub_title: 'Trump mention family event JSON fixture',
+    markets: [{
+      ticker: 'KXTRUMPMENTIONB-26MAR27-NQE',
+      title: 'What will Donald Trump say during the Road to Housing Act signing?',
+      yes_sub_title: 'Event does not qualify',
+      rules_primary: 'Resolves Yes if the event does not qualify.',
+      close_time: isoDaysOut(10),
+    }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.equal(res.route, 'trump_event');
+  assert.equal(res.profile_key, 'political_mentions');
+  assert.equal(res.entity, 'trump');
+  assert.equal(res.horizon, 'event');
+  assert.notEqual(res.route, 'political_general');
+});
+
 test('detects talk_show_media route', () => {
   const event = fixture({
     event_ticker: 'KXSNLMENTION-26JUN13',

@@ -47,6 +47,17 @@ test('router maps mentions family to CPC workflows', () => {
   assert.equal(route.packetWorkflow.id, 'mentions_daily_packet');
 });
 
+test('router maps KXTRUMPMENTIONB ticker family to mentions workflow', () => {
+  const parsed = parseIntakeText('KXTRUMPMENTIONB-26MAR27');
+  assert.equal(parsed.inputType, 'ticker');
+  assert.equal(parsed.marketFamily, 'kalshi_mentions');
+
+  const route = routeMarket(parsed);
+  assert.equal(route.status, 'routed');
+  assert.equal(route.family, 'kalshi_mentions');
+  assert.equal(route.packetWorkflow.id, 'mentions_daily_packet');
+});
+
 test('router blocks plain market requests without a source', () => {
   const route = routeMarket(parseIntakeText('Will the Fed mention inflation?'));
   assert.equal(route.status, 'blocked');
