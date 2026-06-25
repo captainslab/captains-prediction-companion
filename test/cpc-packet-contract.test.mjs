@@ -426,20 +426,20 @@ test('cpcPacketCaption works for non-mentions types', () => {
 test('cpcPacketCaption prefers event titles over generic packet headers', () => {
   const caption = cpcPacketCaption(
     [
-      'Captain MLB — MIL @ ATL Game Board',
+      'Captain MLB — Milwaukee Brewers at Atlanta Braves CPC Read',
       'Milwaukee Brewers at Atlanta Braves',
       'Date: 2026-06-20 | First pitch: MISSING | Venue: MISSING',
-      'CPC Packet: Game Board | generated_utc: 2026-06-20T00:00:00Z',
+      'CPC Packet: CPC Read | generated_utc: 2026-06-20T00:00:00Z',
       '',
       'TLDR',
-      '  Call: NO CLEAR PICK.',
+      '  CPC Read: PASS.',
     ].join('\n'),
     '2026-06-20-KXMLBGAME-26JUN201610MILATL',
     'mlb-daily',
   );
   assert.equal(
     caption,
-    'New CPC packet: MIL @ ATL Game Board -- attached .txt',
+    'New CPC packet: Milwaukee Brewers at Atlanta Braves -- attached .txt',
   );
 });
 

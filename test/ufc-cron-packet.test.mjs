@@ -123,15 +123,15 @@ function buildTestProcess() {
       market_board_context: true,
       evidence_supported_side: false,
     },
-    topEvidence: ['Kalshi fight board captured with 19 market(s).'],
+    topEvidence: ['Kalshi fight market set captured with 19 market(s).'],
     settlementRules: 'UFC market settlement criteria not independently pulled by this packet.',
     verifiedFacts: 'Participants/market contracts captured; fighter status context still required.',
-    marketSignalText: 'Market board captured for research; no pick inferred.',
+    marketSignalText: 'Price context captured for research; no CPC read inferred from price.',
     socialChatter: 'Not used as verified fact.',
     inference: 'Fight inference blocked until fighter status, matchup, recent form, and card-change checks are complete.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
-    finalJudgment: 'WATCH only; no evidence lean from fight board alone.',
-    whyNotPriceOnly: 'Market-board data is reference-only; no final pick is claimed without fighter-status, matchup, and card-change evidence.',
+    finalJudgment: 'WATCH only; no CPC read from price context or fight context alone.',
+    whyNotPriceOnly: 'Price context is reference-only; no final CPC read is claimed without fighter-status, matchup, and card-change evidence.',
     wouldChangeView: [
       'Official card and fighter status are confirmed.',
       'Recent form and style matchup support the same side as any board signal.',
@@ -209,7 +209,7 @@ test('UFC packet process renders unchecked items (missing inputs)', () => {
     'missingEvidence must be non-empty when checklist is incomplete');
 });
 
-test('UFC packet process includes Missing evidence field (no-pick reason)', () => {
+test('UFC packet process includes Missing evidence field (rated-view reason)', () => {
   const process = buildTestProcess();
   const rendered = renderDecisionProcess(process, { heading: 'Research Completeness' });
   assert.match(rendered, /Missing evidence:/, 'packet must include Missing evidence field');
@@ -252,12 +252,12 @@ test('UFC compact packet keeps raw market data out of customer body (audit inven
   assert.match(built.inventoryText, /markets:/, 'Inventory must contain markets section');
 });
 
-test('UFC compact packet never claims PICK or EVIDENCE_LEAN', () => {
+test('UFC compact packet never claims a rated view from price context alone', () => {
   const text = buildPriceOnlyPacketText();
   assert.doesNotMatch(
     text,
     /decision_status: (?:PICK|EVIDENCE[_ ]LEAN|STRONG EVIDENCE[_ ]LEAN)/m,
-    'compact BLOCKED packet must not claim PICK or EVIDENCE_LEAN',
+    'compact BLOCKED packet must not claim a rated view from price context alone',
   );
 });
 
@@ -327,17 +327,17 @@ test('UFC composite path keeps raw prices out of the customer packet', () => {
   }
 });
 
-test('UFC packet TLDR note denies evidence lean without fighter context', () => {
-  const tldrNote = 'fight board only; no evidence lean without fighter status and matchup context.';
-  assert.ok(tldrNote.includes('no evidence lean'),
-    'TLDR note must deny evidence lean without fighter context');
+test('UFC packet TLDR note denies a rated view without fighter context', () => {
+  const tldrNote = 'fight board only; no rated view without fighter status and matchup context.';
+  assert.ok(tldrNote.includes('no rated view'),
+    'TLDR note must deny a rated view without fighter context');
   assert.ok(!tldrNote.toLowerCase().includes('pick'),
     'TLDR note must not assert a pick');
 });
 
 // ─── 5. Anti-price rules: price alone cannot produce a pick ──────────────────
 
-test('SPORTS_GAME with only market_board_context cannot become PICK or EVIDENCE_LEAN', () => {
+test('SPORTS_GAME with only market_board_context cannot become a rated view', () => {
   const p = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
     rawDecision: 'LEAN',
@@ -345,11 +345,11 @@ test('SPORTS_GAME with only market_board_context cannot become PICK or EVIDENCE_
     checked: { market_board_context: true },
   });
   assert.notEqual(p.decisionStatus, 'PICK',
-    'market board alone must not produce PICK');
+    'market board alone must not produce a top-rated model view');
   assert.notEqual(p.decisionStatus, DECISION_STATUSES.EVIDENCE_LEAN,
-    'market board alone must not produce EVIDENCE_LEAN');
+    'market board alone must not produce a higher-rated model view');
   assert.notEqual(p.decisionStatus, DECISION_STATUSES.STRONG_EVIDENCE_LEAN,
-    'market board alone must not produce STRONG_EVIDENCE_LEAN');
+    'market board alone must not produce a top-rated model view');
 });
 
 test('forceWatch=true keeps UFC generator-style WATCH at WATCH regardless of checked items', () => {
@@ -370,7 +370,7 @@ test('forceWatch=true keeps UFC generator-style WATCH at WATCH regardless of che
     'forceWatch=true with raw WATCH must keep status at WATCH even with most items checked');
 });
 
-test('evidence_supported_side=false blocks EVIDENCE_LEAN even when all other items checked', () => {
+test('evidence_supported_side=false blocks a higher-rated view even when all other items are checked', () => {
   const p = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
     rawDecision: 'LEAN',
@@ -384,14 +384,14 @@ test('evidence_supported_side=false blocks EVIDENCE_LEAN even when all other ite
     },
   });
   assert.notEqual(p.decisionStatus, 'PICK',
-    'evidence_supported_side=false must block PICK');
+    'evidence_supported_side=false must block a top-rated model view');
   assert.notEqual(p.decisionStatus, DECISION_STATUSES.EVIDENCE_LEAN,
-    'evidence_supported_side=false must block EVIDENCE_LEAN');
+    'evidence_supported_side=false must block a higher-rated model view');
   assert.notEqual(p.decisionStatus, DECISION_STATUSES.STRONG_EVIDENCE_LEAN,
-    'evidence_supported_side=false must block STRONG_EVIDENCE_LEAN');
+    'evidence_supported_side=false must block a top-rated model view');
 });
 
-test('price/OI/volume signals alone cannot upgrade any market type past MARKET-ONLY LEAN', () => {
+test('price/OI/volume signals alone cannot upgrade any market type past market signal only', () => {
   for (const marketType of Object.values(MARKET_TYPES)) {
     const checked = marketType === MARKET_TYPES.PLAYER_PROP
       ? { line_ladder_comparison: true }
@@ -402,9 +402,9 @@ test('price/OI/volume signals alone cannot upgrade any market type past MARKET-O
       hasMarketSignal: true,
       checked,
     });
-    assert.notEqual(p.decisionStatus, 'PICK', `${marketType}: price-only -> no PICK`);
-    assert.notEqual(p.decisionStatus, DECISION_STATUSES.EVIDENCE_LEAN, `${marketType}: price-only → no EVIDENCE_LEAN`);
-    assert.notEqual(p.decisionStatus, DECISION_STATUSES.STRONG_EVIDENCE_LEAN, `${marketType}: price-only → no STRONG_EVIDENCE_LEAN`);
+    assert.notEqual(p.decisionStatus, 'PICK', `${marketType}: price-only -> no top-rated model view`);
+    assert.notEqual(p.decisionStatus, DECISION_STATUSES.EVIDENCE_LEAN, `${marketType}: price-only → no higher-rated model view`);
+    assert.notEqual(p.decisionStatus, DECISION_STATUSES.STRONG_EVIDENCE_LEAN, `${marketType}: price-only → no top-rated model view`);
   }
 });
 
@@ -441,7 +441,7 @@ test('generate-ufc-weekly.mjs runs to completion with temp state root (integrati
     assert.equal(existsSync(packetPath), true, `Expected packet output at ${packetPath}`);
     const packet = readFileSync(packetPath, 'utf8');
     assert.match(packet, /BLOCKED_MODEL_LAYER_MISSING|No trades placed by this workflow\./, 'packet must include BLOCKED or no-trades footer');
-    assert.match(packet, /No bankroll advice\. No order placement\. Research only\./,
+    assert.match(packet, /No order placement\. Research only\./,
       'packet must preserve no-order-placement footer');
   } finally {
     rmSync(tmp, { recursive: true, force: true });

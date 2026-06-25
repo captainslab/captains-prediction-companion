@@ -27,7 +27,7 @@ import {
   normalizeMarket,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
-import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
+import { buildEventDisplay, buildMarketDisplay, lookupMlbTeam } from './lib/mlb-teams.mjs';
 import {
   buildScoreEngineProjection,
   buildYrfiProjection,
@@ -56,7 +56,7 @@ import {
   buildHrWatchlist,
 } from '../mlb/lib/assumptions-ledger.mjs';
 import { writeScopedLedger } from '../mlb/lib/assumptions-writer.mjs';
-import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES } from '../shared/decision-process.mjs';
 import {
   buildDecisionRow,
   renderDecisionBoard,
@@ -361,7 +361,7 @@ export function mlbPickToDecisionRow(pick = {}) {
     analysisBits.push(`${refLabel} ${refPct} vs market ${mktPct} = ${pick.edge_pp >= 0 ? '+' : ''}${Number(pick.edge_pp).toFixed(1)}pp`);
   }
   if (pick.dk_line != null) analysisBits.push(`book line ${pick.dk_line}`);
-  if (cls === 'CORRELATED_ALTERNATE') analysisBits.push('reference-only: primary pick selected elsewhere in correlation group');
+  if (cls === 'CORRELATED_ALTERNATE') analysisBits.push('reference-only: primary row selected elsewhere in correlation group');
   if (lineupPending) analysisBits.push('pre-lineup: do not enter until lineup confirmed');
   const analysis = analysisBits.length ? analysisBits.join('; ') : `classification ${cls}`;
 
@@ -424,9 +424,6 @@ function stripAuditArtifactsSection(text = '') {
 
 function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, generatedAtUtc = new Date().toISOString() }) {
   const display = buildEventDisplay(event);
-  const matchupAbbrev = display.away_abbrev && display.home_abbrev
-    ? `${display.away_abbrev} @ ${display.home_abbrev}`
-    : (display.display_event_title !== 'MISSING' ? display.display_event_title : (event?.title ?? 'MISSING'));
   const matchupFull = display.away_full && display.home_full
     ? `${display.away_full} at ${display.home_full}`
     : (display.display_event_title !== 'MISSING'
@@ -443,14 +440,14 @@ function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, ge
 
   return [
     `Captain's MLB Prediction Companion`,
-    `Captain MLB — ${matchupAbbrev} ${packetLabel}`,
+    `Captain MLB — ${matchupFull} ${packetLabel}`,
     matchupFull,
     `Date: ${date} | First pitch: ${firstPitch} | Venue: ${venue}`,
     `CPC Packet: ${packetLabel} | generated_utc: ${generatedAtUtc}`,
   ].join('\n');
 }
 
-function classifyGamePacketRead(gamePicks = []) {
+function classifyGamePacketRead(gamePicks = [], event = null) {
   const picks = Array.isArray(gamePicks) ? gamePicks : [];
   const primary = picks.find((p) => p?.primary_pick) ?? picks[0] ?? null;
   const lineupPending = picks.some((p) =>
@@ -463,56 +460,87 @@ function classifyGamePacketRead(gamePicks = []) {
 
   if (!primary) {
     return {
-      call: 'NO CLEAR PICK',
+      call: 'PASS',
+      cpcRead: 'PASS',
+      readLine: 'no rated view',
       reason: 'no model family crosses the threshold',
-      summary: 'model outputs remain provisional while no primary pick is available',
+      summary: 'model outputs remain provisional while no primary rated view is available',
+      whatItMeans: 'CPC does not have enough source-backed model agreement to prefer a side.',
+      evidenceStatus: 'blocked',
     };
   }
 
   const marketLabel = (() => {
     const ticker = String(primary.market_ticker ?? primary.ticker ?? '');
     const suffix = ticker.split('-').pop() || '';
-    return /^[A-Z]{2,4}$/.test(suffix) ? suffix : (primary.contract_title ?? primary.market_title ?? 'favorite');
+    return primary.contract_title ?? primary.market_title ?? (/^[A-Z]{2,4}$/.test(suffix) ? lookupMlbTeam(suffix) ?? suffix : 'favorite');
   })();
+  const eventAway = event?.away_full ?? event?.away_team ?? event?.away ?? null;
+  const eventHome = event?.home_full ?? event?.home_team ?? event?.home ?? null;
+  const readSubject = eventAway ?? marketLabel;
+  const readComparison = eventAway && eventHome ? eventHome : null;
+  const readLine = readComparison ? `${readSubject} rate higher than ${readComparison}` : `${marketLabel} rate higher`;
 
   const classification = String(primary.classification ?? '').toUpperCase();
   const hasModelScore = primary.fair_value != null && Number.isFinite(Number(primary.fair_value));
   if (hasModelScore && (['LEAN', 'CLEAR_PICK', 'PRE_LINEUP_PICK'].includes(classification) || Number(primary.edge_pp) > 0)) {
     return {
-      call: `EVIDENCE LEAN — ${marketLabel}`,
+      call: readLine,
+      cpcRead: 'LEAN',
+      readLine,
       reason: 'required model families and context point the same way',
       summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'modeled family data present',
+      whatItMeans: readComparison
+        ? `The current source-backed model rates ${readSubject} higher than ${readComparison}.`
+        : `The current source-backed model prefers ${marketLabel}.`,
+      evidenceStatus: lineupPending ? 'provisional' : 'complete',
     };
   }
 
   if (lineupPending) {
     return {
-      call: 'NO CLEAR PICK',
+      call: 'PASS',
+      cpcRead: 'PASS',
+      readLine: 'no rated view',
       reason: 'projections provisional due lineup',
       summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+      whatItMeans: 'CPC is waiting for lineup confirmation before promoting the model read.',
+      evidenceStatus: 'provisional',
     };
   }
 
   if (modeledFamilies.size > 1) {
     return {
-      call: 'NO CLEAR PICK',
+      call: 'PASS',
+      cpcRead: 'PASS',
+      readLine: 'monitor only',
       reason: 'modeled families disagree',
       summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+      whatItMeans: 'CPC sees mixed model-family signals, so the read stays neutral.',
+      evidenceStatus: 'thin',
     };
   }
 
   if (modeledFamilies.size === 1) {
     return {
-      call: 'NO CLEAR PICK',
+      call: 'PASS',
+      cpcRead: 'PASS',
+      readLine: 'monitor only',
       reason: 'single modeled family only',
       summary: `modeled families present: ${Array.from(modeledFamilies).join(', ')}`,
+      whatItMeans: 'CPC has one modeled family, but not enough cross-family support to promote the read.',
+      evidenceStatus: 'thin',
     };
   }
 
   return {
-    call: 'NO CLEAR PICK',
+    call: 'PASS',
+    cpcRead: 'PASS',
+    readLine: 'no rated view',
     reason: 'no model family crosses the threshold',
     summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+    whatItMeans: 'CPC does not have enough source-backed model agreement to prefer a side.',
+    evidenceStatus: 'unavailable',
   };
 }
 
@@ -531,7 +559,7 @@ function buildGamePreviewStory({ event = null, statsRecord = null, read = null, 
   const homeTeam = statsRecord?.home_team ?? event?.home_team ?? event?.home_full ?? 'Home';
   const awayStarter = statsRecord?.away_pitcher?.name ?? event?.away_starter ?? event?.away_pitcher ?? 'away starter';
   const homeStarter = statsRecord?.home_pitcher?.name ?? event?.home_starter ?? event?.home_pitcher ?? 'home starter';
-  const call = String(read?.call ?? 'NO CLEAR PICK').trim() || 'NO CLEAR PICK';
+  const cpcRead = String(read?.cpcRead ?? read?.call ?? 'PASS').trim().toUpperCase() || 'PASS';
   const reason = String(read?.reason ?? '').trim().toLowerCase();
 
   const moneylineHome = projections?.score?.outputs?.moneyline_home;
@@ -546,26 +574,34 @@ function buildGamePreviewStory({ event = null, statsRecord = null, read = null, 
 
   if (typeof moneylineHome === 'number' && Number.isFinite(moneylineHome) && typeof awayRuns === 'number' && typeof homeRuns === 'number') {
     const awayWinProb = 1 - moneylineHome;
-    const leanTeam = awayWinProb >= moneylineHome ? awayTeam : homeTeam;
-    const leanRuns = awayWinProb >= moneylineHome
+    const higherTeam = awayWinProb >= moneylineHome ? awayTeam : homeTeam;
+    const lowerTeam = awayWinProb >= moneylineHome ? homeTeam : awayTeam;
+    const higherRuns = awayWinProb >= moneylineHome
       ? `${awayTeam} ${awayRuns.toFixed(1)} to ${homeRuns.toFixed(1)}`
       : `${homeTeam} ${homeRuns.toFixed(1)} to ${awayRuns.toFixed(1)}`;
-    const leanProb = awayWinProb >= moneylineHome ? awayWinProb : moneylineHome;
-    lines.push(`The model leans ${leanTeam} because the projected run split favors ${leanRuns} and the win split lands at ${pct(leanProb)}.`);
+    const higherProb = awayWinProb >= moneylineHome ? awayWinProb : moneylineHome;
+    lines.push(`The model rates ${higherTeam} higher than ${lowerTeam} because the projected run split favors ${higherRuns} and the win split lands at ${pct(higherProb)}.`);
   } else {
     lines.push(`Starter matchup: ${awayStarter} vs ${homeStarter}; ${awayTeam} at ${homeTeam} still reads through the sourced model layer.`);
   }
 
-  if (call === 'NO CLEAR PICK') {
+  if (cpcRead === 'PASS' || cpcRead === 'BLOCKED') {
     if (reason.includes('single modeled family only')) {
-      lines.push(`This remains NO CLEAR PICK because only the MONEYLINE family is fully modeled, so there is no cross-family confirmation to promote it.`);
+      lines.push('Evidence status: thin because only the MONEYLINE family is fully modeled, so there is no cross-family confirmation to promote it.');
     } else if (reason.includes('projections provisional due lineup')) {
-      lines.push(`This remains NO CLEAR PICK because the line is still provisional on lineup alpha, so the model output cannot be promoted yet.`);
+      lines.push('Evidence status: provisional because the line is still waiting on lineup confirmation, so the model output cannot be promoted yet.');
     } else {
-      lines.push(`This remains NO CLEAR PICK because ${read?.reason ?? 'the model does not yet clear the internal promotion threshold'}.`);
+      lines.push(`Evidence status: ${read?.evidenceStatus ?? 'thin'} because ${read?.reason ?? 'the model does not yet clear the internal promotion threshold'}.`);
     }
   } else {
-    lines.push(`Current call: ${call}.`);
+    if (typeof moneylineHome === 'number' && Number.isFinite(moneylineHome) && typeof awayRuns === 'number' && typeof homeRuns === 'number') {
+      const awayWinProb = 1 - moneylineHome;
+      const higherTeam = awayWinProb >= moneylineHome ? awayTeam : homeTeam;
+      const lowerTeam = awayWinProb >= moneylineHome ? homeTeam : awayTeam;
+      lines.push(`Current CPC Read: ${higherTeam} rate higher than ${lowerTeam}.`);
+    } else {
+      lines.push(`Current CPC Read: ${read?.readLine ?? 'no rated view'}.`);
+    }
   }
 
   const shapeParts = [];
@@ -583,8 +619,8 @@ function buildGamePreviewStory({ event = null, statsRecord = null, read = null, 
     lines.push(`Pitching context: ${pitchParts.join(' while ')}.`);
   }
 
-  if (call === 'NO CLEAR PICK') {
-    lines.push('Upgrade trigger: add a confirmed second modeled family or a stronger lane-specific threshold before this moves off no clear pick.');
+  if (cpcRead === 'PASS' || cpcRead === 'BLOCKED') {
+    lines.push('Upgrade trigger: add a confirmed second modeled family or a stronger lane-specific threshold before this moves off PASS.');
   }
 
   return lines.slice(0, 6);
@@ -599,7 +635,7 @@ function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRe
   lines.push(`  WEATHER_ADAPTER: ${backed(sourceRefs.weather)}`);
   lines.push(`  CONTEXT_ADAPTER: ${backed(sourceRefs.context)}`);
   lines.push(`  MODEL_OUTPUT: ${Array.isArray(gamePicks) && gamePicks.length ? 'BACKED' : 'UNAVAILABLE'}`);
-  lines.push('  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).');
+  lines.push('  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in separate audit records).');
   if (statsRecord?.game_pk != null) {
     lines.push(`  GAME_PK: ${statsRecord.game_pk}`);
   }
@@ -609,8 +645,8 @@ function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRe
 /**
  * Build the compact, sectioned MLB slate packet from picks.json scoring rows.
  * Returns { text, rows, inventoryText, counts } or null if no scoring exists.
- * The main user-facing text contains ONLY the sectioned decision board (TLDR +
- * Top Edge / Watchlist / Fades / Blocked + audit pointers). The full per-pick
+ * The main user-facing text contains ONLY the sectioned CPC stack (primary
+ * reads / watchlist / model-below-price / blocked + audit pointers). The full per-pick
  * inventory goes to a separate audit artifact, never the packet body.
  */
 export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null, scope = null, sourceRefs = {} }) {
@@ -629,7 +665,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     Array.isArray(p.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m)))).length;
 
   const tldrNote = lineupPending
-    ? `Pre-lineup slate: ${lineupPending} pick(s) await confirmed lineups — confidence is downgraded, not the board.`
+    ? `Pre-lineup slate: ${lineupPending} rated row(s) await confirmed lineups — confidence is downgraded until lineups confirm.`
     : 'Lineups confirmed where available.';
 
   const body = renderSectionedPacket(boardRows, {
@@ -651,7 +687,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     scope: resolvedScope,
     gamePicks: scoring.picks,
   });
-  const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
+  const neutralityNote = 'Market Context - NOT IN SCORE. Price context: display-only and not used in scoring. CPC model scoring never reads displayed market price.';
   const text = [header, inputStatusNote, neutralityNote, cleanedBody, packetFooter()].filter(Boolean).join('\n\n');
 
   // Full per-pick inventory -> audit artifact only. Each line carries model and
@@ -700,16 +736,16 @@ function buildMlbPacketProcess({ event = null, marketCount = 0, artifacts = [] }
       evidence_supported_side: false,
     },
     topEvidence: [
-      marketCount > 0 ? `Kalshi MLB board captured with ${marketCount} market(s).` : null,
+      marketCount > 0 ? `Kalshi MLB price context captured with ${marketCount} market(s).` : null,
       artifacts.length ? `${artifacts.length} local MLB artifact(s) available.` : null,
     ].filter(Boolean),
     settlementRules: 'MLB market settlement criteria not independently pulled by this packet.',
     verifiedFacts: hasParticipants ? 'Game/event identity captured; lineup, starter, weather, and matchup context still required.' : 'No game identity verified.',
-    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    marketSignalText: marketCount > 0 ? 'Price context captured for display; no CPC read inferred from price.' : 'No price context captured.',
     socialChatter: 'Not used as verified fact.',
     inference: 'MLB inference blocked until starters, lineups/news, venue/weather, and matchup context are complete.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
-    finalJudgment: 'WATCH only; no evidence lean from market board alone.',
+    finalJudgment: 'WATCH only; price context alone cannot promote a CPC read.',
     wouldChangeView: [
       'Probable/confirmed starters and lineups are available.',
       'Weather/park and recent matchup context support the same side as a board signal.',
@@ -895,7 +931,7 @@ export function buildKalshiGamePacket({
   const lines = [];
 
   if (hasComposite) {
-    const read = classifyGamePacketRead(gamePicks);
+    const read = classifyGamePacketRead(gamePicks, event);
     const statusSnapshot = derivePacketStatusSnapshot({ gamePicks, statsRecord });
     const projections = statsRecord
       ? buildGameProjections({
@@ -906,14 +942,17 @@ export function buildKalshiGamePacket({
         weather_status: statusSnapshot.weather_status,
       })
       : null;
-    lines.push('TLDR');
-    lines.push(`  Call: ${read.call}.`);
-    lines.push(`  Why: ${read.reason}.`);
+    lines.push('CPC Read');
+    lines.push(`  CPC Read: ${read.readLine ?? read.cpcRead ?? read.call}.`);
+    lines.push(`  What this means: ${read.whatItMeans}.`);
+    lines.push(`  Why it matters: ${read.reason}.`);
+    lines.push(`  Evidence status: ${read.evidenceStatus}.`);
+    lines.push('  Model Read: projection-first model outputs for this game.');
     lines.push(`  Model summary: ${read.summary}.`);
     lines.push('  Context: starters, lineup status, weather/park, and recent form sourced from adapters.');
-    lines.push('  Market data is display-only and NOT IN SCORE.');
+    lines.push('  Price context: display-only and not used in scoring.');
     lines.push('');
-    lines.push('Research Status');
+    lines.push('Evidence Status');
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
     lines.push('Event Preview / Storyline');
@@ -922,18 +961,20 @@ export function buildKalshiGamePacket({
     }
     lines.push('');
   } else {
-    lines.push('TLDR');
-    lines.push('  Call: NO CLEAR PICK.');
-    lines.push('  Why: no MLB event with a composite-ready game packet was found.');
+    lines.push('CPC Read');
+    lines.push('  CPC Read: BLOCKED.');
+    lines.push('  What this means: CPC does not have a composite-ready game packet for this event.');
+    lines.push('  Why it matters: no MLB event with a composite-ready game packet was found.');
+    lines.push('  Evidence status: unavailable.');
     lines.push('  Model summary: model outputs are unavailable.');
     lines.push('  Context: no scored game inputs were attached.');
-    lines.push('  Market data is display-only and NOT IN SCORE.');
+    lines.push('  Price context: display-only and not used in scoring.');
     lines.push('');
-    lines.push('Research Status');
+    lines.push('Evidence Status');
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
     lines.push('Event Preview / Storyline');
-    for (const storyLine of buildGamePreviewStory({ event, statsRecord, read: { call: 'NO CLEAR PICK' } })) {
+    for (const storyLine of buildGamePreviewStory({ event, statsRecord, read: { call: 'PASS', cpcRead: 'PASS' } })) {
       lines.push(`  ${storyLine}`);
     }
     lines.push('');
@@ -995,7 +1036,7 @@ export function buildKalshiGamePacket({
     event,
     date,
     statsRecord,
-    packetLabel: hasComposite ? 'Game Board' : 'Pre-Final-Lineup',
+    packetLabel: hasComposite ? 'CPC Read' : 'Pre-Final-Lineup',
   });
 
   return {
@@ -1011,31 +1052,37 @@ export function buildKalshiGamePacket({
 function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
-    rawDecision: 'NO CLEAR PICK',
+    rawDecision: 'PASS',
     checked: {},
     settlementRules: 'MISSING: no MLB event packet.',
     verifiedFacts: 'MISSING: no matching MLB events discovered.',
-    marketSignalText: 'No market board captured.',
+    marketSignalText: 'No price context captured.',
     socialChatter: 'Not used.',
     inference: 'No inference.',
     skepticReview: 'MISSING.',
-    finalJudgment: 'NO CLEAR PICK.',
+    finalJudgment: 'PASS.',
   });
   const header = [
     "Captain's MLB Prediction Companion",
-    'Captain MLB — Pre-Final-Lineup',
-    'CPC Packet: Pre-Final-Lineup',
+    'Captain MLB — CPC Read',
+    'CPC Packet: CPC Read',
     `date: ${date}`,
     `packet_type: ${PACKET_TYPE}`,
     `generated_utc: ${new Date().toISOString()}`,
   ].join('\n');
   const lines = [];
-  lines.push('TLDR:');
+  lines.push('CPC Read:');
   lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: no MLB events found; no pick or lean.');
+  lines.push('  cpc_read: BLOCKED');
+  lines.push('  note: no MLB events found; no CPC read available.');
   lines.push('');
-  lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
+  lines.push('Evidence Completeness:');
+  lines.push('  projected participants: unavailable');
+  lines.push('  lineup/injury/news context: unavailable');
+  lines.push('  venue/weather/park context: unavailable');
+  lines.push('  recent form or matchup context: unavailable');
+  lines.push('  price context: unavailable');
+  lines.push('  evidence status: blocked');
   lines.push('');
   lines.push('research_prime:');
   if (primeAttempts.length) {

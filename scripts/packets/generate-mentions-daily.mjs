@@ -35,7 +35,7 @@ import {
   filterMentionEvents,
   fetchMentionEventsBySeries,
 } from './lib/kalshi-discovery.mjs';
-import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeDecisionStatus } from '../shared/decision-process.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
 import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
 import {
@@ -945,7 +945,7 @@ export function mentionCompositeToDecisionRow(composite) {
       ? `research did not run or returned no usable evidence for this event (source_status=${composite?.source_status})`
       : `no usable evidence channels present`;
     blocker = `${reasonCode}: no usable evidence channels for "${target}" (${why})`;
-    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a pick or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
+    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a rated view or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
     trigger = {
       price: null,
         event: `run mentions research for "${target}" (transcripts > quotes > context), then re-score`,
@@ -953,7 +953,7 @@ export function mentionCompositeToDecisionRow(composite) {
   } else if (proximityOnly) {
     postureFinal = 'WATCH';
     statusOverride = EDGE_STATUS.WATCH;
-    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic evidence is missing for "${target}". Missing: ${missingCats.join(', ') || 'evidence channels'}.`;
+    analysis = `LOW-SOURCE WATCH only -- no rated view. Event timing exists, but transcript/history/topic evidence is missing for "${target}". Missing: ${missingCats.join(', ') || 'evidence channels'}.`;
     trigger = {
       price: null,
       event: 'upgrade only after transcript, direct quote, historical tendency, or topic-path evidence lands',
@@ -1464,17 +1464,17 @@ function buildMentionProcess({ event, hasLocalEvidence = false, legacy = null })
       market_board_context: marketCount > 0 || Boolean(legacy),
     },
     topEvidence: [
-      marketCount > 0 ? `Kalshi board captured with ${marketCount} market(s).` : null,
+      marketCount > 0 ? `Kalshi market set captured with ${marketCount} market(s).` : null,
       rules.primary ? 'Settlement wording present in source packet.' : null,
       hasLocalEvidence ? 'Legacy source evidence present.' : null,
     ].filter(Boolean),
     settlementRules: rules.primary || rules.secondary || 'MISSING: exact settlement wording not present in packet.',
     verifiedFacts: hasLocalEvidence ? 'Legacy source evidence present; requires research review.' : 'No verified transcript/event facts supplied by packet generator.',
-    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    marketSignalText: marketCount > 0 ? 'Price context captured for research; no CPC read inferred from price.' : 'No price context captured.',
     socialChatter: 'Separated: packet generator does not promote X chatter to fact.',
     inference: 'Mention-market inference blocked until exact source, transcript path, and word-match rules are checked.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
-    finalJudgment: 'WATCH only; no pick without exact wording, source/event path, and public statement/schedule evidence.',
+    finalJudgment: 'WATCH only; no CPC read without exact wording, source/event path, and public statement/schedule evidence.',
     wouldChangeView: [
       'Official event or transcript source is identified.',
       'Exact word-match/alias rules are confirmed.',
@@ -2131,7 +2131,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
   const lines = [];
   lines.push('TLDR BOARD:');
   lines.push(`  no markets parsed for ${s.title}; nothing to score or rank.`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push(`  decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   return {
@@ -2159,7 +2159,7 @@ function buildLegacyEventPacket({ date, event }) {
   const lines = [];
   lines.push('TLDR:');
   lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push(`  decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
   lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
   lines.push('  note: legacy artifact uses mention-composite only when evidence records are present.');
@@ -2185,7 +2185,7 @@ function buildLegacyEventPacket({ date, event }) {
   for (const l of renderCompositeEvidence([composite])) lines.push(l);
   lines.push('');
   lines.push(`verified_vs_inference: ${p.verified_vs_inference || 'MISSING'}`);
-  lines.push(`decision_status: ${process.decisionStatus}`);
+  lines.push(`decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push(`posture: ${compositeSummary.best_posture} (mention composite; research only, no trade)`);
   return header + lines.join('\n') + packetFooter();
 }
@@ -2193,15 +2193,15 @@ function buildLegacyEventPacket({ date, event }) {
 function buildEmptyDayPacket(date, primeAttempts = [], discovery = null, mentionStats = null) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.MENTION_MARKET,
-    rawDecision: 'NO CLEAR PICK',
+    rawDecision: 'PASS',
     checked: { x_chatter_separated: true },
     settlementRules: 'MISSING: no market/event packet.',
     verifiedFacts: 'MISSING: no mention-style events discovered.',
-    marketSignalText: 'No market board captured.',
+    marketSignalText: 'No price context captured.',
     socialChatter: 'Not used.',
     inference: 'No inference.',
     skepticReview: 'MISSING.',
-    finalJudgment: 'NO CLEAR PICK.',
+    finalJudgment: 'PASS.',
   });
 
   const classificationNote = mentionStats
@@ -2218,8 +2218,8 @@ function buildEmptyDayPacket(date, primeAttempts = [], discovery = null, mention
     [
       'TLDR:',
       `  market_type: ${process.marketType}`,
-      `  decision_status: ${process.decisionStatus}`,
-      '  note: no mention-style events found; no pick or lean.',
+      `  decision_status: ${describeDecisionStatus(process.decisionStatus)}`,
+      '  note: no mention-style events found; no rated view.',
       `  classification_note: ${classificationNote}`,
       '',
       renderDecisionProcess(process, { heading: 'Research Completeness' }),

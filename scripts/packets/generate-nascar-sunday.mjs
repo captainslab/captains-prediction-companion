@@ -25,7 +25,7 @@ import {
   summarizeEvent,
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
-import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeDecisionStatus } from '../shared/decision-process.mjs';
 import { routeNascarMarket } from '../nascar/lib/router.mjs';
 import {
   buildDecisionRow,
@@ -261,17 +261,17 @@ function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, art
       evidence_supported_side: false,
     },
     topEvidence: [
-      marketCount > 0 ? `Kalshi NASCAR board captured with ${marketCount} market(s).` : null,
-      ceiling?.candidates?.length ? `Ceiling board captured from ${ceiling.source}.` : null,
+      marketCount > 0 ? `Kalshi NASCAR market set captured with ${marketCount} market(s).` : null,
+      ceiling?.candidates?.length ? `Ceiling model captured from ${ceiling.source}.` : null,
       artifacts.length ? `${artifacts.length} local artifact(s) available.` : null,
     ].filter(Boolean),
     settlementRules: 'NASCAR market settlement criteria not independently pulled by this packet.',
     verifiedFacts: ceiling?.candidates?.length ? 'Ceiling board present; qualifying/practice and entry status still required.' : 'No verified race-context facts supplied by packet generator.',
-    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    marketSignalText: marketCount > 0 ? 'Price context captured for research; no CPC read inferred from price.' : 'No price context captured.',
     socialChatter: 'Not used as verified fact.',
     inference: 'Race inference blocked until official entry/status, practice/qualifying, track, and recent performance context are complete.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
-    finalJudgment: 'WATCH only; no evidence lean from race board or ceiling board alone.',
+    finalJudgment: 'WATCH only; no CPC read from price context or ceiling model alone.',
     wouldChangeView: [
       'Official entry list and race status are confirmed.',
       'Practice/qualifying and track-form context support a side.',
@@ -411,15 +411,15 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
 function buildEmptyPacket({ date, artifacts, workspaceResult, discovery, matchedCount }) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
-    rawDecision: 'NO CLEAR PICK',
+    rawDecision: 'PASS',
     checked: {},
     settlementRules: 'MISSING: no NASCAR Cup event packet.',
     verifiedFacts: 'MISSING: no matching NASCAR Cup events discovered.',
-    marketSignalText: 'No market board captured.',
+    marketSignalText: 'No price context captured.',
     socialChatter: 'Not used.',
     inference: 'No inference.',
     skepticReview: 'MISSING.',
-    finalJudgment: 'NO CLEAR PICK.',
+    finalJudgment: 'PASS.',
   });
   const header = packetHeader({
     title: 'Captain NASCAR — CPC Packet: No Events',
@@ -430,8 +430,8 @@ function buildEmptyPacket({ date, artifacts, workspaceResult, discovery, matched
   const lines = [];
   lines.push('TLDR:');
   lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
-  lines.push('  note: no NASCAR Cup event found; no pick or lean.');
+  lines.push(`  decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
+  lines.push('  note: no NASCAR Cup event found; no CPC read or rated view.');
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   lines.push('');

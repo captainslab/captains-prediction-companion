@@ -80,6 +80,27 @@ function classificationPriority(classification) {
   return SAME_GAME_COMBO_CLASSIFICATION_PRIORITY.get(classification) ?? Number.MAX_SAFE_INTEGER;
 }
 
+function displayClassification(classification) {
+  switch (classification) {
+    case 'CLEAR_PICK':
+      return 'top-rated';
+    case 'PRE_LINEUP_PICK':
+      return 'pre-lineup top-rated';
+    case 'LEAN':
+      return 'higher-rated';
+    case 'WATCH_FOR_PRICE':
+      return 'monitor only';
+    case 'PASS':
+      return 'no rated view';
+    case 'BLOCKED_SOURCE_GAP':
+      return 'blocked';
+    case 'CORRELATED_ALTERNATE':
+      return 'reference-only';
+    default:
+      return classification ?? 'unknown';
+  }
+}
+
 /**
  * Return the weakest actionable status present in a combo group (informational view).
  * Used by buildSameGameCombos for same-game exposure visibility only.
@@ -579,7 +600,7 @@ function buildSlateManifest({ runDate, generatedAtUtc, kalshi, mlb, baseballSava
       `Baseball Savant adapter status: ${sourceStatus(baseballSavant)}; records: ${savantRecords.length}.`,
       `Weather adapter status: ${sourceStatus(weather)}; records: ${weatherRecords.length}.`,
       `Liquidity adapter status: ${sourceStatus(liquidity)}; records: ${safeArray(liquidity.records).length}.`,
-      'No live picks made. No trades placed.',
+      'No live reads were produced. No trades placed.',
     ],
   };
 }
@@ -637,7 +658,7 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
       source_id: 'kalshi',
       gap: `Kalshi same-day game market discovery kept ${kalshiRecords.length} records; rejected diagnostic count ${rejectedCount}.`,
       affected_market_lanes: [...MARKET_LANES],
-      handling: 'Do not create final picks. Re-run live-readonly discovery or refresh closer to first pitch.',
+      handling: 'Do not create rated outputs. Re-run live-readonly discovery or refresh closer to first pitch.',
     });
   }
 
@@ -646,7 +667,7 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
       source_id: 'baseball_savant',
       gap: `Baseball Savant adapter status ${savantStatus}; records ${savantRecords.length}.`,
       affected_market_lanes: [...MARKET_LANES],
-      handling: 'Do not create final picks until usable Statcast evidence records are available.',
+      handling: 'Do not create rated outputs until usable Statcast evidence records are available.',
     });
   }
 
@@ -655,7 +676,7 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
       source_id: 'weather',
       gap: `Weather adapter status ${weatherStatus}; records ${weatherRecords.length}.`,
       affected_market_lanes: ['game_total', 'yrfi_nrfi', 'home_run_hitter'],
-      handling: 'Do not create weather-sensitive picks until usable weather records are available.',
+      handling: 'Do not create weather-sensitive rated outputs until usable weather records are available.',
     });
   }
 
@@ -712,7 +733,7 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
         dailyRepeatability: 'Daily when adapter discovery file is present; fixture mode is placeholder only',
         limitations: combinedLimitations(
           baseballSavant,
-          'Baseball Savant adapter file present; records are discovery/evidence inputs only and do not authorize picks.',
+          'Baseball Savant adapter file present; records are discovery/evidence inputs only and do not authorize rated outputs.',
         ),
         status: savantStatus,
         lastCheckedUtc: baseballSavant.checked_at_utc ?? null,
@@ -729,7 +750,7 @@ function buildSourceRegistry({ runDate, generatedAtUtc, kalshi, mlb, baseballSav
         dailyRepeatability: 'Daily when adapter discovery file is present; fixture mode is placeholder only',
         limitations: combinedLimitations(
           weather,
-          'Weather adapter file present; records are environment inputs only and do not authorize picks.',
+          'Weather adapter file present; records are environment inputs only and do not authorize rated outputs.',
         ),
         status: weatherStatus,
         lastCheckedUtc: weather.checked_at_utc ?? null,
@@ -831,10 +852,10 @@ function buildPicks({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, weat
     notes: [
       'Discovery-only output writer dry-run.',
       scoring.fixture_mode
-        ? 'Fixture mode: no CLEAR_PICK generated. Replace fixture adapters with live evidence before production use.'
-        : 'Live-readonly mode: CLEAR_PICK requires all evidence gates to pass.',
-      `Scored ${scoring.counts.total} market candidates: ${scoring.counts.clear_pick} CLEAR_PICK, ${scoring.counts.lean} LEAN, ${scoring.counts.watch_for_listing} WATCH_FOR_LISTING, ${scoring.counts.blocked} BLOCKED, ${scoring.counts.not_tradeable} NOT_TRADEABLE.`,
-      'No live picks made. No trades placed.',
+        ? 'Fixture mode: no top-rated read generated. Replace fixture adapters with live evidence before production use.'
+        : 'Live-readonly mode: a top-rated read requires all evidence gates to pass.',
+      `Scored ${scoring.counts.total} market candidates: ${scoring.counts.clear_pick} top-rated, ${scoring.counts.lean} higher-rated, ${scoring.counts.watch_for_listing} monitor only, ${scoring.counts.blocked} blocked, ${scoring.counts.not_tradeable} not tradeable.`,
+      'No live reads were produced. No trades placed.',
     ],
   };
 }
@@ -909,7 +930,7 @@ function whyMostlyTotalsSection({ scoring }) {
     '## Why mostly totals?',
     '',
     `- Game totals account for ${gameTotalCount} of ${scoring.counts.total} scored candidates.`,
-    `- Moneyline is only ${moneylineCount} candidates, and most of those are PASS or WATCH_FOR_PRICE.`,
+    `- Moneyline is only ${moneylineCount} candidates, and most of those are no rated view or monitor only.`,
     `- Weather, lineup, and bullpen uncertainty push the board toward totals while the slate is still settling.`,
     otherCount > 0 ? `- Other lanes are limited to ${otherCount} candidate(s).` : '- Other lanes are effectively absent on this slate.',
     '',
@@ -960,7 +981,7 @@ function buildDailyGuide({
     ).length,
   }));
 
-  // Build start-time lookup keyed on game label for use in clear-picks table
+  // Build start-time lookup keyed on game label for use in the top-rated table
   const startTimeByGame = new Map(
     safeArray(slateManifest.games).map(g => [g.game, g.start_time_utc ?? 'TBD']),
   );
@@ -991,7 +1012,7 @@ function buildDailyGuide({
       )
     : ['| none |  |  |  |  |'];
 
-  // Deduplicate LEANs to one per correlation group for the guide (full list stays in JSON)
+  // Deduplicate higher-rated rows to one per correlation group for the guide (full list stays in JSON)
   const leanSeenGroups = new Set();
   const leanDeduped = leanCandidates.filter(c => {
     const g = c.correlation_group ?? c.market_ticker;
@@ -1003,7 +1024,7 @@ function buildDailyGuide({
   const blockedRows = blockedCandidates.length > 0
     ? blockedCandidates.map(c => `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(safeArray(c.missing_sources).join(', ') || 'source gap')} | Re-run discovery or wait for source availability |`)
     : [
-        '| Full daily prediction guide | Morning scan composer, and usable source evidence when unavailable | Implement remaining composer stages before final picks |',
+        '| Full daily prediction guide | Morning scan composer, and usable source evidence when unavailable | Implement remaining composer stages before final reads |',
         '| Kalshi tradable MLB board | Valid same-day Kalshi records | Re-run discovery closer to first pitch or inspect Kalshi UI manually |',
       ];
 
@@ -1023,7 +1044,7 @@ function buildDailyGuide({
         const side = c.market_lane === 'game_total'
           ? `over ${c.total_strike ?? 'n/a'}`
           : (c.contract_title ?? c.market_title ?? 'n/a');
-        const reason = safeArray(c.missing_confirmations).join(', ') || 'positive edge below LEAN threshold';
+        const reason = safeArray(c.missing_confirmations).join(', ') || 'positive edge below rated threshold';
         const recheck = c.target_entry !== null
           ? `Enter at ${c.target_entry} or below`
           : 'Monitor for price drop';
@@ -1042,7 +1063,7 @@ function buildDailyGuide({
     '',
     `- Generated UTC: ${generatedAtUtc}`,
     '- Discovery only.',
-    '- No final picks.',
+    '- No final reads.',
     '- No trades placed.',
     `- Kalshi same-day market discovery found ${safeArray(kalshi.records).length} valid records.`,
     `- Missing before full guide: ${missingBeforeFullGuide(baseballSavant, weather, liquidity, sportsbook)}.`,
@@ -1052,31 +1073,31 @@ function buildDailyGuide({
     '## Scoring Summary',
     '',
     `- Total candidates scored: ${scoring.counts.total}`,
-    `- CLEAR_PICK: ${scoring.counts.clear_pick}`,
-    `- PRE_LINEUP_PICK: ${scoring.counts.pre_lineup_pick ?? 0}`,
-    `- LEAN: ${scoring.counts.lean}`,
-    `- WATCH_FOR_LISTING: ${scoring.counts.watch_for_listing}`,
-    `- PASS: ${scoring.counts.pass}`,
-    `- BLOCKED: ${scoring.counts.blocked}`,
-    `- NOT_TRADEABLE: ${scoring.counts.not_tradeable}`,
-    `- CORRELATED_ALTERNATE: ${scoring.counts.correlated_alternate ?? 0}`,
+    `- top-rated: ${scoring.counts.clear_pick}`,
+    `- pre-lineup top-rated: ${scoring.counts.pre_lineup_pick ?? 0}`,
+    `- higher-rated: ${scoring.counts.lean}`,
+    `- monitor only: ${scoring.counts.watch_for_listing}`,
+    `- no rated view: ${scoring.counts.pass}`,
+    `- blocked: ${scoring.counts.blocked}`,
+    `- not tradeable: ${scoring.counts.not_tradeable}`,
+    `- reference-only: ${scoring.counts.correlated_alternate ?? 0}`,
     `- Moneyline candidates: ${safeArray(scoring.candidates).filter(c => c.market_lane === 'moneyline').length}`,
     `- Game total candidates: ${safeArray(scoring.candidates).filter(c => c.market_lane === 'game_total').length}`,
     `- Unknown/other candidates: ${safeArray(scoring.candidates).filter(c => !MARKET_LANES.includes(c.market_lane)).length}`,
     `- Fixture mode: ${scoring.fixture_mode}`,
     '',
     ...whyMostlyTotalsSection({ scoring }),
-    '## Clear Picks',
+    '## Top-Rated Reads',
     '',
     '| Market | Game | Contract | Strike | Ask | Mkt Ref | Edge | Max Entry | Start | Missing | Note |',
     '|---|---|---|---:|---:|---:|---:|---:|---|---|---|',
     ...clearPickRows,
     '',
-    '## Pre-Lineup Picks (Lineup Pending — Do Not Enter Yet)',
+    '## Pre-Lineup Top-Rated Reads (Lineup Pending — Do Not Enter Yet)',
     '',
     ...preLineupPickRows,
     '',
-    '## Watch For Listing',
+    '## Monitor Only',
     '',
     '| Player/market | Game | Research edge | Missing Kalshi prop | Recheck time | Trigger |',
     '|---|---|---|---|---|---|',
@@ -1086,13 +1107,13 @@ function buildDailyGuide({
     '| Market | Reason | Spread | Depth | Last update | Recheck |',
     '|---|---|---:|---:|---|---|',
     '',
-    '## Leans (Top 10 by Edge)',
+    '## Higher-Rated Reads (Top 10 by Edge)',
     '',
     '| Market | Game | Strike | Ask | Mkt Ref | Edge | Missing |',
     '|---|---|---:|---:|---:|---:|---|',
     ...leanRows,
     '',
-    '## Watch For Price',
+    '## Price Watch',
     '',
     '| Market | Game | Lane | Side/Strike | Ask | Target | Edge | Reason | Recheck |',
     '|---|---|---|---|---:|---:|---:|---|---|',
@@ -1133,8 +1154,8 @@ function buildDailyGuide({
     '',
     '- No live sources were fetched by the output writer.',
     '- No valid same-day Kalshi markets were available in discovery input.',
-    '- Picks file reflects scored candidates from scoring-core.',
-    '- No live picks made.',
+    '- Candidate file reflects scored outputs from scoring-core.',
+    '- No live reads were produced.',
     '- No trades placed.',
   ];
 
@@ -1184,14 +1205,14 @@ function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, wea
     '## Prediction Status Changes',
     '| Time UTC | ID | Old status | New status | Reason |',
     '|---|---|---|---|---|',
-    '| none |  |  |  | No pick candidates were created |',
+    '| none |  |  |  | No rated candidates were created |',
     '',
     '## Failure Handling',
     '| Case | Item | Handling | Next action |',
     '|---|---|---|---|',
-    '| kalshi_discovery_degraded | Same-day Kalshi MLB board | No final picks | Re-run live-readonly discovery or inspect Kalshi UI closer to first pitch |',
-    `| statcast_adapter_status | Baseball Savant/Statcast | Status ${sourceStatus(baseballSavant)} with ${safeArray(baseballSavant.records).length} records; no final picks | Refresh adapter or keep blocked until usable evidence exists |`,
-    `| weather_adapter_status | Weather | Status ${sourceStatus(weather)} with ${safeArray(weather.records).length} records; no final picks | Refresh adapter or keep blocked until usable evidence exists |`,
+    '| kalshi_discovery_degraded | Same-day Kalshi MLB board | No final reads | Re-run live-readonly discovery or inspect Kalshi UI closer to first pitch |',
+    `| statcast_adapter_status | Baseball Savant/Statcast | Status ${sourceStatus(baseballSavant)} with ${safeArray(baseballSavant.records).length} records; no final reads | Refresh adapter or keep blocked until usable evidence exists |`,
+    `| weather_adapter_status | Weather | Status ${sourceStatus(weather)} with ${safeArray(weather.records).length} records; no final reads | Refresh adapter or keep blocked until usable evidence exists |`,
     '| missing_liquidity | Order book/liquidity | Block tradeability gate | Implement liquidity enrichment |',
     '',
     '## Output Writes',
@@ -1200,7 +1221,7 @@ function buildRunLog({ runDate, generatedAtUtc, kalshi, mlb, baseballSavant, wea
     ...writes,
     '',
     '## No-Trade Confirmation',
-    '- No live picks placed.',
+    '- No live reads were produced.',
     '- No trades placed.',
     '- Output writer read local discovery files only.',
   ].join('\n');
@@ -1270,9 +1291,9 @@ function buildExecutionBoard({
     market_lane_diagnostics: marketLaneDiagnostics,
     safety: [
       'No trades placed.',
-      'No CLEAR_PICK emitted without all evidence gates passing.',
+      'No top-rated read emitted without all evidence gates passing.',
       'Sportsbook prices are reference-only no-vig fair values, not Kalshi prices.',
-      'All picks require manual review before any action.',
+      'All rated outputs require manual review before any action.',
     ],
   };
 }
@@ -1304,7 +1325,7 @@ function buildExecutionBoardMd({
   const moneylineEdgeBoard = board.moneyline_edge_board ?? [];
   const moneylineEdgeRows = moneylineEdgeBoard.length > 0
     ? moneylineEdgeBoard.slice(0, 10).map(c =>
-        `| ${tableEscape(c.market_ticker ?? '')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.side ?? '')} | ${tableEscape(c.classification ?? '')} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${c.target_entry ?? 'n/a'} | ${tableEscape(c.why_not)} |`,
+        `| ${tableEscape(c.market_ticker ?? '')} | ${tableEscape(c.game ?? '')} | ${tableEscape(c.side ?? '')} | ${tableEscape(displayClassification(c.classification))} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${c.target_entry ?? 'n/a'} | ${tableEscape(c.why_not)} |`,
       )
     : ['| none |  |  |  |  |  |  |  |  |'];
   const lines = [
@@ -1327,16 +1348,16 @@ function buildExecutionBoardMd({
     '## Summary Counts',
     '',
     `- Total: ${counts.total ?? 0}`,
-    `- CLEAR_PICK: ${counts.clear_pick ?? 0}`,
-    `- PRE_LINEUP_PICK: ${counts.pre_lineup_pick ?? 0}`,
-    `- LEAN: ${counts.lean ?? 0}`,
-    `- WATCH_FOR_LISTING: ${counts.watch_for_listing ?? 0}`,
-    `- PASS: ${counts.pass ?? 0}`,
-    `- BLOCKED: ${counts.blocked ?? 0}`,
-    `- NOT_TRADEABLE: ${counts.not_tradeable ?? 0}`,
-    `- CORRELATED_ALTERNATE: ${counts.correlated_alternate ?? 0}`,
+    `- top-rated: ${counts.clear_pick ?? 0}`,
+    `- pre-lineup top-rated: ${counts.pre_lineup_pick ?? 0}`,
+    `- higher-rated: ${counts.lean ?? 0}`,
+    `- monitor only: ${counts.watch_for_listing ?? 0}`,
+    `- no rated view: ${counts.pass ?? 0}`,
+    `- blocked: ${counts.blocked ?? 0}`,
+    `- not tradeable: ${counts.not_tradeable ?? 0}`,
+    `- reference-only: ${counts.correlated_alternate ?? 0}`,
     '',
-    '## Clear Picks',
+    '## Top-Rated Reads',
     '',
     board.clear_picks.length === 0
       ? '- none'
@@ -1351,7 +1372,7 @@ function buildExecutionBoardMd({
           }),
         ].join('\n'),
     '',
-    '## Pre-Lineup Picks (Lineup Pending — Do Not Enter Yet)',
+    '## Pre-Lineup Top-Rated Reads (Lineup Pending — Do Not Enter Yet)',
     '',
     board.pre_lineup_picks.length === 0
       ? '- none'
@@ -1368,7 +1389,7 @@ function buildExecutionBoardMd({
           }),
         ].join('\n'),
     '',
-    '## Leans (Top 10 by Edge, one per group)',
+    '## Higher-Rated Reads (Top 10 by Edge, one per group)',
     '',
     board.leans.length === 0
       ? '- none'
@@ -1389,12 +1410,12 @@ function buildExecutionBoardMd({
               `| ${tableEscape(c.market_ticker ?? c.market_title ?? 'unknown')} | ${tableEscape(c.game ?? '')} | ${c.total_strike ?? 'n/a'} | ${c.kalshi_ask ?? 'n/a'} | ${c.market_reference_prob ?? 'n/a'} | ${c.edge_pp !== null ? `${c.edge_pp}pp` : 'n/a'} | ${tableEscape(safeArray(c.missing_confirmations).join(', '))} |`,
             ),
             ...(overflowCount > 0
-              ? [`\n_${overflowCount} more leans — see today-execution-board.json for full list._`]
+              ? [`\n_${overflowCount} more higher-rated rows — see today-execution-board.json for full list._`]
               : []),
           ].join('\n');
         })(),
     '',
-    '## Watch For Price',
+    '## Price Watch',
     '',
     board.watch_for_price.length === 0
       ? '- none'
@@ -1405,7 +1426,7 @@ function buildExecutionBoardMd({
             const side = c.market_lane === 'game_total'
               ? `over ${c.total_strike ?? 'n/a'}`
               : (c.contract_title ?? c.market_title ?? 'n/a');
-            const reason = safeArray(c.missing_confirmations).join(', ') || 'positive edge below LEAN threshold';
+            const reason = safeArray(c.missing_confirmations).join(', ') || 'positive edge below rated threshold';
             const recheck = c.target_entry !== null
               ? `Enter at ${c.target_entry} or below`
               : 'Monitor for price drop';
@@ -1416,7 +1437,7 @@ function buildExecutionBoardMd({
     ...whyMostlyTotalsSection({ scoring }),
     '## Moneyline Edge Board',
     '',
-    '_Discovery view across all classifications. PASS and WATCH_FOR_PRICE rows are included for edge visibility, not action._',
+    '_Discovery view across all classifications. Monitor-only and no-rated-view rows are included for edge visibility, not action._',
     '',
     '| market_ticker | game | Side | Status | Ask | Mkt Ref | Edge | Target | Why not |',
     '|---|---|---|---|---:|---:|---:|---:|---|',
@@ -1445,7 +1466,7 @@ function buildExecutionBoardMd({
     `- Actionable same-game combo groups: ${board.combo_candidates.length}`,
     `- Same-game visibility groups: ${board.same_game_combos.length}`,
     `- Clear combo groups: ${board.combo_clear.length}`,
-    `- Pre-lineup / lean combo groups: ${board.combo_leans.length}`,
+    `- Pre-lineup / higher-rated combo groups: ${board.combo_leans.length}`,
     `- Watch combo groups: ${board.combo_watch.length}`,
     `- Pass combo groups: ${(board.combo_passes ?? []).length}`,
     `- Moneyline candidates: ${board.moneyline_candidate_count}`,
@@ -1630,6 +1651,6 @@ export function composeMlbDailyOutputs({
     baseball_savant_records: safeArray(baseballSavant.records).length,
     weather_records: safeArray(weather.records).length,
     picks: scoring.candidates.length,
-    message: 'Discovery only. No final picks. No trades placed.',
+    message: 'Discovery only. No final reads. No trades placed.',
   };
 }

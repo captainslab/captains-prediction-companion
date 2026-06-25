@@ -4,6 +4,13 @@ import { pathToFileURL } from 'node:url';
 import { routeMlbMarket } from './router-core.mjs';
 import { loadDynamicCompositeSlate, runComposite } from './late-slate-composite-refresh.mjs';
 import { lookupMlbTeam, parseEventTickerTeams, parseMarketTickerTeam } from '../packets/lib/mlb-teams.mjs';
+import {
+  PRICE_CONTEXT_DISPLAY_ONLY,
+  buildCpcCardSummary,
+  renderCpcCardText,
+  normalizeCpcRead,
+  evidenceStatusFrom,
+} from '../shared/cpc-card-summary.mjs';
 
 const MLB_COMPOSITE_PIPELINE = 'mlb_composite';
 const COMPOSITE_ENTRYPOINT = 'scripts/mlb/late-slate-composite-refresh.mjs#runComposite';
@@ -209,7 +216,76 @@ function compactLane(lane) {
   };
 }
 
+function humanLaneLabel(lane, board) {
+  const direction = cleanString(lane?.direction).toLowerCase();
+  if (direction === 'away') return board?.away_team ?? lane?.label ?? 'away side';
+  if (direction === 'home') return board?.home_team ?? lane?.label ?? 'home side';
+  const label = cleanString(lane?.label);
+  if (label) {
+    if (label.toLowerCase().includes('away')) return board?.away_team ?? label;
+    if (label.toLowerCase().includes('home')) return board?.home_team ?? label;
+    return label;
+  }
+  return board?.stronger_side ?? 'selected side';
+}
+
+function titleForMlbCard({ parsed, route = null, board = null, lane = null, blocked = false }) {
+  const away = board?.away_team ?? parsed?.teams?.away ?? null;
+  const home = board?.home_team ?? parsed?.teams?.home ?? null;
+  const matchup = away && home ? `${away} at ${home}` : parsed?.event_title ?? 'MLB market';
+  if (blocked) return `${matchup} — CPC blocked`;
+  const side = humanLaneLabel(lane, board);
+  return side ? `${matchup} — CPC rates ${side} higher` : `${matchup} — CPC read`;
+}
+
+function buildMlbCpcReadText({ board = null, lane = null, blocked = false }) {
+  if (blocked) return 'blocked — missing required evidence';
+  const side = humanLaneLabel(lane, board);
+  const away = board?.away_team ?? null;
+  const home = board?.home_team ?? null;
+  if (side && away && home) {
+    const opposite = side === away ? home : away;
+    return `${side} rate higher than ${opposite}.`;
+  }
+  if (side) return `${side} rate higher.`;
+  return 'no rated view';
+}
+
+function plainLaneMeaning(route = null, board = null) {
+  const away = board?.away_team ?? 'the away side';
+  const home = board?.home_team ?? 'the home side';
+  if (route?.market_lane === 'moneyline') return `${away} at ${home}: this card asks which team grades better to win the game.`;
+  if (route?.market_lane === 'run_line') return `${away} at ${home}: this card asks how the run-line side grades against the current model.`;
+  if (route?.market_lane === 'game_total') return `${away} at ${home}: this card asks how the game total grades against the current model.`;
+  if (route?.market_lane === 'yrfi_nrfi') return `${away} at ${home}: this card asks how the first-inning run lane grades against the current model.`;
+  return `${away} at ${home}: this card asks how the routed MLB lane grades against the current model.`;
+}
+
+function settlementForLane(route = null, side = null) {
+  if (route?.market_lane === 'moneyline') return `YES settles if ${side ?? 'the selected team'} wins the game under the market rules.`;
+  if (route?.market_lane === 'run_line') return 'YES settles if the selected run-line side satisfies the market rules.';
+  if (route?.market_lane === 'game_total') return 'YES settles if the selected total-runs side satisfies the market rules.';
+  if (route?.market_lane === 'yrfi_nrfi') return 'YES settles if the selected first-inning run outcome satisfies the market rules.';
+  return 'YES settlement follows the market rules for the selected MLB lane.';
+}
+
 function blockedResult({ parsed, route = null, reasonCode, reason, handled = true }) {
+  const card = buildCpcCardSummary({
+    title: titleForMlbCard({ parsed, route, blocked: true }),
+    subtitle: 'MLB composite route blocked before a model read could be produced.',
+    plainEnglish: 'This card explains why CPC could not produce a source-backed MLB read for the pasted market.',
+    settlement: 'Settlement follows the market rules, but CPC needs a supported routed lane and source-backed game context first.',
+    route: `mlb_composite/${route?.market_lane ?? 'unrouted'}`,
+    cpcRead: 'BLOCKED',
+    cpcReadText: 'blocked — missing required evidence',
+    evidenceStatus: 'blocked',
+    baseRate: 'unavailable until source-backed context is available',
+    priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+    ticker: parsed?.market_ticker ?? null,
+    marketId: parsed?.market_ticker ?? null,
+    eventId: parsed?.event_ticker ?? null,
+    reason,
+  });
   return {
     schema_version: 'cpc_market_link_composite_v1',
     handled,
@@ -231,6 +307,8 @@ function blockedResult({ parsed, route = null, reasonCode, reason, handled = tru
         }
       : null,
     compact_card: {
+      card,
+      card_text: renderCpcCardText(card),
       status: 'blocked',
       reason_code: reasonCode,
       reason,
@@ -245,6 +323,25 @@ function blockedResult({ parsed, route = null, reasonCode, reason, handled = tru
 
 function readyResult({ parsed, route, compositeResult, lane }) {
   const board = compositeResult.board;
+  const side = humanLaneLabel(lane, board);
+  const card = buildCpcCardSummary({
+    title: titleForMlbCard({ parsed, route, board, lane }),
+    subtitle: `${board.away_team} at ${board.home_team} — ${route.market_lane} model read.`,
+    plainEnglish: plainLaneMeaning(route, board),
+    settlement: settlementForLane(route, side),
+    route: `mlb_composite/${route.market_lane}`,
+    cpcRead: normalizeCpcRead(lane?.status),
+    cpcReadText: buildMlbCpcReadText({ board, lane }),
+    evidenceStatus: evidenceStatusFrom({ status: board.combined_data_quality ?? 'provisional' }),
+    baseRate: 'unavailable until settled-history context is attached',
+    priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+    ticker: parsed.market_ticker,
+    marketId: parsed.market_ticker,
+    eventId: parsed.event_ticker,
+    reason: Array.isArray(lane?.reasons) && lane.reasons.length
+      ? lane.reasons.slice(0, 2).join('; ')
+      : 'Current source-backed model grades this side better.',
+  });
   return {
     schema_version: 'cpc_market_link_composite_v1',
     handled: true,
@@ -264,6 +361,8 @@ function readyResult({ parsed, route, compositeResult, lane }) {
       side_hint: route.side_hint,
     },
     compact_card: {
+      card,
+      card_text: renderCpcCardText(card),
       status: 'ready',
       pipeline: MLB_COMPOSITE_PIPELINE,
       source_url: parsed.url,

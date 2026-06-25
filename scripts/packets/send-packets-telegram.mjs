@@ -251,7 +251,7 @@ export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
     /^Event title:/i.test(line) ||
     /^#\s*Event:/i.test(line));
   const gameTitleLine = lines.find(line =>
-    /^Captain MLB\s*[—-]\s*.+\s+Game Board$/i.test(line));
+    /^Captain MLB\s*[—-]\s*.+\s+(?:Game Board|CPC Read)$/i.test(line));
   const slateTitleLine = lines.find(line =>
     /^Captain MLB\s*[—-]\s*(?:CPC Packet:\s*)?Daily Slate Board$/i.test(line));
   const packetLine = lines.find(line =>
@@ -268,8 +268,8 @@ export function cpcPacketCaption(packetText = '', stem = '', packetType = '') {
     .replace(/^Daily Decision Board:\s*/i, '')
     .trim();
   if (gameTitleLine) {
-    const m = gameTitleLine.match(/^Captain MLB\s*[—-]\s*(.+\s+Game Board)$/i);
-    if (m?.[1]) label = m[1].trim();
+    const m = gameTitleLine.match(/^Captain MLB\s*[—-]\s*(.+\s+(?:Game Board|CPC Read))$/i);
+    if (m?.[1]) label = m[1].trim().replace(/\s+CPC Read$/i, '');
   } else if (slateTitleLine) {
     label = 'Daily Slate Board';
   }

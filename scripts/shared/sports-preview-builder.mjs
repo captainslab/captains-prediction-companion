@@ -7,18 +7,20 @@
 import { validateCpcCustomerPacket } from '../packets/lib/cpc-packet-validator.mjs';
 
 export const BANNED_CUSTOMER_PREVIEW_WORDS = Object.freeze([
-  'pick',
-  'lean',
-  'watch',
-  'fade',
-  'lock',
-  'hammer',
-  'smash',
+  'EVIDENCE LEAN',
+  'non-market evidence only',
+  'Side / market',
+  'Market board',
+  'Call:',
+  'NO CLEAR PICK',
+  'cover probability',
+  'betting edge',
+  'wager',
+  'bankroll',
+  'stake',
   'trigger board',
   'top edge candidates',
-  'no edge',
   'projection-only',
-  'actionable',
   'monitor-only',
 ]);
 
@@ -26,18 +28,21 @@ const CHICAGO_TZ = 'America/Chicago';
 
 const TERM_REPLACEMENTS = new Map([
   ['trigger board', 'trigger list'],
-  ['top edge candidates', 'top sourced options'],
+  ['top edge candidates', 'primary model reads'],
   ['projection-only', 'model-only'],
   ['monitor-only', 'review-only'],
-  ['no edge', 'no clear signal'],
-  ['actionable', 'usable'],
+  ['EVIDENCE LEAN', 'CPC Read'],
+  ['non-market evidence only', 'source-backed model context'],
+  ['Side / market', 'Primary side'],
+  ['Market board', 'Price context'],
+  ['NO CLEAR PICK', 'PASS'],
+  ['cover probability', 'model probability'],
+  ['betting edge', 'model gap'],
+  ['wager', 'contract'],
+  ['bankroll', 'account'],
+  ['stake', 'position size'],
   ['hammer', 'strong'],
   ['smash', 'strong'],
-  ['pick', 'selection'],
-  ['lean', 'signal'],
-  ['watch', 'review'],
-  ['fade', 'avoid'],
-  ['lock', 'anchor'],
 ]);
 
 function isObject(value) {
@@ -68,10 +73,15 @@ function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function termPattern(term) {
+  const escaped = escapeRegExp(term);
+  return /^[A-Za-z0-9_]+$/.test(term) ? `\\b${escaped}\\b` : escaped;
+}
+
 export function scrubCustomerText(text) {
   let out = String(text ?? '');
   for (const [term, replacement] of TERM_REPLACEMENTS) {
-    out = out.replace(new RegExp(`\\b${escapeRegExp(term)}\\b`, 'gi'), replacement);
+    out = out.replace(new RegExp(termPattern(term), 'gi'), replacement);
   }
   return out;
 }
@@ -80,7 +90,7 @@ export function scrubCustomerText(text) {
 export function findBannedCustomerWord(text) {
   const haystack = String(text ?? '');
   for (const term of BANNED_CUSTOMER_PREVIEW_WORDS) {
-    if (new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i').test(haystack)) {
+    if (new RegExp(termPattern(term), 'i').test(haystack)) {
       return term;
     }
   }
@@ -324,7 +334,7 @@ function assembleText({ headline, whyItMatters, storyline, quickRead, displayOnl
   ];
 
   if (displayOnlyMarketLine) {
-    lines.push(`Market context (display only, NOT IN SCORE): ${displayOnlyMarketLine}`);
+    lines.push(`Price context: display-only and not used in scoring. ${displayOnlyMarketLine}`);
   }
 
   return scrubCustomerText(lines.join('\n'));
@@ -373,7 +383,7 @@ export function assembleCpcPreviewPacket({ title, generatedAtUtc, previewText })
   const text = [
     `=== CPC Packet: ${toText(title, 'Sports Preview')} ===`,
     `generated_utc: ${humanUtc}`,
-    'Market Context — NOT IN SCORE.',
+    'Price context: display-only and not used in scoring.',
     previewText,
     'Research only. No trades.',
   ].join('\n');
