@@ -18,6 +18,10 @@
 // Market price/liquidity is display-only context and never a score input.
 // All user-facing times are America/Chicago.
 
+import {
+  formatPmtAdvisoryContext,
+} from './pmt-advisory-context.mjs';
+
 export const SECTION_ORDER = Object.freeze([
   '1. FAST READ',
   '2. TOP YES CASE',
@@ -385,6 +389,16 @@ function pushCardBlock(lines, label, value, width = 76) {
   lines.push('');
 }
 
+function renderPmtAdvisoryBlock(lines, context) {
+  const advisoryLines = formatPmtAdvisoryContext(context);
+  if (!advisoryLines.length) return;
+  lines.push('');
+  for (const line of advisoryLines) {
+    lines.push(line);
+  }
+  lines.push('');
+}
+
 function renderTermCard(lines, term, index, note = {}, { tierOverride = null } = {}) {
   const tier = tierOverride ?? renderedPosture(term);
   const rank = index + 1;
@@ -519,6 +533,9 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const notes = collectNotes(ranked, a);
   const qualificationTerms = ranked.filter(isQualificationRisk);
   const contentTerms = ranked.filter((term) => !isQualificationRisk(term));
+  const pmtAdvisoryContext = input?.research_provenance?.pmt_advisory_context
+    ?? ranked.find((term) => term?.pmt_advisory_context)?.pmt_advisory_context
+    ?? null;
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
@@ -535,6 +552,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const researchedCount = contentTerms.filter(isResearchBacked).length;
   lines.push('1. FAST READ');
   lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${contentTerms.length} term(s) have research-backed P(YES); best tier ${bestTier}. Research only — no trade.`));
+  renderPmtAdvisoryBlock(lines, pmtAdvisoryContext);
   lines.push('');
 
   const strongYes = [];

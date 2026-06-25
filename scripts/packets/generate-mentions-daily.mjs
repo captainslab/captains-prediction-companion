@@ -109,6 +109,9 @@ import {
   filterBySport,
 } from '../mentions/sports-settled-history.mjs';
 import { buildSportsGameContext } from '../mentions/sports-game-context.mjs';
+import {
+  buildPmtAdvisoryContext,
+} from '../mentions/pmt-advisory-context.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -712,6 +715,12 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
     source_status: market?.source_status ?? legacy?.source_status ?? null,
     lexical_gate: lexicalGate,
+    pmt_advisory_context: buildPmtAdvisoryContext({
+      route: route?.route ?? null,
+      eventTitle: event?.title ?? null,
+      eventSubtitle: event?.sub_title ?? event?.subtitle ?? null,
+      speaker: 'Trump',
+    }),
   };
 }
 
@@ -793,6 +802,12 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     posture_cap_reason: `lexical_gate:${decision}`,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
     lexical_gate: lexicalGate,
+    pmt_advisory_context: buildPmtAdvisoryContext({
+      route: route?.route ?? null,
+      eventTitle: event?.title ?? null,
+      eventSubtitle: event?.sub_title ?? event?.subtitle ?? null,
+      speaker: 'Trump',
+    }),
   };
 }
 
@@ -980,6 +995,7 @@ export function mentionCompositeToDecisionRow(composite) {
   });
   return {
     ...row,
+    pmt_advisory_context: composite?.pmt_advisory_context ?? null,
     proof_pct: composite?.proof_pct ?? null,
     handicap_pct: composite?.handicap_pct ?? null,
     kalshi_native_pct: composite?.kalshi_native_pct ?? null,
@@ -1113,6 +1129,9 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   const s = summarizeEvent(event);
   const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
   const summary = summarizeCompositeRun(composites);
+  const pmtAdvisoryContext = composites.find((c) => c?.pmt_advisory_context)?.pmt_advisory_context
+    ?? rows.find((r) => r?.pmt_advisory_context)?.pmt_advisory_context
+    ?? null;
 
   const blockedCount = rows.filter((r) => r.edge_status === EDGE_STATUS.BLOCKED).length;
   const prov = composites[0] ?? null;
@@ -1133,6 +1152,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     compositeSummary: summary,
     provenanceLines,
     sourceHealthDisclosure,
+    pmtAdvisoryContext,
   });
   const text = renderMentionPacket(synthesisInput, {
     generatedAtUtc: new Date().toISOString(),
@@ -1221,11 +1241,14 @@ export function normalizeLayerList(value) {
   return [];
 }
 
-export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null } = {}) {
+export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null, pmtAdvisoryContext = null } = {}) {
   const s = summarizeEvent(event);
   const rules = firstMarketRules(event);
   const contentRows = rows.filter((row) => row.is_qualification_term !== true);
   const qualificationRows = rows.filter((row) => row.is_qualification_term === true);
+  const advisoryContext = pmtAdvisoryContext
+    ?? rows.find((row) => row?.pmt_advisory_context)?.pmt_advisory_context
+    ?? null;
   // Compact each term to only what the model needs for the article.
   const terms = rows.map((row) => ({
     full_strike_text: row.side_target,
@@ -1257,6 +1280,7 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     handicap_reason: row.handicap_reason ?? null,
     research_citations: Array.isArray(row.research_citations) ? row.research_citations : [],
     research_term_note: row.research_term_note ?? null,
+    pmt_advisory_context: row.pmt_advisory_context ?? advisoryContext,
     market_context: {
       implied: row.implied_probability,
       bid_cents: row.market_yes_bid,
@@ -1302,6 +1326,9 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     },
     deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
     source_health_disclosure: sourceHealthDisclosure || null,
+    research_provenance: advisoryContext ? {
+      pmt_advisory_context: advisoryContext,
+    } : null,
     terms,
   };
 }
@@ -2059,6 +2086,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       .map((c) => ({ market_ticker: c.market_ticker, ...c.earnings_posture_adjustment })),
     sports_history: prov?.sports_history ?? null,
     sports_game_context: prov?.sports_game_context ?? null,
+    pmt_advisory_context: prov?.pmt_advisory_context ?? composites.find((c) => c?.pmt_advisory_context)?.pmt_advisory_context ?? null,
   } : null;
 
   // Preferred path: v2 customer renderer; raw inventory routed to a separate
@@ -2072,7 +2100,12 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     sourceHealthDisclosure,
   });
   if (slate) {
-    if (researchProvenance) slate.synthesisInput.research_provenance = researchProvenance;
+    if (researchProvenance) {
+      slate.synthesisInput.research_provenance = {
+        ...(slate.synthesisInput.research_provenance ?? {}),
+        ...researchProvenance,
+      };
+    }
     return {
       text: slate.text,
       inventoryText: slate.inventoryText,
