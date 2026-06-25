@@ -1,0 +1,1991 @@
+{
+  "channel": "https://youtube.com/@predictionmarkettrader?si=qhrMEueBBkKrkgWm",
+  "total_uploads": 219,
+  "category_counts": {
+    "Trump-specific": 123,
+    "general prediction-market guidance": 35,
+    "general mention-market guidance": 14,
+    "irrelevant / low-value": 47
+  },
+  "readable_counts": {
+    "Trump-specific::yes": 121,
+    "general prediction-market guidance::yes": 34,
+    "general mention-market guidance::yes": 14,
+    "general prediction-market guidance::no": 1,
+    "irrelevant / low-value::unchecked": 47,
+    "Trump-specific::no": 2
+  },
+  "rows": [
+    {
+      "video_id": "yg0Xsa2eghY",
+      "title": "Risking $60,000 on Trump's Address to the Nation - Stream Highlights",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "rRuIgO84OF0",
+      "title": "Inside the mind of a $600K Prediction Market Trader",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "ePT6aMqk2Oo",
+      "title": "The Trader Dominating Kalshi\u2019s Mention Markets (Full Interview)",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "TOCgj28XJFM",
+      "title": "Kalshi Explained (Step-by-Step Trading Guide)",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "wqYpjejFoEI",
+      "title": "Making $800 Live Trading a Trump Mention Market",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump mention-market or Trump event transcript",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "lodX5gNJNB4",
+      "title": "Kalshi Trading - Road to $100K Finale",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "no",
+      "transcript_note": "no_captions"
+    },
+    {
+      "video_id": "dGiv-7cHM5Y",
+      "title": "Kalshi Trading - Road to $100K - $82k Profit",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "kl_N43cAYjc",
+      "title": "Kalshi Trading - Road to $100K - $80K Profit Achieved",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "kCafX_WhgxA",
+      "title": "How to Profit on Prediction Markets",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "ZQ3Va3D29qs",
+      "title": "Kalshi Trading - Road to $100K - Ep 7",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "1waqlJz-0us",
+      "title": "Kalshi Trading - Road to $100K - Ep 6",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "5czxVfUgiEg",
+      "title": "Kalshi Trading - Road to $100K - Ep 5",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "r86G2mDO31g",
+      "title": "KALSHI TRADING - Road to $100K Ep.4",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "5BkfhiqTkPs",
+      "title": "Kalshi Trading - Road to $100K - EP 3",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "03TVUTaU0UQ",
+      "title": "Interviewing the Top Music Trader on Kalshi",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "iUVSHMAHrok",
+      "title": "$400K Profit on Kalshi in One Year",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "gmcwZLiIGec",
+      "title": "He made $500K Predicting Rotten Tomatoes Scores",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "j0XPOxZ-ZPo",
+      "title": "I Interviewed the Top Mention Market Trader on Kalshi",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "MwDscBM86Do",
+      "title": "Kalshi Trading - Road to $100K Ep.2",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "rZ3lyHCrxtQ",
+      "title": "Kalshi Trading - Road to $100K - $56K Profit",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "fEg2mcz7zcU",
+      "title": "Wagering $7,000 on What a Swiftie Tells Me",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "_zDTyxzaLfk",
+      "title": "$400 \u2192 $35K Predicting What People Would Say",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "x5bdKqqtapY",
+      "title": "How I made $5,000 shorting GPT-5",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "DSkRzdqc6uY",
+      "title": "Polymarket Trading - WE ARE SO BACK - Ep. 11 Road to $100,000",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "ZnQR0Y-4wss",
+      "title": "$10K PROFIT REACHED - Polymarket Trading - Road to $100,000 - EP. 10 - College Football Mania",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "nVpIkr_H7Wg",
+      "title": "2024 Presidential Election Deep Dive & Prediction",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "-M9okNU5UQQ",
+      "title": "Polymarket Trading - 2 Weeks to the Election! - Road to $100,000 - EP 9",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "IZGqVc7jMuA",
+      "title": "MILESTONE REACHED - Polymarket Trading - Road to $100,000 - EP 8",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "KQMw0mZ8Xms",
+      "title": "Polymarket Trading - Road to $100,000 - We are so back - Week 7",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "Hga85gU_Br8",
+      "title": "Polymarket Trading - Our First Loss! - Road to $100,000",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "LLRCk0KXD40",
+      "title": "Polymarket explained in under 3 minutes",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "n1JFOtGzrpc",
+      "title": "Polymarket Trading - Road to $100,000 - Episode 5",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "npNR9kHM1g4",
+      "title": "Polymarket Trading - Road to $100,000 - Episode 4",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "85N3gdd22l4",
+      "title": "Polymarket Trading - Road to $100,000 - Episode 3",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "EFubLOSwzDw",
+      "title": "Polymarket Trading - Road to $100,000 - Episode 2",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "B1yueYverLE",
+      "title": "Polymarket Trading - Road to $100,000 - Episode 1",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "kydYa1Im77Y",
+      "title": "TRUMP RALLY TO END ALL RALLIES",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "no",
+      "transcript_note": "no_captions"
+    },
+    {
+      "video_id": "GiXSM2VPPjk",
+      "title": "TRUMP TRUCK PA RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "DFHJ21IPYis",
+      "title": "TRUMP MEDAL OF HONOR CEREMONY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "yu--taGiDBQ",
+      "title": "TRUMP G7 PRESS CONFERENCE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "A0oS-A8yrKQ",
+      "title": "TRUMP G7 SUMMIT BILATERAL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "lahki5GjV5A",
+      "title": "TRUMP SIGNS SECURE AMERICA ACT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "yeHWcjpnHf0",
+      "title": "TRUMP TELE-RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "CcEkcgB26pQ",
+      "title": "TRUMP FARMER ROUNDTABLE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "-SOOB8ec3xc",
+      "title": "TRUMP COAL ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Cu05yhWIcKI",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "-U4MIHx7_iY",
+      "title": "TRUMP CABINET MEETING - MARATHON",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "e1bK3bz_S0g",
+      "title": "TRUMP NEW YORK RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "OcGzUHRX5ns",
+      "title": "TRUMP EPA ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "StZuxGCs3Ds",
+      "title": "TRUMP COMMENCEMENT SPEECH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "kWB4PUwg2jQ",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "W3qc3l3jJVg",
+      "title": "TRUMP HEALTHCARE EVENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "YXQ-QUnUIeY",
+      "title": "TRUMP CHINA BILATERAL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "OoWhIXO2e6I",
+      "title": "TRUMP INDIANA FOOTBALL TEAM",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "cCgeCDAwPYk",
+      "title": "TRUMP MATERNAL HEALTHCARE EVENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "8s_WBFS3zMA",
+      "title": "TRUMP MATERNAL HEALTHCARE EVENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "x0gis_KMq6g",
+      "title": "TRUMP ROSE GARDEN REMARKS",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "5b8nsvkS6i4",
+      "title": "TRUMP BRAZIL BILATERAL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Zj2v4DoC2ng",
+      "title": "TRUMP MOTHER'S DAY EVENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "k8iKW1kKYjc",
+      "title": "TRUMP PROCLAMATION SIGNING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "NZUKOB1qbiw",
+      "title": "TRUMP SMALL BUSINESS SUMMIT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Ve5Ps_3YcAM",
+      "title": "TRUMP FLORIDA RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "3zMmgDJQtlM",
+      "title": "FINAL POWELL FED SPEECH",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "_y1L4r5Pmxs",
+      "title": "MICHAEL SAYLOR BITCOIN SPEECH",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "YQtm4QTXdPY",
+      "title": "KING CHARLES ADDRESSES CONGRESS",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "8PGtpJ8iX2s",
+      "title": "THE CATBOY STREAM",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "97j3Q5VglGY",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "subFVBudVMA",
+      "title": "TRUMP DRUG ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "hGWA4FIbySU",
+      "title": "CALIFORNIA GOVERNORS DEBATES",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "l2BW5TmXwuE",
+      "title": "TRUMP COLLEGE SPORTS REMARKS",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "3qKgei0mCdE",
+      "title": "TRUMP VIRGINIA TELERALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "ENwLyuVQyj4",
+      "title": "TRUMP RALLY TURNING POINT USA",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Bv9mF-7xupU",
+      "title": "TRUMP ROUNDTABLE SPEECH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "NcBOUuH8wYM",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "gAasFs-EMvE",
+      "title": "JD VANCE TPUSA SPEECH",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "a0haQGJ-TsQ",
+      "title": "GOVERNOR OF NEW YORK ANNOUNCEMENT",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "vvp1a3HHfZc",
+      "title": "KAMALA HARRIS EXCITING FIRESIDE CHAT",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "uHmzMpNJupQ",
+      "title": "MELANIA TRUMP ADDRESSES THE NATION",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "2S6trwXGoCY",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "BGR2s_qadsM",
+      "title": "TRUMP PRESS CONFERENCE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "9DWr7sHRQik",
+      "title": "TRUMP ADDRESS TO THE NATION",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "0f3Bws_klco",
+      "title": "TRUMP EO SIGNING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Kbw5kJ3a0iU",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "CINsAI_V8Uk",
+      "title": "TRUMP 3 HOUR CABINET MEETING MARATHON",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "xlw9muZ92DY",
+      "title": "TRUMP REPUBLICAN DINNER",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "qjcvaIPGC8M",
+      "title": "TRUMP OVAL OFFICE DHS SWEARING IN",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "zsv7JMLqrvg",
+      "title": "TRUMP SAFETY MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "5phE5foG1eo",
+      "title": "TRUMP NAVY FOOTBALL TROPHY PRESENTATION",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "DE8e59LIAZY",
+      "title": "TRUMP JAPAN BILATERAL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "jnDP0xolHBA",
+      "title": "FED SPEECH - JEROME POWELL",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "AIcfKkRhVu4",
+      "title": "TRUMP SHAMROCK BOWL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "8lgqB5mELK4",
+      "title": "TRUMP BILATERAL IRELAND",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "WbhH1dadzAE",
+      "title": "TRUMP SPEAKS FOR WOMEN HISTORY MONTH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "UqVx3WPENyI",
+      "title": "TRUMP RALLY KENTUCKY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "zzrLa-xB8G8",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "1wqmydj4JnM",
+      "title": "TRUMP GOP CONFERENCE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "4lDIrQ-_WuY",
+      "title": "TRUMP SOCCER MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "ZUOujaRTagc",
+      "title": "TRUMP IRAN ADDRESS",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Y0_DaxTEC9g",
+      "title": "TRUMP RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "NMWtxgCwPzA",
+      "title": "JD VANCE WISCONSIN",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "lCJ7JAjYwOg",
+      "title": "STATE OF THE UNION",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "NX3AOoA1qUM",
+      "title": "STATE OF THE UNION PREVIEW",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "iH66HFUQkMo",
+      "title": "TRUMP CEREMONY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "XmizaOPT1-I",
+      "title": "TRUMP TARIFF SPEECH - SUPREME COURT RESULT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "BSUGoxGrxO4",
+      "title": "TRUMP BREAKFAST",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "DySVjsb3cNU",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "ffG4ZCppAy8",
+      "title": "MAMDANI ANNOUNCEMENT",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "3GWOdDHdd1s",
+      "title": "TRUMP MILITARY SPEECH, BERNIE RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "b2KV7LQiMyI",
+      "title": "TRUMP ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "gNh_5WMEg2Q",
+      "title": "TRUMP UNDISPUTED CHAMPION OF COAL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "LwVDxq4VRZw",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "-nyL4CW0AMQ",
+      "title": "SUPERBOWL RECAP w/ Nate",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "Rh3FsjQfj48",
+      "title": "MAMDANI ANNOUNCEMENT",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "18GkcgZ6Few",
+      "title": "BAD BUNNY PRESS CONFERECE / WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "4Js-KlhdsTA",
+      "title": "THE FOSTER INTERVIEW",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "hWUr6WlD75M",
+      "title": "TRUMP SHUTDOWN BILL SIGNING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "09NyxTYA2pk",
+      "title": "PALANTIR EARNINGS CALL",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "hf5YwxYWKVQ",
+      "title": "Live February 02",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "0LssiD1TVdM",
+      "title": "MAMDANI ANNOUNCEMENT / TRUMP ON DAN BONGINO",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "m0L0lmGlpOs",
+      "title": "GRAMMYS PREVIEW & PREDICTIONS w/ @thegrandetop10 & Music Quant",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "X7BkPL1e8vI",
+      "title": "Interviewing @LoganPredicts $400K+ Profit",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "nTYUc3U57yc",
+      "title": "TRUMP SPECIAL ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "vhRfO1Rqxhk",
+      "title": "TRUMP CABINET MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "WyygIDhwHgI",
+      "title": "POWELL FOMC SPEECH",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "jLuH0IoPasw",
+      "title": "TRUMP, MAMDANI, POWELL - PACKED DAY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "ZnaQzNvuTz0",
+      "title": "TRUMP RALLY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "nm-pvs6Ptd0",
+      "title": "MAMDANI PRESS CONFERENCE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Nqa-i4oWucs",
+      "title": "WHITE HOUSE PRESS BRIEIFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "lErMBANUbqk",
+      "title": "TRUMP & JD VANCE MARCH FOR LIFE SPEECH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "cImDugI4YGA",
+      "title": "MAMDANI, TRUMP, JD VANCE, MIKE JOHNSON - JAM PACKED DAY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "zRCmG7F48N4",
+      "title": "MAMDANI SPEECH / TRUMP CNBC INTERVIEW",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "7G7qFsIQPg0",
+      "title": "TRUMP PRESS BRIEFING - SPECIAL GUEST",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Lo3gEl5ctRM",
+      "title": "MAMDANI MLK CELEBRATION",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "KOY8n7i7gjk",
+      "title": "TRUMP BOULEVARD NAMED AFTER TRUMP",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "06uPhPipp5w",
+      "title": "TRUMP HEALTH ROUNDTABLE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "BUhQVFGReCU",
+      "title": "TRUMP FLORIDA PANTHERS MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "22mmO3QLSjY",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "CdGXaPqTXu8",
+      "title": "TRUMP MILK BILL SIGNING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "bCpbhA9vx54",
+      "title": "TRUMP SPEECH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "V0xvSLeqKqw",
+      "title": "MAMDANI ANNOUNCEMENT",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "mmXB7Sg6JHI",
+      "title": "MAMDANI PRESS CONFERENCE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "KQR4SOOhp5E",
+      "title": "TRUMP MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "mxHJFbQn_xo",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "v80_PNaDf8M",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "BxsklrSco58",
+      "title": "TRUMP REMARKS",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "2Sndi1yCSSI",
+      "title": "Mention Markets with @Tyrael - #4 All Time Public Mentions Trader",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "gpf8s96Fp4s",
+      "title": "TIM WALZ ANNOUNCEMENT",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "5JGOkjUDOrE",
+      "title": "MAMDANI INAUGURATION",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "Nqd2PIniI-g",
+      "title": "Trump Netanyahu Meeting",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "xyhDiede4xs",
+      "title": "TRUMP ZELENSKY MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "aKpNXzSfiDQ",
+      "title": "TRUMP ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "oEac6LNhGrU",
+      "title": "TRUMP ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "9NeswXzoimY",
+      "title": "TRUMP SPECIAL ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "g4AVkmZKF80",
+      "title": "TRUMP HANUKKAH CELEBRATION",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "4eXmc82qnPs",
+      "title": "JD VANCE SPEECH",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "qZ76BKoENDE",
+      "title": "TRUMP OVAL OFFICE BORDER CEREMONY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "TmSywZb_Deo",
+      "title": "TRUMP OVAL OFFICE BORDER CEREMONY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "cZZidYtjZpY",
+      "title": "TRUMP OVAL OFFICE BORDER CEREMONY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "7pQihJ9lKxo",
+      "title": "DONALD TRUMP CEREMONY",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "-1iqA98SSV0",
+      "title": "WHITE HOUSE PRESS BRIEFING - KAROLINE LEAVITT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "6gNeabkXq8k",
+      "title": "US Regulatory Clarity, Tempo Testnet, Tezos, Daylight, and Money Moves Fast EP 13",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "Z3UCZ4T1MQY",
+      "title": "TRUMP RALLY PENNSYLVANIA",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "fn74hQNkl0g",
+      "title": "TRUMP MEETS WITH FARMERS",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "cmSyW4crZwM",
+      "title": "TRUMP FIFA WORLD CUP DRAW",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "mPhW3KMWUyM",
+      "title": "TRUMP CHRISTMAS TREE SPEECH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "xkittLrMILw",
+      "title": "TRUMP PEACE DEAL - RWANDA & CONGO",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Y0UkmuyfnxA",
+      "title": "SNOWFLAKE EARNINGS CALL",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "q5EFK8ZHHlU",
+      "title": "DEALBOOK SUMMIT MENTION MARKETS",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "j9GyEcdlHR4",
+      "title": "TRUMP CABINET MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "YzqICZbfy1M",
+      "title": "WHITE HOUSE PRESS CONFERENCE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "P62MOrjV8Wg",
+      "title": "SPOTIFY WRAPPED MARKETS WITH @GAETEND",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "ekz2JJotCrE",
+      "title": "LANE KIFFIN DECISION",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "DnzZO600Ph0",
+      "title": "Live November 28",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "cuxhuVOCx8Q",
+      "title": "JD VANCE SPEECH",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "WKzWVAKpZo4",
+      "title": "JOHN DEERE EARNINGS CALL",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "ni0D8owpxRA",
+      "title": "Trump Turkey Pardon - GOBBLE VS WADDLE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "iGnNglbh8HQ",
+      "title": "TRUMP EXECUTIVE ORDER SIGNING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "OypmGZ9IJb4",
+      "title": "$100k Profit on Mention Markets with @nathanmeininger",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "0SQ1N4o2cLQ",
+      "title": "WHITE HOUSE PRESS BRIEFING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "xdQLbcoCiU0",
+      "title": "CMA AWARDS, MAMDANI MENTION",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Q6M6GSAnUEY",
+      "title": "NVIDIA EARNINGS",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "G0ZqffFanuA",
+      "title": "TRUMP SAUDI DINNER",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "PpOxlt3t2o8",
+      "title": "TRUMP SAUDI ARABIA, ACKMAN SPACE, MORE",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "9dBLEmLi7r0",
+      "title": "TRUMP MCDONALDS SPEECH",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "no",
+      "transcript_note": "no_captions"
+    },
+    {
+      "video_id": "S4dm5c4Am8k",
+      "title": "TRUMP FIFA WORLD CUP MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "-ScZeLFq8Kw",
+      "title": "YOUNG MANTIS INTERVIEW - 135 FREE THROW CHALLENGE",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "OnfB0JAFcQc",
+      "title": "TRUMP VETERANS DAY ADDRESS",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "WGMg2hZXPCg",
+      "title": "LIVE TO THE 4TH QUARTER - NFL ANNOUNCER MENTIONS",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "cG1SGneSUPA",
+      "title": "COREWEAVE EARNINGS",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "zcqdxYuYyBw",
+      "title": "COREWEAVE EARNINGS",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "kIqs2h9gpso",
+      "title": "TRADING MUSIC MARKETS W/ @THEGRANDETOP10",
+      "category": "general prediction-market guidance",
+      "priority": 2,
+      "reason": "General trading/process guidance video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "VQN_nTZx65A",
+      "title": "TRUMP HUNGARY BILATERAL",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "kW16V0BA7Lc",
+      "title": "$1K to $30K in 1 Month on Kalshi",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "DYfdif2F-O0",
+      "title": "TRUMP SPECIAL ANNOUNCEMENT",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "5fMdpV0HWz0",
+      "title": "2025 ELECTION NIGHT STREAM",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "EnUwmMfak6I",
+      "title": "EARNINGS MENTIONS - PALANTIR & HIMS",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "aoCkAEWsCOg",
+      "title": "X SPACES - NYC RACE, SNF, KALSHI COMBOS, EARNINGS CALLS",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "1_h3-mHlqTE",
+      "title": "QUOTING KALSHI COMBOS LIVE - VibeCoding",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "5tNFwH2n5BA",
+      "title": "NEW STUDIO - NYC ELECTION, EARNINGS MENTIONS, CFB?",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "wf00Bi6mtP8",
+      "title": "EARNINGS CALL MENTION MARKETS",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "i7_LuXLJlZ4",
+      "title": "MENTION MARKET SUPERCYCLE",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Q3ZkFZ1d_UY",
+      "title": "Research Stream - Trump, Paypal, Google, Meta, Microsoft, Chipotle, SBux",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "DNzqcRHKj94",
+      "title": "POWELL FED OPEN BOARD MEETING",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump event/video",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "7o_g_YGYCbM",
+      "title": "TRUMP ANNOUNCEMENT - MENTION MARKET",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump mention-market or Trump event transcript",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "Pe7V8IbOLk8",
+      "title": "TRUMP ANNOUNCEMENT - MENTION MARKET",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump mention-market or Trump event transcript",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "sPc3hSnIDlw",
+      "title": "WHITE HOUSE PRESS BRIEFING - MENTION MARKET",
+      "category": "Trump-specific",
+      "priority": 1,
+      "reason": "Direct Trump mention-market or Trump event transcript",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "juGOo_dfWUM",
+      "title": "RESEARCH STREAM - $TSLA Earnings & NYC Debate Mentions",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "r6MpYSiu1PI",
+      "title": "RESEARCH STREAM - $TSLA Earnings & NYC Debate Mentions",
+      "category": "general mention-market guidance",
+      "priority": 2,
+      "reason": "Mention-market strategy or live mention trading",
+      "transcript_readable": "yes",
+      "transcript_note": "captions_present_non_english_or_auto"
+    },
+    {
+      "video_id": "Gvcz7NBFzgA",
+      "title": "How to answer an Epstein question without saying Epstein",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "1kuhDaT7Uk4",
+      "title": "We're in the GOLDEN AGE of Prediction Markets!",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "hJWZm1110I4",
+      "title": "We are the HOTTEST country",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "px6uVOJmpTI",
+      "title": "Trading Election Nights is ELECTRIC",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "nJM5LZF8Osk",
+      "title": "Growing Your Bankroll on Prediction Markets",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "PS00BZEvztk",
+      "title": "WORLD RECORD - $100 Profit in 6.3 Seconds",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "cWISu8deY9g",
+      "title": "Can Powell Make us $1,000?",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "9V9DKbLuJEM",
+      "title": "We make $500 if Jerome Powell Coughs",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "xgFasGlxesc",
+      "title": "The Art of the Deal",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    },
+    {
+      "video_id": "cJs3IbWjTvk",
+      "title": "Prediction Markets Advantages over Crypto",
+      "category": "general prediction-market guidance",
+      "priority": 3,
+      "reason": "Prediction-market context / interview / tutorial",
+      "transcript_readable": "yes",
+      "transcript_note": "english_captions_present"
+    },
+    {
+      "video_id": "WstwRQyQS4Q",
+      "title": "Can we make $2,500 on Powell's Fed Speech?",
+      "category": "irrelevant / low-value",
+      "priority": 4,
+      "reason": "Not clearly mention- or guidance-related",
+      "transcript_readable": "unchecked",
+      "transcript_note": "low_value_not_probed"
+    }
+  ]
+}
