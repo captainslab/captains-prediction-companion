@@ -16,6 +16,15 @@
 //
 // EDGE = fair(model) vs implied(market). Never market-vs-market.
 
+import {
+  PRICE_CONTEXT_DISPLAY_ONLY,
+  buildCpcCardSummary,
+  evidenceStatusFrom,
+  formatBaseRate,
+  describeCpcRead,
+  normalizeCpcRead,
+} from './cpc-card-summary.mjs';
+
 export const EDGE_STATUS = Object.freeze({
   PICK: 'PICK',
   LEAN: 'LEAN',
@@ -287,12 +296,47 @@ export function buildDecisionRow(input = {}) {
 
   const layersPresent = num(composite.layersPresent ?? composite.layers_present);
   const layersTotal = num(composite.layersTotal ?? composite.layers_total);
+  const cpcRead = normalizeCpcRead(edgeStatus);
+  const evidenceStatus = evidenceStatusFrom({
+    explicit: input.evidenceStatus ?? input.evidence_status,
+    status: input.status ?? edgeStatus,
+    blocker,
+    layersPresent,
+    layersTotal,
+  });
+  const card = buildCpcCardSummary({
+    title: titleFromRow(input),
+    subtitle: input.subtitle ?? input.marketType ?? input.market_type ?? 'CPC stack row',
+    plainEnglish: input.plainEnglish ?? input.plain_english ?? input.analysis ?? input.settlementSummary,
+    settlement: input.settlement ?? input.settlementSummary,
+    route: routeFromRow(input),
+    cpcRead,
+    cpcReadText: input.cpcReadText ?? input.cpc_read_text ?? null,
+    evidenceStatus,
+    baseRate: input.baseRate ?? input.base_rate ?? null,
+    priceContext: input.priceContext ?? input.price_context ?? PRICE_CONTEXT_DISPLAY_ONLY,
+    ticker: input.marketTicker ?? input.market_ticker ?? null,
+    marketId: input.marketId ?? input.market_id ?? input.marketTicker ?? input.market_ticker ?? null,
+    eventId: input.eventId ?? input.event_id ?? null,
+    reason: input.reason ?? input.analysis ?? null,
+  });
 
   return {
     market_ticker: input.marketTicker ?? 'MISSING',
     side_target: input.sideTarget ?? 'MISSING',
     market_type: input.marketType ?? 'MISSING',
     settlement_summary: input.settlementSummary ?? 'MISSING',
+    human_title: card.title,
+    subtitle: card.subtitle,
+    plain_english: card.plain_english,
+    settlement: card.settlement,
+    route: card.route,
+    cpc_read: card.cpc_read,
+    cpc_read_text: card.cpc_read_text,
+    evidence_status: card.evidence_status,
+    base_rate: card.base_rate,
+    price_context: card.price_context,
+    ticker_or_market_id: card.ticker_or_market_id,
     // --- composite / model half (no market price inside) ---
     composite_score: compositeScore,
     composite_posture: composite.posture ?? 'NO_CLEAR_PICK',
@@ -352,20 +396,40 @@ function fmtList(arr, max = 3) {
   return items.join(', ') + extra;
 }
 
+function titleFromRow(input = {}) {
+  const explicit = input.title ?? input.humanTitle ?? input.bigTitle;
+  if (explicit) return String(explicit);
+  const side = input.sideTarget ?? input.side_target;
+  const marketType = input.marketType ?? input.market_type;
+  if (side && marketType) return `${side} — ${marketType}`;
+  return input.marketTicker ?? input.market_ticker ?? 'CPC card';
+}
+
+function routeFromRow(input = {}) {
+  return input.route ?? input.marketType ?? input.market_type ?? 'cpc/general';
+}
+
+function renderCpcReadValue(row) {
+  return fmt(
+    row.cpc_read_text
+    ?? describeCpcRead(row.cpc_read ?? row.edge_status),
+  );
+}
+
 /**
  * Compact, <60-second board renderer. One block per ranked row, model and
  * market shown together with the edge verdict. Raw inventory does NOT belong
  * here — see buildInventoryArtifact for the audit-only dump.
  */
 export function renderDecisionBoard(rows = [], options = {}) {
-  const heading = options.heading ?? 'DECISION BOARD';
+  const heading = options.heading ?? 'CPC READ BOARD';
   const limit = options.limit ?? 12;
   const ranked = rankDecisionRows(rows);
   const shown = ranked.slice(0, limit);
   const lines = [];
-  lines.push(`=== ${heading} (model + market + edge) ===`);
+  lines.push(`=== ${heading} (model read + display-only price context) ===`);
   lines.push(`rows: ${ranked.length}${ranked.length > shown.length ? ` (showing top ${shown.length})` : ''}`);
-  lines.push('legend: edge_status PICK>LEAN>FADE>WATCH>BLOCKED>PASS; edge in pp (model fair − market implied)');
+  lines.push(`legend: top-rated > higher-rated > lower-rated > monitor only > blocked > no rated view. ${PRICE_CONTEXT_DISPLAY_ONLY}`);
   lines.push('');
   if (!shown.length) {
     lines.push('  (no rows)');
@@ -374,13 +438,15 @@ export function renderDecisionBoard(rows = [], options = {}) {
   let i = 0;
   for (const r of shown) {
     i += 1;
-    lines.push(`#${i} [${r.edge_status}] ${fmt(r.market_ticker)} :: ${fmt(r.side_target)}`);
-    lines.push(`    market_type: ${fmt(r.market_type)} | settlement: ${fmt(r.settlement_summary)}`);
-    lines.push(`    composite: score=${fmt(r.composite_score)} posture=${fmt(r.composite_posture)} layers=${fmt(r.layers_present)}`);
-    lines.push(`    top_evidence: ${fmtList(r.top_evidence_layers)} | missing: ${fmtList(r.missing_layers)}`);
-    lines.push(`    market: yes_bid=${fmt(r.market_yes_bid)} yes_ask=${fmt(r.market_yes_ask)} last=${fmt(r.last_price)} vol=${fmt(r.volume)} oi=${fmt(r.open_interest)}`);
-    lines.push(`    implied=${fmt(r.implied_probability)} fair=${fmt(r.fair_probability_or_range)} edge=${r.edge_cents_or_pp === null ? 'MISSING' : `${r.edge_cents_or_pp >= 0 ? '+' : ''}${r.edge_cents_or_pp}pp`} confidence=${fmt(r.confidence)}`);
-    lines.push(`    analysis: ${fmt(r.analysis)}`);
+    const baseRate = formatBaseRate(r.base_rate);
+    lines.push(`#${i} [CPC Read: ${renderCpcReadValue(r)}] ${fmt(r.human_title)}`);
+    lines.push(`    Plain English: ${fmt(r.plain_english)}`);
+    lines.push(`    Settlement: ${fmt(r.settlement)}`);
+    lines.push(`    Route: ${fmt(r.route)} | Evidence status: ${fmt(r.evidence_status)} | Base rate: ${baseRate.summary}`);
+    lines.push(`    Model Read: fair=${fmt(r.fair_probability_or_range)} score=${fmt(r.composite_score)} layers=${fmt(r.layers_present)} confidence=${fmt(r.confidence)}`);
+    lines.push(`    Price context: ${fmt(r.price_context)} implied=${fmt(r.implied_probability)} yes_bid=${fmt(r.market_yes_bid)} yes_ask=${fmt(r.market_yes_ask)} last=${fmt(r.last_price)} volume=${fmt(r.volume)} open_interest=${fmt(r.open_interest)}`);
+    lines.push(`    Ticker/market ID: ${fmt(r.ticker_or_market_id ?? r.market_ticker)}`);
+    lines.push(`    Why it matters: ${fmt(r.analysis)}`);
     lines.push(`    trigger: price=${fmt(r.trigger_price)} event=${fmt(r.trigger_event)}`);
     if (r.blocker_if_any && r.blocker_if_any !== 'none') {
       lines.push(`    blocker: ${r.blocker_if_any}`);
@@ -421,14 +487,19 @@ export function bucketDecisionRows(rows = []) {
 }
 
 function compactRowLines(r, idx) {
-  const edge = r.edge_cents_or_pp === null
-    ? 'edge=MISSING'
-    : `edge=${r.edge_cents_or_pp >= 0 ? '+' : ''}${r.edge_cents_or_pp}pp`;
+  const gap = r.edge_cents_or_pp === null
+    ? 'model/price gap=MISSING'
+    : `model/price gap=${r.edge_cents_or_pp >= 0 ? '+' : ''}${r.edge_cents_or_pp}pp`;
+  const baseRate = formatBaseRate(r.base_rate);
   const out = [];
-  out.push(`#${idx} [${r.edge_status}] ${fmt(r.market_ticker)} :: ${fmt(r.side_target)}`);
-  out.push(`    model: fair=${fmt(r.fair_probability_or_range)} score=${fmt(r.composite_score)} posture=${fmt(r.composite_posture)} layers=${fmt(r.layers_present)} conf=${fmt(r.confidence)}`);
-  out.push(`    market: implied=${fmt(r.implied_probability)} yes_bid=${fmt(r.market_yes_bid)} yes_ask=${fmt(r.market_yes_ask)} last=${fmt(r.last_price)} | ${edge}`);
-  out.push(`    why: ${fmt(r.analysis)}`);
+  out.push(`#${idx} [CPC Read: ${renderCpcReadValue(r)}] ${fmt(r.human_title)}`);
+  out.push(`    Plain English: ${fmt(r.plain_english)}`);
+  out.push(`    Settlement: ${fmt(r.settlement)}`);
+  out.push(`    Route: ${fmt(r.route)} | Evidence status: ${fmt(r.evidence_status)} | Base rate: ${baseRate.summary}`);
+  out.push(`    Model Read: fair=${fmt(r.fair_probability_or_range)} score=${fmt(r.composite_score)} layers=${fmt(r.layers_present)} conf=${fmt(r.confidence)}`);
+  out.push(`    Price context: ${fmt(r.price_context)} implied=${fmt(r.implied_probability)} yes_bid=${fmt(r.market_yes_bid)} yes_ask=${fmt(r.market_yes_ask)} last=${fmt(r.last_price)} | ${gap}`);
+  out.push(`    Ticker/market ID: ${fmt(r.ticker_or_market_id ?? r.market_ticker)}`);
+  out.push(`    Why it matters: ${fmt(r.analysis)}`);
   if (r.trigger_price != null || (r.trigger_event && r.trigger_event !== 'MISSING')) {
     out.push(`    trigger: price=${fmt(r.trigger_price)} when=${fmt(r.trigger_event)}`);
   }
@@ -477,8 +548,8 @@ function compactBlockedNotes(rows = [], limit = 8) {
 
 /**
  * Render the full sectioned, mobile-friendly decision packet body. This is the
- * single shared "enjoyable packet" layout used by every cron packet type:
- *   TLDR -> Top Edge Candidates -> Watchlist/Trigger Board -> Fades ->
+ * shared customer stack layout used by every cron packet type:
+ *   CPC Stack -> Primary Reads -> Watchlist -> Model Below Price ->
  *   Blocked/Needs Source -> Audit Artifacts.
  * Raw inventory NEVER appears here — only the audit artifact paths do.
  */
@@ -490,20 +561,20 @@ export function renderSectionedPacket(rows = [], options = {}) {
 
   const total = rows.length;
   const tldr = [
-    `top_edge=${buckets.topEdge.length}`,
-    `watchlist=${buckets.watchlist.length}`,
-    `fades=${buckets.fades.length}`,
+    `top_rated=${buckets.topEdge.length}`,
+    `monitor_only=${buckets.watchlist.length}`,
+    `lower_rated=${buckets.fades.length}`,
     `blocked=${buckets.blocked.length}`,
-    `pass=${buckets.passes.length}`,
+    `no_rated_view=${buckets.passes.length}`,
   ].join(' | ');
-  lines.push('TLDR BOARD:');
+  lines.push('CPC Stack:');
   if (options.tldrNote) lines.push(`  ${options.tldrNote}`);
   lines.push(`  rows=${total} :: ${tldr}`);
   const headline = buckets.topEdge[0] ?? buckets.watchlist[0] ?? null;
   if (headline) {
-    lines.push(`  headline: [${headline.edge_status}] ${fmt(headline.market_ticker)} ${fmt(headline.side_target)} (${headline.edge_cents_or_pp === null ? 'edge MISSING' : `${headline.edge_cents_or_pp >= 0 ? '+' : ''}${headline.edge_cents_or_pp}pp`})`);
+    lines.push(`  headline: [CPC Read: ${renderCpcReadValue(headline)}] ${fmt(headline.human_title)} (${headline.edge_cents_or_pp === null ? 'model/price gap MISSING' : `${headline.edge_cents_or_pp >= 0 ? '+' : ''}${headline.edge_cents_or_pp}pp`})`);
   }
-  lines.push('  legend: edge_status PICK>LEAN>FADE>WATCH>BLOCKED>PASS; edge = model fair − market implied (pp). Market Context — NOT IN SCORE.');
+  lines.push(`  legend: top-rated > higher-rated > lower-rated > monitor only > blocked > no rated view. ${PRICE_CONTEXT_DISPLAY_ONLY}`);
   lines.push('');
 
   const section = (title, arr, { showEmpty = true, note = null } = {}) => {
@@ -524,20 +595,23 @@ export function renderSectionedPacket(rows = [], options = {}) {
     lines.push('');
   };
 
-  section('1. TOP EDGE CANDIDATES', buckets.topEdge, { note: 'Model fair beats market by a strong margin. Confirm trigger before acting.' });
-  section('2. WATCHLIST / TRIGGER BOARD', buckets.watchlist, { note: 'Edge thin or evidence incomplete; each row lists what makes it playable.' });
-  section('3. FADES / OVERPRICED', buckets.fades, { showEmpty: true, note: 'Market implied runs above model fair.' });
+  section('1. TOP-RATED READS', buckets.topEdge, { note: 'The source-backed model clears the current threshold. Confirm the trigger before using the row.' });
+  section('2. MONITOR ONLY', buckets.watchlist, { note: 'The model view is thin or evidence is incomplete; each row lists what would change the view.' });
+  section('3. PRICE RICH / LOWER-RATED', buckets.fades, { showEmpty: true, note: 'Displayed price sits above the current model view.' });
   lines.push(`=== 4. BLOCKED / NEEDS SOURCE (${buckets.blocked.length}) ===`);
-  lines.push('  Settlement- or model-critical input missing. Not a pick or a pass — compact event-level notes only.');
+  lines.push('  Settlement- or model-critical input missing. Compact event-level notes only.');
   lines.push(...compactBlockedNotes(buckets.blocked, limit));
   lines.push('');
 
-  lines.push('=== 5. AUDIT ARTIFACTS ===');
-  lines.push(`  pass_rows_not_shown: ${buckets.passes.length} (efficient/no-edge; full list in audit inventory)`);
+  lines.push('=== 5. NO RATED VIEW ===');
+  lines.push(`  no_rated_view_rows_not_shown: ${buckets.passes.length} (full list lives in the separate audit artifact)`);
+  lines.push('');
+
+  lines.push('=== 6. AUDIT ARTIFACTS ===');
   if (auditPaths.length) {
     for (const p of auditPaths) lines.push(`  - ${p}`);
   } else {
-    lines.push('  - raw contract inventory written alongside this packet (see *.inventory.txt)');
+    lines.push('  - companion audit artifact written alongside this packet (see *.audit.txt)');
   }
   return lines.join('\n').trimEnd();
 }

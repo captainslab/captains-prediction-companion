@@ -438,8 +438,8 @@ function renderQualificationRiskSection(lines, qualificationTerms) {
     const proven = status === 'high' || status === 'medium';
     lines.push(`- ${maybe(term._short)}`);
     lines.push('');
-    pushCardBlock(lines, 'Settlement:', 'EDNQ is a separate settlement path if the event/rules do not qualify. This is not a content-term pick.');
-    pushCardBlock(lines, 'Read:', proven ? `YES-leaning qualification risk proven (${status || 'unknown'})` : 'Neutral fallback, not a pick.');
+    pushCardBlock(lines, 'Settlement:', 'EDNQ is a separate settlement path if the event/rules do not qualify. This is not a content-term rated view.');
+    pushCardBlock(lines, 'Read:', proven ? `qualification risk confirmed (${status || 'unknown'})` : 'qualification risk not confirmed.');
   }
 }
 
@@ -626,7 +626,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
   lines.push('---');
   lines.push(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`);
-  lines.push('Research only. No trades. No bankroll advice. Market context is never a score input.');
+  lines.push('Research only. No trades. Price context is display-only and never a score input.');
   return lines.join('\n');
 }
 

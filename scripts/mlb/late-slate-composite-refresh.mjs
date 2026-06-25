@@ -161,7 +161,7 @@ function renderCompactRefresh({ date, results, watchGames }) {
   }
 
   if (pickCount === 0) {
-    lines.push('○ NO CLEAR PICKS — composite data insufficient for actionable signals today.');
+    lines.push('○ CPC Read: PASS — composite data is insufficient for a source-backed primary read today.');
   }
 
   // Watch section

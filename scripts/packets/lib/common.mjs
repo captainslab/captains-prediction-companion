@@ -184,7 +184,7 @@ export function packetHeader({ title, date, packetType, sources = [] }) {
 }
 
 export function packetFooter() {
-  return ['', '---', NO_TRADE_FOOTER, 'No bankroll advice. No order placement. Research only.'].join('\n');
+  return ['', '---', NO_TRADE_FOOTER, 'No order placement. Research only.'].join('\n');
 }
 
 export function printDryRunSummary({ packetType, date, dir, items }) {

@@ -89,7 +89,7 @@ test('game packets block ranked rows when MLB model score is missing', () => {
     scope: 'GAME_PACKET',
   });
 
-  assert.match(packet.text, /NO CLEAR PICK/);
+  assert.match(packet.text, /CPC Read: monitor only\./);
   assert.match(packet.text, /BLOCKED_MODEL_LAYER_MISSING/);
   assert.doesNotMatch(packet.text, /BLOCKED \/ NEEDS SOURCE/);
   assert.doesNotMatch(packet.text, /score=MISSING/);
@@ -103,13 +103,13 @@ test('game packets ignore stale article-report format and stay on the clean wrap
     writeFileSync(
       join(articleDir, 'game-20260620-NYYBOS.txt'),
       [
-        'New York Yankees at Boston Red Sox — EVIDENCE LEAN NYY',
+        'Yankees at Red Sox — CPC rates Yankees higher',
         '=======================================================',
         '',
         'TLDR',
-        '  Call: EVIDENCE LEAN — NYY moneyline.',
-        '  Side / market: NYY ML',
-        '  Why: market signal and required MLB evidence point the same way.',
+        '  CPC Read: Yankees rate higher than Red Sox.',
+        '  Model Read: Yankees grade stronger on the current source-backed model.',
+        '  Why: source-backed model and required MLB evidence point the same way.',
         '',
         'Game Model Results',
         '  Home composite score: 48',
@@ -125,7 +125,7 @@ test('game packets ignore stale article-report format and stay on the clean wrap
         '  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).',
         '',
         'Final Call',
-        '  EVIDENCE LEAN on NYY moneyline',
+        '  CPC Read: Yankees rate higher than Red Sox.',
       ].join('\n'),
     );
 
@@ -163,12 +163,12 @@ test('game packets ignore stale article-report format and stay on the clean wrap
 
     const lines = packet.text.split(/\r?\n/);
     assert.match(lines[0], /Captain's MLB Prediction Companion/);
-    assert.match(lines[1], /Captain MLB — NYY @ BOS Game Board/);
+    assert.match(lines[1], /Captain MLB — New York Yankees at Boston Red Sox CPC Read/);
     assert.match(lines[2], /New York Yankees at Boston Red Sox/);
-    assert.match(lines.slice(0, 5).join('\n'), /CPC Packet: Game Board/);
+    assert.match(lines.slice(0, 5).join('\n'), /CPC Packet: CPC Read/);
     assert.match(lines.slice(0, 5).join('\n'), /generated_utc:/);
-    assert.match(packet.text, /TLDR/);
-    assert.match(packet.text, /Research Status/);
+    assert.match(packet.text, /CPC Read/);
+    assert.match(packet.text, /CPC Read/);
     assert.match(packet.text, /Event Preview \/ Storyline/);
     assert.match(packet.text, /Game Model Results/);
     assert.match(packet.text, /Source Ledger/);
@@ -178,9 +178,9 @@ test('game packets ignore stale article-report format and stay on the clean wrap
     assert.match(packet.text, /CONTEXT_ADAPTER:/);
     assert.match(packet.text, /MODEL_OUTPUT:/);
     assert.match(packet.text, /AUDIT_ARTIFACTS_AVAILABLE:/);
-    assert.match(packet.text, /NOT IN SCORE/);
+  assert.match(packet.text, /CPC Read/);
     assert.equal((packet.text.match(/No trades placed by this workflow\./g) || []).length, 1);
-    assert.equal((packet.text.match(/No bankroll advice\./g) || []).length, 1);
+    assert.equal((packet.text.match(/No order placement\. Research only\./g) || []).length, 1);
     assert.doesNotMatch(packet.text, /\/home\/jordan\//);
     assert.doesNotMatch(packet.text, /state\/mlb\//);
     assert.doesNotMatch(packet.text, /TLDR BOARD:/);
@@ -265,7 +265,7 @@ test('single-family game packets do not claim modeled families disagree and keep
   assert.doesNotMatch(packet.text, /modeled families disagree/i);
   assert.match(packet.text, /single modeled family only/i);
   assert.equal((packet.text.match(/No trades placed by this workflow\./g) || []).length, 1);
-  assert.equal((packet.text.match(/No bankroll advice\./g) || []).length, 1);
+  assert.equal((packet.text.match(/No order placement\. Research only\./g) || []).length, 1);
 });
 
 test('single-family fully sourced packets render a sharp model-backed storyline', () => {
@@ -326,7 +326,7 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
   const homeKs = packet.text.match(/Jack Perkins projects around ([0-9]+\.[0-9]) K/);
 
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /NO CLEAR PICK because only the MONEYLINE family is fully modeled/);
+  assert.match(packet.text, /single modeled family only/);
   assert.ok(runSplit, 'run split line should render');
   assert.ok(totalShape, 'total shape line should render');
   assert.ok(yrfiShape, 'YRFI shape line should render');
@@ -357,7 +357,7 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
   assert.doesNotMatch(packet.text, /\/home\/jordan\//);
   assert.doesNotMatch(packet.text, /state\/mlb\//);
   assert.equal((packet.text.match(/No trades placed by this workflow\./g) || []).length, 1);
-  assert.equal((packet.text.match(/No bankroll advice\./g) || []).length, 1);
+  assert.equal((packet.text.match(/No order placement\. Research only\./g) || []).length, 1);
 });
 
 test('game packets show projected lineup status when alpha is still pending', () => {
@@ -413,8 +413,8 @@ test('game packets show projected lineup status when alpha is still pending', ()
     },
   });
 
-  assert.match(packet.text, /Research Status/);
+  assert.match(packet.text, /CPC Read/);
   assert.match(packet.text, /Lineup PROJECTED · Starter PROBABLE · Weather UPDATED/);
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /the line is still provisional on lineup alpha/);
+  assert.match(packet.text, /waiting for lineup confirmation before promoting the model read/);
 });

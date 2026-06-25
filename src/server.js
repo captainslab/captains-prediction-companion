@@ -71,18 +71,61 @@ const pipelineService = createPipelineService({
   seedUrls: await buildSeedUrls(),
 })
 
+export function getExpectedMcpToolNames({ enableNoteTools = ENABLE_NOTE_TOOLS } = {}) {
+  const names = ['app_status']
+  if (enableNoteTools) names.push('remember_note')
+  for (const tool of buildResearchTools()) names.push(tool.name)
+  return names
+}
+
+export function buildAppStatusPayload({
+  launchedAt = new Date().toISOString(),
+  notes = noteStore,
+  enableNoteTools = ENABLE_NOTE_TOOLS,
+} = {}) {
+  return {
+    appName: APP_NAME,
+    version: APP_VERSION,
+    noteCount: notes?.stats?.().count ?? 0,
+    launchedAt,
+    transport: 'streamable-http',
+    endpointPath: '/mcp',
+    healthPath: '/healthz',
+    readOnlyDefault: true,
+    noteToolsEnabled: enableNoteTools,
+    toolNames: getExpectedMcpToolNames({ enableNoteTools }),
+    credentialStatus: {
+      perplexityKeyAvailable: hasPerplexityKey(),
+    },
+  }
+}
+
+export function buildAppStatusToolResult(options = {}) {
+  const status = buildAppStatusPayload(options)
+  return {
+    content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
+    structuredContent: status,
+  }
+}
+
 function buildCardToolResult(result, { includeHidden = false } = {}) {
   const summary = buildEventMarketPlanSummary(result)
+  const text = typeof summary?.card_text === 'string' && summary.card_text.trim()
+    ? summary.card_text
+    : JSON.stringify(summary, null, 2)
   return {
-    content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
+    content: [{ type: 'text', text }],
     structuredContent: includeHidden ? result : summary,
   }
 }
 
 function buildCompositeToolResult(result) {
   const payload = result?.compact_card ?? result
+  const text = typeof payload?.card_text === 'string' && payload.card_text.trim()
+    ? payload.card_text
+    : JSON.stringify(payload, null, 2)
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: 'text', text }],
     structuredContent: payload,
   }
 }
@@ -110,20 +153,7 @@ function createServer(options = {}) {
       inputSchema: {},
     },
     async () => {
-      const status = {
-        appName: APP_NAME,
-        version: APP_VERSION,
-        dataFile: DATA_FILE,
-        noteCount: noteStore.stats().count,
-        launchedAt: new Date().toISOString(),
-        transport: 'streamable-http',
-        perplexityKeyAvailable: hasPerplexityKey(),
-      }
-
-      return {
-        content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
-        structuredContent: status,
-      }
+      return buildAppStatusToolResult()
     }
   )
 

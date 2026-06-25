@@ -106,7 +106,7 @@ function buildStatusBlock(changelog, pkg) {
     ['Package version', '`' + (pkg.version ?? 'unknown') + '`'],
     ['Latest changelog', '`' + changelogVersion + '`'],
     ['Node requirement', '`>=18` (developed on Node 22)'],
-    ['Trading posture', 'Read-only — **no orders, no bankroll automation**'],
+    ['Trading posture', 'Read-only — **no orders, no execution automation**'],
     ['Composite scoring', 'Market-neutral — market price is **never** a composite input'],
     ['Supported packets', 'MLB · NASCAR · mentions / politics'],
     ['Discord output', 'Dry-run formatter only (offline, no live send)'],

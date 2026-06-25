@@ -56,17 +56,17 @@ export function buildUfcProcess({ event = null, legacy = null, marketCount = 0 }
       evidence_supported_side: false,
     },
     topEvidence: [
-      marketCount > 0 ? `Kalshi fight board captured with ${marketCount} market(s).` : null,
+      marketCount > 0 ? `Kalshi fight market set captured with ${marketCount} market(s).` : null,
       legacy?.venue ? `Venue supplied: ${legacy.venue}.` : null,
     ].filter(Boolean),
     settlementRules: 'UFC market settlement criteria not independently pulled by this packet.',
     verifiedFacts: hasParticipants ? 'Participants/market contracts captured; fighter status context still required.' : 'No participants verified.',
-    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    marketSignalText: marketCount > 0 ? 'Price context captured for research; no CPC read inferred from price.' : 'No price context captured.',
     socialChatter: 'Not used as verified fact.',
     inference: 'Fight inference blocked until fighter status, matchup, recent form, and card-change checks are complete.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
-    finalJudgment: 'WATCH only; no evidence lean from fight board alone.',
-    whyNotPriceOnly: 'Market-board data is reference-only; no final pick is claimed without fighter-status, matchup, and card-change evidence.',
+    finalJudgment: 'WATCH only; no CPC read from price context or fight context alone.',
+    whyNotPriceOnly: 'Price context is reference-only; no final CPC read is claimed without fighter-status, matchup, and card-change evidence.',
     wouldChangeView: [
       'Official card and fighter status are confirmed.',
       'Recent form and style matchup support the same side as any board signal.',
@@ -306,8 +306,8 @@ export function buildCompositeCard({ kalshiEvents, allLaneEvents = kalshiEvents,
 function addNoPickSummary(lines, { sourcesChecked, missingInputs, noPickReason }) {
   lines.push(`  sources_checked: ${sourcesChecked}`);
   lines.push(`  missing_inputs: ${missingInputs}`);
-  lines.push('  anti_price_statement: market-board data is reference-only and cannot support a pick by itself.');
-  lines.push(`  no_pick_reason: ${noPickReason}`);
+  lines.push('  anti_price_statement: price context is reference-only and cannot create a CPC read by itself.');
+  lines.push(`  no_rated_view_reason: ${noPickReason}`);
   lines.push('  telegram_send: disabled');
 }
 
@@ -434,16 +434,16 @@ export function buildLegacyEventPacket({ weekendDates: wd, event }) {
 export function buildEmptyPacket(date, dates, discovery) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.SPORTS_GAME,
-    rawDecision: 'NO CLEAR PICK',
+    rawDecision: 'PASS',
     checked: {},
     settlementRules: 'MISSING: no UFC event packet.',
     verifiedFacts: 'MISSING: no UFC events discovered.',
-    marketSignalText: 'No market board captured.',
+    marketSignalText: 'No price context captured.',
     socialChatter: 'Not used.',
     inference: 'No inference.',
     skepticReview: 'MISSING.',
-    finalJudgment: 'NO CLEAR PICK.',
-    whyNotPriceOnly: 'No final pick is claimed without verified UFC event and fighter evidence.',
+    finalJudgment: 'PASS.',
+    whyNotPriceOnly: 'No final rated view is claimed without verified UFC event and fighter evidence.',
   });
   return (
     packetHeader({
@@ -455,12 +455,12 @@ export function buildEmptyPacket(date, dates, discovery) {
     [
       'TLDR:',
       `  market_type: ${process.marketType}`,
-      `  decision_status: ${process.decisionStatus}`,
-      '  note: no UFC events found; no pick or lean.',
+      '  decision_status: no rated view',
+      '  note: no UFC events found; no rated view.',
       '  sources_checked: Kalshi UFC API and calendar page.',
       '  missing_inputs: UFC event, fighter status, recent form, matchup context, card-change checks, settlement criteria.',
-      '  anti_price_statement: market-board data is reference-only and cannot support a pick by itself.',
-      '  no_pick_reason: no UFC event data was discovered inside the weekend window.',
+      '  anti_price_statement: price context is reference-only and cannot create a CPC read by itself.',
+      '  no_rated_view_reason: no UFC event data was discovered inside the weekend window.',
       '  telegram_send: disabled',
       '',
       renderDecisionProcess(process, { heading: 'Research Completeness' }),
@@ -470,7 +470,7 @@ export function buildEmptyPacket(date, dates, discovery) {
       '',
       '--- Market Context - NOT IN SCORE ---',
       'anti_price_statement: price, volume, open interest, and line movement are market context only; they are NOT IN SCORE.',
-      'line_movement: MISSING (no market board captured).',
+      'line_movement: MISSING (no price context captured).',
       '',
       'kalshi_discovery:',
       `  source_page: ${KALSHI_SOURCES.ufc.page_url}`,

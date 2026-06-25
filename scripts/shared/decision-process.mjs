@@ -105,6 +105,14 @@ const MARKET_ONLY_ITEMS = new Set([
   'line_ladder_comparison',
 ]);
 
+const DECISION_STATUS_DISPLAY = Object.freeze({
+  [DECISION_STATUSES.NO_CLEAR_PICK]: 'no rated view',
+  [DECISION_STATUSES.WATCH]: 'monitor only',
+  [DECISION_STATUSES.MARKET_ONLY_LEAN]: 'market signal only',
+  [DECISION_STATUSES.EVIDENCE_LEAN]: 'higher-rated model view',
+  [DECISION_STATUSES.STRONG_EVIDENCE_LEAN]: 'top-rated model view',
+});
+
 function normalizeText(v) {
   if (v == null) return '';
   if (typeof v === 'string') return v;
@@ -166,6 +174,10 @@ function settlementItemFor(marketType) {
   if (marketType === MARKET_TYPES.MENTION_MARKET) return 'exact_settlement_wording';
   if (marketType === MARKET_TYPES.POLITICS_PERSONNEL || marketType === MARKET_TYPES.ELECTION) return 'settlement_rule_fit';
   return null;
+}
+
+export function describeDecisionStatus(status) {
+  return DECISION_STATUS_DISPLAY[status] ?? 'no rated view';
 }
 
 function completeEnoughForEvidenceLean(marketType, checked, missing) {
@@ -236,12 +248,12 @@ export function evaluateDecisionProcess(input = {}) {
   const missingEvidence = input.missingEvidence?.filter(Boolean) ?? missing;
   const whyNotPriceOnly = input.whyNotPriceOnly
     ?? (decisionStatus === DECISION_STATUSES.MARKET_ONLY_LEAN
-      ? 'It is not an evidence-based pick: the board signal exists, but required real-world or settlement evidence is incomplete.'
+      ? 'It is not a source-backed rated view: the board signal exists, but required real-world or settlement evidence is incomplete.'
       : evidenceReady
         ? 'Market signal is cross-checked against required real-world and settlement evidence.'
-        : 'No final pick is claimed because price, liquidity, movement, and ladder shape are insufficient by themselves.');
+        : 'No final rated view is claimed because price, liquidity, movement, and ladder shape are insufficient by themselves.');
   const sourceQuality = input.sourceQuality
-    ?? (evidenceReady ? 'complete-enough for evidence lean' : 'incomplete; downgrade required');
+    ?? (evidenceReady ? 'complete enough for a rated view' : 'incomplete; downgrade required');
   const wouldChangeView = input.wouldChangeView?.filter(Boolean) ?? [];
 
   return {
@@ -266,7 +278,7 @@ export function evaluateDecisionProcess(input = {}) {
       socialChatter: input.socialChatter ?? 'Not used as verified fact',
       inference: input.inference ?? 'Inference withheld unless evidence checklist supports it',
       skepticReview: input.skepticReview ?? (input.skepticReviewPassed ? 'Passed' : 'MISSING / not supplied'),
-      finalJudgment: input.finalJudgment ?? decisionStatus,
+      finalJudgment: input.finalJudgment ?? describeDecisionStatus(decisionStatus),
     },
   };
 }
@@ -285,7 +297,7 @@ export function renderDecisionProcess(process, options = {}) {
   const lines = [];
   lines.push(`${indent}${heading}`);
   lines.push(`${bullet}Market type: ${process.marketType}`);
-  lines.push(`${bullet}Decision status: ${process.decisionStatus}`);
+  lines.push(`${bullet}Decision status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push(`${bullet}Required checklist:`);
   for (const item of process.checklist) {
     lines.push(`${sub}[${item.checked ? 'x' : ' '}] ${item.label}`);

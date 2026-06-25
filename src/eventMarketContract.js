@@ -1,3 +1,12 @@
+import {
+  PRICE_CONTEXT_DISPLAY_ONLY,
+  buildCpcCardSummary,
+  renderCpcCardText,
+  describeCpcRead,
+  normalizeCpcRead,
+  evidenceStatusFrom,
+} from '../scripts/shared/cpc-card-summary.mjs';
+
 function canonicalizeVenue(venue) {
   if (!venue) return 'Kalshi';
   const value = String(venue).trim();
@@ -573,9 +582,9 @@ function buildUserFacingHeadline(status, marketType, eventType, input, marketVie
   }
   if (status === 'ready' && marketType === 'mention') {
     if (marketView?.trade_view?.best_side === 'watch') {
-      return 'The alpha pipeline priced the mention contract, but the edge is too thin to act.';
+      return 'The mention contract is mapped, but the CPC read is still WATCH.';
     }
-    return 'The mention contract is priced and the alpha pipeline has a directional edge.';
+    return 'The mention contract is mapped and CPC has a source-backed model read.';
   }
   if (marketType === 'mention') {
     return 'The contract is mapped as a mention market and is ready for pricing.';
@@ -605,29 +614,29 @@ function buildUserFacingReason(status, marketType, input, marketView) {
     return 'The market type is not supported by the current event-market card.';
   }
   if (status === 'insufficient_context') {
-    return 'The app can parse the venue, but it still lacks enough event detail to build an actionable card.';
+    return 'The app can parse the venue, but it still lacks enough event detail to build a reliable CPC card.';
   }
   if (status === 'waiting' && marketType === 'mention') {
-    return 'The Kalshi link resolves to a board with multiple phrase contracts, so the app needs one specific contract before it can take a side.';
+    return 'The Kalshi link resolves to multiple phrase contracts, so the app needs one specific contract before it can produce a CPC read.';
   }
   if (status === 'needs_pricing' && marketType === 'mention') {
-    return 'The contract has live Kalshi prices, but the alpha pipeline has not produced fair value or edge yet.';
+    return 'The contract has live Kalshi prices, but CPC has not produced a source-backed model read yet.';
   }
   if (status === 'ready' && marketType === 'mention') {
     if (marketView?.trade_view?.best_side === 'watch' && edgeCents === 0) {
-      return 'Alpha fair value sits inside the no-bet band, so the card stays on watch until the live price moves or new evidence appears.';
+      return 'The model read is inside the neutral band, so the card stays on WATCH until new source evidence appears.';
     }
     return (
       alphaReason ??
       (marketView?.trade_view?.best_side === 'watch'
-        ? 'The alpha pipeline priced the contract, but the current edge is too small to act on.'
-        : 'The alpha pipeline has loaded the exact phrase, rules summary, and computed edge for this contract.')
+        ? 'CPC mapped the contract, but the current model gap is too small to promote.'
+        : 'CPC loaded the exact phrase, rules summary, and source-backed model read for this contract.')
     );
   }
   if (marketType === 'mention') {
-    return 'The phrase path is mapped, but exact pricing and edge still need to be computed.';
+    return 'The phrase path is mapped, but CPC still needs a source-backed model read.';
   }
-  return 'The event and market types are classified, but fair value and edge are still missing.';
+  return 'The event and market types are classified, but the source-backed model read is still missing.';
 }
 
 function buildUserFacingNextAction(status, marketType, eventType) {
@@ -643,6 +652,115 @@ function buildUserFacingNextAction(status, marketType, eventType) {
   return 'fetch_live_prices';
 }
 
+function titleCasePhrase(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  if (/^[A-Z]{2,}$/.test(text)) return text;
+  return text
+    .split(/\s+/)
+    .map((part) => part ? `${part[0].toUpperCase()}${part.slice(1)}` : '')
+    .join(' ');
+}
+
+function buildSpeakerLabel(input, eventType) {
+  const metadata = input.metadata ?? {};
+  return metadataValue(metadata, 'speaker', 'host', 'witness')
+    ?? (eventType === 'speech' || eventType === 'press_conference' ? 'the covered speaker' : null)
+    ?? 'the covered speaker';
+}
+
+function buildCustomerCpcReadText({ marketType, status, recommendation, matchup = null }) {
+  const read = normalizeCpcRead(recommendation);
+  if (marketType === 'mention') {
+    if (read === 'PICK') return 'top-rated model side';
+    if (read === 'LEAN') return 'higher-rated term';
+    if (read === 'WATCH') return 'monitor term';
+    if (read === 'FADE') return 'lower-rated term';
+    if (read === 'BLOCKED') return 'blocked — missing required evidence';
+    return 'no rated view';
+  }
+
+  if (matchup?.away && matchup?.home && (read === 'PICK' || read === 'LEAN')) {
+    return `${matchup.away} rate higher than ${matchup.home}.`;
+  }
+
+  if (status === 'waiting' || read === 'WATCH') return 'monitor only';
+  if (read === 'FADE') return 'lower-rated by CPC';
+  if (read === 'BLOCKED') return 'blocked — missing required evidence';
+  if (read === 'PICK') return 'top-rated model side';
+  return describeCpcRead(read);
+}
+
+function buildHumanCardFields({ input, plan, eventDomain, eventType, marketType, status, recommendation, confidence, marketView }) {
+  const metadata = input.metadata ?? {};
+  const marketTicker = marketView?.trade_view?.market_ticker
+    ?? metadataValue(metadata, 'market_ticker')
+    ?? plan.metadata.market_id
+    ?? null;
+  const eventTicker = metadataValue(metadata, 'kalshi_event_ticker', 'event_ticker');
+  const targetPhrase = marketView?.target_phrase
+    ?? metadataValue(metadata, 'target_phrase', 'phrase')
+    ?? extractTargetPhrase(input.title, input.question, input.market_id, input.url);
+  const targetDisplay = titleCasePhrase(targetPhrase) ?? 'the selected outcome';
+  const speaker = buildSpeakerLabel(input, eventType);
+  const eventName = metadataValue(metadata, 'event_name') ?? input.title ?? 'the covered event';
+  const route = `${eventDomain}/${eventType}/${marketType}`;
+  const cpcReadText = buildCustomerCpcReadText({
+    marketType,
+    status,
+    recommendation,
+    matchup: extractMatchup(input.title, input.question, input.url),
+  });
+
+  if (marketType === 'mention') {
+    return {
+      title: `Will ${speaker} say "${targetDisplay}" during the covered event?`,
+      subtitle: `Exact-word mention contract for ${eventName}.`,
+      plainEnglish: `This card asks whether the accepted word form "${targetDisplay}" appears during the covered event under Kalshi's rules.`,
+      settlement: `YES only if the covered event includes the accepted word form under Kalshi's rules.`,
+      route,
+      cpcRead: normalizeCpcRead(recommendation),
+      cpcReadText,
+      evidenceStatus: evidenceStatusFrom({ status, sourceAvailable: status !== 'insufficient_context' }),
+      baseRate: {
+        sample_size: metadataValue(metadata, 'base_rate_sample_size', 'sample_size'),
+        hit_rate: metadataValue(metadata, 'base_rate_hit_rate', 'hit_rate'),
+        tier: metadataValue(metadata, 'base_rate_tier', 'tier'),
+        summary: metadataValue(metadata, 'base_rate_summary')
+          ?? 'unavailable until settled history is attached',
+      },
+      priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+      ticker: marketTicker,
+      marketId: plan.metadata.market_id ?? marketTicker,
+      eventId: eventTicker,
+      reason: buildUserFacingReason(status, marketType, input, marketView),
+    };
+  }
+
+  const matchup = extractMatchup(input.title, input.question, input.url);
+  const title = matchup.away && matchup.home
+    ? `${matchup.away} at ${matchup.home} — CPC read`
+    : `${input.title ?? plan.domain ?? 'Market'} — CPC read`;
+  return {
+    title,
+    subtitle: `${marketType} contract mapped by CPC.`,
+    plainEnglish: 'This card explains what the contract asks and keeps model context separate from displayed price.',
+    settlement: marketView?.moneyline
+      ? 'YES settlement follows the game winner rules for the selected side.'
+      : 'Settlement follows the market rules.',
+    route,
+    cpcRead: normalizeCpcRead(recommendation),
+    cpcReadText,
+    evidenceStatus: evidenceStatusFrom({ status }),
+    baseRate: 'unavailable until settled history is attached',
+    priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+    ticker: marketTicker,
+    marketId: plan.metadata.market_id ?? marketTicker,
+    eventId: eventTicker,
+    reason: buildUserFacingReason(status, marketType, input, marketView),
+  };
+}
+
 function buildUserFacingCard(input, plan) {
   const eventType = inferEventType(input, plan.domain);
   const eventDomain = inferEventDomain(plan.domain, eventType);
@@ -653,8 +771,21 @@ function buildUserFacingCard(input, plan) {
   const confidence =
     normalizeConfidence(metadataValue(input.metadata ?? {}, 'alpha_confidence')) ??
     (status === 'ready' || status === 'needs_pricing' ? 'medium' : 'low');
+  const card = buildCpcCardSummary(buildHumanCardFields({
+    input,
+    plan,
+    eventDomain,
+    eventType,
+    marketType,
+    status,
+    recommendation,
+    confidence,
+    marketView,
+  }));
 
   return {
+    card,
+    card_text: renderCpcCardText(card),
     source: {
       platform: plan.venue,
       url: plan.metadata.url ?? null,

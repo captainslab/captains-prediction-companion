@@ -1,6 +1,8 @@
 # Connect to ChatGPT
 
 Use Captains Prediction Companion as a private ChatGPT app with Developer mode enabled.
+See `docs/CHATGPT_APP_READINESS.md` for the full private readiness checklist and
+`docs/CPC_OUTPUT_LANGUAGE.md` for customer-facing card/packet language rules.
 
 ## Current endpoint
 
@@ -46,12 +48,13 @@ The server is plain Node + the MCP streamable-HTTP transport, so deploying is ju
 
 1. Pull this repo onto the `captainlabs.io` host.
 2. `npm ci` (only deps are `@modelcontextprotocol/sdk` and `zod`).
-3. Run it: `npm start` (listens on `PORT`, default `3000`). For a managed service,
-   adapt `deploy/systemd/captainlabs-api.service.example` — set `PORT` to match the
-   nginx upstream (`127.0.0.1:3000` in `deploy/nginx/captainlabs.io.conf.example`).
-4. nginx already proxies `/` (incl. `/mcp` and `/healthz`) to the node port, so once
+3. Run it locally with `npm start` (default `PORT=3000`).
+4. For production, adapt `deploy/systemd/captainlabs-api.service.example`; it uses
+   `PORT=8000`, matching the nginx upstream `127.0.0.1:8000` in
+   `deploy/nginx/captainlabs.io.conf.example`.
+5. nginx proxies `/` (incl. `/mcp` and `/healthz`) to the production node port, so once
    the service is up, `https://captainlabs.io/mcp` is live.
-5. Verify: `curl https://captainlabs.io/healthz` should return `{"ok":true,...}`.
+6. Verify: `curl https://captainlabs.io/healthz` should return `{"ok":true,...}`.
 
 Then add `https://captainlabs.io/mcp` in ChatGPT as above.
 

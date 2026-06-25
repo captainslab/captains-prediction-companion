@@ -58,7 +58,7 @@ _Auto-generated from `CHANGELOG.md` by `npm run docs:update`. Do not edit by han
 | Package version | `1.0.0` |
 | Latest changelog | `Unreleased` |
 | Node requirement | `>=18` (developed on Node 22) |
-| Trading posture | Read-only — **no orders, no bankroll automation** |
+| Trading posture | Read-only — **no orders, no execution automation** |
 | Composite scoring | Market-neutral — market price is **never** a composite input |
 | Supported packets | MLB · NASCAR · mentions / politics |
 | Discord output | Dry-run formatter only (offline, no live send) |
@@ -158,6 +158,17 @@ Open in a browser:
 - `http://localhost:3000/health` — health check JSON
 - `http://localhost:3000/mcp` — MCP endpoint
 
+## Private ChatGPT Developer Mode
+
+CPC can run as a private ChatGPT Developer Mode MCP app. Use
+`https://captainlabs.io/mcp` for the production app draft, or
+`http://localhost:3000/mcp` for local testing. The app is private/read-only by
+default and is not public ChatGPT app submission ready.
+
+See [docs/CHATGPT_APP_READINESS.md](./docs/CHATGPT_APP_READINESS.md) for setup
+checks, the customer usage flow, and [docs/CPC_OUTPUT_LANGUAGE.md](./docs/CPC_OUTPUT_LANGUAGE.md)
+for the customer-facing card/packet language standard.
+
 ## Generate a packet
 
 All generators are **read-only and place no trades.** Run any of them with
@@ -219,8 +230,8 @@ documentation or source of truth.** New date-scoped runs are gitignored.
 
 ## No trades, no orders
 
-CPC is **research-only**. No script in this repo places an order, manages a
-bankroll, or executes a trade. Every generator carries a
+CPC is **research-only**. No script in this repo places an order or executes a
+trade. Every generator carries a
 `No trades placed by this workflow.` footer, and that boundary is a hard rule —
 see [docs/SECURITY_PRIVACY.md](./docs/SECURITY_PRIVACY.md).
 
@@ -243,7 +254,7 @@ CPC is built secrets-out and read-only by default:
 - **Secrets** — `.env`, `.runtime`, webhook URLs, bot tokens, API keys, and
   private keys are never printed, logged, or committed. Tooling reports only
   *presence*, never values.
-- **Trading** — no live orders, no bankroll automation, no execution.
+- **Trading** — no live orders, no execution automation.
 - **Discord** — dry-run formatter is offline; live send requires explicit
   authorization and an env-only webhook URL.
 - **Data** — `state/`, `data/`, `.runtime/`, `scratch/` are runtime areas, never
