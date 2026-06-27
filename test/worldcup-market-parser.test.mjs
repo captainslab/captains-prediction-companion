@@ -202,11 +202,12 @@ test('all market families route to lanes and render on the sectioned board', () 
   assert.ok(byLane.total_goals_first_half.market_context, '1H total attached as reference');
   assert.ok(byLane.btts_first_half.market_context, '1H BTTS attached as reference');
 
-  const match = { match_id: 'm1', home_team: 'Mexico', away_team: 'South Africa', stage: 'group', kickoff_utc: '2026-06-11T19:00:00Z', lineup_status: 'lineup_confirmed' };
+  const match = { match_id: 'm1', home_team: 'Mexico', away_team: 'South Africa', stage: 'group', kickoff_utc: '2026-06-11T19:00:00Z', lineup_status: 'lineup_confirmed', lineup_locked_verified: false };
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
 
   // Forecast-language match breakdown (new soccer-handicapping renderer).
-  assert.ok(text.includes('Match forecast: Mexico result edge'), 'match-result forecast rendered');
+  assert.ok(text.includes('Match forecast: Mexico rates higher'), 'match-result forecast rendered');
+  assert.ok(text.includes('Model-rated side (forecast only)'), 'forecast summary rendered');
   assert.ok(/Goal forecast: Projected goals: Mexico [\d.]+, South Africa [\d.]+/.test(text),
     'goal forecast rendered in soccer language');
   assert.ok(/Total goals forecast: Projected total [\d.]+/.test(text), 'total goals forecast rendered');
@@ -245,7 +246,7 @@ test('totals/BTTS with missing attack/defense layers block instead of defaulting
 
 test('raw market inventory stays audit-only with the full contract set attached', () => {
   const board = boardWithMarkets(CONTRACT_SET);
-  const match = { match_id: 'm1', home_team: 'Mexico', away_team: 'South Africa', stage: 'group', kickoff_utc: '2026-06-11T19:00:00Z', lineup_status: 'lineup_confirmed' };
+  const match = { match_id: 'm1', home_team: 'Mexico', away_team: 'South Africa', stage: 'group', kickoff_utc: '2026-06-11T19:00:00Z', lineup_status: 'lineup_confirmed', lineup_locked_verified: false };
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
   for (const forbidden of ['yes_bid', 'yes_ask', 'no_bid', 'no_ask', 'open_interest', 'last_price', 'volume', 'orderbook']) {
     assert.ok(!text.includes(forbidden), `raw market field "${forbidden}" leaked into main packet`);

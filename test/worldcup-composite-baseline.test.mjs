@@ -43,7 +43,7 @@ test('packet labels provisional prior-composite provenance as PRE_LOCK', () => {
   });
   assert.ok(text.includes('latest prior team composite from 2026-06-17'), 'must name prior-composite model basis');
   assert.ok(text.includes('Pre-lock forecast: lineups are not confirmed'), 'must mark the pre-lock state');
-  assert.ok(text.includes('not today\'s confirmed XI'), 'must disclose the pre-lock XI basis');
+  assert.ok(text.includes('not today\'s official starting lineup'), 'must disclose the pre-lock lineup basis');
 });
 
 test('packet omits the provisional banner when provenance is current', () => {
