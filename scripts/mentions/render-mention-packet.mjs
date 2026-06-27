@@ -21,6 +21,10 @@
 import {
   formatPmtAdvisoryContext,
 } from './pmt-advisory-context.mjs';
+import {
+  classifyEdnqRisk,
+  normalizeQualificationResult,
+} from './qualification-risk.mjs';
 
 export const SECTION_ORDER = Object.freeze([
   '1. FAST READ',
@@ -28,7 +32,7 @@ export const SECTION_ORDER = Object.freeze([
   '3. WEAK YES WATCHLIST',
   '4. WEAK NO / STRONG NO TRAPS',
   '5. SOURCE GAPS',
-  '6. QUALIFICATION RISK',
+  '6. QUALIFICATION RESULT / EDNQ RISK',
   '7. SETTLEMENT NOTES',
   '8. FULL STRIKE INVENTORY',
 ]);
@@ -92,6 +96,21 @@ export function formatCentral(isoOrDate) {
 }
 
 function formatGeneratedStamp(isoOrDate) {
+  const d = new Date(isoOrDate);
+  if (Number.isNaN(d.getTime())) return 'MISSING';
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  return fmt.format(d);
+}
+
+function formatGeneratedCentralStamp(isoOrDate) {
   return formatCentral(isoOrDate);
 }
 
@@ -224,6 +243,8 @@ export function buildTrumpQualificationCheck(input = {}) {
         /\bbilateral meeting\b/i,
         /\bforeign[- ]leader(?:\s+joint appearance)?\b/i,
         /\bjoint appearance\b/i,
+        /\bworking lunch\b/i,
+        /\bmulti[- ]party\b/i,
         /\bforeign[- ]leader press availability\b/i,
         /\bpress availability\b/i,
         /\bsummit side event\b/i,
@@ -426,25 +447,33 @@ function renderGapSummary(lines, gapTerms) {
   lines.push('  These strikes stay out of the YES/NO cards until research-backed evidence lands.');
 }
 
-function renderQualificationRiskSection(lines, qualificationTerms) {
-  lines.push('6. QUALIFICATION RISK');
-  if (!qualificationTerms.length) {
-    lines.push('- none');
-    lines.push('');
-    return;
+function renderQualificationRiskSection(lines, risk) {
+  lines.push('6. QUALIFICATION RESULT / EDNQ RISK');
+  lines.push(`- EDNQ result: ${risk.result_label} is a separate event-level result/outcome, not a spoken-term strike.`);
+  lines.push(`- CPC Read: ${normalizeQualificationResult(risk.cpc_read)}`);
+  lines.push('- Why EDNQ could happen:');
+  for (const line of risk.why_ednq?.length ? risk.why_ednq : ['No clear qualification-pathway indicator is confirmed yet.']) {
+    lines.push(`  - ${line}`);
   }
-  for (const term of qualificationTerms) {
-    const status = String(term?.qualification_status ?? '').trim().toLowerCase();
-    const proven = status === 'high' || status === 'medium';
-    lines.push(`- ${maybe(term._short)}`);
-    lines.push('');
-    pushCardBlock(lines, 'Settlement:', 'EDNQ is a separate settlement path if the event/rules do not qualify. This is not a content-term rated view.');
-    pushCardBlock(lines, 'Read:', proven ? `qualification risk confirmed (${status || 'unknown'})` : 'qualification risk not confirmed.');
+  lines.push('- Current qualification check:');
+  for (const line of risk.current_check?.length ? risk.current_check : ['Trusted event time not yet confirmed; do not treat settlement expiration as the event start.']) {
+    lines.push(`  - ${line}`);
   }
+  lines.push(`- Historical EDNQ pattern note: ${risk.historical_note}`);
+  if (risk.active_blockers?.length) {
+    lines.push('- Active metadata/source-window blockers:');
+    for (const blocker of risk.active_blockers) {
+      lines.push(`  - ${blocker}`);
+    }
+  } else {
+    lines.push('- Active metadata/source-window blockers: none');
+  }
+  lines.push(`- Qualification term inventory: ${risk.qualification_term_count > 0 ? risk.qualification_term_labels.join(', ') : 'none'}`);
+  lines.push('');
 }
 
 function renderInventoryLabel(term) {
-  if (isQualificationRisk(term)) return 'Event does not qualify';
+  if (isQualificationRisk(term)) return null;
   return maybe(term?._short ?? term?.short_term ?? shortTerm(term?.full_strike_text, ''));
 }
 
@@ -525,6 +554,11 @@ function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = 
  */
 export function renderMentionPacket(input, { analyst = null, redteam = null, generatedAtUtc = null, analystTier = 'none' } = {}) {
   if (!input || typeof input !== 'object') throw new Error('renderMentionPacket: input missing');
+  if (input?.presentation?.blocked) {
+    const code = input.presentation.blocker_code ?? 'BLOCKED_EVENT_METADATA_MISMATCH';
+    const reason = input.presentation.reason ?? 'event metadata mismatch';
+    throw new Error(`renderMentionPacket: ${code}: ${reason}`);
+  }
   const e = input.event ?? {};
   const summary = input.summary ?? {};
   const ranked = rankTerms(Array.isArray(input.terms) ? input.terms : [], e.title);
@@ -533,19 +567,29 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const notes = collectNotes(ranked, a);
   const qualificationTerms = ranked.filter(isQualificationRisk);
   const contentTerms = ranked.filter((term) => !isQualificationRisk(term));
+  const ednqRisk = classifyEdnqRisk({
+    event: e,
+    researchRoute: input?.research_provenance?.research_route ?? null,
+    qualificationTerms,
+    presentation: input?.presentation ?? null,
+  });
   const pmtAdvisoryContext = input?.research_provenance?.pmt_advisory_context
     ?? ranked.find((term) => term?.pmt_advisory_context)?.pmt_advisory_context
     ?? null;
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
-  lines.push(`event_time_central: ${formatCentral(e.date_time)}`);
+  lines.push(`event_time_central: ${formatCentral(input?.presentation?.event_time_iso ?? e.date_time)}`);
   lines.push(`date: ${maybe(input.date)}`);
-  if (generatedAtUtc) lines.push(`generated_utc: ${formatGeneratedStamp(generatedAtUtc)}`);
+  if (generatedAtUtc) {
+    lines.push(`generated_utc: ${formatGeneratedStamp(generatedAtUtc)}`);
+    lines.push(`generated_central: ${formatGeneratedCentralStamp(generatedAtUtc)}`);
+  }
   lines.push(`settlement_source: ${maybe(e.settlement_source_link)}`);
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('Market Context - NOT IN SCORE: display-only context; never a score input.');
   lines.push('Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify.');
+  lines.push(`Content term count: ${contentTerms.length} content term${contentTerms.length === 1 ? '' : 's'}${qualificationTerms.length ? ` + ${qualificationTerms.length} EDNQ result${qualificationTerms.length === 1 ? '' : 's'}` : ''}.`);
   lines.push('');
 
   const bestTier = postCapBestPosture(contentTerms);
@@ -603,7 +647,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   }
   lines.push('');
 
-  renderQualificationRiskSection(lines, qualificationTerms);
+  renderQualificationRiskSection(lines, ednqRisk);
 
   lines.push('7. SETTLEMENT NOTES');
   const provenanceLines = Array.isArray(input.deterministic_provenance_lines)
@@ -621,7 +665,10 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   lines.push('');
 
   lines.push('8. FULL STRIKE INVENTORY');
-  for (const t of ranked) lines.push(`- ${renderInventoryLabel(t)}`);
+  for (const t of contentTerms) {
+    const label = renderInventoryLabel(t);
+    if (label) lines.push(`- ${label}`);
+  }
   lines.push('');
 
   lines.push('---');
@@ -656,11 +703,20 @@ export function validateRenderedPacket(text, input) {
       throw new Error('rendered packet included bracket refs but omitted compact sources note');
     }
   }
-  for (const term of input?.terms ?? []) {
-    const label = String(term?.is_qualification_term === true
-      ? 'Event does not qualify'
-      : term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
+  const inputTerms = Array.isArray(input?.terms) ? input.terms : [];
+  const contentTerms = inputTerms.filter((term) => !isQualificationRisk(term));
+  const qualificationTerms = inputTerms.filter(isQualificationRisk);
+  for (const term of contentTerms) {
+    const label = String(term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
     if (label && !text.includes(label)) throw new Error(`rendered packet omitted short strike text: ${label}`);
+  }
+  const inventoryBlock = text.split('8. FULL STRIKE INVENTORY')[1] ?? '';
+  for (const term of qualificationTerms) {
+    const label = String(term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
+    if (label && inventoryBlock.includes(label)) throw new Error(`rendered packet leaked EDNQ term into full strike inventory: ${label}`);
+  }
+  if (qualificationTerms.length && !/6\. QUALIFICATION RESULT \/ EDNQ RISK/.test(text)) {
+    throw new Error('rendered packet omitted EDNQ qualification section');
   }
   return true;
 }

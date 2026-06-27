@@ -9,6 +9,7 @@ import {
   SECTION_ORDER,
   buildTrumpQualificationCheck,
 } from '../scripts/mentions/render-mention-packet.mjs';
+import { classifyEdnqRisk } from '../scripts/mentions/qualification-risk.mjs';
 import { buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
 import {
   buildKalshiEventPacket,
@@ -276,6 +277,97 @@ test('Trump qualification gate classifies low, medium-high, and high-risk event 
   const foreignLeader = buildTrumpQualificationCheck(trumpQualificationInput({ title: 'Trump bilateral meeting with foreign leader' }));
   assert.equal(foreignLeader?.event_type, 'foreign-leader joint appearance / bilateral / summit side event');
   assert.equal(foreignLeader?.ednq_risk, 'HIGH');
+
+  const workingLunch = buildTrumpQualificationCheck(trumpQualificationInput({ title: 'Trump working lunch with foreign leaders' }));
+  assert.equal(workingLunch?.ednq_risk, 'HIGH');
+});
+
+test('EDNQ classifier separates direct remarks from ambiguous source-window risk', () => {
+  const direct = classifyEdnqRisk({
+    event: {
+      title: 'What will Trump say during the press conference?',
+      sub_title: 'Donald Trump - press conference',
+      rules_primary: 'If Trump speaks the listed strike term, resolves Yes.',
+    },
+    researchRoute: 'trump_event',
+    qualificationTerms: [{ is_qualification_term: true, full_strike_text: 'Event does not qualify' }],
+  });
+  assert.equal(direct.cpc_read, 'low');
+  assert.equal(direct.result_label, 'Event does not qualify');
+  assert.match(direct.current_check.join(' '), /content-term scoring remains conditional on qualification/i);
+
+  const ambiguous = classifyEdnqRisk({
+    event: {
+      title: 'Trump remarks',
+      sub_title: 'Trump remarks',
+    },
+    researchRoute: 'trump_event',
+    qualificationTerms: [],
+    presentation: {
+      blocked: true,
+      blocker_code: 'BLOCKED_EVENT_METADATA_MISMATCH',
+      reason: 'stale cache',
+      conflicts: [{ field: 'event_time', expected: '2026-06-26', actual: '2026-07-11' }],
+    },
+  });
+  assert.equal(ambiguous.cpc_read, 'blocked');
+  assert.match(ambiguous.active_blockers.join(' '), /BLOCKED_EVENT_METADATA_MISMATCH/);
+});
+
+test('EDNQ classifier supports multiple Trump mention families without submarket hardcoding', () => {
+  const workingLunch = classifyEdnqRisk({
+    event: {
+      event_ticker: 'KXTRUMPMENTIONB-26JUN26',
+      series_ticker: 'KXTRUMPMENTIONB',
+      title: 'What will Trump say during his working lunch with foreign leaders?',
+      sub_title: 'Donald Trump - multi-party working lunch',
+    },
+    researchRoute: 'trump_event',
+    qualificationTerms: [{ is_qualification_term: true, full_strike_text: 'Event does not qualify' }],
+  });
+  assert.equal(workingLunch.cpc_read, 'high');
+  assert.match(workingLunch.why_ednq.join(' '), /foreign-leader|working lunch|multi-party/i);
+  assert.match(workingLunch.historical_note, /limited and not exhaustive/i);
+
+  const partialClip = classifyEdnqRisk({
+    event: {
+      event_ticker: 'KXTRUMPMENTION-26JUN26',
+      series_ticker: 'KXTRUMPMENTION',
+      title: 'Trump arrival footage and short Q&A with foreign leader',
+      sub_title: 'partial clip; source cannot verify qualifying remarks',
+    },
+    researchRoute: 'trump_event',
+    qualificationTerms: [{ is_qualification_term: true, full_strike_text: 'Event does not qualify' }],
+  });
+  assert.equal(partialClip.cpc_read, 'high');
+  assert.match(partialClip.why_ednq.join(' '), /arrival footage|partial clip|short Q&A|source/i);
+});
+
+test('renderer header uses trusted presentation metadata and refuses blocked presentation', () => {
+  const input = trumpQualificationInput({ title: 'What will Trump say during his remarks at the Faith & Freedom Coalition Conference?' });
+  input.event.date_time = '2026-07-11T14:00:00Z';
+  input.presentation = {
+    blocked: false,
+    event_time_iso: '2026-06-26T14:00:00Z',
+    event_date: '2026-06-26',
+    event_time_source: 'event.date_time',
+  };
+
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  assert.match(text, /event_time_central: Jun 26, 2026, 9:00 AM CDT/);
+  assert.doesNotMatch(text, /event_time_central: Jul 11, 2026, 9:00 AM CDT/);
+  const generatedUtcLine = text.split('\n').find((line) => line.startsWith('generated_utc:'));
+  assert.match(generatedUtcLine, /UTC/);
+  assert.doesNotMatch(generatedUtcLine, /CDT|CST/);
+
+  assert.throws(() => renderMentionPacket({
+    ...input,
+    presentation: {
+      blocked: true,
+      blocker_code: 'BLOCKED_EVENT_METADATA_MISMATCH',
+      reason: 'cached timing conflicts with trusted metadata',
+    },
+  }, { generatedAtUtc: NOW }), /BLOCKED_EVENT_METADATA_MISMATCH/);
 });
 
 test('count thresholds and EDNQ render in separate sections', () => {
@@ -332,6 +424,7 @@ test('count thresholds and EDNQ render in separate sections', () => {
   };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   assert.match(text, /Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify\./);
+  assert.match(text, /Content term count: 2 content terms \+ 1 EDNQ result\./);
   assert.doesNotMatch(text, /0\. QUALIFICATION CHECK/);
   assert.doesNotMatch(text, /^\s*\|.*\|\s*$/m);
   const topYes = sectionBlock(text, '2. TOP YES CASE', '3. WEAK YES WATCHLIST');
@@ -345,10 +438,12 @@ test('count thresholds and EDNQ render in separate sections', () => {
   assert.match(traps, /Settlement:[\s\S]*YES if Trump says "tariff"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event[\s\S]*window\./);
   assert.match(traps, /Evidence:[\s\S]*comparable history only; weak current context\./);
 
-  const qualification = sectionBlock(text, '6. QUALIFICATION RISK', '7. SETTLEMENT NOTES');
-  assert.match(qualification, /Event does not qualify/);
-  assert.match(qualification, /Settlement:[\s\S]*EDNQ is a separate settlement path if the event\/rules do not qualify\.[\s\S]*This[\s\S]*is not a content-term pick\./);
-  assert.match(qualification, /Read:[\s\S]*YES-leaning qualification risk proven \(high\)/);
+  const qualification = sectionBlock(text, '6. QUALIFICATION RESULT / EDNQ RISK', '7. SETTLEMENT NOTES');
+  assert.match(qualification, /EDNQ result: Event does not qualify is a separate event-level result\/outcome, not a spoken-term strike\./);
+  assert.match(qualification, /CPC Read:\s*(?:low|not confirmed)/i);
+  assert.match(qualification, /Why EDNQ could happen:[\s\S]*Pattern match:/);
+  assert.match(qualification, /Current qualification check:[\s\S]*content-term scoring remains conditional on qualification/i);
+  assert.match(qualification, /Historical EDNQ pattern note:[\s\S]*limited and not exhaustive/i);
   assert.doesNotMatch(qualification, /P\(YES\)/);
 });
 
@@ -364,6 +459,45 @@ test('non-Trump packets stay on the same stacked-card format', () => {
   const nonTrump = renderMentionPacket(builtInput({ sourceBacked: true }), { generatedAtUtc: NOW });
   assert.doesNotMatch(nonTrump, /0\. QUALIFICATION CHECK/);
   assert.match(nonTrump, /1\. FAST READ/);
+});
+
+test('direct Trump conference-style packets keep EDNQ low or not confirmed unless evidence says otherwise', () => {
+  const input = {
+    packet_kind: 'mentions_customer_packet_v2',
+    date: DATE,
+    research_provenance: { research_route: 'trump_event' },
+    event: {
+      title: 'What will Trump say during the press conference?',
+      subtitle: 'Donald Trump - press conference',
+      date_time: NOW,
+      settlement_source_link: 'https://kalshi.com/events/KXTRUMPQUAL',
+      rules_primary: 'If Trump speaks the listed strike term, the market resolves Yes.',
+    },
+    summary: { market_count: 2 },
+    terms: [
+      {
+        full_strike_text: 'What will Trump say during the press conference? -- Biden',
+        short_term: 'Biden',
+        cpc_score: 72,
+        research_state: 'research-backed',
+        market_context: { note: 'NOT IN SCORE' },
+      },
+      {
+        full_strike_text: 'What will Trump say during the press conference? -- Event does not qualify',
+        short_term: 'Event does not qualify',
+        cpc_score: null,
+        research_state: 'qualification fallback',
+        market_type: 'ednq',
+        is_qualification_term: true,
+        market_context: { note: 'NOT IN SCORE' },
+      },
+    ],
+  };
+  const text = renderMentionPacket(input, { generatedAtUtc: NOW });
+  const qualification = sectionBlock(text, '6. QUALIFICATION RESULT / EDNQ RISK', '7. SETTLEMENT NOTES');
+  assert.match(qualification, /CPC Read:\s*(?:low|not confirmed)/i);
+  assert.match(qualification, /direct Trump remarks|conference format|trusted event time/i);
+  assert.doesNotMatch(text, /8\. FULL STRIKE INVENTORY[\s\S]*Event does not qualify/);
 });
 
 test('threshold-supported repeated mention evidence can still render a YES tier', () => {
@@ -442,7 +576,7 @@ test('fast read uses the rendered tier, not the summary, and research gaps sort 
     market_context: { implied: null, bid_cents: null, ask_cents: null, note: 'NOT IN SCORE' },
   });
   const gapText = renderMentionPacket(gapInput, { generatedAtUtc: NOW });
-  const gapSection = sectionBlock(gapText, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
+  const gapSection = sectionBlock(gapText, '5. SOURCE GAPS', '6. QUALIFICATION RESULT / EDNQ RISK');
   assert.match(gapSection, /Aardvark/);
   assert.doesNotMatch(gapText, /Aardvark — P\(YES\)/);
 });
@@ -490,7 +624,7 @@ test('valid analyst JSON lands in card catalyst/settlement-fit text', () => {
   assert.match(text, /Sources: see packet meta\/audit artifact\./);
   assert.ok(!topYes.includes('…'), 'full catalyst and settlement fit text should not truncate');
 
-  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
+  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RESULT / EDNQ RISK');
   assert.match(gaps, /Aardvark/);
   assert.doesNotMatch(gaps, /Aardvark — P\(YES\)/);
 });
@@ -499,7 +633,7 @@ test('source gaps stay compact and settlement notes preserve provenance', () => 
   const input = builtInput({ sourceBacked: false });
   input.deterministic_provenance_lines = ['settled_history: tier=exact_horizon n=2 hits=2 misses=0 hit_rate=1.00'];
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
-  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RISK');
+  const gaps = sectionBlock(text, '5. SOURCE GAPS', '6. QUALIFICATION RESULT / EDNQ RISK');
   assert.match(gaps, /research gap/i);
   assert.doesNotMatch(gaps, /Malarkey.*Malarkey/);
 
