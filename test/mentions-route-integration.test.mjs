@@ -23,10 +23,11 @@ const NOW = new Date('2026-06-12T12:00:00Z');
 
 function trumpWeeklyEvent() {
   return {
-    event_ticker: 'KXTRUMPMENTION-26JUN13',
+    event_ticker: 'KXTRUMPMENTION-26JUN12',
     series_ticker: 'KXTRUMPMENTION',
     title: 'What will Trump say this week?',
     sub_title: 'Trump weekly mention market',
+    date_time: '2026-06-12T12:00:00Z',
     close_time: '2026-06-14T03:00:00Z',
     markets: [
       {
@@ -80,7 +81,7 @@ test('route resolution happens before source/model extraction', async () => {
   const built = buildKalshiEventPacket({
     date: '2026-06-12',
     event: trumpWeeklyEvent(),
-    sourceUrl: 'state/mentions/2026-06-12/kalshi-events/KXTRUMPMENTION-26JUN13.json',
+    sourceUrl: 'state/mentions/2026-06-12/kalshi-events/KXTRUMPMENTION-26JUN12.json',
   });
   assert.equal(built.researchProvenance.research_route, 'trump_weekly');
   assert.equal(built.synthesisInput.research_provenance.research_route, 'trump_weekly');
