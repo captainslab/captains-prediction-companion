@@ -278,6 +278,14 @@ function cleanSettlementPhrase(phrase) {
   return raw;
 }
 
+function quotedVariantList(parts = []) {
+  const quoted = parts.map((part) => `"${part}"`);
+  if (!quoted.length) return null;
+  if (quoted.length === 1) return quoted[0];
+  if (quoted.length === 2) return `${quoted[0]} or ${quoted[1]}`;
+  return `${quoted.slice(0, -1).join(', ')}, or ${quoted.at(-1)}`;
+}
+
 function describeSettlementFit(phrase, requiredCount = null, speaker = null) {
   const original = String(phrase ?? '').trim();
   const repeat = detectRepeatRequirement(original);
@@ -285,21 +293,22 @@ function describeSettlementFit(phrase, requiredCount = null, speaker = null) {
   if (!raw) return null;
   const base = raw;
   const slashParts = base.split('/').map((part) => part.trim()).filter(Boolean);
+  const slashVariantList = quotedVariantList(slashParts);
   if (speaker) {
     if (Number.isFinite(Number(requiredCount)) && Number(requiredCount) > 1) {
-      if (slashParts.length >= 2) {
-        return `YES if ${speaker} says either "${slashParts[0]}" or "${slashParts[1]}" ${requiredCount} or more qualifying times during the event window.`;
+      if (slashParts.length >= 2 && slashVariantList) {
+        return `YES if ${speaker} says ${slashParts.length === 2 ? 'either ' : 'any of '}${slashVariantList} ${requiredCount} or more qualifying times during the event window.`;
       }
       return `YES if ${speaker} says "${base}" ${requiredCount} or more qualifying times during the event window.`;
     }
-    if (slashParts.length >= 2) {
-      return `YES if ${speaker} says either "${slashParts[0]}" or "${slashParts[1]}" during the qualifying event window.`;
+    if (slashParts.length >= 2 && slashVariantList) {
+      return `YES if ${speaker} says ${slashParts.length === 2 ? 'either ' : 'any of '}${slashVariantList} during the qualifying event window.`;
     }
     return `YES if ${speaker} says "${base}" during the qualifying event window.`;
   }
   let fit;
-  if (slashParts.length >= 2) {
-    fit = `YES if either exact token "${slashParts[0]}" or "${slashParts[1]}" is said`;
+  if (slashParts.length >= 2 && slashVariantList) {
+    fit = `YES if ${slashParts.length === 2 ? 'either exact token ' : 'any exact token among '}${slashVariantList} is said`;
   } else {
     fit = `YES only if the exact token "${base}" is said`;
   }
