@@ -100,6 +100,7 @@ function trumpHousingEvent() {
     event_ticker: 'KXTRUMPMENTIONB-26JUN24',
     title: 'What will Trump say during the Road to Housing Act signing?',
     sub_title: 'Donald Trump - Road to Housing Act signing',
+    date_time: '2026-06-24T14:00:00Z',
     close_time: '2026-07-09T14:00:00Z',
     series_ticker: 'KXTRUMPMENTIONB',
     markets: [
@@ -262,8 +263,11 @@ test('Trump housing packet cleans settlement wording and keeps comparable-histor
   assert.match(text, /Settlement:[\s\S]*YES if Trump says "Iran"[\s\S]*3 or more qualifying times[\s\S]*during[\s\S]*the event window\./);
   assert.match(text, /Evidence:[\s\S]*current-event context\./);
   assert.match(text, /Provenance:[\s\S]*comparable_event_history: source=kalshi_native n=14 yes=10[\s\S]*hit_rate=0\.71/);
-  assert.match(text, /Settlement:[\s\S]*EDNQ is a separate settlement path if the event\/rules do not qualify\.[\s\S]*This[\s\S]*is not a content-term pick\./);
-  assert.match(text, /Read:[\s\S]*Neutral fallback, not a pick\./);
+  assert.match(text, /6\. QUALIFICATION RESULT \/ EDNQ RISK/);
+  assert.match(text, /EDNQ result: Event does not qualify is a separate event-level result\/outcome, not a spoken-term strike\./);
+  assert.match(text, /CPC Read:[\s\S]*(?:low|medium|high|not confirmed|blocked)/i);
+  assert.match(text, /Historical EDNQ pattern note:[\s\S]*limited and not exhaustive/i);
+  assert.match(text, /Current qualification check:[\s\S]*content-term scoring remains conditional on qualification/i);
   assert.match(text, /settled_history: tier=none n=0 hits=0 misses=0 hit_rate=n\/a/);
   assert.doesNotMatch(text, /YES only if the exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Single Family"[\s\S]*is said/);
   assert.doesNotMatch(text, /YES if either exact token "What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Permit"[\s\S]*"Zoning" is said/);
@@ -272,12 +276,11 @@ test('Trump housing packet cleans settlement wording and keeps comparable-histor
   assert.match(text, /- Single Family/);
   assert.match(text, /- Permit \/ Zoning/);
   assert.match(text, /- Iran \(3\+ times\)/);
-  assert.match(text, /- Event does not qualify/);
+  assert.doesNotMatch(text, /8\. FULL STRIKE INVENTORY[\s\S]*Event does not qualify/);
   assert.doesNotMatch(text, /What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Single Family/);
   assert.doesNotMatch(text, /What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Permit \/ Zoning/);
   assert.doesNotMatch(text, /What will Donald Trump say during THE PRESIDENT signs the 21st Century ROAD to Housing Act\? -- Iran \(3\+ times\)/);
   assert.doesNotMatch(text, /\/home\/jordan\//);
-  assert.doesNotMatch(text, /\b2026-06-24T\d{2}:\d{2}:\d{2}\.\d{3}Z\b/);
 });
 
 test('proximity-only mention rows are low-source capped, not source-backed composite', () => {
@@ -348,7 +351,7 @@ test('buildMentionsSynthesisPrompt stays disabled even when source layers are pr
   }), /model-written mentions packet_text synthesis is disabled/);
 });
 
-test('full strike inventory appendix lists every strike exactly, including "Event does not qualify"', () => {
+test('full strike inventory appendix lists only content strikes', () => {
   const input = {
     packet_kind: 'mentions_watch_user_packet_v1',
     date: '2026-06-12',
@@ -362,7 +365,7 @@ test('full strike inventory appendix lists every strike exactly, including "Even
   const appendix = buildFullStrikeInventoryAppendix(input);
   assert.match(appendix, /Full Strike Inventory/);
   assert.ok(appendix.includes('- What will Hunter Biden say during This is Gavin Newsom Podcast? -- Trump'));
-  assert.ok(appendix.includes('- What will Hunter Biden say during This is Gavin Newsom Podcast? -- Event does not qualify'));
+  assert.ok(!appendix.includes('Event does not qualify'));
 });
 
 test('validation catches a missing full strike when appendix is absent', () => {
@@ -377,7 +380,7 @@ test('validation catches a missing full strike when appendix is absent', () => {
     ],
   };
   const textMissing = `Some packet\nWhat will Hunter Biden say during This is Gavin Newsom Podcast? -- Trump\nMarket Context - NOT IN SCORE\nresearch-only`;
-  assert.throws(() => validateSynthesizedMentionPacket(textMissing, input), /omitted full strike text.*Event does not qualify/);
+  assert.doesNotThrow(() => validateSynthesizedMentionPacket(textMissing, input));
   const textFull = appendFullStrikeInventory(textMissing, input);
   assert.doesNotThrow(() => validateSynthesizedMentionPacket(textFull, input));
 });
@@ -394,7 +397,152 @@ test('abbreviation-only strike labels do not satisfy full-strike validation', ()
     ],
   };
   const abbrevOnly = 'Terms: Trump; Event does not qualify\nMarket Context - NOT IN SCORE\nresearch-only';
-  assert.throws(() => validateSynthesizedMentionPacket(abbrevOnly, input), /omitted full strike text/);
+  assert.throws(() => validateSynthesizedMentionPacket(abbrevOnly, input), /omitted full strike text.*Trump/);
+});
+
+test('stale cached event timing blocks when a trusted explicit start contradicts the cached date', () => {
+  // A trusted explicit event-START field (date_time) that disagrees with the cached
+  // packet/ticker date is a genuine stale-cache mismatch and must still fail closed.
+  // (Contrast with the live-open-ended case above, where only a far-future SETTLEMENT
+  // ceiling exists and the packet must deliver.)
+  const event = {
+    event_ticker: 'KXTRUMPMENTION-26JUN26',
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?',
+    sub_title: 'Donald Trump - Faith & Freedom Coalition policy conference',
+    date_time: '2026-07-11T14:00:00Z',
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTION-26JUN26-ENDORSE',
+        title: 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?',
+        yes_sub_title: 'Endorse / Endorsed / Endorsement',
+        custom_strike: { Word: 'Endorse' },
+        rules_primary: 'If Trump says Endorse / Endorsed / Endorsement, resolves Yes.',
+        mention_profile: 'political_mentions',
+        layer_records: {
+          event_proximity: { present: true, score: 88, source_basis: 'official schedule confirmed' },
+        },
+      },
+    ],
+  };
+  const built = buildKalshiEventPacket({ date: '2026-06-26', event, sourceUrl: 'https://kalshi.com/events/KXTRUMPMENTION-26JUN26' });
+  assert.equal(built.blocked, true);
+  assert.equal(built.blocker?.blocker_code, 'BLOCKED_EVENT_METADATA_MISMATCH');
+  assert.equal(built.blocker?.settlement_source, 'https://kalshi.com/events/KXTRUMPMENTION-26JUN26');
+  assert.equal(built.blocker?.title, 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?');
+  assert.deepEqual(built.blocker?.conflicts, [
+    {
+      field: 'event_time',
+      expected: '2026-06-26',
+      actual: '2026-07-11',
+      source: 'event.date_time',
+    },
+  ]);
+  assert.match(JSON.stringify(built.blocker), /2026-07-11T14:00:00\.000Z/);
+  assert.match(JSON.stringify(built.blocker), /2026-06-26/);
+  assert.equal(built.text, null);
+});
+
+test('trusted explicit event metadata overrides stale settlement timing', () => {
+  const event = {
+    event_ticker: 'KXTRUMPMENTION-26JUN26',
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?',
+    sub_title: 'Donald Trump - Faith & Freedom Coalition policy conference',
+    date_time: '2026-06-26T15:00:00Z',
+    close_time: '2026-07-11T14:00:00Z',
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTION-26JUN26-ENDORSE',
+        title: 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?',
+        yes_sub_title: 'Endorse / Endorsed / Endorsement',
+        custom_strike: { Word: 'Endorse' },
+        rules_primary: 'If Trump says Endorse / Endorsed / Endorsement, resolves Yes.',
+        mention_profile: 'political_mentions',
+        layer_records: {
+          event_proximity: { present: true, score: 88, source_basis: 'official schedule confirmed' },
+        },
+      },
+    ],
+  };
+  const built = buildKalshiEventPacket({ date: '2026-06-26', event, sourceUrl: 'https://kalshi.com/events/KXTRUMPMENTION-26JUN26' });
+  assert.notEqual(built.blocked, true);
+  assert.match(built.text, /event_time_central: Jun 26, 2026, 10:00 AM CDT/);
+  assert.match(built.text, /generated_utc: .*UTC/);
+  assert.match(built.text, /generated_central: .*CDT/);
+  assert.doesNotMatch(built.text, /Jul 11, 2026, 9:00 AM CDT/);
+});
+
+test('live open-ended market delivers when ticker date matches packet date despite far-future settlement', () => {
+  // Root cause guard: "What will MrBeast say during his next YouTube video?" is LIVE
+  // today but has no explicit event-start field; its only timestamps are far-future
+  // settlement ceilings (close_time / expected_expiration_time). The ticker date and
+  // packet date both say today, so the settlement ceiling must be display-only, NOT a
+  // blocking metadata mismatch. Before the fix this fail-closed every such event.
+  const event = {
+    event_ticker: 'KXMRBEASTMENTION-26JUN27C',
+    series_ticker: 'KXMRBEASTMENTION',
+    title: 'What will MrBeast say during his next YouTube video?',
+    sub_title: 'MrBeast next YouTube video',
+    close_time: '2026-08-13T14:00:00Z',
+    expected_expiration_time: '2026-08-13T14:00:00Z',
+    markets: [
+      {
+        ticker: 'KXMRBEASTMENTION-26JUN27C-FEASTABLE',
+        title: 'What will MrBeast say during his next YouTube video?',
+        yes_sub_title: 'Feastable',
+        custom_strike: { Word: 'Feastable' },
+        rules_primary: 'If MrBeast says Feastable, resolves Yes.',
+        mention_profile: 'entertainment_mentions',
+        close_time: '2026-08-13T14:00:00Z',
+        expected_expiration_time: '2026-08-13T14:00:00Z',
+        layer_records: {
+          event_proximity: { present: true, score: 80, source_basis: 'live market confirmed' },
+        },
+      },
+    ],
+  };
+  const built = buildKalshiEventPacket({ date: '2026-06-27', event, sourceUrl: 'https://kalshi.com/events/KXMRBEASTMENTION-26JUN27C' });
+  assert.notEqual(built.blocked, true);
+  assert.ok(built.blocker == null, 'no blocker artifact for a live open-ended market');
+  assert.ok(built.text, 'packet text should render for a live open-ended market');
+});
+
+test('settlement-source ticker conflicts block with conflicting fields', () => {
+  const event = {
+    event_ticker: 'KXTRUMPMENTION-26JUN26',
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?',
+    sub_title: 'Donald Trump - Faith & Freedom Coalition policy conference',
+    event_url: 'https://kalshi.com/events/KXTRUMPMENTION-26JUL11',
+    date_time: '2026-06-26T14:00:00Z',
+    markets: [
+      {
+        ticker: 'KXTRUMPMENTION-26JUN26-ENDORSE',
+        event_ticker: 'KXTRUMPMENTION-26JUN26',
+        title: 'What will Donald Trump say during Remarks at the Faith & Freedom Coalition\'s 2026 Policy Conference?',
+        yes_sub_title: 'Endorse / Endorsed / Endorsement',
+        custom_strike: { Word: 'Endorse' },
+        rules_primary: 'If Trump says Endorse / Endorsed / Endorsement, resolves Yes.',
+        mention_profile: 'political_mentions',
+        layer_records: {
+          event_proximity: { present: true, score: 88, source_basis: 'official schedule confirmed' },
+        },
+      },
+    ],
+  };
+  const built = buildKalshiEventPacket({ date: '2026-06-26', event, sourceUrl: '/tmp/source.json' });
+  assert.equal(built.blocked, true);
+  assert.equal(built.blocker?.blocker_code, 'BLOCKED_EVENT_METADATA_MISMATCH');
+  assert.deepEqual(built.blocker?.conflicts, [
+    {
+      field: 'settlement_source_event_ticker',
+      expected: 'KXTRUMPMENTION-26JUN26',
+      actual: 'KXTRUMPMENTION-26JUL11',
+      source: 'settlement_source',
+    },
+  ]);
+  assert.equal(built.text, null);
 });
 
 test('mentions packet generator preserves forbidden pricing field guard in layer records', () => {

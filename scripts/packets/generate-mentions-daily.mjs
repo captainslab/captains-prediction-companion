@@ -82,6 +82,10 @@ import {
   shortTerm,
   CUSTOMER_RENDERER_ID,
 } from '../mentions/render-mention-packet.mjs';
+import {
+  resolveMentionPresentationMetadata,
+  BLOCKED_EVENT_METADATA_MISMATCH,
+} from '../mentions/qualification-risk.mjs';
 import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
 import { gateMentionMarket } from '../mentions/lexical-gate.mjs';
 import {
@@ -1124,7 +1128,7 @@ function injectSourceHealthDisclosure(text, sourceHealthDisclosure) {
   return `${head}\n\n${disclosure}\n${tail}`;
 }
 
-export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null }) {
+export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null, presentation = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
   const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
@@ -1153,6 +1157,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     provenanceLines,
     sourceHealthDisclosure,
     pmtAdvisoryContext,
+    presentation,
   });
   const text = renderMentionPacket(synthesisInput, {
     generatedAtUtc: new Date().toISOString(),
@@ -1241,8 +1246,20 @@ export function normalizeLayerList(value) {
   return [];
 }
 
-export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null, pmtAdvisoryContext = null } = {}) {
+export function buildMentionsSynthesisInput({
+  date,
+  event,
+  rows = [],
+  sourceUrl = null,
+  inventoryPath = null,
+  compositeSummary = {},
+  provenanceLines = [],
+  sourceHealthDisclosure = null,
+  pmtAdvisoryContext = null,
+  presentation = null,
+} = {}) {
   const s = summarizeEvent(event);
+  const trustedPresentation = presentation ?? resolveMentionPresentationMetadata({ date, event });
   const rules = firstMarketRules(event);
   const contentRows = rows.filter((row) => row.is_qualification_term !== true);
   const qualificationRows = rows.filter((row) => row.is_qualification_term === true);
@@ -1297,10 +1314,11 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     event: {
       title: s.title,
       subtitle: s.sub_title,
-      date_time: s.close,
+      date_time: trustedPresentation?.event_time_iso ?? s.close,
       settlement_source_link: event?.event_url ?? event?.url ?? `https://kalshi.com/events/${s.ticker}`,
       rules_primary: rules.primary,
     },
+    presentation: trustedPresentation,
     synthesis_rules: {
       output_style: 'concise research article / Substack-style brief',
       research_only: true,
@@ -1355,6 +1373,7 @@ export function describeMentionsHermesInvocation(options = {}) {
 export function buildFullStrikeInventoryAppendix(input = {}) {
   const terms = Array.isArray(input.terms) ? input.terms : [];
   const strikes = terms
+    .filter((t) => t?.is_qualification_term !== true && !/event does not qualify/i.test(String(t?.full_strike_text ?? '')))
     .map((t) => String(t.full_strike_text ?? '').trim())
     .filter(Boolean);
   if (!strikes.length) return '';
@@ -1378,7 +1397,7 @@ export function validateSynthesizedMentionPacket(text, input) {
   if ((input?.synthesis_rules?.all_terms_proximity_only || input?.synthesis_rules?.all_terms_research_gap) && forbiddenJargon.test(text)) {
     throw new Error('Hermes packet violated research-gap labeling: used legacy customer jargon');
   }
-  for (const term of input?.terms ?? []) {
+  for (const term of (input?.terms ?? []).filter((t) => t?.is_qualification_term !== true && !/event does not qualify/i.test(String(t?.full_strike_text ?? '')))) {
     const full = String(term.full_strike_text ?? '').trim();
     if (full && !text.includes(full)) {
       throw new Error(`Hermes packet omitted full strike text: ${full}`);
@@ -1994,6 +2013,53 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
 export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
+  const presentation = resolveMentionPresentationMetadata({ date, event });
+
+  if (presentation.blocked) {
+    const blocker = {
+      event_ticker: s.ticker,
+      date,
+      stage: 'event_metadata',
+      blocker_code: BLOCKED_EVENT_METADATA_MISMATCH,
+      reason: presentation.reason,
+      title: presentation.title,
+      settlement_source: presentation.settlement_source,
+      packet_date: presentation.packet_date,
+      ticker_date: presentation.ticker_date,
+      event_time_iso: presentation.event_time_iso,
+      event_date: presentation.event_date,
+      event_time_source: presentation.event_time_source,
+      conflicts: presentation.conflicts,
+      blocked_at_utc: new Date().toISOString(),
+      delivered: false,
+    };
+    return {
+      blocked: true,
+      blocker,
+      text: null,
+      inventoryText: null,
+      rows: [],
+      synthesisInput: null,
+      researchProvenance: null,
+      marketCount: marketInfo.marketCount,
+      missingStrikeCount: marketInfo.missingStrikeCount,
+      missingMarkets: marketInfo.missingMarkets,
+      compositeSummary: {
+        market_count: marketInfo.marketCount,
+        scored_count: 0,
+        source_backed_count: 0,
+        proximity_only_count: 0,
+        best_posture: 'NO_CLEAR_PICK',
+        best_score: null,
+        pricing_excluded: true,
+      },
+      counts: {
+        total: marketInfo.marketCount,
+        blocked: marketInfo.marketCount,
+        scored: 0,
+      },
+    };
+  }
 
   // Phase 2 earnings alpha (earnings_call route only): the per-term quarter
   // layer and context delta are built once per event from fixtures/cache —
@@ -2098,6 +2164,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     sourcePath: sourceUrl,
     inventoryPath,
     sourceHealthDisclosure,
+    presentation,
   });
   if (slate) {
     if (researchProvenance) {
@@ -2516,6 +2583,22 @@ export async function writeKalshiEventPackets({
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
+
+    if (built.blocked) {
+      const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+      mkdirSync(blockerDir, { recursive: true });
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      writeFileSync(blockerPath, JSON.stringify({
+        ...built.blocker,
+        event_ticker: ticker,
+        date,
+        stage: 'event_metadata',
+        delivered: false,
+      }, null, 2));
+      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: ${built.blocker?.reason || 'event metadata mismatch'} (blocker: ${blockerPath})`);
+      failedTickers.push(ticker);
+      continue;
+    }
 
     // EVENT-LEVEL FAIL-CLOSED gate: if every decision row is BLOCKED (no usable
     // source evidence anywhere on the board — the NO_DECLARED_SOURCES /
