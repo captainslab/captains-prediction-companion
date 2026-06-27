@@ -71,6 +71,19 @@ function normalizeTeamSide(value) {
   return null;
 }
 
+function isGoalkeeperPosition(position) {
+  return /goalkeeper|keeper|gk/.test(String(position ?? '').trim().toLowerCase());
+}
+
+function isDefenderPosition(position) {
+  const p = String(position ?? '').trim().toLowerCase();
+  return /\b(d|df|def|cb|lb|rb|lcb|rcb|lwb|rwb|wb|defender|fullback|full-back|wingback|wing-back|centre[- ]?back|center[- ]?back)\b/.test(p);
+}
+
+function hasRoleEvidence(player) {
+  return (player.penalty_role ?? 0) > 0 || (player.set_piece_role ?? 0) > 0;
+}
+
 function normalizeLineupStatus(value) {
   const status = String(value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (status === LINEUP_STATUS.PRE_LOCK_PROJECTED
@@ -105,6 +118,7 @@ function normalizeCandidate(candidate = {}, fallbackSide = null, fallbackLineupS
 
 function isReadyStarter(player) {
   return player.lineup_status === LINEUP_STATUS.CONFIRMED_XI
+    && scoringSource(player) === 'xg'
     && (player.start_probability ?? 0) >= 0.7
     && (player.expected_minutes ?? 0) >= 60;
 }
@@ -165,7 +179,11 @@ function deriveStartProbability(player) {
 function scoringSource(player) {
   if (player.xg_per_90 !== null && player.xg_per_90 !== undefined) return 'xg';
   const prior = positionPriorGoalsPer90(player.position);
-  if (prior !== null) return 'weak_prior';
+  if (prior !== null) {
+    if (isGoalkeeperPosition(player.position)) return null;
+    if (isDefenderPosition(player.position) && !hasRoleEvidence(player)) return null;
+    return 'weak_prior';
+  }
   return null;
 }
 
@@ -230,6 +248,25 @@ function buildCandidateProjection({
     };
   }
 
+  if (isGoalkeeperPosition(player.position)) {
+    return {
+      player_id: player.player_id,
+      player_name: player.player_name,
+      team_side: player.team_side,
+      projection_status: PROJECTION_STATUS.BLOCKED_PLAYER_DATA_MISSING,
+      expected_minutes: null,
+      start_probability: null,
+      projected_player_goals: null,
+      anytime_goal_probability: null,
+      reason: 'goalkeepers are excluded from anytime-goalscorer projections',
+      model_notes: ['goalkeepers_excluded_from_anytime_goalscorer_projection'],
+      input_status: player.lineup_status,
+      price_free: true,
+      _eligible: false,
+      _raw_weight: 0,
+    };
+  }
+
   const source = scoringSource(player);
   if (!source) {
     return {
@@ -266,9 +303,7 @@ function buildCandidateProjection({
   let reason;
   if (isReadyStarter(player)) {
     projectionStatus = PROJECTION_STATUS.READY;
-    reason = source === 'xg'
-      ? 'confirmed starter with xG-based scoring weight'
-      : 'confirmed starter with position-based prior';
+    reason = 'confirmed starter with xG-based scoring weight';
   } else if (source === 'weak_prior') {
     projectionStatus = PROJECTION_STATUS.PROVISIONAL_PRE_LOCK;
     reason = 'weak pre-lock prior from position/role while xG is missing';
@@ -325,6 +360,11 @@ export function projectAnytimeGoalscorers({
   const normalizedCandidates = Array.isArray(player_candidates)
     ? player_candidates.map((candidate) => normalizeCandidate(candidate, teamSide, normalizedLineupStatus))
     : [];
+  const confirmedXiHasPlayerPriorSignals = normalizedCandidates.some((candidate) => (
+    candidate.xg_per_90 !== null
+    || candidate.penalty_role > 0
+    || candidate.set_piece_role > 0
+  ));
 
   const base = {
     match_id: matchId,
@@ -336,6 +376,17 @@ export function projectAnytimeGoalscorers({
     total_projected_player_goals: null,
     price_free: true,
   };
+
+  if (normalizedLineupStatus === LINEUP_STATUS.CONFIRMED_XI
+    && normalizedCandidates.length
+    && !confirmedXiHasPlayerPriorSignals) {
+    return {
+      ...base,
+      blocked_reason: 'player-level scoring priors unavailable',
+      total_projected_player_goals: null,
+      players: [],
+    };
+  }
 
   const provisional = normalizedCandidates.map((player) => buildCandidateProjection({
     player,
@@ -389,4 +440,3 @@ export function projectAnytimeGoalscorer(input = {}) {
   });
   return res.players[0] ?? null;
 }
-

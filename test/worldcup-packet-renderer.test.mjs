@@ -48,14 +48,14 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
   });
 
   assert.match(text, /1\. Matchday Forecast/);
-  assert.match(text, /Argentina vs Austria: Argentina result edge; projected goals 1\.79-0\.94; projected total 2\.73/);
+  assert.match(text, /Argentina vs Austria: Argentina rates higher; projected goals 1\.79-0\.94; projected total 2\.73/);
   assert.match(text, /Status: Pre-lock, lineups not confirmed/);
-  assert.match(text, /Model basis: latest prior team composite from 2026-06-17, not today's confirmed XI/);
+  assert.match(text, /Model basis: latest prior team composite from 2026-06-17, not today's official starting lineup/);
   assert.match(text, /Kickoff: .*C(?:DT|ST).*\/ .*E(?:DT|ST)/);
   assert.match(text, /Goal forecast: Projected goals: Argentina 1\.79, Austria 0\.94/);
   assert.match(text, /Total goals forecast: Projected total 2\.73/);
   assert.match(text, /Both-score forecast: \d+%/);
-  assert.match(text, /Goal-spread forecast: Argentina \+0\.85 goals; no line available to grade/);
+  assert.match(text, /Goal-spread forecast: Argentina \+0\.85 goals; projected goal difference only; no market line attached/);
   assert.match(text, /Score-grid check: models aligned/);
   assert.match(text, /Market comparison: no market lines attached; model output shown as forecast only\./);
   assert.match(text, /First-half markets are unavailable because no half-split model layer is sourced\./);

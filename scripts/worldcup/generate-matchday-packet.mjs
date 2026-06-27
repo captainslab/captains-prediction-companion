@@ -2,7 +2,7 @@
 // World Cup matchday packet generator.
 //
 // Usage:
-//   node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--dry-run]
+//   node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--refresh-lineups] [--dry-run]
 //
 // Flow:
 //   1. Load static structure for date
@@ -17,8 +17,10 @@
 //   5. Write packet + audit artifacts
 //   6. If lineups confirmed, also write lineup-locked packet
 
-import { resolve } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { fetchStaticStructure } from './source-adapters/static-structure.mjs';
 import { fetchTeamBaseline } from './source-adapters/team-baseline.mjs';
@@ -31,19 +33,24 @@ import { composeMultiLaneCeilingBoard } from './lib/multi-lane-ceiling.mjs';
 import { renderWorldCupPacket, writeWorldCupPacket } from './lib/packet-renderer.mjs';
 import { CPC_MATCHDAY_TIMEZONE, localDateInTimeZone, filterMatchesForLocalDate } from './lib/matchday-window.mjs';
 import { findLatestPriorBaseline } from './lib/composite-baseline.mjs';
+import { evaluateLineupCacheFreshness, isFreshLineupCache } from './lib/lineup-freshness.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const LINEUP_FETCHER = join(__dirname, 'source-adapters', 'fetch-official-lineups.mjs');
 
 function slugify(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null, packetStage: null };
+  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null, packetStage: null, refreshLineups: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
     else if (a === '--state-root') opts.stateRoot = argv[++i];
     else if (a === '--match-id') opts.matchId = argv[++i];
     else if (a === '--packet-stage') opts.packetStage = argv[++i];
+    else if (a === '--refresh-lineups') opts.refreshLineups = true;
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${a}`);
@@ -63,10 +70,30 @@ function readJsonIfExists(path) {
   }
 }
 
+function buildLineupAdjustment(matchday, lineupLockedVerified) {
+  const missingFields = ['player_ratings', 'key_absence_flags', 'expected_starters'];
+  if (lineupLockedVerified) {
+    return {
+      status: 'blocked',
+      flag: 'LINEUP_ADJUSTED_MODEL_MISSING',
+      basis: 'baseline composite',
+      missing_fields: missingFields,
+      reason: 'matchday artifact only exposes starting XI names/positions/numbers',
+    };
+  }
+  return {
+    status: 'unavailable',
+    flag: 'LINEUP_ADJUSTED_MODEL_MISSING',
+    basis: 'baseline composite',
+    missing_fields: missingFields,
+    reason: matchday?.ok ? 'official starting lineup not verified' : 'matchday data not loaded',
+  };
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--packet-stage STAGE] [--dry-run]');
+    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--packet-stage STAGE] [--refresh-lineups] [--dry-run]');
     process.exit(0);
   }
 
@@ -113,6 +140,20 @@ async function main() {
 
   // 3. Filter matches for today (operating timezone = America/Chicago, not UTC).
   let todayMatches = filterMatchesForLocalDate(structure.matches, date, CPC_MATCHDAY_TIMEZONE);
+  const shouldRefreshLineups = !opts.dryRun && (
+    opts.refreshLineups
+    || opts.packetStage === 'lineup_lock'
+    || opts.packetStage === 'lineup_locked'
+  );
+  const lineupRefreshStartedAt = shouldRefreshLineups ? new Date().toISOString() : null;
+
+  if (shouldRefreshLineups) {
+    console.log('[worldcup] refreshing official lineups before lineup-sensitive calculations...');
+    const refresh = spawnSync(process.execPath, [LINEUP_FETCHER, '--date', date, '--state-root', stateRoot], { stdio: 'inherit' });
+    if (refresh.status !== 0) {
+      throw new Error(`official lineup refresh failed with status ${refresh.status}`);
+    }
+  }
 
   // Optional single-match mode: emit a standalone packet for one fixture,
   // written under a distinct base name so it never collides with or
@@ -179,10 +220,26 @@ async function main() {
 
     // 3b. Matchday data
     const matchday = loadCachedMatchday(stateRoot, date, match.match_id);
-    const lineupStatus = matchday.ok
-      ? (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending')
+    const lineupFreshness = evaluateLineupCacheFreshness(matchday, {
+      matchId: match.match_id,
+      kickoffUtc: match.kickoff_utc,
+      refreshStartedAtIso: shouldRefreshLineups ? lineupRefreshStartedAt : null,
+    });
+    if (shouldRefreshLineups && !lineupFreshness.verified) {
+      throw new Error(`stale lineup cache for match ${match.match_id}; lineup_lock packets require the refreshed official XI snapshot`);
+    }
+    const rawLineupStatus = matchday.ok
+      ? ((matchday.home?.lineup_status === 'lineup_confirmed' && matchday.away?.lineup_status === 'lineup_confirmed')
+        ? 'lineup_confirmed'
+        : (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending'))
       : 'lineup_pending';
+    const lineupLockedVerified = rawLineupStatus === 'lineup_confirmed' && lineupFreshness.verified === true;
+    const lineupStatus = lineupLockedVerified ? 'lineup_confirmed' : 'lineup_pending';
+    const lineupAdjustment = buildLineupAdjustment(matchday, lineupLockedVerified);
     match.lineup_status = lineupStatus;
+    match.lineup_locked_verified = lineupLockedVerified;
+    match.lineup_freshness = lineupFreshness;
+    match.lineup_adjustment = lineupAdjustment;
     // Expose the (price-free) lineup payload to the renderer for the
     // lineup-locked block. Only specific fields are read downstream.
     match.matchday = matchday.ok ? matchday : null;
@@ -207,7 +264,9 @@ async function main() {
       set_piece_matchup: { present: !!matchup.ok, score: matchup.home?.set_piece_vs_opponent?.score ?? null, basis: matchup.home?.set_piece_vs_opponent?.basis },
       goalkeeper_edge: { present: !!matchup.ok, score: matchup.home?.goalkeeper_vs_opponent_chance_quality?.score ?? null, basis: matchup.home?.goalkeeper_vs_opponent_chance_quality?.basis },
       squad_availability: { present: matchday.ok, score: null, basis: 'squad availability', missing_reason: matchday.ok ? null : 'matchday data not loaded' },
-      lineup_strength_delta: { present: lineupStatus === 'lineup_confirmed', score: null, basis: 'lineup strength delta', missing_reason: lineupStatus !== 'lineup_confirmed' ? 'lineups not confirmed' : null },
+      lineup_strength_delta: { present: false, score: null, basis: 'baseline composite', missing_reason: lineupLockedVerified
+        ? `LINEUP_ADJUSTED_MODEL_MISSING: ${lineupAdjustment.reason}; missing_fields=${lineupAdjustment.missing_fields.join(', ')}`
+        : (matchday.ok ? 'lineups not confirmed or lineup cache not verified' : 'matchday data not loaded') },
       rest_travel_venue_climate: { present: false, score: null, basis: 'rest/travel/venue/climate', missing_reason: 'not yet sourced' },
       tournament_incentive_state: { present: false, score: null, basis: 'tournament incentive', missing_reason: 'not yet sourced' },
       knockout_extra_time_penalty: { present: false, score: null, basis: 'knockout extra time / penalties', missing_reason: (!match.stage || match.stage === 'group') ? 'group stage' : 'not yet sourced' },
@@ -224,7 +283,9 @@ async function main() {
       set_piece_matchup: { present: !!matchup.ok, score: matchup.away?.set_piece_vs_opponent?.score ?? null, basis: matchup.away?.set_piece_vs_opponent?.basis },
       goalkeeper_edge: { present: !!matchup.ok, score: matchup.away?.goalkeeper_vs_opponent_chance_quality?.score ?? null, basis: matchup.away?.goalkeeper_vs_opponent_chance_quality?.basis },
       squad_availability: { present: matchday.ok, score: null, basis: 'squad availability', missing_reason: matchday.ok ? null : 'matchday data not loaded' },
-      lineup_strength_delta: { present: lineupStatus === 'lineup_confirmed', score: null, basis: 'lineup strength delta', missing_reason: lineupStatus !== 'lineup_confirmed' ? 'lineups not confirmed' : null },
+      lineup_strength_delta: { present: false, score: null, basis: 'baseline composite', missing_reason: lineupLockedVerified
+        ? `LINEUP_ADJUSTED_MODEL_MISSING: ${lineupAdjustment.reason}; missing_fields=${lineupAdjustment.missing_fields.join(', ')}`
+        : (matchday.ok ? 'lineups not confirmed or lineup cache not verified' : 'matchday data not loaded') },
       rest_travel_venue_climate: { present: false, score: null, basis: 'rest/travel/venue/climate', missing_reason: 'not yet sourced' },
       tournament_incentive_state: { present: false, score: null, basis: 'tournament incentive', missing_reason: 'not yet sourced' },
       knockout_extra_time_penalty: { present: false, score: null, basis: 'knockout extra time / penalties', missing_reason: (!match.stage || match.stage === 'group') ? 'group stage' : 'not yet sourced' },
@@ -253,7 +314,7 @@ async function main() {
       awayLedger: ledger.away,
       marketContexts,
       isKnockout,
-      lineupConfirmed: lineupStatus === 'lineup_confirmed',
+      lineupConfirmed: lineupLockedVerified,
     });
 
     boards.push(board);
@@ -265,6 +326,9 @@ async function main() {
       matchday: matchday.ok ? matchday : null,
       market_context: marketCtx.ok ? marketCtx : null,
       parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
+      lineup_freshness: lineupFreshness,
+      lineup_locked_verified: lineupLockedVerified,
+      lineup_adjustment: lineupAdjustment,
     });
   }
 
@@ -323,7 +387,10 @@ async function main() {
   }
 }
 
-main().catch(e => {
-  console.error(e);
-  process.exit(1);
-});
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch(e => {
+    console.error(e);
+    process.exit(1);
+  });
+}
