@@ -112,7 +112,7 @@ test('mergePasses prefers the handicap reason when proof is empty and the blend 
   assert.ok(!/no evidence|no mention/i.test(rows[0].reason), 'rendered reason must not assert no evidence on a YES-leaning blend');
 });
 
-test('buildResearchTermNote derives settlement fit from slash tokens and repeat requirements', () => {
+test('buildResearchTermNote derives settlement fit from 2-term slash bundles and repeat requirements', () => {
   const note = buildResearchTermNote({
     phrase: 'Afford / Affordable (N+ times)',
     reason: 'habit/news-cycle pressure',
@@ -128,6 +128,45 @@ test('buildResearchTermNote derives settlement fit from slash tokens and repeat 
   assert.match(note.settlement_fit, /either exact token "Afford" or "Affordable"/);
   assert.match(note.settlement_fit, /Requires 3 or more qualifying mentions, not just one\./);
   assert.match(note.provenance, /comparable_event_history: source=kalshi_native n=2 yes=1 hit_rate=0\.50/);
+});
+
+test('buildResearchTermNote renders every variant in 3-term slash bundles', () => {
+  const note = buildResearchTermNote({
+    phrase: 'Endorse / Endorsed / Endorsement',
+    reason: 'campaign language keeps the endorsement family active',
+    kalshiNativePct: 67,
+    kalshiNativeN: 3,
+    proofPct: 25,
+    handicapPct: 71,
+    speaker: 'Trump',
+  });
+  assert.ok(note, 'research note should be built from usable research');
+  assert.match(note.settlement_fit, /"Endorse"/);
+  assert.match(note.settlement_fit, /"Endorsed"/);
+  assert.match(note.settlement_fit, /"Endorsement"/);
+  assert.match(note.settlement_fit, /any of "Endorse", "Endorsed", or "Endorsement"/);
+
+  const afford = buildResearchTermNote({
+    phrase: 'Afford / Affordable / Affordability',
+    reason: 'housing affordability framing is live',
+    proofPct: 62,
+    handicapPct: 67,
+    speaker: 'Trump',
+  });
+  assert.match(afford.settlement_fit, /"Afford"/);
+  assert.match(afford.settlement_fit, /"Affordable"/);
+  assert.match(afford.settlement_fit, /"Affordability"/);
+
+  const cheat = buildResearchTermNote({
+    phrase: 'Cheat / Cheater / Cheating',
+    reason: 'election-integrity language is live',
+    proofPct: 58,
+    handicapPct: 64,
+    speaker: 'Trump',
+  });
+  assert.match(cheat.settlement_fit, /"Cheat"/);
+  assert.match(cheat.settlement_fit, /"Cheater"/);
+  assert.match(cheat.settlement_fit, /"Cheating"/);
 });
 
 test('threshold research prompt carries required_count and repeat-count context', async () => {

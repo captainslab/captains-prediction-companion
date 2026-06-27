@@ -45,7 +45,7 @@ const GAP_LABEL = 'RESEARCH GAP';
 const QUALIFICATION_STATE = 'qualification fallback';
 const QUALIFICATION_LABEL = 'QUALIFICATION RISK';
 const TIER_RANK = Object.freeze({ 'STRONG YES': 4, 'WEAK YES': 3, 'WEAK NO': 2, 'STRONG NO': 1, [GAP_LABEL]: 0 });
-const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
+const FORBIDDEN_CUSTOMER_JARGON_RE = /(?:\bEVIDENCE[ _]LEAN\b|\bNO[ _]CLEAR[ _]PICK\b|\bWATCH\b|\bLEAN\b|\bLEANS\b|\bpick\b|\bfade\b|\bbest bet\b|\bwager\b|\bbankroll\b|Call:|Market board|Side \/ market|\bsource layer(?:s)?\b|\bevent_proximity\b|\bproximity-only\b|\bstub\b|\bscaffold\b|\bcomposite score\b|\bsource-backed composite\b)/i;
 const COLD_CURRENT_CONTEXT_RE = /\b(no direct current context|weak current context|not a topic|not a focus|not a primary|not primary|not central|not relevant|irrelevant|cold|no current context|current context cold)\b/i;
 const SOURCES_META_NOTE = 'Sources: see packet meta/audit artifact.';
 
@@ -411,7 +411,9 @@ function pushCardBlock(lines, label, value, width = 76) {
 }
 
 function renderPmtAdvisoryBlock(lines, context) {
-  const advisoryLines = formatPmtAdvisoryContext(context);
+  const advisoryLines = formatPmtAdvisoryContext(context)
+    .map((line) => safeCustomerText(line, null))
+    .filter(Boolean);
   if (!advisoryLines.length) return;
   lines.push('');
   for (const line of advisoryLines) {
