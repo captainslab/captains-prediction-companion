@@ -1,0 +1,17 @@
+=== SAMPLE: MLB Public Packet (Research Context Fed) ===
+
+Expected public output for: Houston Astros at Detroit Tigers, 2026-06-27
+
+⚾ Houston Astros at Detroit Tigers
+Date: 2026-06-27
+Venue: Comerica Park
+
+🏠 Detroit Tigers starter: Tarik Skubal (LHP) — 7 IP, 1 ER in last start vs CWS
+✈️ Houston Astros starter: Framber Valdez (LHP) — Allowed 4 ER in 5 IP last outing
+⚠️ Houston Astros injury: Jose Abreu (IL60, back)
+🌥️ Weather: 78°F, wind 8 mph out to left field
+📈 Run env: Comerica Park plays slightly pitcher-friendly in June
+📜 Series: Astros took 2 of 3 in April series
+
+Note: This packet contains contextual research only.
+No price, probability, or financial data is included.

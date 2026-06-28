@@ -1,0 +1,27 @@
+=== SAMPLE: ACTIVE World Cup Public Packet (FORECAST ALLOWED) ===
+
+This is the expected public output when:
+  lineup_confirmed = true
+  model_consumes_lineup = true
+
+Forecast numbers ARE permitted to appear in this state.
+
+Expected packet structure:
+
+🏟️ Algeria vs Austria
+Group: Group J
+Venue: Kansas City Stadium
+Date: 2026-06-27
+
+🟢 Algeria XI: Oussama Benbot, Riyad Mahrez, Amine Gouiri [+ full XI]
+🟢 Austria XI: Alexander Schlager, Marko Arnautovic, Marcel Sabitzer [+ full XI]
+📊 Standings: [group_standings_note]
+🎯 Context: [advancement_context]
+
+Projected goals: Algeria 1.41, Austria 1.19
+Projected total: 2.60
+Both teams score: 52%
+
+Note: These numbers are rendered ONLY because model_consumes_lineup=true.
+If the model had not consumed the confirmed XI, this block would be replaced
+with the FORECAST HELD notice and numbers moved to audit artifact only.

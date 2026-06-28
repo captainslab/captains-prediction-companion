@@ -1,0 +1,40 @@
+{
+  "_fixture_type": "mlb_research_context",
+  "_fixture_label": "Houston Astros at Detroit Tigers — 2026-06-27",
+  "_meta": {
+    "provider": "perplexity",
+    "model": "sonar",
+    "sport": "mlb",
+    "status": "ok",
+    "fetched_utc": "2026-06-27T20:00:00.000Z",
+    "cost_usd": "0.000021",
+    "parse_status": "ok",
+    "missing_fields": ["home_bullpen_note", "away_bullpen_note"]
+  },
+  "research": {
+    "home_team": "Detroit Tigers",
+    "away_team": "Houston Astros",
+    "game_date": "2026-06-27",
+    "venue": "Comerica Park",
+    "home_starter_name": "Tarik Skubal",
+    "home_starter_handedness": "L",
+    "home_starter_recent_note": "7 IP, 1 ER in last start vs CWS",
+    "away_starter_name": "Framber Valdez",
+    "away_starter_handedness": "L",
+    "away_starter_recent_note": "Allowed 4 ER in 5 IP last outing",
+    "home_lineup_status": "confirmed",
+    "away_lineup_status": "projected",
+    "home_injury_notes": null,
+    "away_injury_notes": "Jose Abreu (IL60, back)",
+    "home_bullpen_note": null,
+    "away_bullpen_note": null,
+    "weather_note": "78\u00b0F, wind 8 mph out to left field",
+    "weather_risk": false,
+    "run_environment_note": "Comerica Park plays slightly pitcher-friendly in June",
+    "recent_series_context": "Astros took 2 of 3 in April series",
+    "home_last_5_record": "3-2",
+    "away_last_5_record": "2-3",
+    "research_confidence": "high",
+    "research_notes": null
+  }
+}

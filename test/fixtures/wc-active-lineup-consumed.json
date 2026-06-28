@@ -1,0 +1,32 @@
+{
+  "_fixture_type": "worldcup_public_packet",
+  "_fixture_label": "ACTIVE — lineup confirmed AND model consumed confirmed XI state",
+  "_description": "Public packet fixture demonstrating active forecast behavior. Forecast numbers are permitted because model_consumes_lineup=true. This is the ONLY condition under which projected goals/BTTS/margin may appear in the public packet.",
+  "forecastMeta": {
+    "lineup_confirmed": true,
+    "model_consumes_lineup": true,
+    "lineup_source": "ESPN fifa.world (event 760484)"
+  },
+  "matchMeta": {
+    "homeTeam": "Algeria",
+    "awayTeam": "Austria",
+    "matchDate": "2026-06-27",
+    "venue": "Kansas City Stadium",
+    "group": "Group J"
+  },
+  "forecast": {
+    "projected_goals_home": 1.41,
+    "projected_goals_away": 1.19,
+    "projected_total": 2.60,
+    "btts_pct": 52,
+    "note": "Lineup-adjusted forecast. These numbers may appear in the public packet."
+  },
+  "expected_public_output": {
+    "contains_FORECAST_HELD_notice": false,
+    "contains_confirmed_xis": true,
+    "contains_projected_goals": true,
+    "contains_btts_pct": true,
+    "contains_projected_total": true,
+    "passes_banned_language_scan": true
+  }
+}
