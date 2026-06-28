@@ -237,6 +237,7 @@ async function main() {
     const lineupStatus = lineupLockedVerified ? 'lineup_confirmed' : 'lineup_pending';
     const lineupAdjustment = buildLineupAdjustment(matchday, lineupLockedVerified);
     match.lineup_status = lineupStatus;
+    match.model_consumes_lineup = lineupLockedVerified;
     match.lineup_locked_verified = lineupLockedVerified;
     match.lineup_freshness = lineupFreshness;
     match.lineup_adjustment = lineupAdjustment;
@@ -326,6 +327,7 @@ async function main() {
       matchday: matchday.ok ? matchday : null,
       market_context: marketCtx.ok ? marketCtx : null,
       parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
+      model_consumes_lineup: lineupLockedVerified,
       lineup_freshness: lineupFreshness,
       lineup_locked_verified: lineupLockedVerified,
       lineup_adjustment: lineupAdjustment,
