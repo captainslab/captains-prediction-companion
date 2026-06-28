@@ -6,14 +6,17 @@ const { before, test } = require('node:test');
 let composeEvidenceLedgerForGame;
 let composeMultiLaneCeilingBoard;
 let renderWorldCupPacket;
+let scanPublicOutput;
 
 before(async () => {
   const evidence = await import('../../scripts/worldcup/lib/evidence-ledger.mjs');
   const ceiling = await import('../../scripts/worldcup/lib/multi-lane-ceiling.mjs');
   const renderer = await import('../../scripts/worldcup/lib/packet-renderer.mjs');
+  const publicRenderer = require('../../src/sports/publicPacketRenderer.js');
   composeEvidenceLedgerForGame = evidence.composeEvidenceLedgerForGame;
   composeMultiLaneCeilingBoard = ceiling.composeMultiLaneCeilingBoard;
   renderWorldCupPacket = renderer.renderWorldCupPacket;
+  scanPublicOutput = publicRenderer.scanPublicOutput;
 });
 
 function r(score) {
@@ -79,6 +82,8 @@ test('stale confirmed-lineup packet holds the forecast and moves prior composite
   assert.ok(!rendered.includes(awayGoals), `stale render leaked away goals ${awayGoals}`);
   assert.ok(!rendered.includes(totalGoals), `stale render leaked total goals ${totalGoals}`);
   assert.ok(!rendered.includes(bttsPct), `stale render leaked BTTS ${bttsPct}`);
+  const scan = scanPublicOutput(rendered);
+  assert.equal(scan.clean, true, `stale packet leaked banned terms: ${scan.violations.join(', ')}`);
   assert.ok(match._audit_suppressed_forecast?.prior_composite, 'audit artifact should keep suppressed composite data');
   assert.match(match._audit_suppressed_forecast.prior_composite.goalForecastLine, /Projected goals/);
   assert.match(match._audit_suppressed_forecast.prior_composite.totalGoalsForecastLine, /Projected total/);
@@ -102,5 +107,7 @@ test('active confirmed-lineup packet keeps the projections public and omits the 
   assert.ok(rendered.includes(awayGoals), `active render should include away goals ${awayGoals}`);
   assert.ok(rendered.includes(totalGoals), `active render should include total goals ${totalGoals}`);
   assert.ok(rendered.includes(bttsPct), `active render should include BTTS ${bttsPct}`);
+  const scan = scanPublicOutput(rendered);
+  assert.equal(scan.clean, true, `active packet leaked banned terms: ${scan.violations.join(', ')}`);
   assert.equal(match._audit_suppressed_forecast, undefined);
 });

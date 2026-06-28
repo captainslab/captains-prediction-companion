@@ -9,6 +9,7 @@ const { checkForecastFreshness } = require('./worldCupResearchContext.js');
 
 const PUBLIC_BANNED_TERMS = [
   'bet', 'betting', 'wager', 'sportsbook', 'odds', 'moneyline', 'prop',
+  'market', 'price',
   'pick', 'lean', 'lock', 'fade', 'edge', 'trade', 'buy', 'sell',
   'bankroll', 'stake', 'unit', 'market price', 'bid', 'ask',
   'open interest', 'volume', 'liquidity', 'NOT IN SCORE', 'display-only',

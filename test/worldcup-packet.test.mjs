@@ -3,7 +3,7 @@
 // Pins the decision-board contract:
 //   - all required sections render
 //   - missing lineups → BLOCKED row + pre-lineup PICK downgrade (no fake pick)
-//   - market is labeled NOT IN SCORE
+//   - public packet stays free of market / price / odds language
 //   - no raw market inventory / raw price fields dumped into the main packet
 
 import test from 'node:test';
@@ -59,7 +59,7 @@ const REQUIRED_SECTIONS = [
   'Daily Slate Preview — Why Today Matters',
   '1. Matchday Forecast',
   '2. Match Breakdowns',
-  '3. Market Comparison',
+  '3. Forecast Context',
   '4. Model Limits',
   '5. Source Quality',
 ];
@@ -69,7 +69,7 @@ const REQUIRED_SECTIONS = [
 const BANNED_USER_FACING = [
   /\bPICK\b/, /\bLEAN\b/, /\bWATCH\b/, /\bFADE\b/, /\bOVERPRICED\b/,
   /TOP EDGE CANDIDATES/, /TRIGGER BOARD/, /winner_lean/, /\bno edge\b/i,
-  /projection-only/,
+  /projection-only/, /\bmarket\b/i, /\bprice\b/i, /\bodds\b/i, /display-only/i, /NOT IN SCORE/i,
 ];
 
 test('packet renders every required section', () => {
@@ -78,42 +78,45 @@ test('packet renders every required section', () => {
   for (const s of REQUIRED_SECTIONS) {
     assert.ok(text.includes(s), `packet missing section: ${s}`);
   }
-  assert.ok(text.includes('No trades placed by this workflow.'));
+  assert.ok(text.includes('Research only.'));
 });
 
-test('missing lineups → match disclosed as pre-lock and no full PICK is emitted', () => {
+test('missing lineups → match disclosed as lineup pending and no full PICK is emitted', () => {
   const { match, board } = makeFixture({ lineupStatus: 'lineup_pending' });
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
   // New contract: pre-lineup matches are not held back, but must be clearly
-  // disclosed as pre-lock forecast-only output that uses the prior composite.
-  assert.ok(text.includes('Status: Pre-lock, lineups not confirmed'),
-    'pending lineups must be disclosed as pre-lock');
+  // disclosed as lineup-pending forecast-only output that uses the prior composite.
+  assert.ok(text.includes('Status: Lineup pending, lineups not confirmed'),
+    'pending lineups must be disclosed as lineup pending');
   assert.ok(text.includes("Model basis: latest prior team composite, not today's confirmed XI"),
     'pre-lock model basis must be stated');
-  assert.ok(/Model-projected edges \(forecast only\)/.test(text),
-    'edges must be framed as forecast-only');
+  assert.ok(/Model-projected favorites/.test(text),
+    'favorites must be framed as forecast-only');
+  assert.ok(text.includes('Forecast context: lineups are not confirmed yet.'),
+    'forecast context must be public-safe and lineup-aware');
   assert.ok(!/PICK_HOME|PICK_AWAY/.test(text),
     'no full PICK enum may be emitted while lineups are unconfirmed');
-  assert.ok(!text.includes('LINEUP LOCKED'), 'pre-lock packet must not claim a locked lineup');
+  assert.ok(!text.includes('STARTING XI CONFIRMED'), 'lineup-pending packet must not claim a confirmed lineup');
 });
 
-test('confirmed lineups with strong evidence → clear model side, marked lineup-locked', () => {
+test('confirmed lineups with strong evidence → clear model side, marked confirmed', () => {
   const { match, board } = makeFixture({ lineupStatus: 'lineup_confirmed' });
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11', packet_stage: 'lineup_locked' } });
-  assert.ok(/Match forecast: Mexico result edge/.test(text), 'strong confirmed-lineup edge should produce a clear model side');
-  assert.ok(text.includes('Status: LINEUP LOCKED — official starting XI confirmed'),
+  assert.ok(/Match forecast: Mexico favored/.test(text), 'strong confirmed-lineup side should produce a clear model side');
+  assert.ok(text.includes('Status: STARTING XI CONFIRMED — official starting XI confirmed'),
     'confirmed lineups must be marked lineup-locked');
   assert.ok(!/\bPICK\b/.test(text), 'no raw PICK enum in user-facing text');
-  assert.ok(!text.includes('Status: Pre-lock'), 'locked match must not be flagged pre-lock');
+  assert.ok(!text.includes('Status: Lineup pending'), 'confirmed match must not be flagged lineup pending');
 });
 
-test('market context is labeled NOT IN SCORE and shown as display-only', () => {
+test('forecast context is public-safe and free of market language', () => {
   const { match, board } = makeFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
-  assert.ok(text.includes('3. Market Comparison'), 'market comparison section must render');
-  assert.ok(text.includes('NOT IN SCORE'), 'market must be labeled NOT IN SCORE');
-  assert.ok(text.includes('Market prices are display-only when present and are NOT IN SCORE.'),
-    'market prices must be disclosed as display-only and not scored');
+  assert.ok(text.includes('3. Forecast Context'), 'forecast context section must render');
+  assert.ok(text.includes('Forecast context: lineups are not confirmed yet.'),
+    'forecast context must state lineups are not confirmed');
+  assert.doesNotMatch(text, /\b(?:market|price|odds|display-only|NOT IN SCORE)\b/i,
+    'public packet must not leak market/price language');
 });
 
 test('no raw market inventory or raw price fields leak into the main packet', () => {
@@ -122,8 +125,8 @@ test('no raw market inventory or raw price fields leak into the main packet', ()
   for (const forbidden of ['yes_bid', 'yes_ask', 'no_bid', 'no_ask', 'open_interest', 'last_price', 'volume', 'orderbook', '"ticker"']) {
     assert.ok(!text.includes(forbidden), `raw market field "${forbidden}" leaked into main packet`);
   }
-  // The packet references markets as display-only context, never dumps raw inventory.
-  assert.ok(text.includes('market lines attached'), 'market comparison must summarize lines, not dump them');
+  assert.doesNotMatch(text, /\b(?:market|price|odds|display-only|NOT IN SCORE)\b/i,
+    'public packet must not leak market/price language');
 });
 
 test('packet stays mobile-readable (bounded length per match)', () => {
@@ -180,9 +183,11 @@ test('Total Goals with no line shows projection, no fabricated over/under (no ba
   const match = { match_id: 'x', home_team: 'A', away_team: 'B', stage: 'group', kickoff_utc: '2026-06-22T17:00:00Z', lineup_status: 'lineup_pending' };
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
   assert.ok(/Total goals forecast: Projected total [\d.]+/.test(text), 'projected total still shown without a line');
-  assert.ok(text.includes('no market lines attached'), 'no markets → comparison states no lines attached');
+  assert.ok(text.includes('Forecast context: lineups are not confirmed yet.'), 'forecast context should explain the lineup state');
   assert.ok(/no line available to grade/.test(text), 'no line → spread states no line available to grade');
   assert.ok(!/projection-only/.test(text), 'banned "projection-only" label must not appear');
+  assert.doesNotMatch(text, /\b(?:market|price|odds|display-only|NOT IN SCORE)\b/i,
+    'public packet must not leak market/price language');
 });
 
 test('rendered packet contains no betting-tout shorthand (PICK/LEAN/WATCH/FADE/etc.)', () => {

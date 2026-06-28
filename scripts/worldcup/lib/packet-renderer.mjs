@@ -13,8 +13,8 @@
 //   - Main packet must be enjoyable and quick to read.
 //   - No raw contract inventory in main packet.
 //   - Full raw market inventory goes to .inventory.txt audit artifact only.
-//   - Every row shows model half and market half separately.
-//   - Market line clearly labeled as NOT IN SCORE.
+//   - Every row shows model half and reference context separately.
+//   - Reference context is clearly labeled as context only.
 //   - If source data missing, show exact missing source and next trigger.
 //   - If lineups unavailable, show pre-lineup confidence downgrade.
 
@@ -154,7 +154,7 @@ function header(title, date) {
     `date: ${date}`,
     `packet_type: worldcup-matchday`,
     `Generated: ${generatedDisplay()}`,
-    `No trades placed by this workflow. Research only.`,
+    `Research only.`,
     ``,
   ].join('\n');
 }
@@ -196,11 +196,11 @@ function kickoffDisplay(match) {
 
 function resultEdgePhrase(board, match) {
   const lane = (board?.lanes || []).find((entry) => entry.lane === 'match_winner');
-  if (!lane || lane.recommendation === 'N/A') return 'No clear result edge';
-  if (/HOME/.test(lane.recommendation)) return `${match.home_team} result edge`;
-  if (/AWAY/.test(lane.recommendation)) return `${match.away_team} result edge`;
-  if (/DRAW/.test(lane.recommendation)) return 'Draw edge';
-  return 'No clear result edge';
+  if (!lane || lane.recommendation === 'N/A') return 'No clear side';
+  if (/HOME/.test(lane.recommendation)) return `${match.home_team} favored`;
+  if (/AWAY/.test(lane.recommendation)) return `${match.away_team} favored`;
+  if (/DRAW/.test(lane.recommendation)) return 'Draw in play';
+  return 'No clear side';
 }
 
 function projectionFor(board) {
@@ -283,7 +283,7 @@ function displayLabel(lane) {
 }
 
 function confidenceLine(confidence, provisional) {
-  return `    Confidence: ${confidence ?? 'low'}${provisional ? ', pre-lock' : ''}`;
+  return `    Confidence: ${confidence ?? 'low'}${provisional ? ', before lineups' : ''}`;
 }
 
 // Side + strength for a result-style recommendation, in soccer language.
@@ -293,14 +293,16 @@ function modelSidePhrase(rec, match) {
     : /DRAW/.test(rec) ? 'Draw'
     : null;
   if (rec.startsWith('PICK') && side) return `Clear model side: ${side}`;
+  if (rec === 'LEAN_FADE') return 'Opposite-side value (model prefers the other side)';
   if (rec.startsWith('LEAN') && side) return `Slight model side: ${side}`;
-  return 'No clear side';
+  if (rec === 'WATCH') return 'No clear model signal';
+  return 'Model signal unavailable';
 }
 
 // Generic translated model state for any non-main lane (last-resort fallback).
 function modelStatePhrase(rec) {
   if (rec.startsWith('PICK')) return 'Actionable model edge';
-  if (rec === 'LEAN_FADE') return 'Opposite-side value (model rejects price)';
+  if (rec === 'LEAN_FADE') return 'Opposite-side value (model prefers the other side)';
   if (rec.startsWith('LEAN')) return 'Slight model advantage';
   if (rec === 'WATCH') return 'Monitor — no clear actionable edge';
   if (rec === 'BLOCKED_MODEL_LAYER_MISSING') return 'Model unavailable: missing model layer';
@@ -310,17 +312,17 @@ function modelStatePhrase(rec) {
 function crossCheckPhrase(verdict) {
   if (verdict === 'CONSISTENT') return 'models aligned';
   if (verdict === 'MISMATCH') return 'model disagreement';
-  return 'monitor model disagreement';
+  return 'model disagreement';
 }
 function crossCheckSentence(verdict) {
   if (verdict === 'CONSISTENT') return 'The goal-distribution model and match-result model point to the same side.';
   if (verdict === 'MISMATCH') return 'The goal-distribution model and match-result model point to different sides.';
-  return 'The goal-distribution model and match-result model differ slightly; monitor before lock.';
+  return 'The goal-distribution model and match-result model differ slightly; check again before kickoff.';
 }
 
 function drawReadPhrase(evaluation) {
   if (evaluation === 'ACTIONABLE') return 'draw in play';
-  if (evaluation === 'WATCH_ONLY') return 'draw monitor';
+  if (evaluation === 'WATCH_ONLY') return 'draw review';
   if (evaluation === 'BLOCKED_MODEL_LAYER_MISSING') return 'unavailable';
   return evaluation ?? 'n/a';
 }
@@ -451,9 +453,9 @@ function lineupCoverage(match, board) {
       : 'official starting lineup not verified',
   ));
   result.push(coverage(
-    'market lines',
+    'reference lines',
     hasMarketLines ? 'gathered' : 'unavailable',
-    hasMarketLines ? 'display-only and not used in scoring' : 'no market lines sourced for this match',
+    hasMarketLines ? 'context only and not used in scoring' : 'no reference lines sourced for this match',
   ));
   result.push(coverage('advancement/standings', 'unavailable', 'standings feed not sourced'));
   result.push(coverage(
@@ -636,14 +638,13 @@ function whyItMattersBlock(matches = [], boards = []) {
     const forecastHeld = isForecastHeld(match);
     const timingState = isLineupVerified(match) ? 'official starting lineup verified' : 'lineup-sensitive';
     lines.push(`  Match context: ${match.home_team} vs ${match.away_team} [${safeStage(match)}] — ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
-    lines.push(`  Model lanes that matter: result, total goals, BTTS, goal spread, and anytime goalscorer.`);
+    lines.push(`  Model lanes that matter: result, total goals, BTTS, goal spread, and player scoring.`);
     lines.push(`  Lineup status: ${timingState}.`);
-    lines.push(`  Goalscorer status: ${forecastHeld ? 'forecast held until the model consumes the confirmed XI state' : summarizeGoalscorerStatus(sidecar)}.`);
+    lines.push(`  Player scoring status: ${forecastHeld ? 'forecast held until the model consumes the confirmed XI state' : summarizeGoalscorerStatus(sidecar)}.`);
     const missingOrBlocked = forecastHeld
       ? ['forecast held until the model consumes the confirmed XI state']
       : [...new Set(sidecar.map((entry) => entry.blocked || 'player candidates available'))];
     lines.push(`  Missing or blocked: ${missingOrBlocked.join('; ')}.`);
-    lines.push('  Price context: display-only and not used in scoring.');
     if (forecastHeld) {
       lines.push('  Goal environment: forecast held until the model consumes the confirmed XI state.');
     } else if (goalProjection?.projection_status === 'PROJECTED') {
@@ -669,14 +670,14 @@ function whyItMattersBlock(matches = [], boards = []) {
     .join('; ');
   lines.push(`  Today's games: ${games}.`);
   lines.push(`  Timing-sensitive matches: ${timingSensitive}.`);
-  lines.push('  Pre-lock / lineup-sensitive lanes: result, total goals, BTTS, goal spread, and anytime goalscorer.');
-  lines.push('  Watch lineup-lock windows: each match is scheduled 45 minutes before kickoff.');
-  lines.push(`  Individual lineup-lock packets: ${lineupPackets}.`);
+    lines.push('  Lineup-sensitive lanes: result, total goals, BTTS, goal spread, and player scoring.');
+  lines.push('  Watch lineup timing windows: each match is scheduled 45 minutes before kickoff.');
+  lines.push(`  Individual lineup timing packets: ${lineupPackets}.`);
   if (matches.some(isForecastHeld)) {
     const heldNames = matches.filter(isForecastHeld).map((m) => `${m.home_team} vs ${m.away_team}`).join('; ');
-    lines.push(`  Goalscorer outputs are held for ${heldNames} until the model consumes the confirmed XI state.`);
+    lines.push(`  Player scoring outputs are held for ${heldNames} until the model consumes the confirmed XI state.`);
   } else {
-    lines.push('  Goalscorer outputs stay provisional until an official starting lineup is verified.');
+    lines.push('  Player scoring outputs stay provisional until an official starting lineup is verified.');
   }
   lines.push('');
   return lines.join('\n');
@@ -684,22 +685,18 @@ function whyItMattersBlock(matches = [], boards = []) {
 
 function renderGoalscorerBlock(match, board) {
   if (isForecastHeld(match)) {
-    return [
-      '  Anytime Goalscorer Model — PRICE FREE (display-only and not used in scoring)',
-      '    Forecast held until the model consumes the confirmed XI state.',
-      '',
-    ].join('\n');
+    return '';
   }
   const sidecar = ['home', 'away'].map((side) => projectGoalscorerSide(match, board, side));
   const lines = [];
-  lines.push('  Anytime Goalscorer Model — PRICE FREE (display-only and not used in scoring)');
+  lines.push('  Player Scoring Outlook');
   if (sidecar.every((entry) => entry.blocked === 'team projected goals unavailable')) {
-    lines.push('    BLOCKED_TEAM_GOALS_MISSING — team projected goals unavailable.');
+    lines.push('    Player scoring outlook: team projected goals unavailable.');
     lines.push('');
     return lines.join('\n');
   }
   if (sidecar.every((entry) => entry.blocked === 'player-level scoring priors unavailable')) {
-    lines.push('    Goalscorer status: blocked — player-level scoring priors unavailable.');
+    lines.push('    Player scoring outlook: player-level scoring priors unavailable.');
     lines.push('');
     return lines.join('\n');
   }
@@ -712,17 +709,17 @@ function renderGoalscorerBlock(match, board) {
     lines.push(`    ${team} (${sideLabel}) | team goals ${goalBudget} | lineup ${lineupStatusLabel(status)}`);
 
     if (entry.blocked === 'player candidate pool unavailable') {
-      lines.push('      BLOCKED_PLAYER_DATA_MISSING — player candidate pool unavailable.');
+      lines.push('      Player scoring outlook: player candidate pool unavailable.');
       continue;
     }
     if (entry.blocked === 'player-level scoring priors unavailable') {
-      lines.push('      Goalscorer status: blocked — player-level scoring priors unavailable.');
+      lines.push('      Player scoring outlook: player-level scoring priors unavailable.');
       continue;
     }
 
     const players = entry.players || [];
     if (!players.length) {
-      lines.push('      BLOCKED_PLAYER_DATA_MISSING — player candidate pool unavailable.');
+      lines.push('      Player scoring outlook: player candidate pool unavailable.');
       continue;
     }
 
@@ -760,7 +757,7 @@ function formatLane(lane, match, provisional) {
   // Model-unavailable lanes render as a single honest line — no fake model half.
   if (lane.recommendation === 'BLOCKED_MODEL_LAYER_MISSING') {
     const ref = lane.market_context
-      ? ` | market ref (NOT IN SCORE): ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
+      ? ` | reference context: ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
       : '';
     return `  [${displayLabel(lane)}] Model unavailable: missing model layer.${ref}\n`;
   }
@@ -825,7 +822,7 @@ function formatLane(lane, match, provisional) {
     lines.push(`  [${label}] ${modelStatePhrase(lane.recommendation)} | confidence:${lane.confidence}`);
   }
 
-  // Market half — display only, always labeled NOT IN SCORE.
+  // Reference half — context only, never mixed into scoring.
   if (lane.market_context) {
     const mc = lane.market_context;
     const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
@@ -834,9 +831,9 @@ function formatLane(lane, match, provisional) {
       lane.edge_draw_pp != null ? `D:${lane.edge_draw_pp}pp` : null,
       lane.edge_away_pp != null ? `A:${lane.edge_away_pp}pp` : null,
     ].filter(Boolean).join(' ') || 'n/a (no model fair probability)';
-    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model−market gap ${gaps}`);
+    lines.push(`    REFERENCE: ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model gap ${gaps}`);
   } else {
-    lines.push('    MARKET (NOT IN SCORE): no market context attached');
+    lines.push('    REFERENCE: no reference context attached');
   }
   lines.push('');
   return lines.join('\n');
@@ -845,15 +842,15 @@ function formatLane(lane, match, provisional) {
 // Favored side label for a match, derived from model output only (price-free).
 function favoredTeam(board, match) {
   const phrase = resultEdgePhrase(board, match);
-  if (phrase === `${match.home_team} result edge`) return match.home_team;
-  if (phrase === `${match.away_team} result edge`) return match.away_team;
-  if (phrase === 'Draw edge') return 'even (draw edge)';
-  return 'no clear edge';
+  if (phrase === `${match.home_team} favored`) return match.home_team;
+  if (phrase === `${match.away_team} favored`) return match.away_team;
+  if (phrase === 'Draw in play') return 'draw in play';
+  return 'no clear side';
 }
 
 function slateStatusLabel(match) {
   return match?.lineup_status === 'lineup_confirmed'
-    ? 'LINEUP LOCKED (official XIs)'
+    ? 'STARTING XI CONFIRMED (official XIs)'
     : 'scheduled — lineups not yet announced';
 }
 
@@ -879,9 +876,9 @@ function slatePreviewBlock(matches = [], boards = []) {
     lines.push(`  ${g} today: ${fixtures.join('; ')}.`);
   }
   // Model-projected favorites (forecast only).
-  const favs = matches.map((m, i) => favoredTeam(boards[i], m)).filter((f) => f && f !== 'no clear edge');
+  const favs = matches.map((m, i) => favoredTeam(boards[i], m)).filter((f) => f && f !== 'no clear side');
   if (favs.length) {
-    lines.push(`  Model-projected edges (forecast only): ${favs.join(', ')}.`);
+    lines.push(`  Model-projected favorites: ${favs.join(', ')}.`);
   }
   const lockedNames = matches.filter((m) => m.lineup_status === 'lineup_confirmed').map((m) => `${m.home_team} vs ${m.away_team}`);
   lines.push('  Advancement / standings math: not sourced — omitted rather than invented.');
@@ -931,10 +928,10 @@ function formatMatch(match, board, provenance = null, previewLines = null) {
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
   lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
   if (locked) {
-    lines.push('  Status: LINEUP LOCKED — official starting XI confirmed');
+    lines.push('  Status: STARTING XI CONFIRMED — official starting XI confirmed');
     lines.push(`  Model basis: lineups confirmed; projection still uses the latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''} (no lineup-adjusted model path)`);
   } else {
-    lines.push('  Status: Pre-lock, lineups not confirmed');
+    lines.push('  Status: Lineup pending, lineups not confirmed');
     lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's confirmed XI`);
   }
   lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
@@ -972,9 +969,9 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const research = meta.research ?? null;
   const researchRoot = meta.research_root ?? undefined;
   const packetStage = meta.packet_stage ?? null;
+  const isMorningPreview = packetStage === 'morning_board';
   const confirmedCount = (matches || []).filter((m) => m?.lineup_status === 'lineup_confirmed').length;
   const isLineupLocked = packetStage === 'lineup_locked' || confirmedCount > 0;
-  const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
   for (let i = 0; i < (matches || []).length; i += 1) {
     const freshness = checkForecastFreshness({
@@ -995,11 +992,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
         lines.push('Lineup-aware note: confirmed lineups are shown per match; projections still use the prior team composite because no lineup-adjusted model path is sourced yet.\n');
       }
     } else if (isMorningPreview) {
-      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, morning pre-lock preview.`);
-      lines.push('Lineup-aware note: this preview is pre-lock; goalscorer outputs remain provisional until official starting lineups are available.\n');
+      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, morning lineup preview.`);
+      lines.push('Lineup-aware note: this preview is before lineups; player scoring outputs remain provisional until official starting lineups are available.\n');
     } else {
       lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's confirmed XI.`);
-      lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
+      lines.push('Lineup-pending forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
     }
   }
 
@@ -1031,22 +1028,23 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   }
 
   // 3. Market Comparison
-  lines.push(section('3. Market Comparison'));
-  if (!hasMarketContext) {
-    lines.push('  Market comparison: no market lines attached; model output shown as forecast only.');
-    lines.push('');
+  lines.push(section('3. Forecast Context'));
+  if (matches.some(isForecastHeld)) {
+    lines.push('  Forecast context: confirmed lineups are shown, but held forecasts stay suppressed until the confirmed XI state is consumed.');
+  } else if (confirmedCount > 0) {
+    lines.push(`  Forecast context: official starting XIs are confirmed for ${confirmedCount}/${matches.length} match(es).`);
   } else {
-    lines.push('  Market comparison: market lines attached; model output shown as forecast only.');
-    lines.push('  Market prices are display-only when present and are NOT IN SCORE.\n');
+    lines.push('  Forecast context: lineups are not confirmed yet.');
   }
+  lines.push('');
 
   // 4. Model Limits
   lines.push(section('4. Model Limits'));
-  lines.push('  First-half markets are unavailable because no half-split model layer is sourced.');
+  lines.push('  First-half views are unavailable because no split-layer model is sourced.');
   if (matches.some(isForecastHeld)) {
     lines.push('  Confirmed-lineup forecasts stay held until the model consumes the confirmed XI state.\n');
   } else {
-    lines.push('  Pre-lock forecasts use the latest prior team composite until starting XI data is available.\n');
+    lines.push('  Forecasts use the latest prior team composite until starting XI data is available.\n');
   }
 
   // 5. Source Quality
@@ -1063,7 +1061,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   if (confirmedCount > 0) {
     lines.push(`  Lineup status: official starting XIs confirmed for ${confirmedCount}/${matches.length} match(es); the rest are pre-lineup.`);
   } else {
-    lines.push('  Pre-lock status: lineups are not confirmed');
+    lines.push('  Lineup status: lineups are not confirmed');
   }
   if (matches.some(isForecastHeld)) {
     lines.push('  Model basis: official starting XIs are confirmed, but the public forecast is held until the model consumes the confirmed XI state.');
@@ -1081,12 +1079,10 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   } else {
     lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
   }
-  lines.push('  Market prices are display-only when present and are not used in the model.');
   lines.push('');
 
   lines.push('─'.repeat(70));
-  lines.push('Market prices are display-only when present and are NOT IN SCORE.');
-  lines.push('No trades placed. Research only.');
+  lines.push('Forecast only.');
   lines.push('─'.repeat(70));
 
   return lines.join('\n');

@@ -26,7 +26,7 @@ test('multi-term contamination is rejected', () => {
 });
 
 test('market-style public disclosure terms are also rejected', () => {
-  const priceTerms = ['market price', 'bid', 'ask', 'open interest', 'volume', 'liquidity', 'NOT IN SCORE', 'display-only'];
+  const priceTerms = ['market', 'price', 'odds', 'market price', 'bid', 'ask', 'open interest', 'volume', 'liquidity', 'NOT IN SCORE', 'display-only'];
   for (const term of priceTerms) {
     const result = scanPublicOutput(`The ${term} context is shown for reference.`);
     assert.equal(result.clean, false, `term "${term}" should be detected`);
