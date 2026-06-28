@@ -1,17 +1,10 @@
 /**
  * sportTokenBudgets.js
  * Per-sport Perplexity token budgets and recency filter settings.
- * Extend this file when adding UFC, NASCAR, or other sports.
  */
 
 'use strict';
 
-/**
- * Token budget definitions per sport.
- * max_tokens: max response tokens requested from Perplexity.
- * recency_filter: Perplexity search recency ('hour', 'day', 'week', 'month').
- * cost_ceiling_usd: soft ceiling — caller should log a warning if exceeded.
- */
 const SPORT_TOKEN_BUDGETS = {
   mlb: {
     max_tokens: 3500,
@@ -40,4 +33,8 @@ const SPORT_TOKEN_BUDGETS = {
   },
 };
 
-module.exports = { SPORT_TOKEN_BUDGETS };
+function maxTokens(sport) {
+  return (SPORT_TOKEN_BUDGETS[sport] || SPORT_TOKEN_BUDGETS.default).max_tokens;
+}
+
+module.exports = { SPORT_TOKEN_BUDGETS, maxTokens };

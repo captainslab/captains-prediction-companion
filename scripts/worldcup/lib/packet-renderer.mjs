@@ -22,6 +22,12 @@ import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { buildPacketPreviewBlock } from '../../shared/cpc-preview-adapter.mjs';
+import { checkForecastFreshness } from '../../../src/sports/worldCupResearchContext.js';
+import {
+  LINEUP_STATUS as GOALSCORER_LINEUP_STATUS,
+  PROJECTION_STATUS as GOALSCORER_PROJECTION_STATUS,
+  projectAnytimeGoalscorers,
+} from './goalscorer-projection.mjs';
 
 const CHICAGO_TZ = 'America/Chicago';
 const EASTERN_TZ = 'America/New_York';
@@ -95,6 +101,7 @@ function worldCupModelSummary(match, board) {
 // when no banked artifact exists (the existing model forecast lines stand on
 // their own — we never invent a source-backed block without a source).
 function matchPreviewLines(match, board, packetDate, researchRoot) {
+  if (isForecastHeld(match)) return null;
   const eventTicker = worldCupEventTicker(match, packetDate);
   if (!eventTicker) return null;
   let block;
@@ -237,6 +244,28 @@ function scoreGridCheck(board) {
   return 'Score-grid check: model unavailable';
 }
 
+function suppressedForecastAudit(match, board) {
+  const gp = projectionFor(board);
+  const bttsLane = (board?.lanes || []).find((entry) => entry.lane === 'both_teams_to_score');
+  return {
+    match_forecast: resultEdgePhrase(board, match),
+    goalForecastLine: goalForecastLine(match, board),
+    totalGoalsForecastLine: totalGoalsForecastLine(board),
+    bttsForecastLine: bttsForecastLine(board),
+    spreadForecastLine: spreadForecastLine(match, board),
+    scoreGridCheck: scoreGridCheck(board),
+    goal_projection: gp ? {
+      projection_status: gp.projection_status ?? null,
+      projected_home_goals: gp.projected_home_goals ?? null,
+      projected_away_goals: gp.projected_away_goals ?? null,
+      projected_total_goals: gp.projected_total_goals ?? null,
+      projected_goal_margin_home: gp.projected_goal_margin_home ?? null,
+      cross_check_1x2: gp.cross_check_1x2?.verdict ?? null,
+    } : null,
+    btts_probability: bttsLane?.p_btts_yes ?? null,
+  };
+}
+
 // --- Customer-facing translation of internal model enums ---------------------
 // Internal enum names (PICK / LEAN / WATCH / FADE, CONSISTENT / MISMATCH, …) are
 // kept on the board objects for compatibility but are NEVER rendered raw. The
@@ -303,6 +332,408 @@ function totalProfile(total) {
   if (total >= 2.4) return 'neutral total profile';
   if (total >= 2.1) return 'neutral-to-under goal environment';
   return 'low-scoring profile';
+}
+
+function fmtPct(value, digits = 0) {
+  if (value === null || value === undefined || Number.isNaN(value)) return 'N/A';
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function slugify(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function displayPair(date) {
+  const ct = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ,
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(date);
+  const et = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(date);
+  return `${ct} / ${et}`;
+}
+
+function isLineupVerified(match) {
+  return match?.lineup_status === 'lineup_confirmed' || match?.lineup_locked_verified === true;
+}
+
+function isLineupLocked(match) {
+  return isLineupVerified(match);
+}
+
+function isForecastHeld(match) {
+  return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
+}
+
+function isGoalkeeperPosition(position) {
+  return /goalkeeper|keeper|gk/.test(String(position ?? '').trim().toLowerCase());
+}
+
+function lineupsStatusText(match) {
+  return isLineupVerified(match)
+    ? 'official starting lineup verified'
+    : 'official starting lineup not verified';
+}
+
+function lineupSourceText(md) {
+  if (!md?.source?.provider) return null;
+  const ev = md.source.event_id ? ` (event ${md.source.event_id})` : '';
+  return `${md.source.provider.toUpperCase()} ${md.source.league ?? ''}`.trim().replace(/\s+/g, ' ') + ev;
+}
+
+function lineupCoverage(match, board) {
+  const md = match?.matchday;
+  const source = md?.source ?? null;
+  const verified = isLineupVerified(match);
+  const result = [];
+  const sourceText = source ? lineupSourceText(md) : null;
+  const fetched = md?.fetched_utc ?? match?.lineup_freshness?.fetched_utc ?? null;
+  const freshnessReason = match?.lineup_freshness?.reason ?? 'not verified';
+  const freshnessState = match?.lineup_freshness?.source_event_state ?? source?.event_state ?? null;
+  const freshnessId = match?.lineup_freshness?.source_event_id ?? source?.event_id ?? null;
+  const lineup = [];
+  for (const side of ['home', 'away']) {
+    const startingXi = md?.[side]?.lineup?.starting_xi;
+    if (Array.isArray(startingXi)) lineup.push(...startingXi);
+  }
+  const positionsKnown = lineup.length > 0 && lineup.every((player) => String(player?.position ?? '').trim().length > 0);
+  const hasGoalScoringPriors = lineup.some((player) => candidateHasRealPrior(player));
+  const hasMarketLines = Boolean(board?.lanes?.some((lane) => lane?.market_context) || match?.board_has_market_lines);
+  const coverage = (label, status, reason) => `    ${label}: ${status} — ${reason}`;
+  result.push(coverage(
+    'official starting lineup',
+    verified ? 'gathered' : 'unavailable',
+    verified
+      ? `${sourceText ?? 'official source not attached'}${fetched ? `, fetched ${fetched}` : ''}`
+      : `${freshnessReason}${freshnessState ? ` (event_state=${freshnessState})` : ''}${freshnessId ? ` (event ${freshnessId})` : ''}`,
+  ));
+  result.push(coverage(
+    'player positions/roles',
+    verified && positionsKnown ? 'gathered' : 'unavailable',
+    verified && positionsKnown
+      ? `${lineup.length} starters with positions`
+      : verified
+        ? 'starter positions missing from lineup artifact'
+        : 'official starting lineup not verified',
+  ));
+  result.push(coverage(
+    'player scoring priors',
+    verified && hasGoalScoringPriors ? 'gathered' : verified ? 'blocked' : 'unavailable',
+    verified
+      ? (hasGoalScoringPriors
+        ? `${lineup.filter((player) => candidateHasRealPrior(player)).length} starting players carry xG or role priors`
+        : 'player-level scoring priors unavailable')
+      : 'official starting lineup not verified',
+  ));
+  result.push(coverage(
+    'team baseline composite',
+    'gathered',
+    verified ? 'baseline composite only; lineup-adjusted model not applied' : 'baseline composite only; lineup-adjusted model not applied (pre-lineup)',
+  ));
+  result.push(coverage(
+    'lineup-adjusted team model',
+    verified ? 'blocked' : 'unavailable',
+    verified
+      ? `LINEUP_ADJUSTED_MODEL_MISSING; ${match?.lineup_adjustment?.reason ?? 'matchday artifact lacks player_ratings, key_absence_flags, and expected_starters'}`
+      : 'official starting lineup not verified',
+  ));
+  result.push(coverage(
+    'market lines',
+    hasMarketLines ? 'gathered' : 'unavailable',
+    hasMarketLines ? 'display-only and not used in scoring' : 'no market lines sourced for this match',
+  ));
+  result.push(coverage('advancement/standings', 'unavailable', 'standings feed not sourced'));
+  result.push(coverage(
+    'live context',
+    'unavailable',
+    `no live feed attached${source?.event_state ? ` (event_state=${source.event_state})` : ''}`,
+  ));
+  return result.join('\n');
+}
+
+function lineupLockDisplay(match) {
+  if (!match?.kickoff_utc) return 'Kickoff: TBD';
+  const d = new Date(match.kickoff_utc);
+  if (Number.isNaN(d.getTime())) return 'Kickoff: TBD';
+  return displayPair(new Date(d.getTime() - (45 * 60 * 1000)));
+}
+
+function starterMinutesForPosition(position) {
+  const p = String(position ?? '').toLowerCase();
+  if (/goalkeeper|keeper|gk/.test(p)) return 90;
+  if (/(defender|centre back|center back|cb|lb|rb|lwb|rwb|fullback|full-back|wingback|wing-back)/.test(p)) return 82;
+  if (/(midfielder|cm|dm|am|lm|rm|cam|holding midfielder|attacking midfielder|central midfielder)/.test(p)) return 78;
+  if (/(forward|striker|centre forward|center forward|cf|fw|winger|wide forward|inside forward)/.test(p)) return 74;
+  return 76;
+}
+
+function candidateHasRealPrior(candidate) {
+  return (candidate?.xg_per_90 !== null && candidate?.xg_per_90 !== undefined)
+    || (candidate?.penalty_role ?? 0) > 0
+    || (candidate?.set_piece_role ?? 0) > 0;
+}
+
+// Customer-facing label for an internal goalscorer lineup-status enum so the
+// rendered packet never leaks raw tokens like CONFIRMED_XI / PRE_LOCK_PROJECTED.
+function lineupStatusLabel(status) {
+  switch (String(status ?? '').trim().toUpperCase()) {
+    case 'CONFIRMED_XI': return 'official starting lineup';
+    case 'PRE_LOCK_PROJECTED': return 'pre-lineup projection';
+    case 'LINEUP_WINDOW': return 'lineup window';
+    case 'LINEUP_SENSITIVE': return 'lineup-sensitive';
+    case 'UNAVAILABLE': return 'unavailable';
+    default: return String(status ?? '').trim().toLowerCase().replace(/_/g, ' ') || 'unavailable';
+  }
+}
+
+function candidatePoolForSide(match, side) {
+  const md = match?.matchday?.[side];
+  const team = md?.lineup?.team_name ?? md?.team ?? (side === 'home' ? match?.home_team : match?.away_team) ?? null;
+  const lineupConfirmed = isLineupLocked(match);
+  const lineup = Array.isArray(md?.lineup?.starting_xi) ? md.lineup.starting_xi : [];
+  const squadPlayers = Array.isArray(md?.squad?.players) ? md.squad.players : [];
+  const sourcePlayers = lineupConfirmed && lineup.length ? lineup : squadPlayers;
+
+  return {
+    team,
+    lineup_status: lineupConfirmed
+      ? GOALSCORER_LINEUP_STATUS.CONFIRMED_XI
+      : GOALSCORER_LINEUP_STATUS.PRE_LOCK_PROJECTED,
+    players: sourcePlayers.map((player, index) => {
+      const name = player?.name ?? player?.fullName ?? player?.player_name ?? null;
+      const position = player?.position ?? player?.role ?? null;
+      if (isGoalkeeperPosition(position)) return null;
+      return {
+        player_id: player?.player_id ?? `${match?.match_id ?? 'match'}:${side}:${slugify(name ?? `player-${index}`)}:${index}`,
+        player_name: name,
+        team_side: side,
+        position,
+        lineup_status: lineupConfirmed
+          ? GOALSCORER_LINEUP_STATUS.CONFIRMED_XI
+          : GOALSCORER_LINEUP_STATUS.PRE_LOCK_PROJECTED,
+        start_probability: lineupConfirmed ? 0.85 : undefined,
+        expected_minutes: lineupConfirmed ? starterMinutesForPosition(player?.position ?? player?.role ?? null) : undefined,
+        penalty_role: player?.penalty_role ?? null,
+        set_piece_role: player?.set_piece_role ?? null,
+        xg_per_90: player?.xg_per_90 ?? null,
+      };
+    }).filter((player) => player && player.player_name),
+  };
+}
+
+function projectGoalscorerSide(match, board, side) {
+  const goalProjection = board?.goal_projection;
+  if (!goalProjection || goalProjection.projection_status !== 'PROJECTED') {
+    return {
+      team: side === 'home' ? match?.home_team : match?.away_team,
+      side,
+      blocked: 'team projected goals unavailable',
+      projection: null,
+      players: [],
+      playerPoolSize: 0,
+    };
+  }
+
+  const teamProjectedGoals = side === 'home'
+    ? goalProjection.projected_home_goals
+    : goalProjection.projected_away_goals;
+  const pool = candidatePoolForSide(match, side);
+  if (pool.lineup_status === GOALSCORER_LINEUP_STATUS.CONFIRMED_XI
+    && pool.players.length
+    && !pool.players.some(candidateHasRealPrior)) {
+    return {
+      team: pool.team,
+      side,
+      blocked: 'player-level scoring priors unavailable',
+      projection: null,
+      players: [],
+      playerPoolSize: pool.players.length,
+      teamProjectedGoals,
+      lineup_status: pool.lineup_status,
+    };
+  }
+  if (!pool.players.length) {
+    return {
+      team: pool.team,
+      side,
+      blocked: 'player candidate pool unavailable',
+      projection: null,
+      players: [],
+      playerPoolSize: 0,
+      teamProjectedGoals,
+      lineup_status: pool.lineup_status,
+    };
+  }
+
+  const projection = projectAnytimeGoalscorers({
+    match,
+    team_side: side,
+    projected_team_goals: teamProjectedGoals,
+    player_candidates: pool.players,
+    lineup_status: pool.lineup_status,
+  });
+
+  const players = (projection.players || [])
+    .slice()
+    .sort((a, b) => (b.projected_player_goals ?? -1) - (a.projected_player_goals ?? -1))
+    .slice(0, 3);
+
+  return {
+    team: pool.team,
+    side,
+    blocked: null,
+    projection,
+    players,
+    playerPoolSize: pool.players.length,
+    teamProjectedGoals,
+    lineup_status: pool.lineup_status,
+  };
+}
+
+function summarizeGoalscorerStatus(sidecar) {
+  if (!sidecar?.length) return 'BLOCKED_PLAYER_DATA_MISSING';
+  if (sidecar.some((entry) => entry.blocked === 'team projected goals unavailable')) return 'BLOCKED_TEAM_GOALS_MISSING';
+  if (sidecar.some((entry) => entry.blocked === 'player-level scoring priors unavailable')) {
+    return 'blocked — player-level scoring priors unavailable';
+  }
+  if (sidecar.some((entry) => entry.blocked === 'player candidate pool unavailable')) return 'BLOCKED_PLAYER_DATA_MISSING';
+  if (sidecar.some((entry) => (entry.players || []).some((player) => player.projection_status === GOALSCORER_PROJECTION_STATUS.READY))) {
+    return 'READY for official starting lineup players';
+  }
+  if (sidecar.some((entry) => (entry.players || []).some((player) => player.projection_status === GOALSCORER_PROJECTION_STATUS.PROVISIONAL_PRE_LOCK))) {
+    return 'PROVISIONAL_PRE_LOCK';
+  }
+  return 'LINEUP_SENSITIVE';
+}
+
+function whyItMattersBlock(matches = [], boards = []) {
+  const lines = [];
+  lines.push(section('Why it matters'));
+  if (!matches.length) {
+    lines.push('  No matches loaded for this date.');
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  if (matches.length === 1) {
+    const match = matches[0];
+    const board = boards[0];
+    const goalProjection = board?.goal_projection;
+    const sidecar = ['home', 'away'].map((side) => projectGoalscorerSide(match, board, side));
+    const forecastHeld = isForecastHeld(match);
+    const timingState = isLineupVerified(match) ? 'official starting lineup verified' : 'lineup-sensitive';
+    lines.push(`  Match context: ${match.home_team} vs ${match.away_team} [${safeStage(match)}] — ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
+    lines.push(`  Model lanes that matter: result, total goals, BTTS, goal spread, and anytime goalscorer.`);
+    lines.push(`  Lineup status: ${timingState}.`);
+    lines.push(`  Goalscorer status: ${forecastHeld ? 'forecast held until the model consumes the confirmed XI state' : summarizeGoalscorerStatus(sidecar)}.`);
+    const missingOrBlocked = forecastHeld
+      ? ['forecast held until the model consumes the confirmed XI state']
+      : [...new Set(sidecar.map((entry) => entry.blocked || 'player candidates available'))];
+    lines.push(`  Missing or blocked: ${missingOrBlocked.join('; ')}.`);
+    lines.push('  Price context: display-only and not used in scoring.');
+    if (forecastHeld) {
+      lines.push('  Goal environment: forecast held until the model consumes the confirmed XI state.');
+    } else if (goalProjection?.projection_status === 'PROJECTED') {
+      lines.push(`  Goal environment: projected ${goalProjection.projected_home_goals}-${goalProjection.projected_away_goals} goals.`);
+    } else {
+      lines.push(`  Goal environment: ${goalProjection?.reason ?? 'team goals unavailable'}.`);
+    }
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  const games = matches
+    .filter((m) => m?.home_team && m?.away_team)
+    .map((m) => `${m.home_team} vs ${m.away_team} (${kickoffDisplay(m)})`)
+    .join('; ');
+  const timingSensitive = matches
+    .filter((m) => !isLineupLocked(m))
+    .map((m) => `${m.home_team} vs ${m.away_team}`)
+    .join('; ') || 'all matches with kickoff times';
+  const lineupPackets = matches
+    .filter((m) => m.kickoff_utc)
+    .map((m) => `${m.home_team} vs ${m.away_team} at ${lineupLockDisplay(m)}`)
+    .join('; ');
+  lines.push(`  Today's games: ${games}.`);
+  lines.push(`  Timing-sensitive matches: ${timingSensitive}.`);
+  lines.push('  Pre-lock / lineup-sensitive lanes: result, total goals, BTTS, goal spread, and anytime goalscorer.');
+  lines.push('  Watch lineup-lock windows: each match is scheduled 45 minutes before kickoff.');
+  lines.push(`  Individual lineup-lock packets: ${lineupPackets}.`);
+  if (matches.some(isForecastHeld)) {
+    const heldNames = matches.filter(isForecastHeld).map((m) => `${m.home_team} vs ${m.away_team}`).join('; ');
+    lines.push(`  Goalscorer outputs are held for ${heldNames} until the model consumes the confirmed XI state.`);
+  } else {
+    lines.push('  Goalscorer outputs stay provisional until an official starting lineup is verified.');
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function renderGoalscorerBlock(match, board) {
+  if (isForecastHeld(match)) {
+    return [
+      '  Anytime Goalscorer Model — PRICE FREE (display-only and not used in scoring)',
+      '    Forecast held until the model consumes the confirmed XI state.',
+      '',
+    ].join('\n');
+  }
+  const sidecar = ['home', 'away'].map((side) => projectGoalscorerSide(match, board, side));
+  const lines = [];
+  lines.push('  Anytime Goalscorer Model — PRICE FREE (display-only and not used in scoring)');
+  if (sidecar.every((entry) => entry.blocked === 'team projected goals unavailable')) {
+    lines.push('    BLOCKED_TEAM_GOALS_MISSING — team projected goals unavailable.');
+    lines.push('');
+    return lines.join('\n');
+  }
+  if (sidecar.every((entry) => entry.blocked === 'player-level scoring priors unavailable')) {
+    lines.push('    Goalscorer status: blocked — player-level scoring priors unavailable.');
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  for (const entry of sidecar) {
+    const team = entry.team ?? (entry.side === 'home' ? match.home_team : match.away_team);
+    const sideLabel = entry.side === 'home' ? 'home' : 'away';
+    const goalBudget = entry.teamProjectedGoals == null ? 'MISSING' : entry.teamProjectedGoals.toFixed(2);
+    const status = entry.projection?.lineup_status ?? (entry.blocked ? 'UNAVAILABLE' : 'LINEUP_SENSITIVE');
+    lines.push(`    ${team} (${sideLabel}) | team goals ${goalBudget} | lineup ${lineupStatusLabel(status)}`);
+
+    if (entry.blocked === 'player candidate pool unavailable') {
+      lines.push('      BLOCKED_PLAYER_DATA_MISSING — player candidate pool unavailable.');
+      continue;
+    }
+    if (entry.blocked === 'player-level scoring priors unavailable') {
+      lines.push('      Goalscorer status: blocked — player-level scoring priors unavailable.');
+      continue;
+    }
+
+    const players = entry.players || [];
+    if (!players.length) {
+      lines.push('      BLOCKED_PLAYER_DATA_MISSING — player candidate pool unavailable.');
+      continue;
+    }
+
+    for (const player of players) {
+      lines.push(
+        `      - ${player.player_name} | ${player.team_side} | ${player.projection_status} | mins ${player.expected_minutes ?? 'N/A'} | start ${fmtPct(player.start_probability, 0)} | goals ${player.projected_player_goals == null ? 'MISSING' : player.projected_player_goals.toFixed(2)} | P(anytime) ${fmtPct(player.anytime_goal_probability, 1)} | ${player.reason}`,
+      );
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
 }
 
 // Short side phrase for the summary/list sections (TLDR etc.).
@@ -455,7 +886,13 @@ function slatePreviewBlock(matches = [], boards = []) {
   const lockedNames = matches.filter((m) => m.lineup_status === 'lineup_confirmed').map((m) => `${m.home_team} vs ${m.away_team}`);
   lines.push('  Advancement / standings math: not sourced — omitted rather than invented.');
   if (lockedNames.length) {
-    lines.push(`  Lineup/source: official starting XIs confirmed for ${lockedNames.join(', ')}; remaining matches are pre-lineup and use the prior team composite.`);
+    if (matches.some(isForecastHeld)) {
+      lines.push('  Lineup/source: official starting XIs confirmed, but the public forecast is held until the model consumes the confirmed XI state.');
+    } else if (lockedNames.length === matches.length) {
+      lines.push('  Lineup/source: official starting XIs confirmed for all matches; the prior team composite still powers the forecast.');
+    } else {
+      lines.push(`  Lineup/source: official starting XIs confirmed for ${lockedNames.join(', ')}; remaining matches are pre-lineup and use the prior team composite.`);
+    }
   } else {
     lines.push('  Lineup/source: no official starting XIs confirmed yet; all matches use the prior team composite.');
   }
@@ -488,7 +925,8 @@ function lineupLockedLines(match) {
 
 function formatMatch(match, board, provenance = null, previewLines = null) {
   const lines = [];
-  const locked = match?.lineup_status === 'lineup_confirmed';
+  const locked = isLineupLocked(match);
+  const holdForecast = match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
   const gp = projectionFor(board);
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
   lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
@@ -500,7 +938,12 @@ function formatMatch(match, board, provenance = null, previewLines = null) {
     lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's confirmed XI`);
   }
   lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
-  if (gp) {
+  if (holdForecast) {
+    match._audit_suppressed_forecast = {
+      prior_composite: suppressedForecastAudit(match, board),
+    };
+    lines.push('  ⏸ FORECAST HELD — lineups confirmed but model has not consumed the confirmed XI state. Prior composite numbers suppressed from public output.');
+  } else if (gp) {
     lines.push(`  ${goalForecastLine(match, board).replace(/^Goal forecast: /, 'Goal forecast: ')}`);
     lines.push(`  ${totalGoalsForecastLine(board).replace(/^Total goals forecast: /, 'Total goals forecast: ')}`);
     lines.push(`  ${bttsForecastLine(board).replace(/^Both-score forecast: /, 'Both-score forecast: ')}`);
@@ -533,12 +976,27 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const isLineupLocked = packetStage === 'lineup_locked' || confirmedCount > 0;
   const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
+  for (let i = 0; i < (matches || []).length; i += 1) {
+    const freshness = checkForecastFreshness({
+      lineup_confirmed: matches[i]?.lineup_status === 'lineup_confirmed',
+      model_consumes_lineup: matches[i]?.model_consumes_lineup === true,
+    });
+    matches[i].model_consumes_lineup = freshness.allow_active_forecast;
+  }
+
   const lines = [];
   lines.push(header('MATCHDAY FORECAST', date));
   if (provenance?.provisional) {
     if (isLineupLocked) {
       lines.push(`Model basis: latest prior team composite from ${provenance.source_date}; ${confirmedCount} match(es) now carry confirmed official starting XIs (see per-match status).`);
-      lines.push('Lineup-aware note: confirmed lineups are shown per match; projections still use the prior team composite because no lineup-adjusted model path is sourced yet.\n');
+      if (matches.some(isForecastHeld)) {
+        lines.push('Lineup-aware note: confirmed lineups are shown per match; the public forecast is held until the model consumes the confirmed XI state.\n');
+      } else {
+        lines.push('Lineup-aware note: confirmed lineups are shown per match; projections still use the prior team composite because no lineup-adjusted model path is sourced yet.\n');
+      }
+    } else if (isMorningPreview) {
+      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, morning pre-lock preview.`);
+      lines.push('Lineup-aware note: this preview is pre-lock; goalscorer outputs remain provisional until official starting lineups are available.\n');
     } else {
       lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's confirmed XI.`);
       lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
@@ -555,7 +1013,9 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     const board = boards[i];
     const projection = projectionFor(board);
     const edge = resultEdgePhrase(board, match);
-    if (projection) {
+    if (isForecastHeld(match)) {
+      lines.push(`  • ${match.home_team} vs ${match.away_team}: FORECAST HELD — lineups confirmed but model has not consumed the confirmed XI state.`);
+    } else if (projection) {
       lines.push(`  • ${match.home_team} vs ${match.away_team}: ${edge}; projected goals ${projection.projected_home_goals}-${projection.projected_away_goals}; projected total ${projection.projected_total_goals}`);
     } else {
       lines.push(`  • ${match.home_team} vs ${match.away_team}: ${edge}; projected goals Model unavailable: missing model layer`);
@@ -583,7 +1043,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   // 4. Model Limits
   lines.push(section('4. Model Limits'));
   lines.push('  First-half markets are unavailable because no half-split model layer is sourced.');
-  lines.push('  Pre-lock forecasts use the latest prior team composite until starting XI data is available.\n');
+  if (matches.some(isForecastHeld)) {
+    lines.push('  Confirmed-lineup forecasts stay held until the model consumes the confirmed XI state.\n');
+  } else {
+    lines.push('  Pre-lock forecasts use the latest prior team composite until starting XI data is available.\n');
+  }
 
   // 5. Source Quality
   lines.push(section('5. Source Quality'));
@@ -601,7 +1065,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   } else {
     lines.push('  Pre-lock status: lineups are not confirmed');
   }
-  lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's confirmed XI.`);
+  if (matches.some(isForecastHeld)) {
+    lines.push('  Model basis: official starting XIs are confirmed, but the public forecast is held until the model consumes the confirmed XI state.');
+  } else {
+    lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's official starting lineup.`);
+  }
   if (researchStatus === 'ok') {
     const confirmed = research?.source_quality?.confirmed;
     const matchCount = matches.length;
