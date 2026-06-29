@@ -27,6 +27,9 @@ import {
 } from '../scripts/packets/send-packets-telegram.mjs';
 import { inspectPacketFile } from '../scripts/cron/cpc-packet-janitor.mjs';
 import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
+import { renderWorldCupPacket } from '../scripts/worldcup/lib/packet-renderer.mjs';
+import { composeEvidenceLedgerForGame } from '../scripts/worldcup/lib/evidence-ledger.mjs';
+import { composeMultiLaneCeilingBoard } from '../scripts/worldcup/lib/multi-lane-ceiling.mjs';
 
 const SENDER = join(process.cwd(), 'scripts/packets/send-packets-telegram.mjs');
 
@@ -99,6 +102,48 @@ function runSenderCli(root, date, extraArgs = []) {
     '--dry-run',
     ...extraArgs,
   ], { encoding: 'utf8' });
+}
+
+function buildWorldCupBoard() {
+  const mk = (score) => ({ present: true, score });
+  const side = (score) => Object.fromEntries(
+    ['team_quality_baseline', 'recent_form', 'attacking_strength', 'defensive_strength', 'opponent_adjusted_attack', 'opponent_adjusted_defense', 'opponent_style_fit', 'set_piece_matchup', 'goalkeeper_edge', 'squad_availability', 'lineup_strength_delta', 'rest_travel_venue_climate', 'tournament_incentive_state', 'knockout_extra_time_penalty']
+      .map((key) => [key, mk(score)]),
+  );
+  const ledger = composeEvidenceLedgerForGame(side(84), side(54));
+  return composeMultiLaneCeilingBoard({
+    homeLedger: ledger.home,
+    awayLedger: ledger.away,
+    marketContexts: [],
+    isKnockout: false,
+    lineupConfirmed: false,
+  });
+}
+
+function buildWorldCupPacketText({ liveContext = null, research = { status: 'ok' } } = {}) {
+  const match = {
+    match_id: '400021513',
+    home_team: 'Germany',
+    away_team: 'Paraguay',
+    group: 'Group stage',
+    stage: 'group',
+    kickoff_utc: '2026-06-29T20:30:00Z',
+    lineup_status: 'lineup_pending',
+  };
+  if (liveContext) match.live_context = liveContext;
+  const board = buildWorldCupBoard();
+  return renderWorldCupPacket({
+    matches: [match],
+    boards: [board],
+    meta: { date: '2026-06-11', packet_stage: 'morning_board', research },
+  });
+}
+
+function seedWorldCupDiscovery(root, date) {
+  const discoveryDir = join(root, 'worldcup', date, 'discovery');
+  mkdirSync(discoveryDir, { recursive: true });
+  const source = join(process.cwd(), 'state', 'worldcup', date, 'discovery', 'static_structure.json');
+  writeFileSync(join(discoveryDir, 'static_structure.json'), readFileSync(source, 'utf8'));
 }
 
 test('planDeliveries sends chunks in order and never audit artifacts', () => {
@@ -247,6 +292,81 @@ test('sender fails closed when janitor blocks the only candidate packet', () => 
 
   assert.equal(result.verdict, 'JANITOR_BLOCKED');
   assert.ok(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
+});
+
+test('worldcup janitor allows consistent live-context coverage', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wc-janitor-ok-'));
+  seedWorldCupDiscovery(root, '2026-06-29');
+  const packetPath = join(root, 'worldcup-2026-06-29-lineup_lock-germany-paraguay.txt');
+  const text = buildWorldCupPacketText({
+    liveContext: {
+      status: 'gathered',
+      source_id: 'perplexity',
+      source_label: 'Perplexity research',
+      matched_by: 'match_id',
+      match_id: '400021513',
+      event_id: '760489',
+      source_quality: 'High',
+      summary: 'Germany and Paraguay preview includes a predicted Germany XI and one injury note.',
+      citations: ['[1]', '[2]'],
+    },
+    research: { status: 'ok', attached_count: 1 },
+  });
+  writeFileSync(packetPath, text);
+
+  const result = inspectPacketFile(packetPath, {
+    date: '2026-06-29',
+    stateRoot: root,
+    packetType: 'worldcup-matchday',
+    ledgerPath: join(root, '.delivery-ledger.json'),
+    idempotencyKey: 'worldcup-2026-06-29-lineup_lock-germany-paraguay',
+    requireLedger: false,
+    requireSourceHealth: true,
+    documentDelivery: true,
+    force: false,
+  });
+
+  assert.notEqual(result.verdict, 'JANITOR_BLOCKED', result.errors.map((err) => `${err.code}: ${err.message}`).join('; '));
+  assert.ok(!result.errors.some((err) => err.code === 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION'));
+});
+
+test('worldcup janitor blocks captured Source Quality when per-match live context is unavailable', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wc-janitor-block-'));
+  seedWorldCupDiscovery(root, '2026-06-29');
+  const packetPath = join(root, 'worldcup-2026-06-29-lineup_lock-germany-paraguay.txt');
+  const text = buildWorldCupPacketText({
+    liveContext: {
+      status: 'gathered',
+      source_id: 'perplexity',
+      source_label: 'Perplexity research',
+      matched_by: 'match_id',
+      match_id: '400021513',
+      event_id: '760489',
+      source_quality: 'High',
+      summary: 'Germany and Paraguay preview includes a predicted Germany XI and one injury note.',
+      citations: ['[1]', '[2]'],
+    },
+    research: { status: 'ok', attached_count: 1 },
+  }).replace(
+    /live context: gathered — [^\n]+/,
+    'live context: unavailable — no live context attached to this match',
+  );
+  writeFileSync(packetPath, text);
+
+  const result = inspectPacketFile(packetPath, {
+    date: '2026-06-29',
+    stateRoot: root,
+    packetType: 'worldcup-matchday',
+    ledgerPath: join(root, '.delivery-ledger.json'),
+    idempotencyKey: 'worldcup-2026-06-29-lineup_lock-germany-paraguay',
+    requireLedger: false,
+    requireSourceHealth: true,
+    documentDelivery: true,
+    force: false,
+  });
+
+  assert.equal(result.verdict, 'JANITOR_BLOCKED');
+  assert.ok(result.errors.some((err) => err.code === 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION'));
 });
 
 test('sender skips already-delivered packets via the ledger in dry-run too', () => {

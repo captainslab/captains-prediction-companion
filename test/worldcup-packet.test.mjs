@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { attachWorldCupResearchContext } from '../scripts/worldcup/generate-matchday-packet.mjs';
 import { composeEvidenceLedgerForGame } from '../scripts/worldcup/lib/evidence-ledger.mjs';
 import { composeMultiLaneCeilingBoard } from '../scripts/worldcup/lib/multi-lane-ceiling.mjs';
 import { evaluateLineupCacheFreshness } from '../scripts/worldcup/lib/lineup-freshness.mjs';
@@ -41,6 +42,7 @@ function makeFixture({
   awayScore = 55,
   lineupConfirmed = lineupStatus === 'lineup_confirmed',
   lineupLockedVerified = false,
+  liveContext = null,
 } = {}) {
   const match = {
     match_id: '400021443',
@@ -52,6 +54,7 @@ function makeFixture({
     lineup_status: lineupStatus,
     lineup_locked_verified: lineupLockedVerified,
   };
+  if (liveContext) match.live_context = liveContext;
   const ledger = composeEvidenceLedgerForGame(fullSide(homeScore), fullSide(awayScore));
   const board = composeMultiLaneCeilingBoard({
     homeLedger: ledger.home,
@@ -155,6 +158,7 @@ test('market context is labeled reference-only and shown as display-only', () =>
   const { match, board } = makeFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
   assert.ok(text.includes('3. Reference Comparison'), 'market comparison section must render');
+  assert.match(text, /Market Context - NOT IN SCORE/i, 'market context marker must be explicit');
   assert.ok(text.includes('reference-only'), 'market must be labeled reference-only');
   assert.ok(text.includes('Reference prices are not used in the model.'),
     'market prices must be disclosed as not used in the model');
@@ -360,12 +364,27 @@ test('confirmed XI packet can render READY goalscorer players', () => {
   assert.equal((text.match(/player candidates available/g) || []).length, 1, 'player candidates available must render only once');
 });
 
-test('per-match coverage block lists all eight layers with status labels', () => {
+test('per-match coverage block lists all eight layers with attached live context as gathered', () => {
   const { match, board } = makeConfirmedGoalscorerFixture();
+  match.live_context = {
+    status: 'gathered',
+    source_id: 'perplexity',
+    source_label: 'Perplexity research',
+    matched_by: 'match_id',
+    match_id: match.match_id,
+    event_id: '760489',
+    source_quality: 'High',
+    summary: 'Germany and Paraguay preview includes a predicted Germany XI and one injury note.',
+    citations: ['[1]', '[2]'],
+  };
   const text = renderWorldCupPacket({
     matches: [match],
     boards: [board],
-    meta: { date: '2026-06-22', packet_stage: 'lineup_locked' },
+    meta: {
+      date: '2026-06-22',
+      packet_stage: 'lineup_locked',
+      research: { status: 'ok', attached_count: 1 },
+    },
   });
   assert.ok(text.includes('Data coverage (gathered / unavailable / blocked):'), 'coverage sub-header must render');
   for (const label of [
@@ -387,7 +406,51 @@ test('per-match coverage block lists all eight layers with status labels', () =>
   assert.ok(/lineup-adjusted team model: blocked —/.test(text), 'lineup-adjusted model must be blocked');
   assert.ok(/reference lines: unavailable —/.test(text), 'reference lines must be unavailable when none are attached');
   assert.ok(/advancement\/standings: unavailable —/.test(text), 'advancement standings must be unavailable');
-  assert.ok(/live context: unavailable —/.test(text), 'live context must be unavailable');
+  assert.ok(/live context: gathered — Perplexity research/.test(text), 'live context must be gathered when attached');
+  assert.ok(/Perplexity research: live supplemental context captured for 1\/1 matches\./.test(text));
+});
+
+test('no live context attached stays unavailable and Source Quality stays honest', () => {
+  const { match, board } = makeFixture();
+  const text = renderWorldCupPacket({
+    matches: [match],
+    boards: [board],
+    meta: { date: '2026-06-11', packet_stage: 'morning_board', research: { status: 'ok' } },
+  });
+  assert.ok(/live context: unavailable — no live context attached to this match/.test(text));
+  assert.ok(/Perplexity research: unavailable — no match-level live context attached/.test(text));
+  assert.ok(!/captured for \d+\/\d+ matches/.test(text), 'source quality must not claim captured context');
+});
+
+test('mismatched research record does not attach and does not count as captured', () => {
+  const match = {
+    match_id: '400021443',
+    home_team: 'Mexico',
+    away_team: 'South Africa',
+    kickoff_utc: '2026-06-11T19:00:00Z',
+  };
+  const attached = attachWorldCupResearchContext(match, {
+    researchStatus: 'ok',
+    researchIndex: [{
+      record: {
+        match_id: '999999',
+        summary: 'Different fixture',
+        source_quality: 'High',
+      },
+      index: 0,
+      keys: ['match_id:999999'],
+      used: false,
+    }],
+  });
+  assert.equal(attached.live_context.status, 'unavailable');
+  const board = makeFixture().board;
+  const text = renderWorldCupPacket({
+    matches: [attached],
+    boards: [board],
+    meta: { date: '2026-06-11', packet_stage: 'morning_board', research: { status: 'ok' } },
+  });
+  assert.ok(/live context: unavailable — no live context attached to this match/.test(text));
+  assert.ok(/Perplexity research: unavailable — no match-level live context attached/.test(text));
 });
 
 test('goalkeepers and low-prior defenders never appear in the goalscorer section', () => {

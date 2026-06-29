@@ -302,6 +302,8 @@ function sourceTimestamp(value) {
   const candidates = [
     value.generated_utc,
     value.generated_at,
+    value.produced_at,
+    value.discovered_at,
     value.updated_utc,
     value.updated_at,
     value.fetched_utc,
@@ -537,6 +539,36 @@ export function noUsableSourceEvidenceFinding(text, packetType) {
       };
     }
   }
+  return null;
+}
+
+function worldcupContextCoverageContradiction(text, packetType) {
+  if (!/worldcup/i.test(packetType ?? '')) return null;
+  const body = String(text ?? '');
+  const gatheredCount = (body.match(/^\s*live context:\s*gathered\b/imsg) || []).length;
+  const unavailableCount = (body.match(/^\s*live context:\s*unavailable\b/imsg) || []).length;
+  const capturedMatch = body.match(/Perplexity research:\s*live supplemental context captured for\s*(\d+)\s*\/\s*(\d+)\s+matches\./i);
+  const unavailableMatch = body.match(/Perplexity research:\s*unavailable\b/i);
+
+  if (capturedMatch) {
+    const captured = Number(capturedMatch[1]);
+    const total = Number(capturedMatch[2]);
+    if (Number.isFinite(captured) && Number.isFinite(total) && captured !== gatheredCount) {
+      return {
+        code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
+        message: `worldcup packet claims ${captured}/${total} live context match(es) captured but renders ${gatheredCount} gathered row(s) and ${unavailableCount} unavailable row(s)`,
+      };
+    }
+    return null;
+  }
+
+  if (unavailableMatch && gatheredCount > 0) {
+    return {
+      code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
+      message: `worldcup packet says live context is unavailable but renders ${gatheredCount} gathered row(s)`,
+    };
+  }
+
   return null;
 }
 
@@ -830,6 +862,11 @@ export function validatePacketText(text, context = {}) {
     // disclosure does NOT clear this — disclosing stale cache cannot manufacture
     // research that was never performed.
     errors.push(noSourceEvidence);
+  }
+
+  const worldcupContradiction = worldcupContextCoverageContradiction(text, packetType);
+  if (worldcupContradiction) {
+    errors.push(worldcupContradiction);
   }
 
   const alphaPending = mlbAlphaPendingFinding(text, packetType);

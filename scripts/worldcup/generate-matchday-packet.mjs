@@ -70,6 +70,125 @@ function readJsonIfExists(path) {
   }
 }
 
+function researchKeyToken(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  return slugify(text);
+}
+
+function researchPairKey(homeTeam, awayTeam) {
+  const home = researchKeyToken(homeTeam);
+  const away = researchKeyToken(awayTeam);
+  if (!home || !away) return null;
+  return `pair:${home}|${away}`;
+}
+
+function researchRecordKeys(record = {}) {
+  const keys = [];
+  const push = (prefix, value) => {
+    const token = researchKeyToken(value);
+    if (token) keys.push(`${prefix}:${token}`);
+  };
+
+  push('match_id', record.match_id ?? record.matchId);
+  push('event_id', record.event_id ?? record.eventId ?? record.source_event_id);
+  push('event_ticker', record.event_ticker ?? record.eventTicker ?? record.market_ticker ?? record.marketTicker);
+
+  const pair = researchPairKey(
+    record.home_team ?? record.homeTeam,
+    record.away_team ?? record.awayTeam,
+  );
+  if (pair) keys.push(pair);
+
+  return [...new Set(keys)];
+}
+
+function researchMatchKeys(match = {}, matchday = null) {
+  const keys = [];
+  const push = (prefix, value) => {
+    const token = researchKeyToken(value);
+    if (token) keys.push(`${prefix}:${token}`);
+  };
+
+  push('match_id', match.match_id);
+  push('event_id', matchday?.source?.event_id ?? match?.event_id ?? match?.source_event_id);
+  push('event_ticker', match?.event_ticker ?? match?.market_context?.event_ticker ?? match?.market_context?.ticker);
+
+  const pair = researchPairKey(match?.home_team, match?.away_team);
+  if (pair) keys.push(pair);
+
+  return [...new Set(keys)];
+}
+
+function buildResearchIndex(researchArtifact = {}) {
+  return (Array.isArray(researchArtifact?.records) ? researchArtifact.records : []).map((record, index) => ({
+    record,
+    index,
+    keys: researchRecordKeys(record),
+    used: false,
+  }));
+}
+
+function normalizeResearchSummary(value, max = 200) {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return 'summary unavailable';
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
+}
+
+export function attachWorldCupResearchContext(match, {
+  matchday = null,
+  researchIndex = [],
+  researchStatus = 'ok',
+  sourceId = 'perplexity',
+  sourceLabel = 'Perplexity research',
+} = {}) {
+  const keys = researchMatchKeys(match, matchday);
+  const entry = researchIndex.find((candidate) =>
+    !candidate.used && candidate.keys.some((key) => keys.includes(key)),
+  );
+
+  if (!entry) {
+    return {
+      ...match,
+      live_context: {
+        status: 'unavailable',
+        source_id: sourceId,
+        source_label: sourceLabel,
+        reason: researchStatus === 'ok'
+          ? 'no live context attached to this match'
+          : `research ${researchStatus}`,
+      },
+    };
+  }
+
+  entry.used = true;
+  const record = entry.record ?? {};
+  return {
+    ...match,
+    live_context: {
+      status: 'gathered',
+      source_id: sourceId,
+      source_label: sourceLabel,
+      matched_by: entry.keys.find((key) => keys.includes(key)) ?? 'match_id',
+      match_keys: keys,
+      record_index: entry.index,
+      match_id: String(match.match_id ?? record.match_id ?? '').trim() || null,
+      event_id: String(matchday?.source?.event_id ?? match?.event_id ?? '').trim() || null,
+      source_quality: record.source_quality ?? null,
+      lineup_status: record.lineup_status ?? null,
+      summary: normalizeResearchSummary(record.summary ?? record.note ?? ''),
+      team_news: Array.isArray(record.team_news) ? record.team_news : (record.team_news ? [record.team_news] : []),
+      injuries: Array.isArray(record.injuries) ? record.injuries : (record.injuries ? [record.injuries] : []),
+      suspensions: Array.isArray(record.suspensions) ? record.suspensions : (record.suspensions ? [record.suspensions] : []),
+      citations: Array.isArray(record.citations) ? record.citations : [],
+      notes: record.notes ?? null,
+    },
+  };
+}
+
 function buildLineupAdjustment(matchday, lineupLockedVerified) {
   const missingFields = ['player_ratings', 'key_absence_flags', 'expected_starters'];
   if (lineupLockedVerified) {
@@ -180,29 +299,10 @@ async function main() {
     matches: todayMatches,
     stateRoot,
   });
-  // "captured" = research records that actually carry sourced context (a known
-  // lineup posture or non-Low source quality), as opposed to the lineup-confirm
-  // count. Without this the Source Quality line under-reports real capture as 0.
   const researchRecords = research.artifact?.records ?? [];
-  const capturedCount = researchRecords.filter((r) => {
-    const ls = String(r?.lineup_status || '').toLowerCase();
-    const sq = String(r?.source_quality || '').toLowerCase();
-    // Source-quality values are verbose ("High - ...", "Low - No search ...");
-    // match on prefix, not exact, so a Low/Unknown record never counts as
-    // captured context.
-    const lsCaptured = ls && !ls.startsWith('unknown') && !ls.startsWith('not ');
-    const sqCaptured = sq && !sq.startsWith('low') && !sq.startsWith('unknown') && !sq.startsWith('none');
-    return lsCaptured || sqCaptured;
-  }).length;
-  const researchSummary = {
-    status: research.status,
-    ok: research.ok,
-    outPath: research.outPath,
-    match_count: research.artifact?.match_count ?? todayMatches.length,
-    source_quality: research.artifact?.source_quality ?? null,
-    captured: researchRecords.length ? capturedCount : null,
-    reason: research.artifact?.reason ?? null,
-  };
+  const researchIndex = buildResearchIndex(research.artifact);
+  let attachedResearchCount = 0;
+  let attachedResearchMatchIds = [];
 
   const boards = [];
   const auditRecords = [];
@@ -237,13 +337,27 @@ async function main() {
     const lineupStatus = lineupLockedVerified ? 'lineup_confirmed' : 'lineup_pending';
     const lineupAdjustment = buildLineupAdjustment(matchday, lineupLockedVerified);
     match.lineup_status = lineupStatus;
-    match.model_consumes_lineup = lineupLockedVerified;
     match.lineup_locked_verified = lineupLockedVerified;
+    // A fresh official XI unlocks the public forecast; the separate
+    // lineup-adjusted model remains blocked until the missing layers exist.
+    match.model_consumes_lineup = lineupLockedVerified;
     match.lineup_freshness = lineupFreshness;
     match.lineup_adjustment = lineupAdjustment;
     // Expose the (price-free) lineup payload to the renderer for the
     // lineup-locked block. Only specific fields are read downstream.
     match.matchday = matchday.ok ? matchday : null;
+    const researchAttachedMatch = attachWorldCupResearchContext(match, {
+      matchday: match.matchday,
+      researchIndex,
+      researchStatus: research.status,
+      sourceId: research.artifact?.source_id ?? 'perplexity',
+      sourceLabel: 'Perplexity research',
+    });
+    Object.assign(match, researchAttachedMatch);
+    if (match.live_context?.status === 'gathered') {
+      attachedResearchCount += 1;
+      attachedResearchMatchIds.push(match.match_id);
+    }
 
     // 3c. Build composite input
     // Layer scores must be 0-100. Team baselines carry normalized 0-100
@@ -325,14 +439,27 @@ async function main() {
       board,
       matchup: matchup.ok ? matchup : null,
       matchday: matchday.ok ? matchday : null,
+      live_context: match.live_context ?? null,
       market_context: marketCtx.ok ? marketCtx : null,
       parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
-      model_consumes_lineup: lineupLockedVerified,
       lineup_freshness: lineupFreshness,
       lineup_locked_verified: lineupLockedVerified,
+      model_consumes_lineup: lineupLockedVerified,
       lineup_adjustment: lineupAdjustment,
     });
   }
+
+  const researchSummary = {
+    status: research.status,
+    ok: research.ok,
+    outPath: research.outPath,
+    match_count: todayMatches.length,
+    record_count: researchRecords.length,
+    attached_count: attachedResearchCount,
+    attached_match_ids: attachedResearchMatchIds,
+    source_quality: research.artifact?.source_quality ?? null,
+    reason: research.artifact?.reason ?? null,
+  };
 
   // 4. Render packet
   const packetStage = opts.packetStage
