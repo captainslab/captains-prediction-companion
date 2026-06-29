@@ -17,7 +17,7 @@ Return null for anything you cannot verify with high confidence.`;
 function checkForecastFreshness(forecastMeta) {
   const lineup_confirmed = Boolean(forecastMeta?.lineup_confirmed);
   const model_consumes_lineup = forecastMeta?.model_consumes_lineup;
-  if (lineup_confirmed && model_consumes_lineup === false) {
+  if (lineup_confirmed && model_consumes_lineup !== true) {
     return {
       allow_active_forecast: false,
       held_reason: 'FORECAST_HELD — Official starting XI confirmed but model composite predates lineup lock. Projected goals, BTTS, margin, and score distribution from prior composite are suppressed in public output. Confirmed XIs and match context are shown. Audit artifact retains prior composite numbers separately.',

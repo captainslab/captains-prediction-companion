@@ -104,3 +104,16 @@ test('active confirmed-lineup packet keeps the projections public and omits the 
   assert.ok(rendered.includes(bttsPct), `active render should include BTTS ${bttsPct}`);
   assert.equal(match._audit_suppressed_forecast, undefined);
 });
+
+test('confirmed lineup without model_consumes_lineup stays held', () => {
+  const { match, board } = makeFixture({ modelConsumesLineup: undefined });
+  const rendered = renderWorldCupPacket({
+    matches: [match],
+    boards: [board],
+    meta: { date: '2026-06-11', packet_stage: 'lineup_locked' },
+  });
+
+  assert.match(rendered, /FORECAST HELD/);
+  assert.ok(!rendered.includes('Goal forecast: Projected goals:'), 'missing model consumption must not publish forecast lines');
+  assert.ok(match._audit_suppressed_forecast?.prior_composite, 'suppressed forecast should be preserved for audit only');
+});

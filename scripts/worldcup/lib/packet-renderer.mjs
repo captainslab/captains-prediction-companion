@@ -375,7 +375,7 @@ function isLineupLocked(match) {
 }
 
 function isForecastHeld(match) {
-  return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup === false;
+  return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
 }
 
 function isGoalkeeperPosition(position) {
@@ -926,7 +926,7 @@ function lineupLockedLines(match) {
 function formatMatch(match, board, provenance = null, previewLines = null) {
   const lines = [];
   const locked = isLineupLocked(match);
-  const holdForecast = match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup === false;
+  const holdForecast = match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
   const gp = projectionFor(board);
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
   lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
