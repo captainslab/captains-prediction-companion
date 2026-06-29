@@ -30,6 +30,16 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
     kickoff_utc: '2026-06-22T17:00:00.000Z',
     venue: 'Dallas Stadium',
     lineup_status: 'lineup_pending',
+    live_context: {
+      status: 'gathered',
+      source_id: 'perplexity',
+      source_label: 'Perplexity research',
+      matched_by: 'match_id',
+      match_id: '400021494',
+      source_quality: 'High',
+      summary: 'Argentina enters with a full-strength XI and a strong recent scoring run.',
+      citations: ['[1]'],
+    },
   };
   const board = buildBoard(92.7, 39.3);
   const text = renderWorldCupPacket({
@@ -42,7 +52,7 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
       research: {
         status: 'ok',
         outPath: 'state/worldcup/2026-06-22/research/perplexity_research.json',
-        source_quality: { confirmed: 1, not_confirmed: 0, unknown: 0 },
+        attached_count: 1,
       },
     },
   });
@@ -59,6 +69,7 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
   assert.match(text, /Score-grid check: models aligned/);
   assert.match(text, /Market comparison: no market lines attached; model output shown as forecast only\./);
   assert.match(text, /First-half markets are unavailable because no half-split model layer is sourced\./);
+  assert.match(text, /live context: gathered — Perplexity research/);
   assert.match(text, /Perplexity research: live supplemental context captured/);
   assert.doesNotMatch(text, /\b(?:PICK|LEAN|WATCH|FADE|winner_lean|projection-only|actionable|monitor|top edge candidates|trigger board|overpriced)\b/i);
   assert.doesNotMatch(text, /\blineup_status\b/i);

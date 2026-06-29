@@ -243,7 +243,7 @@ function scoreGridCheck(board) {
 }
 
 // --- Customer-facing translation of internal model enums ---------------------
-// Internal enum names (PICK / LEAN / WATCH / FADE, CONSISTENT / MISMATCH, …) are
+// Internal enum names (PICK / LEAN / WATCH / FADE, CONSISTENT / MISMATCH, ...) are
 // kept on the board objects for compatibility but are NEVER rendered raw. The
 // customer reads soccer / handicapping language only; the raw enums live in the
 // audit JSON. Price/market fields still never touch any model value here.
@@ -366,6 +366,36 @@ function lineupSourceText(md) {
   return `${md.source.provider.toUpperCase()} ${md.source.league ?? ''}`.trim().replace(/\s+/g, ' ') + ev;
 }
 
+function compactText(value, max = 180) {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return 'summary unavailable';
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
+}
+
+function liveContextCoverage(match) {
+  const ctx = match?.live_context ?? null;
+  const coverage = (status, reason) => `    live context: ${status} — ${reason}`;
+  if (!ctx || ctx.status !== 'gathered') {
+    return coverage('unavailable', compactText(ctx?.reason ?? 'no live context attached to this match', 160));
+  }
+
+  const provenance = [];
+  if (ctx.source_label) provenance.push(ctx.source_label);
+  if (ctx.matched_by) provenance.push(`matched by ${ctx.matched_by}`);
+  if (ctx.match_id) provenance.push(`match_id ${ctx.match_id}`);
+  if (ctx.event_id) provenance.push(`event ${ctx.event_id}`);
+  if (ctx.source_quality) provenance.push(`source quality ${ctx.source_quality}`);
+  const summary = compactText(ctx.summary ?? ctx.note ?? ctx.reason ?? 'summary unavailable');
+  return coverage('gathered', `${provenance.join(', ')}${provenance.length ? '; ' : ''}summary: ${summary}`);
+}
+
+function countLiveContextMatches(matches = []) {
+  return (matches || []).filter((match) => match?.live_context?.status === 'gathered').length;
+}
+
 function lineupCoverage(match, board) {
   const md = match?.matchday;
   const source = md?.source ?? null;
@@ -428,11 +458,7 @@ function lineupCoverage(match, board) {
     hasMarketLines ? 'display-only and not used in scoring' : 'no market lines sourced for this match',
   ));
   result.push(coverage('advancement/standings', 'unavailable', 'standings feed not sourced'));
-  result.push(coverage(
-    'live context',
-    'unavailable',
-    `no live feed attached${source?.event_state ? ` (event_state=${source.event_state})` : ''}`,
-  ));
+  result.push(liveContextCoverage(match));
   return result.join('\n');
 }
 
@@ -992,6 +1018,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     totalLayers += (board.layers_total ?? 14) * 2;
     presentLayers += (board.layers_present_home ?? 0) + (board.layers_present_away ?? 0);
   }
+  const liveContextCount = countLiveContextMatches(matches);
   const researchStatus = research?.status ?? 'PERPLEXITY_UNAVAILABLE';
   lines.push(`  Matches evaluated: ${matches.length}`);
   lines.push(`  Side-layer coverage: ${presentLayers}/${totalLayers}`);
@@ -1004,17 +1031,18 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   } else {
     lines.push('  Pre-lock status: lineups are not confirmed');
   }
-  lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's official starting lineup.`);
-  if (researchStatus === 'ok') {
-    const confirmed = research?.source_quality?.confirmed;
-    const matchCount = matches.length;
-    const captured = research?.captured;
-    const capturedCount = Number.isFinite(captured)
-      ? captured
-      : (Number.isFinite(confirmed) ? confirmed : matchCount);
-    lines.push(`  Perplexity research: live supplemental context captured for ${capturedCount}/${matchCount} matches.`);
+  if (matches.some(isForecastHeld)) {
+    lines.push('  Model basis: official starting XIs are confirmed, but the public forecast is held until the model consumes the confirmed XI state.');
   } else {
-    lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
+    lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's official starting lineup.`);
+  }
+  if (liveContextCount > 0) {
+    lines.push(`  Perplexity research: live supplemental context captured for ${liveContextCount}/${matches.length} matches.`);
+  } else {
+    const reason = researchStatus === 'ok'
+      ? 'no match-level live context attached'
+      : `${researchStatus}${research?.reason ? `: ${research.reason}` : ''}`;
+    lines.push(`  Perplexity research: unavailable — ${reason}; current source mode stayed cached/local.`);
   }
   lines.push('  Market prices are display-only when present and are not used in the model.');
   lines.push('');
