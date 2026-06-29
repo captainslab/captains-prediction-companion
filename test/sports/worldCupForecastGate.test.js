@@ -7,6 +7,7 @@ let composeEvidenceLedgerForGame;
 let composeMultiLaneCeilingBoard;
 let renderWorldCupPacket;
 let scanPublicOutput;
+let checkForecastFreshness;
 
 before(async () => {
   const evidence = await import('../../scripts/worldcup/lib/evidence-ledger.mjs');
@@ -17,6 +18,7 @@ before(async () => {
   composeMultiLaneCeilingBoard = ceiling.composeMultiLaneCeilingBoard;
   renderWorldCupPacket = renderer.renderWorldCupPacket;
   scanPublicOutput = publicRenderer.scanPublicOutput;
+  ({ checkForecastFreshness } = require('../../src/sports/worldCupResearchContext.js'));
 });
 
 function r(score) {
@@ -110,4 +112,25 @@ test('active confirmed-lineup packet keeps the projections public and omits the 
   const scan = scanPublicOutput(rendered);
   assert.equal(scan.clean, true, `active packet leaked banned terms: ${scan.violations.join(', ')}`);
   assert.equal(match._audit_suppressed_forecast, undefined);
+});
+
+test('confirmed lineup with missing model_consumes_lineup holds the forecast', () => {
+  const { match, board } = makeFixture({ modelConsumesLineup: undefined });
+  const rendered = renderWorldCupPacket({
+    matches: [match],
+    boards: [board],
+    meta: { date: '2026-06-11', packet_stage: 'lineup_locked' },
+  });
+
+  assert.match(rendered, /FORECAST HELD/);
+  assert.ok(match._audit_suppressed_forecast?.prior_composite, 'suppressed forecast should be preserved for audit only');
+});
+
+test('strict gate: only literal true model_consumes_lineup allows an active forecast', () => {
+  // Confirmed lineup + non-true (truthy or falsy) model_consumes must hold the forecast.
+  assert.equal(checkForecastFreshness({ lineup_confirmed: true, model_consumes_lineup: true }).allow_active_forecast, true);
+  for (const value of [undefined, false, 'yes', 1, {}]) {
+    const result = checkForecastFreshness({ lineup_confirmed: true, model_consumes_lineup: value });
+    assert.equal(result.allow_active_forecast, false, `truthy/non-true value ${JSON.stringify(value)} must hold the forecast`);
+  }
 });
