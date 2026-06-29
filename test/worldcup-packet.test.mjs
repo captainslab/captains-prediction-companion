@@ -88,9 +88,9 @@ test('missing lineups → match disclosed as lineup pending and no full PICK is 
   // disclosed as lineup-pending forecast-only output that uses the prior composite.
   assert.ok(text.includes('Status: Lineup pending, lineups not confirmed'),
     'pending lineups must be disclosed as lineup pending');
-  assert.ok(text.includes("Model basis: latest prior team composite, not today's confirmed XI"),
+  assert.ok(text.includes("Model basis: latest prior team composite, not today's official starting lineup"),
     'pre-lock model basis must be stated');
-  assert.ok(/Model-projected favorites/.test(text),
+  assert.ok(/Model-rated side/.test(text),
     'favorites must be framed as forecast-only');
   assert.ok(text.includes('Forecast context: lineups are not confirmed yet.'),
     'forecast context must be public-safe and lineup-aware');
@@ -102,7 +102,7 @@ test('missing lineups → match disclosed as lineup pending and no full PICK is 
 test('confirmed lineups with strong evidence → clear model side, marked confirmed', () => {
   const { match, board } = makeFixture({ lineupStatus: 'lineup_confirmed' });
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11', packet_stage: 'lineup_locked' } });
-  assert.ok(/Match forecast: Mexico favored/.test(text), 'strong confirmed-lineup side should produce a clear model side');
+  assert.ok(/Match forecast: Mexico rates higher/.test(text), 'strong confirmed-lineup side should produce a clear model side');
   assert.ok(text.includes('Status: STARTING XI CONFIRMED — official starting XI confirmed'),
     'confirmed lineups must be marked lineup-locked');
   assert.ok(!/\bPICK\b/.test(text), 'no raw PICK enum in user-facing text');
@@ -184,7 +184,7 @@ test('Total Goals with no line shows projection, no fabricated over/under (no ba
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
   assert.ok(/Total goals forecast: Projected total [\d.]+/.test(text), 'projected total still shown without a line');
   assert.ok(text.includes('Forecast context: lineups are not confirmed yet.'), 'forecast context should explain the lineup state');
-  assert.ok(/no line available to grade/.test(text), 'no line → spread states no line available to grade');
+  assert.ok(/projected goal difference only; no external line attached/.test(text), 'no line → spread states projected goal difference only');
   assert.ok(!/projection-only/.test(text), 'banned "projection-only" label must not appear');
   assert.doesNotMatch(text, /\b(?:market|price|odds|display-only|NOT IN SCORE)\b/i,
     'public packet must not leak market/price language');

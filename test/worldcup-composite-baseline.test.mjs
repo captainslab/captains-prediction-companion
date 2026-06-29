@@ -41,7 +41,7 @@ test('packet labels provisional prior-composite provenance as prior composite', 
     matches: [match], boards: [board],
     meta: { date: '2026-06-22', composite_provenance: { source_date: '2026-06-17', provisional: true } },
   });
-  assert.ok(text.includes('latest prior team composite from 2026-06-17, not today\'s confirmed XI'), 'must name the prior-composite model basis');
+  assert.ok(text.includes('latest prior team composite from 2026-06-17, not today\'s official starting lineup'), 'must name the prior-composite model basis');
   assert.ok(text.includes('Lineup-pending forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.'), 'must mark the lineup-pending state');
   assert.ok(!text.includes('Pre-lock forecast'), 'must not use retired pre-lock wording');
 });
