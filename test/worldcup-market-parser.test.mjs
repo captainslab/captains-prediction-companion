@@ -213,9 +213,9 @@ test('all market families route to lanes and render on the sectioned board', () 
   assert.ok(/Total goals forecast: Projected total [\d.]+/.test(text), 'total goals forecast rendered');
   assert.ok(/Both-score forecast: \d+%/.test(text), 'BTTS forecast rendered');
   assert.ok(/Goal-spread forecast: Mexico \+[\d.]+ goals/.test(text), 'goal-spread forecast rendered');
-  // Markets are shown as display-only context, not scored.
-  assert.ok(text.includes('3. Market Comparison') && text.includes('NOT IN SCORE'),
-    'market comparison rendered as display-only');
+  // Reference context is shown as forecast-only, not scored.
+  assert.ok(text.includes('3. Reference Comparison') && text.includes('reference-only'),
+    'market comparison rendered as forecast-only');
   // First-half lanes stay unmodeled, surfaced in Model Limits — no fake 1H modeling.
   assert.ok(text.includes('First-half markets are unavailable because no half-split model layer is sourced.'),
     '1H lanes disclosed as model-unavailable, not modeled');

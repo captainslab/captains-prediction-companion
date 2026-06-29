@@ -55,9 +55,9 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
   assert.match(text, /Goal forecast: Projected goals: Argentina 1\.79, Austria 0\.94/);
   assert.match(text, /Total goals forecast: Projected total 2\.73/);
   assert.match(text, /Both-score forecast: \d+%/);
-  assert.match(text, /Goal-spread forecast: Argentina \+0\.85 goals; projected goal difference only; no market line attached/);
+  assert.match(text, /Goal-spread forecast: Argentina \+0\.85 goals; projected goal difference only; no external line attached/);
   assert.match(text, /Score-grid check: models aligned/);
-  assert.match(text, /Market comparison: no market lines attached; model output shown as forecast only\./);
+  assert.match(text, /Reference comparison: no external lines attached; model output shown as forecast only\./);
   assert.match(text, /First-half markets are unavailable because no half-split model layer is sourced\./);
   assert.match(text, /Perplexity research: live supplemental context captured/);
   assert.doesNotMatch(text, /\b(?:PICK|LEAN|WATCH|FADE|winner_lean|projection-only|actionable|monitor|top edge candidates|trigger board|overpriced)\b/i);
@@ -65,5 +65,5 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
   assert.doesNotMatch(text, /\boverall_confidence\b/i);
   assert.doesNotMatch(text, /\[null\]/i);
   assert.doesNotMatch(text, /2026-06-22T17:00:00\.000Z/);
-  assert.match(text, /NOT IN SCORE/);
+  assert.match(text, /Reference prices are not used in the model\./);
 });

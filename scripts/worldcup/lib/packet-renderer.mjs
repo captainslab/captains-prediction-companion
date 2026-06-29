@@ -233,7 +233,7 @@ function spreadForecastLine(match, board) {
   const margin = gp.projected_goal_margin_home >= 0
     ? `${match.home_team} +${gp.projected_goal_margin_home.toFixed(2)} goals`
     : `${match.away_team} +${Math.abs(gp.projected_goal_margin_home).toFixed(2)} goals`;
-  return `Goal-spread forecast: ${margin}; projected goal difference only; no market line attached`;
+  return `Goal-spread forecast: ${margin}; projected goal difference only; no external line attached`;
 }
 
 function scoreGridCheck(board) {
@@ -451,9 +451,9 @@ function lineupCoverage(match, board) {
       : 'official starting lineup not verified',
   ));
   result.push(coverage(
-    'market lines',
+    'reference lines',
     hasMarketLines ? 'gathered' : 'unavailable',
-    hasMarketLines ? 'display-only and not used in scoring' : 'no market lines sourced for this match',
+    hasMarketLines ? 'reference-only and not used in scoring' : 'no reference lines sourced for this match',
   ));
   result.push(coverage('advancement/standings', 'unavailable', 'standings feed not sourced'));
   result.push(coverage(
@@ -643,7 +643,7 @@ function whyItMattersBlock(matches = [], boards = []) {
       ? ['forecast held until the model consumes the confirmed XI state']
       : [...new Set(sidecar.map((entry) => entry.blocked || 'player candidates available'))];
     lines.push(`  Missing or blocked: ${missingOrBlocked.join('; ')}.`);
-    lines.push('  Price context: display-only and not used in scoring.');
+    lines.push('  Price context: reference-only and not used in scoring.');
     if (forecastHeld) {
       lines.push('  Goal environment: forecast held until the model consumes the confirmed XI state.');
     } else if (goalProjection?.projection_status === 'PROJECTED') {
@@ -685,14 +685,14 @@ function whyItMattersBlock(matches = [], boards = []) {
 function renderGoalscorerBlock(match, board) {
   if (isForecastHeld(match)) {
     return [
-      '  Anytime Goalscorer Model — PRICE FREE (display-only and not used in scoring)',
+      '  Anytime Goalscorer Model — no price attached (reference-only and not used in scoring)',
       '    Forecast held until the model consumes the confirmed XI state.',
       '',
     ].join('\n');
   }
   const sidecar = ['home', 'away'].map((side) => projectGoalscorerSide(match, board, side));
   const lines = [];
-  lines.push('  Anytime Goalscorer Model — PRICE FREE (display-only and not used in scoring)');
+  lines.push('  Anytime Goalscorer Model — no price attached (reference-only and not used in scoring)');
   if (sidecar.every((entry) => entry.blocked === 'team projected goals unavailable')) {
     lines.push('    BLOCKED_TEAM_GOALS_MISSING — team projected goals unavailable.');
     lines.push('');
@@ -760,7 +760,7 @@ function formatLane(lane, match, provisional) {
   // Model-unavailable lanes render as a single honest line — no fake model half.
   if (lane.recommendation === 'BLOCKED_MODEL_LAYER_MISSING') {
     const ref = lane.market_context
-      ? ` | market ref (NOT IN SCORE): ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
+      ? ` | reference-only: ${lane.market_context.normalized_target ?? lane.market_context.ticker}`
       : '';
     return `  [${displayLabel(lane)}] Model unavailable: missing model layer.${ref}\n`;
   }
@@ -790,7 +790,7 @@ function formatLane(lane, match, provisional) {
       lines.push(`    Total view: ${view}`);
       lines.push(`    Over profile: ${pct(lane.p_over)} / Under profile: ${pct(lane.p_under)}`);
     } else {
-      lines.push('    Total view: projected goal difference only; no market line attached');
+      lines.push('    Total view: projected goal difference only; no external line attached');
     }
     lines.push(`    Profile: ${totalProfile(lane.projected_total_goals)}`);
     lines.push(confidenceLine(lane.confidence, provisional));
@@ -817,7 +817,7 @@ function formatLane(lane, match, provisional) {
       lines.push(`    Spread view: ${view}`);
       lines.push(`    Cover profile: ${pct(lane.p_cover)} (${lane.spread_side} ${lane.spread_line})`);
     } else {
-      lines.push('    Spread view: projected goal difference only; no market line attached');
+      lines.push('    Spread view: projected goal difference only; no external line attached');
       lines.push(`    Profile: ${m === 0 ? 'even matchup' : 'favorite advantage'}, not enough line context for a cover call`);
     }
     lines.push(confidenceLine(lane.confidence, provisional));
@@ -825,7 +825,7 @@ function formatLane(lane, match, provisional) {
     lines.push(`  [${label}] ${modelStatePhrase(lane.recommendation)} | confidence:${lane.confidence}`);
   }
 
-  // Market half — display only, always labeled NOT IN SCORE.
+  // Reference half — always customer-visible but never scored.
   if (lane.market_context) {
     const mc = lane.market_context;
     const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
@@ -834,9 +834,9 @@ function formatLane(lane, match, provisional) {
       lane.edge_draw_pp != null ? `D:${lane.edge_draw_pp}pp` : null,
       lane.edge_away_pp != null ? `A:${lane.edge_away_pp}pp` : null,
     ].filter(Boolean).join(' ') || 'n/a (no model fair probability)';
-    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model−market gap ${gaps}`);
+    lines.push(`    REFERENCE ONLY: ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model−reference gap ${gaps}`);
   } else {
-    lines.push('    MARKET (NOT IN SCORE): no market context attached');
+    lines.push('    REFERENCE ONLY: no reference context attached');
   }
   lines.push('');
   return lines.join('\n');
@@ -1037,13 +1037,13 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   }
 
   // 3. Market Comparison
-  lines.push(section('3. Market Comparison'));
+  lines.push(section('3. Reference Comparison'));
   if (!hasMarketContext) {
-    lines.push('  Market comparison: no market lines attached; model output shown as forecast only.');
+    lines.push('  Reference comparison: no external lines attached; model output shown as forecast only.');
     lines.push('');
   } else {
-    lines.push('  Market comparison: market lines attached; model output shown as forecast only.');
-    lines.push('  Market prices are display-only when present and are NOT IN SCORE.\n');
+    lines.push('  Reference comparison: external lines attached; model output shown as forecast only.');
+    lines.push('  Reference prices are not used in the model.\n');
   }
 
   // 4. Model Limits
@@ -1091,11 +1091,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   } else {
     lines.push(`  Perplexity research: ${researchStatus}; current source mode stayed cached/local.`);
   }
-  lines.push('  Market prices are display-only when present and are not used in the model.');
+  lines.push('  Reference prices are not used in the model.');
   lines.push('');
 
   lines.push('─'.repeat(70));
-  lines.push('Market prices are display-only when present and are NOT IN SCORE.');
+  lines.push('Reference prices are not used in the model.');
   lines.push('No trades placed. Research only.');
   lines.push('─'.repeat(70));
 

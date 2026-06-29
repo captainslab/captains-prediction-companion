@@ -3,7 +3,7 @@
 // Pins the decision-board contract:
 //   - all required sections render
 //   - missing lineups → BLOCKED row + pre-lineup PICK downgrade (no fake pick)
-//   - market is labeled NOT IN SCORE
+//   - market is labeled reference-only
 //   - no raw market inventory / raw price fields dumped into the main packet
 
 import test from 'node:test';
@@ -67,7 +67,7 @@ const REQUIRED_SECTIONS = [
   'Daily Slate Preview — Why Today Matters',
   '1. Matchday Forecast',
   '2. Match Breakdowns',
-  '3. Market Comparison',
+  '3. Reference Comparison',
   '4. Model Limits',
   '5. Source Quality',
 ];
@@ -115,11 +115,29 @@ test('confirmed lineups with strong evidence → clear model side, marked lineup
   assert.ok(!text.includes('Status: Pre-lock'), 'locked match must not be flagged pre-lock');
 });
 
-test('stale or identity-mismatched lineup cache keeps the packet pre-lock', () => {
+test('lineup cache stays fresh when the source event id differs from the internal match id', () => {
   const freshness = evaluateLineupCacheFreshness({
     ok: true,
     match_id: '400021443',
     source: { event_id: '400099999', event_state: 'pre' },
+    fetched_utc: '2026-06-11T18:40:00Z',
+  }, {
+    matchId: '400021443',
+    kickoffUtc: '2026-06-11T19:00:00Z',
+    refreshStartedAtIso: '2026-06-11T18:35:00Z',
+  });
+  assert.equal(freshness.verified, true);
+  const { match, board } = makeFixture({ lineupStatus: 'lineup_confirmed', lineupLockedVerified: freshness.verified });
+  const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11', packet_stage: 'lineup_locked' } });
+  assert.ok(text.includes('Status: LINEUP LOCKED — official starting XI confirmed'));
+  assert.ok(!text.includes('Status: Pre-lock'));
+});
+
+test('actual match id mismatch still keeps the packet pre-lock', () => {
+  const freshness = evaluateLineupCacheFreshness({
+    ok: true,
+    match_id: '400099999',
+    source: { event_id: '400021443', event_state: 'pre' },
     fetched_utc: '2026-06-11T18:40:00Z',
   }, {
     matchId: '400021443',
@@ -133,13 +151,13 @@ test('stale or identity-mismatched lineup cache keeps the packet pre-lock', () =
   assert.ok(!text.includes('LINEUP LOCKED'));
 });
 
-test('market context is labeled NOT IN SCORE and shown as display-only', () => {
+test('market context is labeled reference-only and shown as display-only', () => {
   const { match, board } = makeFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
-  assert.ok(text.includes('3. Market Comparison'), 'market comparison section must render');
-  assert.ok(text.includes('NOT IN SCORE'), 'market must be labeled NOT IN SCORE');
-  assert.ok(text.includes('Market prices are display-only when present and are NOT IN SCORE.'),
-    'market prices must be disclosed as display-only and not scored');
+  assert.ok(text.includes('3. Reference Comparison'), 'market comparison section must render');
+  assert.ok(text.includes('reference-only'), 'market must be labeled reference-only');
+  assert.ok(text.includes('Reference prices are not used in the model.'),
+    'market prices must be disclosed as not used in the model');
 });
 
 test('no raw market inventory or raw price fields leak into the main packet', () => {
@@ -148,8 +166,8 @@ test('no raw market inventory or raw price fields leak into the main packet', ()
   for (const forbidden of ['yes_bid', 'yes_ask', 'no_bid', 'no_ask', 'open_interest', 'last_price', 'volume', 'orderbook', '"ticker"']) {
     assert.ok(!text.includes(forbidden), `raw market field "${forbidden}" leaked into main packet`);
   }
-  // The packet references markets as display-only context, never dumps raw inventory.
-  assert.ok(text.includes('market lines attached'), 'market comparison must summarize lines, not dump them');
+  // The packet references external lines as reference-only context, never dumps raw inventory.
+  assert.ok(text.includes('external lines attached'), 'reference comparison must summarize lines, not dump them');
 });
 
 test('packet stays mobile-readable (bounded length per match)', () => {
@@ -324,7 +342,7 @@ test('packet renders Why it matters and a blocked goalscorer sidecar when player
   const { match, board } = makeGoalFixture();
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22', packet_stage: 'morning_pre_lock' } });
   assert.ok(text.includes('Why it matters'), 'Why it matters section must render');
-  assert.ok(text.includes('Anytime Goalscorer Model — PRICE FREE'), 'goalscorer section must render');
+  assert.ok(text.includes('Anytime Goalscorer Model — no price attached'), 'goalscorer section must render');
   assert.ok(text.includes('BLOCKED_PLAYER_DATA_MISSING'), 'missing player pool must be called out');
 });
 
@@ -336,7 +354,7 @@ test('confirmed XI packet can render READY goalscorer players', () => {
     meta: { date: '2026-06-22', packet_stage: 'lineup_locked' },
   });
   assert.ok(text.includes('Why it matters'), 'Why it matters section must render');
-  assert.ok(text.includes('Anytime Goalscorer Model — PRICE FREE'), 'goalscorer section must render');
+  assert.ok(text.includes('Anytime Goalscorer Model — no price attached'), 'goalscorer section must render');
   assert.ok(text.includes('READY'), 'confirmed XI players should be able to render READY');
   assert.ok(/Player One|Player Five/.test(text), 'confirmed starter names should appear');
   assert.equal((text.match(/player candidates available/g) || []).length, 1, 'player candidates available must render only once');
@@ -356,7 +374,7 @@ test('per-match coverage block lists all eight layers with status labels', () =>
     'player scoring priors:',
     'team baseline composite:',
     'lineup-adjusted team model:',
-    'market lines:',
+    'reference lines:',
     'advancement/standings:',
     'live context:',
   ]) {
@@ -367,7 +385,7 @@ test('per-match coverage block lists all eight layers with status labels', () =>
   assert.ok(/player scoring priors: gathered —/.test(text), 'player priors must be gathered');
   assert.ok(/team baseline composite: gathered —/.test(text), 'team baseline must be gathered');
   assert.ok(/lineup-adjusted team model: blocked —/.test(text), 'lineup-adjusted model must be blocked');
-  assert.ok(/market lines: unavailable —/.test(text), 'market lines must be unavailable when none are attached');
+  assert.ok(/reference lines: unavailable —/.test(text), 'reference lines must be unavailable when none are attached');
   assert.ok(/advancement\/standings: unavailable —/.test(text), 'advancement standings must be unavailable');
   assert.ok(/live context: unavailable —/.test(text), 'live context must be unavailable');
 });
@@ -390,7 +408,7 @@ test('goalkeepers and low-prior defenders never appear in the goalscorer section
     ],
   });
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22', packet_stage: 'lineup_locked' } });
-  const goalSection = text.split('Anytime Goalscorer Model — PRICE FREE')[1];
+  const goalSection = text.split('Anytime Goalscorer Model — no price attached')[1];
   assert.ok(goalSection, 'goalscorer section must be present');
   for (const name of ['Goalkeeper One', 'Goalkeeper Two', 'Defender One', 'Defender Two']) {
     assert.ok(!goalSection.includes(name), `${name} must not appear in goalscorer candidates`);
@@ -408,7 +426,7 @@ test('goalscorer section is bounded to top 3 per team', () => {
     { name: 'Player Twelve', position: 'F', number: '20' },
   );
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22', packet_stage: 'lineup_locked' } });
-  const goalSection = text.split('Anytime Goalscorer Model — PRICE FREE')[1];
+  const goalSection = text.split('Anytime Goalscorer Model — no price attached')[1];
   const playerLines = (goalSection.match(/^\s+- /gm) || []);
   assert.ok(playerLines.length <= 6, `goalscorer section must stay bounded; got ${playerLines.length}`);
 });
@@ -467,7 +485,7 @@ test('Canada vs Switzerland single-match packet renders Why it matters and READY
     meta: { date: '2026-06-24', packet_stage: 'lineup_locked' },
   });
   assert.ok(text.includes('Why it matters'), 'single-match packet must include Why it matters');
-  assert.ok(text.includes('Anytime Goalscorer Model — PRICE FREE'), 'single-match packet must include goalscorer section');
+  assert.ok(text.includes('Anytime Goalscorer Model — no price attached'), 'single-match packet must include goalscorer section');
   assert.ok(text.includes('READY'), 'Canada vs Switzerland test packet should render READY goalscorer players');
   assert.ok(text.includes('Switzerland') && text.includes('Canada'), 'match teams should appear in the packet');
 });
@@ -484,8 +502,8 @@ test('Total Goals with no line shows projection, no fabricated over/under (no ba
   const match = { match_id: 'x', home_team: 'A', away_team: 'B', stage: 'group', kickoff_utc: '2026-06-22T17:00:00Z', lineup_status: 'lineup_pending' };
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-22' } });
   assert.ok(/Total goals forecast: Projected total [\d.]+/.test(text), 'projected total still shown without a line');
-  assert.ok(text.includes('no market lines attached'), 'no markets → comparison states no lines attached');
-  assert.ok(/projected goal difference only; no market line attached/.test(text), 'no line → spread/total use the new line-less phrasing');
+  assert.ok(text.includes('no external lines attached'), 'no lines → comparison states no lines attached');
+  assert.ok(/projected goal difference only; no external line attached/.test(text), 'no line → spread/total use the new line-less phrasing');
   assert.ok(!/projection-only/.test(text), 'banned "projection-only" label must not appear');
 });
 
