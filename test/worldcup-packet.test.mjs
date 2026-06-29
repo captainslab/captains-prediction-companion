@@ -395,6 +395,7 @@ test('per-match coverage block lists all eight layers with attached live context
     'lineup-adjusted team model:',
     'reference lines:',
     'advancement/standings:',
+    'source-backed preview:',
     'live context:',
   ]) {
     assert.ok(text.includes(label), `coverage block missing ${label}`);
@@ -406,8 +407,10 @@ test('per-match coverage block lists all eight layers with attached live context
   assert.ok(/lineup-adjusted team model: blocked —/.test(text), 'lineup-adjusted model must be blocked');
   assert.ok(/reference lines: unavailable —/.test(text), 'reference lines must be unavailable when none are attached');
   assert.ok(/advancement\/standings: unavailable —/.test(text), 'advancement standings must be unavailable');
+  assert.ok(/source-backed preview: unavailable — no fresh match-level preview attached/.test(text), 'preview attachment must stay unavailable when no preview is attached');
   assert.ok(/live context: gathered — Perplexity research/.test(text), 'live context must be gathered when attached');
-  assert.ok(/Perplexity research: live supplemental context captured for 1\/1 matches\./.test(text));
+  assert.ok(/Perplexity live context: attached for 1\/1 matches\./.test(text));
+  assert.ok(/Perplexity source-backed previews: unavailable — no fresh match-level preview attachment\./.test(text));
 });
 
 test('no live context attached stays unavailable and Source Quality stays honest', () => {
@@ -418,7 +421,9 @@ test('no live context attached stays unavailable and Source Quality stays honest
     meta: { date: '2026-06-11', packet_stage: 'morning_board', research: { status: 'ok' } },
   });
   assert.ok(/live context: unavailable — no live context attached to this match/.test(text));
-  assert.ok(/Perplexity research: unavailable — no match-level live context attached/.test(text));
+  assert.ok(/source-backed preview: unavailable — no fresh match-level preview attached/.test(text));
+  assert.ok(/Perplexity live context: unavailable — no match-level live context attached/.test(text));
+  assert.ok(/Perplexity source-backed previews: unavailable — no fresh match-level preview attachment\./.test(text));
   assert.ok(!/captured for \d+\/\d+ matches/.test(text), 'source quality must not claim captured context');
 });
 
@@ -450,7 +455,9 @@ test('mismatched research record does not attach and does not count as captured'
     meta: { date: '2026-06-11', packet_stage: 'morning_board', research: { status: 'ok' } },
   });
   assert.ok(/live context: unavailable — no live context attached to this match/.test(text));
-  assert.ok(/Perplexity research: unavailable — no match-level live context attached/.test(text));
+  assert.ok(/source-backed preview: unavailable — no fresh match-level preview attached/.test(text));
+  assert.ok(/Perplexity live context: unavailable — no match-level live context attached/.test(text));
+  assert.ok(/Perplexity source-backed previews: unavailable — no fresh match-level preview attachment\./.test(text));
 });
 
 test('goalkeepers and low-prior defenders never appear in the goalscorer section', () => {

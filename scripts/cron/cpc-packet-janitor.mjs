@@ -545,27 +545,56 @@ export function noUsableSourceEvidenceFinding(text, packetType) {
 function worldcupContextCoverageContradiction(text, packetType) {
   if (!/worldcup/i.test(packetType ?? '')) return null;
   const body = String(text ?? '');
-  const gatheredCount = (body.match(/^\s*live context:\s*gathered\b/imsg) || []).length;
-  const unavailableCount = (body.match(/^\s*live context:\s*unavailable\b/imsg) || []).length;
-  const capturedMatch = body.match(/Perplexity research:\s*live supplemental context captured for\s*(\d+)\s*\/\s*(\d+)\s+matches\./i);
-  const unavailableMatch = body.match(/Perplexity research:\s*unavailable\b/i);
+  const liveGatheredCount = (body.match(/^\s*live context:\s*gathered\b/imsg) || []).length;
+  const liveUnavailableCount = (body.match(/^\s*live context:\s*unavailable\b/imsg) || []).length;
+  const previewGatheredCount = (body.match(/^\s*source-backed preview:\s*gathered\b/imsg) || []).length;
+  const previewUnavailableCount = (body.match(/^\s*source-backed preview:\s*unavailable\b/imsg) || []).length;
+  const previewBlockCount = (body.match(/^\s*Source-backed preview:\s*$/gim) || []).length;
+  const liveAttachedMatch = body.match(/Perplexity live context:\s*attached for\s*(\d+)\s*\/\s*(\d+)\s+matches\./i);
+  const liveUnavailableMatch = body.match(/Perplexity live context:\s*unavailable\b/i);
+  const previewAttachedMatch = body.match(/Perplexity source-backed previews:\s*attached for\s*(\d+)\s*\/\s*(\d+)\s+matches\./i);
+  const previewUnavailableMatch = body.match(/Perplexity source-backed previews:\s*unavailable\b/i);
 
-  if (capturedMatch) {
-    const captured = Number(capturedMatch[1]);
-    const total = Number(capturedMatch[2]);
-    if (Number.isFinite(captured) && Number.isFinite(total) && captured !== gatheredCount) {
+  if (liveAttachedMatch) {
+    const captured = Number(liveAttachedMatch[1]);
+    const total = Number(liveAttachedMatch[2]);
+    if (Number.isFinite(captured) && Number.isFinite(total) && captured !== liveGatheredCount) {
       return {
         code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
-        message: `worldcup packet claims ${captured}/${total} live context match(es) captured but renders ${gatheredCount} gathered row(s) and ${unavailableCount} unavailable row(s)`,
+        message: `worldcup packet claims ${captured}/${total} live context match(es) attached but renders ${liveGatheredCount} gathered row(s) and ${liveUnavailableCount} unavailable row(s)`,
       };
     }
-    return null;
   }
 
-  if (unavailableMatch && gatheredCount > 0) {
+  if (liveUnavailableMatch && liveGatheredCount > 0) {
     return {
       code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
-      message: `worldcup packet says live context is unavailable but renders ${gatheredCount} gathered row(s)`,
+      message: `worldcup packet says live context is unavailable but renders ${liveGatheredCount} gathered row(s)`,
+    };
+  }
+
+  if (previewGatheredCount !== previewBlockCount) {
+    return {
+      code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
+      message: `worldcup packet renders ${previewGatheredCount} gathered preview attachment row(s) but ${previewBlockCount} source-backed preview block(s)`,
+    };
+  }
+
+  if (previewAttachedMatch) {
+    const captured = Number(previewAttachedMatch[1]);
+    const total = Number(previewAttachedMatch[2]);
+    if (Number.isFinite(captured) && Number.isFinite(total) && captured !== previewGatheredCount) {
+      return {
+        code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
+        message: `worldcup packet claims ${captured}/${total} preview attachment match(es) but renders ${previewGatheredCount} gathered preview row(s), ${previewUnavailableCount} unavailable preview row(s), and ${previewBlockCount} preview block(s)`,
+      };
+    }
+  }
+
+  if (previewUnavailableMatch && (previewGatheredCount > 0 || previewBlockCount > 0)) {
+    return {
+      code: 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION',
+      message: `worldcup packet says preview attachments are unavailable but renders ${previewGatheredCount} gathered preview row(s) and ${previewBlockCount} preview block(s)`,
     };
   }
 

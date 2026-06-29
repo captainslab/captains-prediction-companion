@@ -369,6 +369,45 @@ test('worldcup janitor blocks captured Source Quality when per-match live contex
   assert.ok(result.errors.some((err) => err.code === 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION'));
 });
 
+test('worldcup janitor blocks captured preview attachments when no preview attachment rows or blocks render', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wc-janitor-preview-block-'));
+  seedWorldCupDiscovery(root, '2026-06-29');
+  const packetPath = join(root, 'worldcup-2026-06-29-lineup_lock-germany-paraguay.txt');
+  const text = buildWorldCupPacketText({
+    liveContext: {
+      status: 'gathered',
+      source_id: 'perplexity',
+      source_label: 'Perplexity research',
+      matched_by: 'match_id',
+      match_id: '400021513',
+      event_id: '760489',
+      source_quality: 'High',
+      summary: 'Germany and Paraguay preview includes a predicted Germany XI and one injury note.',
+      citations: ['[1]', '[2]'],
+    },
+    research: { status: 'ok', attached_count: 1 },
+  }).replace(
+    'Perplexity source-backed previews: unavailable — no fresh match-level preview attachment.',
+    'Perplexity source-backed previews: attached for 1/1 matches.',
+  );
+  writeFileSync(packetPath, text);
+
+  const result = inspectPacketFile(packetPath, {
+    date: '2026-06-29',
+    stateRoot: root,
+    packetType: 'worldcup-matchday',
+    ledgerPath: join(root, '.delivery-ledger.json'),
+    idempotencyKey: 'worldcup-2026-06-29-lineup_lock-germany-paraguay',
+    requireLedger: false,
+    requireSourceHealth: true,
+    documentDelivery: true,
+    force: false,
+  });
+
+  assert.equal(result.verdict, 'JANITOR_BLOCKED');
+  assert.ok(result.errors.some((err) => err.code === 'BLOCKED_CONTEXT_COVERAGE_CONTRADICTION'));
+});
+
 test('sender skips already-delivered packets via the ledger in dry-run too', () => {
   const date = '2099-01-02';
   const { root, dir } = makePacketDir(date);

@@ -24,6 +24,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { buildPacketPreviewBlock } from '../../shared/cpc-preview-adapter.mjs';
 import { checkForecastFreshness } from '../../../src/sports/worldCupResearchContext.js';
 import {
+  assertPerplexityAttachmentSummaryMatches,
+  makeGatheredPerplexityAttachment,
+  makeUnavailablePerplexityAttachment,
+  summarizePerplexityAttachments,
+} from './perplexity-attachment-contract.mjs';
+import {
   LINEUP_STATUS as GOALSCORER_LINEUP_STATUS,
   PROJECTION_STATUS as GOALSCORER_PROJECTION_STATUS,
   projectAnytimeGoalscorers,
@@ -103,7 +109,13 @@ function worldCupModelSummary(match, board) {
 function matchPreviewLines(match, board, packetDate, researchRoot) {
   if (isForecastHeld(match)) return null;
   const eventTicker = worldCupEventTicker(match, packetDate);
-  if (!eventTicker) return null;
+  if (!eventTicker) {
+    match.preview_context = makeUnavailablePerplexityAttachment({
+      attachment_kind: 'preview_context',
+      reason: 'world cup event ticker unavailable for preview lookup',
+    });
+    return null;
+  }
   let block;
   try {
     block = buildPacketPreviewBlock({
@@ -117,9 +129,34 @@ function matchPreviewLines(match, board, packetDate, researchRoot) {
       root: researchRoot,
     });
   } catch {
+    match.preview_context = makeUnavailablePerplexityAttachment({
+      attachment_kind: 'preview_context',
+      reason: 'preview lookup failed closed',
+      event_ticker: eventTicker,
+    });
     return null;
   }
-  if (!block || !block.artifact_found || !block.text) return null;
+  const unavailableReason = !block?.artifact_found
+    ? 'no fresh match-level preview attached to this match'
+    : `banked preview ${block?.freshness_status ?? 'unknown'} and not treated as fresh evidence`;
+  if (!block || block.used_research !== true || !block.text) {
+    match.preview_context = makeUnavailablePerplexityAttachment({
+      attachment_kind: 'preview_context',
+      reason: unavailableReason,
+      event_ticker: eventTicker,
+      artifact_found: Boolean(block?.artifact_found),
+      freshness_status: block?.freshness_status ?? 'no_artifact',
+      used_research: Boolean(block?.used_research),
+    });
+    return null;
+  }
+  match.preview_context = makeGatheredPerplexityAttachment({
+    attachment_kind: 'preview_context',
+    event_ticker: eventTicker,
+    artifact_found: true,
+    freshness_status: block.freshness_status,
+    used_research: true,
+  });
   const lines = ['', '  Source-backed preview:'];
   for (const line of String(block.text).split('\n')) {
     lines.push(line ? `    ${line}` : '');
@@ -420,8 +457,18 @@ function liveContextCoverage(match) {
   return coverage('gathered', `${provenance.join(', ')}${provenance.length ? '; ' : ''}summary: ${summary}`);
 }
 
-function countLiveContextMatches(matches = []) {
-  return (matches || []).filter((match) => match?.live_context?.status === 'gathered').length;
+function previewContextCoverage(match) {
+  const ctx = match?.preview_context ?? null;
+  const coverage = (status, reason) => `    source-backed preview: ${status} — ${reason}`;
+  if (!ctx || ctx.status !== 'gathered') {
+    return coverage('unavailable', compactText(ctx?.reason ?? 'no fresh match-level preview attached', 160));
+  }
+
+  const provenance = [];
+  if (ctx.source_label) provenance.push(ctx.source_label);
+  if (ctx.event_ticker) provenance.push(`event ${ctx.event_ticker}`);
+  if (ctx.freshness_status) provenance.push(`freshness ${ctx.freshness_status}`);
+  return coverage('gathered', provenance.join(', ') || 'source-backed preview block attached');
 }
 
 function lineupCoverage(match, board) {
@@ -486,6 +533,7 @@ function lineupCoverage(match, board) {
     hasMarketLines ? 'reference-only and not used in scoring' : 'no reference lines sourced for this match',
   ));
   result.push(coverage('advancement/standings', 'unavailable', 'standings feed not sourced'));
+  result.push(previewContextCoverage(match));
   result.push(liveContextCoverage(match));
   return result.join('\n');
 }
@@ -1010,6 +1058,11 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     });
     matches[i].model_consumes_lineup = freshness.allow_active_forecast;
   }
+  const previewLinesByMatch = (matches || []).map((match, index) => (
+    matchPreviewLines(match, boards?.[index], date, researchRoot)
+  ));
+  assertPerplexityAttachmentSummaryMatches(research, matches);
+  const attachmentSummary = summarizePerplexityAttachments(matches);
 
   const lines = [];
   lines.push(header('MATCHDAY FORECAST', date));
@@ -1055,7 +1108,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   // 2. Match Breakdowns
   lines.push(section('2. Match Breakdowns'));
   for (let i = 0; i < matches.length; i++) {
-    const previewLines = matchPreviewLines(matches[i], boards[i], date, researchRoot);
+    const previewLines = previewLinesByMatch[i];
     lines.push(formatMatch(matches[i], boards[i], provenance, previewLines));
     lines.push('  Data coverage (gathered / unavailable / blocked):');
     lines.push(lineupCoverage(matches[i], boards[i]));
@@ -1089,7 +1142,8 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     totalLayers += (board.layers_total ?? 14) * 2;
     presentLayers += (board.layers_present_home ?? 0) + (board.layers_present_away ?? 0);
   }
-  const liveContextCount = countLiveContextMatches(matches);
+  const liveContextCount = attachmentSummary.live_context.attached_count;
+  const previewContextCount = attachmentSummary.preview_context.attached_count;
   const researchStatus = research?.status ?? 'PERPLEXITY_UNAVAILABLE';
   lines.push(`  Matches evaluated: ${matches.length}`);
   lines.push(`  Side-layer coverage: ${presentLayers}/${totalLayers}`);
@@ -1108,12 +1162,17 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
     lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's official starting lineup.`);
   }
   if (liveContextCount > 0) {
-    lines.push(`  Perplexity research: live supplemental context captured for ${liveContextCount}/${matches.length} matches.`);
+    lines.push(`  Perplexity live context: attached for ${liveContextCount}/${matches.length} matches.`);
   } else {
     const reason = researchStatus === 'ok'
       ? 'no match-level live context attached'
       : `${researchStatus}${research?.reason ? `: ${research.reason}` : ''}`;
-    lines.push(`  Perplexity research: unavailable — ${reason}; current source mode stayed cached/local.`);
+    lines.push(`  Perplexity live context: unavailable — ${reason}; current source mode stayed cached/local.`);
+  }
+  if (previewContextCount > 0) {
+    lines.push(`  Perplexity source-backed previews: attached for ${previewContextCount}/${matches.length} matches.`);
+  } else {
+    lines.push('  Perplexity source-backed previews: unavailable — no fresh match-level preview attachment.');
   }
   lines.push('  Reference prices are not used in the model.');
   lines.push('');

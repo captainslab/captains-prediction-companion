@@ -70,7 +70,8 @@ test('renderWorldCupPacket uses customer-facing forecast language and no raw UTC
   assert.match(text, /Market Context - NOT IN SCORE: no external lines attached; model output shown as forecast only\./);
   assert.match(text, /First-half markets are unavailable because no half-split model layer is sourced\./);
   assert.match(text, /live context: gathered — Perplexity research/);
-  assert.match(text, /Perplexity research: live supplemental context captured/);
+  assert.match(text, /Perplexity live context: attached for 1\/1 matches\./);
+  assert.match(text, /Perplexity source-backed previews: unavailable — no fresh match-level preview attachment\./);
   assert.doesNotMatch(text, /\b(?:PICK|LEAN|WATCH|FADE|winner_lean|projection-only|actionable|monitor|top edge candidates|trigger board|overpriced)\b/i);
   assert.doesNotMatch(text, /\blineup_status\b/i);
   assert.doesNotMatch(text, /\boverall_confidence\b/i);

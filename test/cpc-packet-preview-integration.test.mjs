@@ -293,6 +293,8 @@ test('World Cup matchday RENDERER injects a source-backed preview for the resolv
     });
 
     assert.match(packet, /Source-backed preview:/, 'renderer did not inject the source-backed block');
+    assert.match(packet, /source-backed preview: gathered — Perplexity research, event KXWCGAME-26JUN22NORSEN, freshness fresh/);
+    assert.match(packet, /Perplexity source-backed previews: attached for 1\/1 matches\./);
     assert.match(packet, /Group-stage advancement on the line in Norway vs Senegal/);
     assert.match(packet, /Primary source: Match Centre \| FIFA/);
     // Customer-safety is asserted on the INJECTED preview block only — the WC
@@ -315,7 +317,44 @@ test('World Cup matchday RENDERER omits the preview block when no artifact is ba
       matches: [match], boards: [board], meta: { date: DATE, research: { status: 'ok' }, research_root: root },
     });
     assert.doesNotMatch(packet, /Source-backed preview:/, 'no source → no injected block');
+    assert.match(packet, /source-backed preview: unavailable — no fresh match-level preview attached/);
+    assert.match(packet, /Perplexity source-backed previews: unavailable — no fresh match-level preview attachment\./);
     assert.match(packet, /Norway vs Senegal/, 'match breakdown still renders');
+  });
+});
+
+test('World Cup matchday RENDERER omits stale preview artifacts from the source-backed attachment path', () => {
+  withTempBank((root) => {
+    bankFixture(root, {
+      generated_at: '2026-06-10T12:00:00Z',
+      freshness: 'stale',
+      packet_family: 'sports', packet_type: 'worldcup-match',
+      route: 'worldcup_match', submarket: 'match_preview', event_id: 'KXWCGAME-26JUN22NORSEN',
+      source_titles: ['Match Centre | FIFA'],
+      why_this_matters: 'Historical note only.',
+      headline_candidates: ['Historical preview only'],
+    });
+
+    const match = {
+      match_id: '400021491', home_team: 'Norway', away_team: 'Senegal',
+      group: 'Group I', kickoff_utc: '2026-06-23T00:00:00.000Z', venue: 'New York/New Jersey Stadium',
+    };
+    const board = {
+      goal_projection: {
+        projection_status: 'PROJECTED', projected_home_goals: 1.14, projected_away_goals: 1.52,
+        projected_total_goals: 2.66, projected_goal_margin_home: -0.38, cross_check_1x2: { verdict: 'CONSISTENT' },
+      },
+      lanes: [{ lane: 'match_winner', recommendation: 'LEAN_AWAY', p_home: 0.30, p_draw: 0.28, p_away: 0.42 }],
+      layers_total: 14, layers_present_home: 6, layers_present_away: 6,
+    };
+
+    const packet = renderWorldCupPacket({
+      matches: [match], boards: [board], meta: { date: DATE, research: { status: 'ok' }, research_root: root },
+    });
+
+    assert.doesNotMatch(packet, /Source-backed preview:/, 'stale research must not render as a source-backed preview block');
+    assert.match(packet, /source-backed preview: unavailable — banked preview stale and not treated as fresh evidence/);
+    assert.match(packet, /Perplexity source-backed previews: unavailable — no fresh match-level preview attachment\./);
   });
 });
 

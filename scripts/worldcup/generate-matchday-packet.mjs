@@ -30,6 +30,7 @@ import { loadCachedMarketContext, normalizeMarketContext } from './source-adapte
 import { runWorldCupPerplexityResearch } from './source-adapters/perplexity-research.mjs';
 import { composeEvidenceLedgerForGame } from './lib/evidence-ledger.mjs';
 import { composeMultiLaneCeilingBoard } from './lib/multi-lane-ceiling.mjs';
+import { buildWorldCupResearchSummary } from './lib/perplexity-attachment-contract.mjs';
 import { renderWorldCupPacket, writeWorldCupPacket } from './lib/packet-renderer.mjs';
 import { CPC_MATCHDAY_TIMEZONE, localDateInTimeZone, filterMatchesForLocalDate } from './lib/matchday-window.mjs';
 import { findLatestPriorBaseline } from './lib/composite-baseline.mjs';
@@ -449,18 +450,6 @@ async function main() {
     });
   }
 
-  const researchSummary = {
-    status: research.status,
-    ok: research.ok,
-    outPath: research.outPath,
-    match_count: todayMatches.length,
-    record_count: researchRecords.length,
-    attached_count: attachedResearchCount,
-    attached_match_ids: attachedResearchMatchIds,
-    source_quality: research.artifact?.source_quality ?? null,
-    reason: research.artifact?.reason ?? null,
-  };
-
   // 4. Render packet
   const packetStage = opts.packetStage
     || (todayMatches.some(m => m.lineup_status === 'lineup_confirmed')
@@ -474,9 +463,20 @@ async function main() {
       date,
       packet_stage: packetStage,
       composite_provenance: compositeProvenance,
-      research: researchSummary,
+      research: {
+        status: research.status,
+        ok: research.ok,
+        outPath: research.outPath,
+        match_count: todayMatches.length,
+        record_count: researchRecords.length,
+        attached_count: attachedResearchCount,
+        attached_match_ids: attachedResearchMatchIds,
+        source_quality: research.artifact?.source_quality ?? null,
+        reason: research.artifact?.reason ?? null,
+      },
     },
   });
+  const researchSummary = buildWorldCupResearchSummary(research, todayMatches);
 
   // 5. Write packet + audit artifacts
   const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
