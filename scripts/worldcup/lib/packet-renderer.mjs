@@ -350,6 +350,10 @@ function isLineupLocked(match) {
   return isLineupVerified(match);
 }
 
+function isForecastHeld(match) {
+  return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
+}
+
 function isGoalkeeperPosition(position) {
   return /goalkeeper|keeper|gk/.test(String(position ?? '').trim().toLowerCase());
 }
