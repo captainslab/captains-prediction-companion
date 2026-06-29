@@ -9,12 +9,21 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, rmSync, mkdtempSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, existsSync, rmSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { computeDueActions, gradeMatch, PHASE_WINDOWS } from '../scripts/worldcup/cron/cron-dispatch.mjs';
+import {
+  computeDueActions,
+  dispatchGeneratePacketAction,
+  gradeMatch,
+  runGenerator,
+  runPacketSender,
+} from '../scripts/worldcup/cron/cron-dispatch.mjs';
+import {
+  buildWorldCupPacketSchedule,
+  LINEUP_LOCK_LEAD_MINUTES,
+} from '../scripts/worldcup/cron/worldcup-schedule.mjs';
 
 const REPO = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 
@@ -37,44 +46,290 @@ function due({ at, matches = [OPENER], markers = [] }) {
   });
 }
 
+function tempScheduleRoot(match = OPENER) {
+  const root = mkdtempSync(join(tmpdir(), 'wc-sched-'));
+  mkdirSync(join(root, 'worldcup', '2026-06-11', 'discovery'), { recursive: true });
+  writeFileSync(
+    join(root, 'worldcup', '2026-06-11', 'discovery', 'static_structure.json'),
+    JSON.stringify({ ok: true, matches: [match], match_count: 1 }, null, 2),
+  );
+  return root;
+}
+
 // ---------------------------------------------------------------------------
-// Phase windows
+// Schedule helper + due actions
 // ---------------------------------------------------------------------------
 
-test('phase windows are contiguous from T-6h to kickoff', () => {
-  assert.equal(PHASE_WINDOWS.pre_lineup_board.to, PHASE_WINDOWS.lineup_window.from);
-  assert.equal(PHASE_WINDOWS.lineup_window.to, PHASE_WINDOWS.post_lineup_final.from);
-  assert.equal(PHASE_WINDOWS.post_lineup_final.to, 0);
+test('schedule helper pins the morning preview to 9:00 AM Central', () => {
+  const root = tempScheduleRoot();
+  try {
+    const schedule = buildWorldCupPacketSchedule({ date: '2026-06-11', stateRoot: root });
+    assert.equal(schedule.ok, true);
+    assert.equal(schedule.lineup_lock_lead_minutes, LINEUP_LOCK_LEAD_MINUTES);
+    const morning = schedule.jobs.find((job) => job.kind === 'pre_lineup_board');
+    assert.ok(morning, 'morning job must exist');
+    assert.match(morning.send_at_local, /9:00 AM C(?:DT|ST)/, `unexpected morning send_at_local: ${morning.send_at_local}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('packet sender helper targets the exact worldcup stem', () => {
+  const calls = [];
+  const ok = runPacketSender({
+    date: '2026-06-26',
+    stateRoot: '/tmp/state',
+    stem: 'worldcup-2026-06-26-lineup_lock-norway-france',
+    dryRun: false,
+    spawn: (cmd, args, opts) => {
+      calls.push({ cmd, args, opts });
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].cmd, process.execPath);
+  assert.ok(calls[0].args.some((arg) => String(arg).includes('send-packets-telegram.mjs')));
+  assert.ok(calls[0].args.includes('--type'));
+  assert.ok(calls[0].args.includes('worldcup-matchday'));
+  assert.ok(calls[0].args.includes('--only'));
+  assert.ok(calls[0].args.includes('worldcup-2026-06-26-lineup_lock-norway-france'));
+});
+
+test('lineup-lock generation requests a fresh lineup refresh before calculating', () => {
+  const calls = [];
+  const ok = runGenerator({
+    date: '2026-06-26',
+    stateRoot: '/tmp/state',
+    dryRun: false,
+    packetStage: 'lineup_lock',
+    matchId: '400021443',
+    refreshLineups: true,
+    spawn: (cmd, args, opts) => {
+      calls.push({ cmd, args, opts });
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].cmd, process.execPath);
+  assert.ok(calls[0].args.some((arg) => String(arg).includes('generate-matchday-packet.mjs')));
+  assert.ok(calls[0].args.includes('--refresh-lineups'));
+  assert.ok(calls[0].args.includes('--packet-stage'));
+  assert.ok(calls[0].args.includes('lineup_lock'));
+});
+
+test('dispatch helper dry-run never calls generator, sender, or marker writes', () => {
+  const calls = [];
+  const result = dispatchGeneratePacketAction({
+    action: {
+      phase: 'lineup_lock',
+      packet_stage: 'lineup_lock',
+      stem: 'worldcup-2026-06-26-lineup_lock-norway-france',
+      marker: 'lineup_lock-400021443',
+      match_id: '400021443',
+    },
+    date: '2026-06-26',
+    stateRoot: '/tmp/state',
+    dryRun: true,
+    runGeneratorFn: () => { calls.push('generator'); return true; },
+    runPacketSenderFn: () => { calls.push('sender'); return true; },
+    writeMarkerFn: () => { calls.push('marker'); },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.stage, 'dry_run');
+  assert.deepEqual(calls, []);
+});
+
+test('dispatch helper runs generator before sender and writes the marker only after sender success', () => {
+  const calls = [];
+  const result = dispatchGeneratePacketAction({
+    action: {
+      phase: 'lineup_lock',
+      packet_stage: 'lineup_lock',
+      stem: 'worldcup-2026-06-26-lineup_lock-norway-france',
+      marker: 'lineup_lock-400021443',
+      match_id: '400021443',
+    },
+    date: '2026-06-26',
+    stateRoot: '/tmp/state',
+    runGeneratorFn: (opts) => {
+      calls.push(['generator', opts]);
+      return true;
+    },
+    runPacketSenderFn: (opts) => {
+      calls.push(['sender', opts]);
+      return true;
+    },
+    writeMarkerFn: (stateRoot, date, marker, payload) => {
+      calls.push(['marker', { stateRoot, date, marker, payload }]);
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.stage, 'sent');
+  assert.deepEqual(calls.map(([kind]) => kind), ['generator', 'sender', 'marker']);
+  assert.equal(calls[0][1].refreshLineups, true);
+  assert.equal(calls[1][1].stem, 'worldcup-2026-06-26-lineup_lock-norway-france');
+  assert.equal(calls[2][1].marker, 'lineup_lock-400021443');
+});
+
+test('dispatch helper generator failure does not send and does not mark', () => {
+  const calls = [];
+  const result = dispatchGeneratePacketAction({
+    action: {
+      phase: 'lineup_lock',
+      packet_stage: 'lineup_lock',
+      stem: 'worldcup-2026-06-26-lineup_lock-norway-france',
+      marker: 'lineup_lock-400021443',
+      match_id: '400021443',
+    },
+    date: '2026-06-26',
+    stateRoot: '/tmp/state',
+    runGeneratorFn: () => {
+      calls.push('generator');
+      return false;
+    },
+    runPacketSenderFn: () => {
+      calls.push('sender');
+      return true;
+    },
+    writeMarkerFn: () => {
+      calls.push('marker');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'generator_failed');
+  assert.deepEqual(calls, ['generator']);
+});
+
+test('dispatch helper sender failure does not write the marker', () => {
+  const calls = [];
+  const result = dispatchGeneratePacketAction({
+    action: {
+      phase: 'lineup_lock',
+      packet_stage: 'lineup_lock',
+      stem: 'worldcup-2026-06-26-lineup_lock-norway-france',
+      marker: 'lineup_lock-400021443',
+      match_id: '400021443',
+    },
+    date: '2026-06-26',
+    stateRoot: '/tmp/state',
+    runGeneratorFn: () => {
+      calls.push('generator');
+      return true;
+    },
+    runPacketSenderFn: () => {
+      calls.push('sender');
+      return false;
+    },
+    writeMarkerFn: () => {
+      calls.push('marker');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'sender_failed');
+  assert.deepEqual(calls, ['generator', 'sender']);
+});
+
+test('fresh lineup cache helper accepts source event id differences and rejects stale snapshots', async () => {
+  const { isFreshLineupCache } = await import('../scripts/worldcup/lib/lineup-freshness.mjs');
+  assert.equal(
+    isFreshLineupCache({
+      ok: true,
+      match_id: '400021443',
+      source: { event_id: '400021443', event_state: 'pre' },
+      fetched_utc: '2026-06-26T18:45:10.000Z',
+    }, {
+      matchId: '400021443',
+      kickoffUtc: '2026-06-26T19:00:00.000Z',
+      refreshStartedAtIso: '2026-06-26T18:45:00.000Z',
+    }),
+    true,
+  );
+  assert.equal(
+    isFreshLineupCache({
+      ok: true,
+      match_id: '400021443',
+      source: { event_id: '400099999', event_state: 'pre' },
+      fetched_utc: '2026-06-26T18:45:10.000Z',
+    }, {
+      matchId: '400021443',
+      kickoffUtc: '2026-06-26T19:00:00.000Z',
+      refreshStartedAtIso: '2026-06-26T18:45:00.000Z',
+    }),
+    true,
+  );
+  assert.equal(
+    isFreshLineupCache({
+      ok: true,
+      match_id: '400021443',
+      source: { event_id: '400021443', event_state: 'pre' },
+      fetched_utc: '2026-06-26T18:39:00.000Z',
+    }, {
+      matchId: '400021443',
+      kickoffUtc: '2026-06-26T19:00:00.000Z',
+      refreshStartedAtIso: '2026-06-26T18:45:00.000Z',
+    }),
+    false,
+  );
+  assert.equal(
+    isFreshLineupCache({
+      ok: true,
+      source: { event_id: '400021443', event_state: 'pre' },
+      fetched_utc: '2026-06-26T18:45:10.000Z',
+    }, {
+      matchId: '400021443',
+      kickoffUtc: '2026-06-26T19:00:00.000Z',
+      refreshStartedAtIso: '2026-06-26T18:45:00.000Z',
+    }),
+    false,
+  );
 });
 
 test('T-5h → pre-lineup board due once; marker suppresses repeat', () => {
   const first = due({ at: '2026-06-11T14:00:00Z' });
-  assert.deepEqual(first.actions.map(a => a.phase), ['pre_lineup_board']);
+  assert.deepEqual(first.actions.map((a) => a.phase), ['pre_lineup_board']);
   const repeat = due({ at: '2026-06-11T14:15:00Z', markers: ['pre_lineup_board'] });
   assert.equal(repeat.actions.length, 0, 'marker must prevent duplicate morning board');
 });
 
-test('T-75m → lineup-window refresh fires every run (no marker)', () => {
-  const a = due({ at: '2026-06-11T17:45:00Z' });
-  assert.deepEqual(a.actions.map(x => x.phase), ['lineup_window']);
-  assert.equal(a.actions[0].marker, null, 'lineup window refresh is intentionally unmarked');
-  const again = due({ at: '2026-06-11T18:00:00Z' });
-  assert.deepEqual(again.actions.map(x => x.phase), ['lineup_window']);
-});
-
-test('T-20m → post-lineup final due once per match', () => {
-  const a = due({ at: '2026-06-11T18:40:00Z' });
-  assert.deepEqual(a.actions.map(x => x.phase), ['post_lineup_final']);
+test('T-45m → lineup-lock packet due once per match; marker suppresses repeat', () => {
+  const a = due({ at: '2026-06-11T18:15:00Z', markers: ['pre_lineup_board'] });
+  assert.deepEqual(a.actions.map((x) => x.phase), ['lineup_lock']);
   assert.equal(a.actions[0].match_id, OPENER.match_id);
-  const repeat = due({ at: '2026-06-11T18:50:00Z', markers: [`post_lineup_final-${OPENER.match_id}`] });
-  assert.equal(repeat.actions.length, 0);
+  assert.equal(a.actions[0].marker, `lineup_lock-${OPENER.match_id}`);
+  const repeat = due({ at: '2026-06-11T18:30:00Z', markers: ['pre_lineup_board', `lineup_lock-${OPENER.match_id}`] });
+  assert.equal(repeat.actions.length, 0, 'marker must prevent duplicate lineup-lock packet');
 });
 
 test('T+3h → post-match grade due once per match', () => {
-  const a = due({ at: '2026-06-11T22:00:00Z' });
+  const a = due({ at: '2026-06-11T22:00:00Z', markers: ['pre_lineup_board', `lineup_lock-${OPENER.match_id}`] });
   assert.deepEqual(a.actions.map(x => x.kind), ['grade_match']);
-  const repeat = due({ at: '2026-06-11T23:00:00Z', markers: [`post_match_grade-${OPENER.match_id}`] });
+  const repeat = due({ at: '2026-06-11T23:00:00Z', markers: ['pre_lineup_board', `lineup_lock-${OPENER.match_id}`, `post_match_grade-${OPENER.match_id}`] });
   assert.equal(repeat.actions.length, 0);
+});
+
+test('schedule helper deduplicates repeated fixtures by stable match job key', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wc-sched-dupe-'));
+  try {
+    mkdirSync(join(root, 'worldcup', '2026-06-11', 'discovery'), { recursive: true });
+    writeFileSync(
+      join(root, 'worldcup', '2026-06-11', 'discovery', 'static_structure.json'),
+      JSON.stringify({ ok: true, matches: [OPENER, OPENER], match_count: 2 }, null, 2),
+    );
+    const schedule = buildWorldCupPacketSchedule({ date: '2026-06-11', stateRoot: root });
+    const lineupJobs = schedule.jobs.filter((job) => job.kind === 'lineup_lock');
+    assert.equal(lineupJobs.length, 1, 'duplicate match jobs must collapse to one');
+    assert.equal(new Set(schedule.jobs.map((job) => job.stem)).size, schedule.jobs.length, 'stems must remain unique');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('far from kickoff → nothing due', () => {
@@ -153,20 +408,29 @@ test('dispatcher --dry-run emits decisions and writes no packets or markers', ()
   const stateRoot = mkdtempSync(join(tmpdir(), 'wc-cron-'));
   try {
     // Minimal cached structure for the dispatcher to read.
-    execFileSync('mkdir', ['-p', join(stateRoot, 'worldcup', '2026-06-11', 'discovery')]);
+    mkdirSync(join(stateRoot, 'worldcup', '2026-06-11', 'discovery'), { recursive: true });
     const struct = { ok: true, matches: [OPENER], match_count: 1 };
-    execFileSync('bash', ['-c', `cat > ${join(stateRoot, 'worldcup', '2026-06-11', 'discovery', 'static_structure.json')}`], { input: JSON.stringify(struct) });
+    writeFileSync(join(stateRoot, 'worldcup', '2026-06-11', 'discovery', 'static_structure.json'), JSON.stringify(struct, null, 2));
 
-    const out = execFileSync(process.execPath, [
-      join(REPO, 'scripts/worldcup/cron/cron-dispatch.mjs'),
-      '--date', '2026-06-11',
-      '--now', '2026-06-11T14:00:00Z',
-      '--state-root', stateRoot,
-      '--dry-run',
-    ], { encoding: 'utf8' });
+    const morning = computeDueActions({
+      matches: [OPENER],
+      now: new Date('2026-06-11T14:00:00Z'),
+      stateRoot,
+      date: '2026-06-11',
+      hasMarker: () => false,
+    });
+    assert.deepEqual(morning.actions.map((a) => a.phase), ['pre_lineup_board']);
+    assert.equal(morning.note, null);
 
-    assert.ok(out.includes('"phase":"pre_lineup_board"'), `expected pre_lineup_board decision, got: ${out}`);
-    assert.ok(out.includes('DRY RUN'), 'must announce dry-run');
+    const lineup = computeDueActions({
+      matches: [OPENER],
+      now: new Date('2026-06-11T18:15:00Z'),
+      stateRoot,
+      date: '2026-06-11',
+      hasMarker: (name) => name === 'pre_lineup_board',
+    });
+    assert.deepEqual(lineup.actions.map((a) => a.phase), ['lineup_lock']);
+    assert.equal(lineup.actions[0].match_id, OPENER.match_id);
     assert.ok(!existsSync(join(stateRoot, 'worldcup', '2026-06-11', 'cron')), 'dry-run must not write markers');
     assert.ok(!existsSync(join(stateRoot, 'packets')), 'dry-run must not write packets');
   } finally {

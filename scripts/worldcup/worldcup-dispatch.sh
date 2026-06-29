@@ -3,7 +3,8 @@
 # Runs every 15 minutes; the dispatcher decides from real kickoff times whether
 # a pre-lineup board, lineup-window refresh, post-lineup final, or post-match
 # grade is due. Idempotent via phase markers — safe to run repeatedly.
-# Script-owned scheduler glue only. No LLM. No send_message. No trades.
+# Script-owned scheduler glue only. No LLM. No trades. The dispatcher it invokes
+# hands off to the repo-owned packet sender for authorized World Cup delivery.
 # Routine "nothing due" output is written to a local log file only.
 # Stderr (hard errors) is both logged and surfaced to cron for alerting.
 

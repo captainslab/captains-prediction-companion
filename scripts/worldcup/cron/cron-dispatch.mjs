@@ -6,9 +6,10 @@
 //                                                [--state-root state] [--dry-run]
 //
 // Designed to run every 15 minutes from crontab. Reads the cached fixture
-// structure for the date and decides — from real kickoff times — which phase
-// each match is in, then runs the packet generator / grader accordingly.
-// Idempotent: phase markers under state/worldcup/<date>/cron/ prevent repeats.
+// structure for the date and decides — from real kickoff times — which packet
+// jobs are due, including the 9:00 AM Central pre-lock preview and the
+// kickoff-minus-45-minute lineup-lock match packets.
+// Idempotent: marker files under state/worldcup/<date>/cron/ prevent repeats.
 //
 // Phases (relative to kickoff K):
 //   pre_lineup_board     K-6h  .. K-90m   morning board packet (once per date)
@@ -18,7 +19,8 @@
 //   knockout_switch      automatic — derived from match.stage in the fixture
 //                        data; logged here so the switch is auditable.
 //
-// Script-owned scheduler glue only. No LLM. No send_message. No trades.
+// Script-owned scheduler + delivery glue only. No LLM. No trades.
+// Packet delivery is delegated to scripts/packets/send-packets-telegram.mjs.
 // Exit codes: 0 = ok (including nothing due), 1 = hard error.
 
 import { resolve, dirname, join } from 'node:path';
@@ -26,21 +28,25 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { filterMatchesForLocalDate, CPC_MATCHDAY_TIMEZONE } from '../lib/matchday-window.mjs';
+import { CPC_MATCHDAY_TIMEZONE } from '../lib/matchday-window.mjs';
+import {
+  buildWorldCupPacketSchedule,
+  LINEUP_LOCK_LEAD_MINUTES,
+  MORNING_PRE_LOCK_LOCAL_TIME,
+  wallTimeToUtc,
+} from './worldcup-schedule.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GENERATOR = join(__dirname, '..', 'generate-matchday-packet.mjs');
-const LINEUP_FETCHER = join(__dirname, '..', 'source-adapters', 'fetch-official-lineups.mjs');
-// Phases where official starting XIs may be published — refresh the lineup
-// cache from source before generating so the packet can reach lineup_locked.
-const LINEUP_FETCH_PHASES = new Set(['lineup_window', 'post_lineup_final']);
-
-const MIN = 60 * 1000;
+const SENDER = join(__dirname, '..', '..', 'packets', 'send-packets-telegram.mjs');
+// Phases where official starting XIs may be published — request a fresh lineup
+// cache before generating so the packet can be locked from current official XI
+// data rather than an older pre-lock snapshot.
+const LINEUP_FETCH_PHASES = new Set(['lineup_lock']);
 
 export const PHASE_WINDOWS = Object.freeze({
-  pre_lineup_board: { from: -360, to: -90 },   // minutes relative to kickoff
-  lineup_window: { from: -90, to: -40 },
-  post_lineup_final: { from: -40, to: 0 },
+  pre_lineup_board: { local_time: MORNING_PRE_LOCK_LOCAL_TIME, time_zone: CPC_MATCHDAY_TIMEZONE },
+  lineup_lock: { lead_minutes: LINEUP_LOCK_LEAD_MINUTES },
   post_match_grade: { from: 150, to: Infinity },
 });
 
@@ -69,6 +75,57 @@ function readJsonIfExists(path) {
   }
 }
 
+function buildAdHocSchedule({ matches = [], date }) {
+  const jobs = [];
+  const morningSendAt = wallTimeToUtc(date, MORNING_PRE_LOCK_LOCAL_TIME, CPC_MATCHDAY_TIMEZONE);
+  jobs.push({
+    key: `pre_lineup_board:${date}`,
+    kind: 'pre_lineup_board',
+    stem: `worldcup-${date}-morning_pre_lock`,
+    packet_stage: 'morning_pre_lock',
+    date,
+    send_at_utc: morningSendAt?.toISOString() ?? null,
+    send_at_local: morningSendAt ? new Intl.DateTimeFormat('en-US', {
+      timeZone: CPC_MATCHDAY_TIMEZONE,
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    }).format(morningSendAt) : null,
+  });
+  for (const m of matches || []) {
+    if (!m?.kickoff_utc) continue;
+    const sendAt = new Date(new Date(m.kickoff_utc).getTime() - (LINEUP_LOCK_LEAD_MINUTES * 60 * 1000));
+    if (Number.isNaN(sendAt.getTime())) continue;
+    jobs.push({
+      key: `lineup_lock:${m.match_id}`,
+      kind: 'lineup_lock',
+      stem: `worldcup-${date}-lineup_lock-${String(m.home_team || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${String(m.away_team || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      packet_stage: 'lineup_lock',
+      date,
+      match_id: String(m.match_id),
+      home_team: m.home_team,
+      away_team: m.away_team,
+      kickoff_utc: m.kickoff_utc,
+      send_at_utc: sendAt.toISOString(),
+      send_at_local: new Intl.DateTimeFormat('en-US', {
+        timeZone: CPC_MATCHDAY_TIMEZONE,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short',
+      }).format(sendAt),
+    });
+  }
+  return { ok: true, date, matches, jobs };
+}
+
 function markerPath(stateRoot, date, name) {
   return resolve(stateRoot, 'worldcup', date, 'cron', `${name}.done`);
 }
@@ -88,83 +145,120 @@ function writeMarker(stateRoot, date, name, payload) {
  * Exported for cron dry-run proof tests.
  */
 export function computeDueActions({ matches, now, stateRoot, date, hasMarker }) {
+  const built = stateRoot ? buildWorldCupPacketSchedule({ date, stateRoot }) : null;
+  const schedule = built && built.ok ? built : buildAdHocSchedule({ matches, date });
+  const scheduledMatches = schedule.ok ? schedule.matches : (matches || []);
+  const upcoming = scheduledMatches.filter((m) => m?.kickoff_utc);
   const actions = [];
   const marked = hasMarker ?? ((name) => markerExists(stateRoot, date, name));
+  const nowMs = now.getTime();
 
-  const upcoming = (matches || []).filter(m => m.kickoff_utc);
-  if (upcoming.length === 0) {
+  if (!upcoming.length) {
     return { actions, note: 'no fixtures with kickoff times for this date' };
   }
 
-  const nowMs = now.getTime();
-  const minutesFromKickoff = (m) => (nowMs - new Date(m.kickoff_utc).getTime()) / MIN;
-
   // Knockout switch is data-driven; surface it for the audit trail.
-  const knockout = upcoming.some(m => m.stage && m.stage !== 'group');
+  const knockout = upcoming.some((m) => m.stage && m.stage !== 'group');
   if (knockout) {
     actions.push({ kind: 'knockout_switch', note: 'knockout-stage fixture present; ET/penalty layer + advance lane active' });
   }
 
-  // Date-level morning board: due when ANY match enters its pre-lineup window.
-  const inPre = upcoming.some(m => {
-    const t = minutesFromKickoff(m);
-    return t >= PHASE_WINDOWS.pre_lineup_board.from && t < PHASE_WINDOWS.pre_lineup_board.to;
-  });
-  if (inPre && !marked('pre_lineup_board')) {
-    actions.push({ kind: 'generate_packet', phase: 'pre_lineup_board', marker: 'pre_lineup_board' });
+  for (const job of schedule.jobs || []) {
+    if (job.kind !== 'pre_lineup_board' && job.kind !== 'lineup_lock') continue;
+    const sendAtMs = new Date(job.send_at_utc).getTime();
+    if (nowMs < sendAtMs) continue;
+    const marker = job.kind === 'pre_lineup_board'
+      ? 'pre_lineup_board'
+      : `lineup_lock-${job.match_id}`;
+    if (marked(marker)) continue;
+    actions.push({
+      kind: 'generate_packet',
+      phase: job.kind,
+      packet_stage: job.packet_stage,
+      marker,
+      match_id: job.match_id ?? null,
+      stem: job.stem,
+      send_at_utc: job.send_at_utc,
+      send_at_local: job.send_at_local,
+    });
   }
 
-  // Lineup window: regenerate every run while any match is in the window (no marker).
-  const inLineupWindow = upcoming.some(m => {
-    const t = minutesFromKickoff(m);
-    return t >= PHASE_WINDOWS.lineup_window.from && t < PHASE_WINDOWS.lineup_window.to;
-  });
-  if (inLineupWindow) {
-    actions.push({ kind: 'generate_packet', phase: 'lineup_window', marker: null });
-  }
-
-  // Post-lineup final: once per match.
   for (const m of upcoming) {
-    const t = minutesFromKickoff(m);
-    if (t >= PHASE_WINDOWS.post_lineup_final.from && t < PHASE_WINDOWS.post_lineup_final.to) {
-      const name = `post_lineup_final-${m.match_id}`;
-      if (!marked(name)) {
-        actions.push({ kind: 'generate_packet', phase: 'post_lineup_final', marker: name, match_id: m.match_id });
-      }
+    const gradeAt = new Date(m.kickoff_utc).getTime() + (150 * 60 * 1000);
+    if (nowMs < gradeAt) continue;
+    const name = `post_match_grade-${m.match_id}`;
+    if (!marked(name)) {
+      actions.push({ kind: 'grade_match', match_id: m.match_id, marker: name });
     }
   }
 
-  // Post-match grade: once per match, only when a result exists.
-  for (const m of upcoming) {
-    const t = minutesFromKickoff(m);
-    if (t >= PHASE_WINDOWS.post_match_grade.from) {
-      const name = `post_match_grade-${m.match_id}`;
-      if (!marked(name)) {
-        actions.push({ kind: 'grade_match', match_id: m.match_id, marker: name });
-      }
-    }
-  }
-
-  return { actions, note: actions.length === 0 ? 'nothing due' : null };
+  return { actions, note: actions.length === 0 ? 'nothing due' : null, schedule };
 }
 
-function runGenerator({ date, stateRoot, dryRun }) {
+export function runGenerator({ date, stateRoot, dryRun, packetStage = null, matchId = null, refreshLineups = false, spawn = spawnSync }) {
   const args = [GENERATOR, '--date', date, '--state-root', stateRoot];
+  if (packetStage) args.push('--packet-stage', packetStage);
+  if (matchId) args.push('--match-id', String(matchId));
+  if (refreshLineups) args.push('--refresh-lineups');
   if (dryRun) args.push('--dry-run');
-  const r = spawnSync(process.execPath, args, { stdio: 'inherit' });
+  const r = spawn(process.execPath, args, { stdio: 'inherit' });
   return r.status === 0;
 }
 
-// Best-effort: pull official starting XIs into the matchday cache so the
-// generator can lock the lineup. Failure (e.g. source down / XIs not yet
-// posted) is non-fatal — the generator falls back to the pre-lock board.
-function runLineupFetch({ date, stateRoot }) {
-  const args = [LINEUP_FETCHER, '--date', date, '--state-root', stateRoot];
-  const r = spawnSync(process.execPath, args, { stdio: 'inherit' });
-  if (r.status !== 0) {
-    console.error(`[worldcup-dispatch] lineup fetch non-zero (status ${r.status}); proceeding with pre-lock fallback`);
-  }
+export function runPacketSender({ date, stateRoot, stem, dryRun, spawn = spawnSync }) {
+  const args = [
+    SENDER,
+    '--type', 'worldcup-matchday',
+    '--date', date,
+    '--state-root', stateRoot,
+    '--only', stem,
+  ];
+  if (dryRun) args.push('--dry-run');
+  const r = spawn(process.execPath, args, { stdio: 'inherit' });
   return r.status === 0;
+}
+
+export function dispatchGeneratePacketAction({
+  action,
+  date,
+  stateRoot,
+  dryRun = false,
+  runGeneratorFn = runGenerator,
+  runPacketSenderFn = runPacketSender,
+  writeMarkerFn = writeMarker,
+}) {
+  if (dryRun) {
+    return { ok: true, dryRun: true, stage: 'dry_run', generator_called: false, sender_called: false, marker_written: false };
+  }
+
+  const generatorOk = runGeneratorFn({
+    date,
+    stateRoot,
+    dryRun: false,
+    packetStage: action.packet_stage,
+    matchId: action.match_id,
+    refreshLineups: LINEUP_FETCH_PHASES.has(action.phase),
+  });
+  if (!generatorOk) {
+    return { ok: false, stage: 'generator_failed', generator_called: true, sender_called: false, marker_written: false };
+  }
+
+  const senderOk = runPacketSenderFn({
+    date,
+    stateRoot,
+    stem: action.stem,
+    dryRun: false,
+  });
+  if (!senderOk) {
+    return { ok: false, stage: 'sender_failed', generator_called: true, sender_called: true, marker_written: false };
+  }
+
+  const marker_written = Boolean(action.marker);
+  if (marker_written) {
+    writeMarkerFn(stateRoot, date, action.marker, { action });
+  }
+
+  return { ok: true, stage: 'sent', generator_called: true, sender_called: true, marker_written };
 }
 
 /**
@@ -201,18 +295,15 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const { date, stateRoot, dryRun, nowDate } = opts;
 
-  const structPath = resolve(stateRoot, 'worldcup', date, 'discovery', 'static_structure.json');
-  const structure = readJsonIfExists(structPath);
-  if (!structure) {
-    console.log(`[worldcup-dispatch] no cached structure for ${date}; run daily-sync first. Nothing to do.`);
+  const schedule = buildWorldCupPacketSchedule({ date, stateRoot });
+  if (!schedule.ok) {
+    console.log(`[worldcup-dispatch] ${schedule.error}; run daily-sync first. Nothing to do.`);
     return;
   }
 
-  // Select today's matches by America/Chicago local date (the CPC operating
-  // timezone), not raw UTC. A late kickoff such as 02:00Z belongs to the prior
-  // Chicago date; a UTC startsWith() would orphan it from its slate.
-  const todayMatches = filterMatchesForLocalDate(structure.matches || [], date, CPC_MATCHDAY_TIMEZONE);
-  const { actions, note } = computeDueActions({ matches: todayMatches, now: nowDate, stateRoot, date });
+  const structure = schedule.structure;
+  const todayMatches = schedule.matches || [];
+  const { actions, note } = computeDueActions({ matches: todayMatches, now: nowDate, stateRoot, date, schedule });
 
   if (note) console.log(`[worldcup-dispatch] ${nowDate.toISOString()} ${date}: ${note}`);
   if (actions.length === 0) return;
@@ -222,12 +313,19 @@ async function main() {
     if (dryRun) continue;
 
     if (action.kind === 'generate_packet') {
-      if (LINEUP_FETCH_PHASES.has(action.phase)) {
-        runLineupFetch({ date, stateRoot });
+      const result = dispatchGeneratePacketAction({
+        action,
+        date,
+        stateRoot,
+      });
+      if (!result.ok && result.stage === 'generator_failed') {
+        console.error(`[worldcup-dispatch] generator failed for phase ${action.phase}`);
+        continue;
       }
-      const ok = runGenerator({ date, stateRoot, dryRun: false });
-      if (ok && action.marker) writeMarker(stateRoot, date, action.marker, { action });
-      if (!ok) console.error(`[worldcup-dispatch] generator failed for phase ${action.phase}`);
+      if (!result.ok && result.stage === 'sender_failed') {
+        console.error(`[worldcup-dispatch] sender failed for phase ${action.phase}; leaving marker unset`);
+        continue;
+      }
     } else if (action.kind === 'grade_match') {
       const auditPath = resolve(stateRoot, 'packets', date, 'worldcup-matchday', `worldcup-${date}-audit.json`);
       const audit = readJsonIfExists(auditPath);
