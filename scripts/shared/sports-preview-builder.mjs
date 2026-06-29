@@ -201,6 +201,7 @@ function composeStoryline({ research, model, sport, packet_type }) {
 
   const resultEdge = truncateWords(
     firstText(
+      model?.result_read,
       model?.result_edge,
       model?.edge,
       model?.read,
@@ -278,6 +279,7 @@ function buildQuickRead({ model, research, sport, packet_type }) {
 
   const resultEdge = truncateWords(
     firstText(
+      model?.result_read,
       model?.result_edge,
       model?.edge,
       model?.read,
@@ -290,7 +292,7 @@ function buildQuickRead({ model, research, sport, packet_type }) {
   const keySourceContext = pickKeySourceContext(research);
 
   return {
-    result_edge: scrubCustomerText(`Result edge: ${resultEdge}`),
+    result_read: scrubCustomerText(`Result read: ${resultEdge}`),
     projected: scrubCustomerText(`Projected: ${projected}`),
     total_environment: scrubCustomerText(`Total environment: ${totalEnvironment}`),
     key_source_context: scrubCustomerText(keySourceContext),
@@ -316,7 +318,7 @@ function assembleText({ headline, whyItMatters, storyline, quickRead, displayOnl
     `Why it matters: ${whyItMatters}`,
     `Storyline: ${storyline}`,
     'Quick read:',
-    `- ${quickRead.result_edge}`,
+    `- ${quickRead.result_read}`,
     `- ${quickRead.projected}`,
     `- ${quickRead.total_environment}`,
     `- ${quickRead.key_source_context}`,

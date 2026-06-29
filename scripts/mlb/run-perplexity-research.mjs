@@ -24,6 +24,8 @@ import {
   buildMlbResearchPrompt,
   classifyResearchFact,
 } from './lib/perplexity-prompt-builder.mjs';
+import { fetchMlbResearchContext } from '../../src/sports/mlbResearchContext.js';
+import { scanPublicOutput } from '../../src/sports/publicPacketRenderer.js';
 import {
   ensurePerplexityEnvLoaded,
   hasPerplexityKey,
@@ -91,6 +93,9 @@ export async function runMlbResearch({
   model = 'sonar',
   env = process.env,
   persist = true,
+  games = [],
+  packetText = null,
+  outputPacketText = null,
   callImpl = callPerplexity,
 } = {}) {
   const prompt = buildMlbResearchPrompt(queryType, gameAnchor);
@@ -101,6 +106,16 @@ export async function runMlbResearch({
 
   const key = readKeyInternal(env);
   const resp = await callImpl({ key, system: prompt.system, user: prompt.user, model });
+
+  const attachedGames = [];
+  if (Array.isArray(games) && games.length) {
+    for (const game of games) {
+      const research_context = await fetchMlbResearchContext(game);
+      game.research_context = research_context;
+      attachedGames.push(game);
+    }
+  }
+
   if (!resp.ok) {
     return {
       status: 'FAIL',
@@ -108,6 +123,7 @@ export async function runMlbResearch({
       detail: resp.json?.error?.message || 'unknown',
       key_present: true,
       prompt,
+      games: attachedGames,
     };
   }
 
@@ -155,7 +171,17 @@ export async function runMlbResearch({
     search_results,
     usage: resp.json?.usage ?? null,
     price_free: true,
+    games: attachedGames,
   };
+
+  const packetCandidate = outputPacketText ?? packetText;
+  if (typeof packetCandidate === 'string' && packetCandidate.trim()) {
+    const scan = scanPublicOutput(packetCandidate);
+    if (!scan.clean) {
+      throw new Error(`Public packet contains banned terms: ${scan.violations.join(', ')}`);
+    }
+    artifact.public_packet_scan = scan;
+  }
 
   if (persist && outPath) {
     mkdirSync(resolve(outPath, '..'), { recursive: true });

@@ -1,0 +1,45 @@
+{
+  "_fixture_type": "worldcup_public_packet",
+  "_fixture_label": "STALE — lineup confirmed, model did NOT consume XI state",
+  "_description": "Public packet fixture demonstrating forecast held behavior. Projected goals, BTTS, and margin from prior composite are suppressed in public output. Confirmed XIs and match context are shown.",
+  "forecastMeta": {
+    "lineup_confirmed": true,
+    "model_consumes_lineup": false,
+    "model_basis": "prior composite from 2026-06-17",
+    "lineup_source": "ESPN fifa.world (event 760484)"
+  },
+  "matchMeta": {
+    "homeTeam": "Algeria",
+    "awayTeam": "Austria",
+    "matchDate": "2026-06-27",
+    "venue": "Kansas City Stadium",
+    "group": "Group J"
+  },
+  "prior_composite_numbers_AUDIT_ONLY": {
+    "projected_goals_home": 1.37,
+    "projected_goals_away": 1.27,
+    "projected_total": 2.64,
+    "btts_pct": 54,
+    "note": "These numbers are AUDIT ONLY. They must not appear in the public packet when forecast is held."
+  },
+  "expected_public_output": {
+    "contains_FORECAST_HELD_notice": true,
+    "contains_confirmed_xis": true,
+    "contains_projected_goals": false,
+    "contains_btts_pct": false,
+    "contains_projected_total": false,
+    "passes_banned_language_scan": true
+  },
+  "confirmed_xis": {
+    "algeria": [
+      "Oussama Benbot", "Aissa Mandi", "Jaouen Hadjam", "Rafik Belghali",
+      "Ramy Bensebaini", "Nabil Bentaleb", "Houssem Aouar", "Ibrahim Maza",
+      "Amine Gouiri", "Fares Chaubi", "Riyad Mahrez"
+    ],
+    "austria": [
+      "Alexander Schlager", "David Alaba", "Stefan Posch", "Philipp Lienhart",
+      "Phillipp Mwene", "Romano Schmid", "Konrad Laimer", "Nicolas Seiwald",
+      "Marcel Sabitzer", "Xaver Schlager", "Marko Arnautovic"
+    ]
+  }
+}

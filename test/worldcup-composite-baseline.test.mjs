@@ -25,7 +25,7 @@ test('findLatestPriorBaseline returns null when no prior baseline exists', () =>
   assert.equal(findLatestPriorBaseline('state', '2026-01-01'), null);
 });
 
-test('packet labels provisional prior-composite provenance as PRE_LOCK', () => {
+test('packet labels provisional prior-composite provenance as prior composite', () => {
   const match = {
     match_id: '400021494', home_team: 'Argentina', away_team: 'Austria',
     stage: 'group', kickoff_utc: '2026-06-22T17:00:00.000Z', lineup_status: 'lineup_pending',
@@ -41,9 +41,9 @@ test('packet labels provisional prior-composite provenance as PRE_LOCK', () => {
     matches: [match], boards: [board],
     meta: { date: '2026-06-22', composite_provenance: { source_date: '2026-06-17', provisional: true } },
   });
-  assert.ok(text.includes('latest prior team composite from 2026-06-17'), 'must name prior-composite model basis');
-  assert.ok(text.includes('Pre-lock forecast: lineups are not confirmed'), 'must mark the pre-lock state');
-  assert.ok(text.includes('not today\'s confirmed XI'), 'must disclose the pre-lock XI basis');
+  assert.ok(text.includes('latest prior team composite from 2026-06-17, not today\'s official starting lineup'), 'must name the prior-composite model basis');
+  assert.ok(text.includes('Lineup-pending forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.'), 'must mark the lineup-pending state');
+  assert.ok(!text.includes('Pre-lock forecast'), 'must not use retired pre-lock wording');
 });
 
 test('packet omits the provisional banner when provenance is current', () => {

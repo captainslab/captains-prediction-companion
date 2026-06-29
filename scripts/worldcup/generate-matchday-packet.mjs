@@ -182,6 +182,9 @@ async function main() {
       ? (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending')
       : 'lineup_pending';
     match.lineup_status = lineupStatus;
+    // A fresh official XI unlocks the public forecast; the separate
+    // lineup-adjusted model remains blocked until the missing layers exist.
+    match.model_consumes_lineup = lineupStatus === 'lineup_confirmed';
     // Expose the (price-free) lineup payload to the renderer for the
     // lineup-locked block. Only specific fields are read downstream.
     match.matchday = matchday.ok ? matchday : null;
@@ -264,6 +267,7 @@ async function main() {
       matchday: matchday.ok ? matchday : null,
       market_context: marketCtx.ok ? marketCtx : null,
       parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
+      model_consumes_lineup: lineupStatus === 'lineup_confirmed',
     });
   }
 
