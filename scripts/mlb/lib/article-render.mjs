@@ -22,6 +22,7 @@ import { DECISION_STATUSES, renderDecisionProcess } from '../../shared/decision-
 import { buildMarketFamilyCoverage } from './market-engine.mjs';
 import {
   describeKs,
+  describeMoneyline,
   describeRunline,
   describeTeamRuns,
   describeTotal,
