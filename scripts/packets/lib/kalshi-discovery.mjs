@@ -86,6 +86,10 @@ export async function defaultFetcher(url, options = {}) {
   const timeoutMs = options.timeoutMs ?? Number(process.env.KALSHI_FETCH_TIMEOUT_MS || '15000');
   let lastError = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // A caller-supplied signal (e.g. a per-source discovery deadline) takes over
+    // cancellation; once it aborts, stop immediately rather than burning retry
+    // backoff on a request that can never succeed.
+    if (options.signal?.aborted) { lastError = lastError || 'aborted'; break; }
     const controller = options.signal ? null : new AbortController();
     const timeout = controller && Number.isFinite(timeoutMs) && timeoutMs > 0
       ? setTimeout(() => controller.abort(), timeoutMs)
@@ -113,6 +117,8 @@ export async function defaultFetcher(url, options = {}) {
     } catch (err) {
       if (timeout) clearTimeout(timeout);
       lastError = err.message || String(err);
+      // Caller aborted (deadline hit) -> bail without further retries/backoff.
+      if (options.signal?.aborted) break;
       if (attempt < maxRetries - 1) {
         const delay = baseDelayMs * (2 ** attempt);
         await new Promise(r => setTimeout(r, delay));
@@ -139,8 +145,9 @@ export async function fetchKalshiEvents(sourceKey, options = {}) {
   const maxPages = options.maxPages ?? 5;
   let lastError = null;
   while (pageCount < maxPages) {
+    if (options.signal?.aborted) { lastError = lastError || 'aborted'; break; }
     const url = cursor ? `${source.api_url}&cursor=${encodeURIComponent(cursor)}` : source.api_url;
-    const res = await fetcher(url);
+    const res = await fetcher(url, { signal: options.signal });
     attempts.push({ url, ok: res.ok, status: res.status, error: res.error });
     if (!res.ok || !res.json) { lastError = res.error || 'no JSON body'; break; }
     const pageEvents = Array.isArray(res.json.events) ? res.json.events : [];
@@ -180,8 +187,9 @@ export async function fetchMentionEventsBySeries(options = {}) {
   const allSeries = [];
 
   while (pageCount < maxSeriesPages) {
+    if (options.signal?.aborted) break;
     const url = `${KALSHI_API_BASE}/series?limit=1000${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`;
-    const res = await fetcher(url);
+    const res = await fetcher(url, { signal: options.signal });
     attempts.push({ url, ok: res.ok, status: res.status, error: res.error });
     if (!res.ok || !res.json) break;
     const series = Array.isArray(res.json.series) ? res.json.series : [];
@@ -201,11 +209,13 @@ export async function fetchMentionEventsBySeries(options = {}) {
   // Step 3: Fetch events for each mention series (no status filter — events have empty status)
   const maxEventPagesPerSeries = options.maxEventPagesPerSeries ?? 2;
   for (const s of mentionSeries) {
+    if (options.signal?.aborted) break;
     let eCursor = '';
     let ePageCount = 0;
     while (ePageCount < maxEventPagesPerSeries) {
+      if (options.signal?.aborted) break;
       const eUrl = `${KALSHI_API_BASE}/events?series_ticker=${encodeURIComponent(s.ticker)}&limit=200&with_nested_markets=true${eCursor ? '&cursor=' + encodeURIComponent(eCursor) : ''}`;
-      const eRes = await fetcher(eUrl);
+      const eRes = await fetcher(eUrl, { signal: options.signal });
       attempts.push({ url: eUrl, ok: eRes.ok, status: eRes.status, error: eRes.error });
       if (!eRes.ok || !eRes.json) break;
       const pageEvents = Array.isArray(eRes.json.events) ? eRes.json.events : [];

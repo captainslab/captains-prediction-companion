@@ -143,21 +143,128 @@ export function annotateResearchRoutes(candidates) {
   return candidates;
 }
 
-async function discoverCandidates({ stateRoot, env, eventsFile }) {
+// ─── bounded discovery ───────────────────────────────────────────────────────
+// Each discovery source (broad Kalshi scan, mention-series scan, Alpha intake)
+// runs under its own wall-clock deadline. A hung upstream cannot stall the cron:
+// when the budget elapses we abort the source's in-flight fetches (so no open
+// socket keeps the process alive) and skip it. Surviving sources still flow
+// through, and a degraded-status artifact records what was skipped. Three
+// sequential sources × the per-source budget stays comfortably under the cron's
+// hard script timeout.
+
+export const DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS = 20 * 1000;
+
+export function discoverySourceTimeoutMs(env = process.env) {
+  const seconds = Number(env.MENTIONS_WATCH_DISCOVERY_TIMEOUT_SECONDS);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS;
+}
+
+// Run one discovery source against a deadline. The source receives an AbortSignal
+// it threads to fetch; on timeout we abort it (cancelling open sockets) and
+// resolve with a degraded marker instead of waiting. Errors are also degraded,
+// never fatal. Returns { label, status: 'ok'|'timeout'|'error', ms, events, error }.
+async function runDiscoverySource(label, fn, timeoutMs) {
+  const controller = new AbortController();
+  const started = Date.now();
+  let timer = null;
+  const timeout = new Promise((res) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      res({ __timedOut: true });
+    }, timeoutMs);
+  });
+  console.log(`[mentions-watch] discovery source=${label} start (budget=${Math.round(timeoutMs / 1000)}s)`);
+  try {
+    const outcome = await Promise.race([
+      Promise.resolve()
+        .then(() => fn(controller.signal))
+        .then((value) => ({ value }), (error) => ({ error })),
+      timeout,
+    ]);
+    const ms = Date.now() - started;
+    if (outcome.__timedOut) {
+      console.error(`[mentions-watch] discovery source=${label} TIMEOUT after ${ms}ms — skipped (degraded)`);
+      return { label, status: 'timeout', ms, events: [], error: `timed out after ${Math.round(timeoutMs / 1000)}s` };
+    }
+    if (outcome.error) {
+      controller.abort();
+      console.error(`[mentions-watch] discovery source=${label} ERROR after ${ms}ms — skipped (degraded): ${outcome.error.message}`);
+      return { label, status: 'error', ms, events: [], error: outcome.error.message };
+    }
+    const events = Array.isArray(outcome.value) ? outcome.value : [];
+    console.log(`[mentions-watch] discovery source=${label} ok in ${ms}ms (mention_events=${events.length})`);
+    return { label, status: 'ok', ms, events, error: null };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function writeDiscoveryStatusArtifact({ stateRoot, date, sources }) {
+  const dir = resolve(stateRoot, 'mentions', date);
+  mkdirSync(dir, { recursive: true });
+  const path = resolve(dir, 'discovery-status.json');
+  writeFileSync(path, JSON.stringify({
+    date,
+    generated_at_utc: new Date().toISOString(),
+    degraded: sources.some((s) => s.status !== 'ok'),
+    sources: sources.map((s) => ({ source: s.label, status: s.status, ms: s.ms, error: s.error })),
+  }, null, 2));
+  return path;
+}
+
+async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery = {} }) {
   if (eventsFile) {
     // Test/recovery hook: read candidate events from a local JSON file
     // instead of the network. Shape: [{ event_ticker, ... }] or { events: [...] }.
     const parsed = JSON.parse(readFileSync(eventsFile, 'utf8'));
-    return annotateResearchRoutes(Array.isArray(parsed) ? parsed : (parsed.events ?? []));
+    return {
+      candidates: annotateResearchRoutes(Array.isArray(parsed) ? parsed : (parsed.events ?? [])),
+      sources: [{ label: 'events-file', status: 'ok', ms: 0, events: [], error: null }],
+      degraded: false,
+    };
   }
+
+  const fetchKalshiEventsImpl = discovery.fetchKalshiEvents ?? fetchKalshiEvents;
+  const fetchSeriesImpl = discovery.fetchMentionEventsBySeries ?? fetchMentionEventsBySeries;
+  const collectAlphaImpl = discovery.collectAlphaMentionIntake ?? collectAlphaMentionIntake;
+  const timeoutMs = discovery.timeoutMs ?? discoverySourceTimeoutMs(env);
+
   const candidates = [];
-  const broad = await fetchKalshiEvents('broad');
-  candidates.push(...filterMentionEvents(broad.events).mentionEvents);
-  const series = await fetchMentionEventsBySeries();
-  candidates.push(...filterMentionEvents(series.events).mentionEvents);
-  const alpha = await collectAlphaMentionIntake({ stateRoot, env, fallbackEvents: [] });
-  candidates.push(...(alpha.events || []));
-  return annotateResearchRoutes(candidates);
+  const sources = [];
+
+  const broad = await runDiscoverySource('kalshi-broad', async (signal) => {
+    const res = await fetchKalshiEventsImpl('broad', { signal });
+    return filterMentionEvents(res?.events ?? []).mentionEvents;
+  }, timeoutMs);
+  sources.push(broad);
+  candidates.push(...broad.events);
+
+  const series = await runDiscoverySource('kalshi-series', async (signal) => {
+    const res = await fetchSeriesImpl({ signal });
+    return filterMentionEvents(res?.events ?? []).mentionEvents;
+  }, timeoutMs);
+  sources.push(series);
+  candidates.push(...series.events);
+
+  const alpha = await runDiscoverySource('alpha-intake', async (signal) => {
+    // Inject a signal-aware fetch so a hung intake request actually aborts at
+    // the deadline (collectAlphaMentionIntake otherwise uses raw timeout-less fetch).
+    const res = await collectAlphaImpl({
+      stateRoot,
+      env,
+      fallbackEvents: [],
+      fetchImpl: (url, opts = {}) => fetch(url, { ...opts, signal }),
+    });
+    return res?.events ?? [];
+  }, timeoutMs);
+  sources.push(alpha);
+  candidates.push(...alpha.events);
+
+  const degraded = sources.some((s) => s.status !== 'ok');
+  if (degraded) {
+    writeDiscoveryStatusArtifact({ stateRoot, date, sources });
+  }
+  return { candidates: annotateResearchRoutes(candidates), sources, degraded };
 }
 
 // ─── single-run lock ──────────────────────────────────────────────────────────
@@ -255,6 +362,7 @@ export async function watch({
   env = process.env,
   runStepImpl = runStep,
   maxNewPerRunDefault = DEFAULT_MAX_NEW_PER_RUN,
+  discovery = {},
 } = {}) {
   // Single-run lock: overlapping cron fires exit 0 quietly instead of
   // double-generating/double-sending. Stale locks (dead pid) are recovered.
@@ -262,16 +370,16 @@ export async function watch({
   const lock = acquireRunLock(lockPath);
   if (!lock.acquired) {
     console.log(`[mentions-watch] ${date}: already running (lock held by pid ${lock.holder?.pid ?? 'unknown'} since ${lock.holder?.started_utc ?? 'unknown'}) — exit 0`);
-    return { skipped: 'already-running', fresh: [], seen: [], deferred: [], retryable: [], attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: [] };
+    return { skipped: 'already-running', fresh: [], seen: [], deferred: [], retryable: [], attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: [], discovery: { degraded: false, sources: [] } };
   }
   try {
-    return await watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault });
+    return await watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault, discovery });
   } finally {
     releaseRunLock(lockPath);
   }
 }
 
-async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault }) {
+async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, env, runStepImpl, maxNewPerRunDefault, discovery = {} }) {
   const path = ledgerPath(stateRoot, date);
   const ledger = loadLedger(path);
   const maxNewPerRun = parsePositiveInt(env.MENTIONS_WATCH_MAX_NEW_PER_RUN, maxNewPerRunDefault);
@@ -283,7 +391,13 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   }
 
   console.log(`[mentions-watch] ${new Date().toISOString()} scan start date=${date}${dryRun ? ' (dry-run)' : ''}${markSeenOnly ? ' (mark-seen-only)' : ''}`);
-  const candidates = await discoverCandidates({ stateRoot, env, eventsFile });
+  const discoveryResult = await discoverCandidates({ stateRoot, date, env, eventsFile, discovery });
+  const candidates = discoveryResult.candidates;
+  const discoverySummary = { degraded: discoveryResult.degraded, sources: discoveryResult.sources };
+  if (discoveryResult.degraded) {
+    const skipped = discoveryResult.sources.filter((s) => s.status !== 'ok').map((s) => `${s.label}:${s.status}`).join(', ');
+    console.error(`[mentions-watch] ${date}: DEGRADED discovery — ${skipped}; continuing with available sources`);
+  }
   const { fresh, seen, deferred, retryable } = selectNewTodayEvents(candidates, ledger, date);
 
   if (deferred.length) {
@@ -292,7 +406,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   }
   if (!fresh.length && !retryable.length) {
     console.log(`[mentions-watch] ${date}: no new today events (seen=${seen.length}, watchlist=${deferred.length}) — quiet exit`);
-    return { fresh: [], seen, deferred, retryable: [], attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: normalizedHeld };
+    return { fresh: [], seen, deferred, retryable: [], attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: normalizedHeld, discovery: discoverySummary };
   }
 
   if (markSeenOnly) {
@@ -315,7 +429,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
     }
     saveLedger(path, ledger);
     console.log(`[mentions-watch] ${date}: marked ${fresh.length} event(s) seen WITHOUT delivery; ledger at ${path}`);
-    return { fresh, seen, deferred, retryable, attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: normalizedHeld };
+    return { fresh, seen, deferred, retryable, attempted: [], retried: [], queued: [], retryQueued: [], succeeded: [], failed: [], held: normalizedHeld, discovery: discoverySummary };
   }
 
   // Throttle: never burst-deliver a big first-run batch. Events beyond the cap
@@ -333,7 +447,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   if (dryRun) {
     const dryTargets = [...attempted.map((ev) => ev.event_ticker), ...retried.map((ev) => ev.event_ticker)];
     console.log(`[mentions-watch] [dry-run] would generate + send packets for: ${dryTargets.join(', ')} (ledger not written)`);
-    return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded: [], failed: [], held: normalizedHeld };
+    return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded: [], failed: [], held: normalizedHeld, discovery: discoverySummary };
   }
 
   // Per-event isolation: each new event gets its own generate + validate +
@@ -417,7 +531,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
 
   saveLedger(path, ledger);
   console.log(`[mentions-watch] ${date}: processed ${work.length} event(s) (delivered=${succeeded.length}, blocked=${failed.length}, held=${held.length}, queued=${queued.length}, retryQueued=${retryQueued.length}); ledger updated at ${path}`);
-  return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded, failed, held };
+  return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded, failed, held, discovery: discoverySummary };
 }
 
 export const DEFAULT_MAX_NEW_PER_RUN = 3;
@@ -437,6 +551,27 @@ function writeBlockerArtifact({ stateRoot, date, ticker, error }) {
     delivered: false,
   }, null, 2));
   return blockerPath;
+}
+
+// Flush stdio, then force-exit. A discovery source aborted at its deadline can
+// leave an undici socket in the connection pool that stays referenced for
+// several seconds (the connect timeout of a black-holed upstream), which would
+// otherwise keep this process alive past the cron's hard script timeout even
+// though all watcher logic has finished. An explicit exit makes termination
+// deterministic; the short drain guards against truncating piped logs.
+function flushAndExit(code) {
+  let pending = 0;
+  let exited = false;
+  const finish = () => { if (!exited) { exited = true; process.exit(code); } };
+  for (const stream of [process.stdout, process.stderr]) {
+    if (stream.writableLength > 0) {
+      pending += 1;
+      stream.write('', () => { pending -= 1; if (pending === 0) finish(); });
+    }
+  }
+  if (pending === 0) finish();
+  // Safety net: never let a stalled drain hold the process open.
+  setTimeout(finish, 250).unref();
 }
 
 async function main() {
@@ -459,8 +594,11 @@ async function main() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main().catch((err) => {
-    console.error(`[mentions-watch] failed: ${err.message}`);
-    process.exit(1);
-  });
+  main().then(
+    () => flushAndExit(0),
+    (err) => {
+      console.error(`[mentions-watch] failed: ${err.message}`);
+      flushAndExit(1);
+    },
+  );
 }
