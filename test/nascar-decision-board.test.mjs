@@ -1,11 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   buildNascarRows,
   buildRacePacket,
   loadNascarCeiling,
 } from '../scripts/packets/generate-nascar-sunday.mjs';
+import { validateCpcCustomerPacket } from '../scripts/packets/lib/cpc-packet-validator.mjs';
 import { looksLikeRawInventoryDump } from '../scripts/shared/decision-packet.mjs';
 
 // A minimal Kalshi NASCAR win-market event: per-driver binary contracts keyed
@@ -144,6 +148,78 @@ test('JOINED packet: real model edge rows with composite scores surface above BL
 });
 
 test('loadNascarCeiling ignores artifacts without candidates', () => {
-  // A fixtures-only placeholder with `ceilings` (not `candidates`) must NOT join.
   assert.equal(loadNascarCeiling([]), null);
+});
+
+// The real `ceilings[]` board shape (schema nascar_ceiling_board_v1). No market
+// price, score, or probability — the board carries lane labels + qualitative
+// basis only, so the packet renders user-facing lines without fabricating model
+// fields. Written to a temp file so the test is self-contained (the live
+// state/nascar/<date> artifacts are gitignored and absent on a clean checkout).
+function ceilingBoardV1() {
+  return {
+    schema_version: 'nascar_ceiling_board_v1',
+    mode: 'fixtures-only',
+    supported_market_lanes: [
+      { market_lane: 'win', lane_type: 'finish_position', source_available: true },
+      { market_lane: 'top10', lane_type: 'finish_position', source_available: true },
+    ],
+    ceilings: [
+      {
+        driver_id: 'driver-a-11', driver_name: 'Driver A', car_number: 11,
+        ceiling_market: 'win', ceiling_label: 'Win', lane_type: 'finish_position',
+        basis: 'Composite of starting position 2, practice rank 3, and multi-lap rank 2.',
+        pool_entry_reason: 'current_points_top_20',
+        override_reasons: ['top5_starting_position', 'top5_practice_speed'],
+      },
+      {
+        driver_id: 'driver-b-24', driver_name: 'Driver B', car_number: 24,
+        ceiling_market: 'top10', ceiling_label: 'Top 10', lane_type: 'finish_position',
+        basis: 'Composite of starting position 8, practice rank 12, and multi-lap rank 9.',
+        pool_entry_reason: 'current_points_top_20', override_reasons: [],
+      },
+    ],
+    field_bucket: {
+      bucket_id: 'FIELD', longshot_driver_count: 1, driver_names: ['Driver C'],
+      summary: '1 non-active driver(s) collapsed into FIELD longshot bucket; no individual modeling output emitted.',
+    },
+    user_facing_lines: ['Driver A Win', 'Driver B Top 10'],
+  };
+}
+
+test('Toyota / Save Mart 350 packet joins the ceiling_board.json shape without fabricating model fields', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nascar-ceiling-'));
+  const ceilingPath = join(dir, 'ceiling_board.json');
+  writeFileSync(ceilingPath, JSON.stringify(ceilingBoardV1(), null, 2));
+
+  const loaded = loadNascarCeiling([ceilingPath]);
+  assert.ok(loaded, 'real ceiling board must load');
+  assert.equal(loaded.source, ceilingPath);
+  assert.equal(Array.isArray(loaded.ceilings), true);
+  assert.equal(loaded.ceilings.length, 2);
+
+  const event = nascarEvent({
+    event_ticker: 'KXNASCARRACE-TOYSM26',
+    title: 'Toyota / Save Mart 350 Winner',
+  });
+  const packet = buildRacePacket({
+    date: '2026-06-28',
+    event,
+    sourcePath: 'state/nascar/2026-06-28/kalshi-events/KXNASCARRACE-TOYSM26.json',
+    artifacts: [ceilingPath],
+    workspaceResult: null,
+  });
+
+  assert.ok(packet.text.includes('CPC Packet: Toyota / Save Mart 350 Winner'));
+  assert.ok(packet.text.includes('Driver A Win'));
+  assert.ok(packet.text.includes('Driver B Top 10'));
+  assert.doesNotMatch(packet.text, /BLOCKED_MODEL_LAYER_MISSING/);
+  assert.doesNotMatch(packet.text, /score=|probability=|edge=|odds=|ranking=|confidence=/i);
+  assert.doesNotMatch(packet.inventoryText, /score=|probability=|edge=|odds=|ranking=|confidence=/i);
+  assert.equal(looksLikeRawInventoryDump(packet.text), false);
+  assert.equal(looksLikeRawInventoryDump(packet.inventoryText), true);
+  const contract = validateCpcCustomerPacket(packet.text);
+  assert.equal(contract.valid, true, contract.errors.join('; '));
+
+  rmSync(dir, { recursive: true, force: true });
 });
