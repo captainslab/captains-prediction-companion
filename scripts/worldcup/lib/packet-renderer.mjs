@@ -375,7 +375,7 @@ function isLineupLocked(match) {
 }
 
 function isForecastHeld(match) {
-  return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
+  return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup === false;
 }
 
 function isGoalkeeperPosition(position) {
@@ -926,7 +926,7 @@ function lineupLockedLines(match) {
 function formatMatch(match, board, provenance = null, previewLines = null) {
   const lines = [];
   const locked = isLineupLocked(match);
-  const holdForecast = match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
+  const holdForecast = match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup === false;
   const gp = projectionFor(board);
   lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
   lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
@@ -980,7 +980,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   for (let i = 0; i < (matches || []).length; i += 1) {
     const freshness = checkForecastFreshness({
       lineup_confirmed: matches[i]?.lineup_status === 'lineup_confirmed',
-      model_consumes_lineup: matches[i]?.model_consumes_lineup === true,
+      model_consumes_lineup: matches[i]?.model_consumes_lineup,
     });
     matches[i].model_consumes_lineup = freshness.allow_active_forecast;
   }
