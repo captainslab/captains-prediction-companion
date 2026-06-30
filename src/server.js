@@ -3,11 +3,12 @@ import { handleCaptainLabsApiRequest } from './captainLabsApi.js'
 import { createPipelineService } from './pipelineService.js'
 import { createNoteStore } from './noteStore.js'
 import { loadDotEnv } from './env.js'
-import { ensurePerplexityEnvLoaded, hasPerplexityKey } from '../scripts/mentions/mentions-research-perplexity.mjs'
+import { ensurePerplexityEnvLoaded } from '../scripts/mentions/mentions-research-perplexity.mjs'
 import { fetchKalshiMarkets } from './marketSources.js'
-import { buildEventMarketPlan, buildEventMarketPlanSummary, buildFocusedKalshiMarketPlan } from './eventMarketTool.js'
+import { buildFocusedKalshiMarketPlan } from './eventMarketTool.js'
 import { buildEventMarketWorkflowPrompt } from './eventMarketPrompt.js'
 import { analyzeCompositeMarketLink } from '../scripts/mlb/link-composite-card.mjs'
+import { buildAppCardSummary, renderAppCardText } from '../scripts/shared/cpc-card-summary.mjs'
 import { buildResearchTools } from './researchTools.js'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
@@ -71,18 +72,119 @@ const pipelineService = createPipelineService({
   seedUrls: await buildSeedUrls(),
 })
 
-function buildCardToolResult(result, { includeHidden = false } = {}) {
-  const summary = buildEventMarketPlanSummary(result)
+export function getExpectedMcpToolNames({ enableNoteTools = ENABLE_NOTE_TOOLS } = {}) {
+  const names = ['app_status']
+  if (enableNoteTools) names.push('remember_note')
+  for (const tool of buildResearchTools()) names.push(tool.name)
+  return names
+}
+
+export function buildAppStatusPayload({
+  enableNoteTools = ENABLE_NOTE_TOOLS,
+} = {}) {
   return {
-    content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
-    structuredContent: includeHidden ? result : summary,
+    appName: APP_NAME,
+    version: APP_VERSION,
+    endpoint: {
+      transport: 'streamable-http',
+      mcp: '/mcp',
+      healthz: '/healthz',
+    },
+    toolList: getExpectedMcpToolNames({ enableNoteTools }),
+    readOnlyDefault: true,
+    noteToolsEnabled: enableNoteTools,
+    posture: {
+      noTrade: true,
+      noSend: true,
+      noPublicWrite: true,
+    },
+    warnings: [
+      'Price context is display-only and not used in scoring.',
+    ],
+  }
+}
+
+function renderAppStatusText(status) {
+  const posture = status?.posture ?? {}
+  const postureBits = [
+    posture.noTrade ? 'no trade' : null,
+    posture.noSend ? 'no send' : null,
+    posture.noPublicWrite ? 'no public write' : null,
+  ].filter(Boolean)
+  const toolCount = Array.isArray(status?.toolList) ? status.toolList.length : 0
+  return [
+    `${status?.appName ?? APP_NAME} is ready.`,
+    `Endpoint: ${status?.endpoint?.mcp ?? '/mcp'} with ${status?.endpoint?.healthz ?? '/healthz'} health checks.`,
+    `Tools: ${toolCount} default tool${toolCount === 1 ? '' : 's'}${status?.noteToolsEnabled ? ' plus note tools' : ''}.`,
+    `Posture: read-only by default${postureBits.length ? `; ${postureBits.join(', ')}` : ''}.`,
+    'Price context is display-only and not used in scoring.',
+  ].join(' ')
+}
+
+export function buildAppStatusToolResult(options = {}) {
+  const status = buildAppStatusPayload(options)
+  return {
+    content: [{ type: 'text', text: renderAppStatusText(status) }],
+    structuredContent: status,
+  }
+}
+
+function extractAppCard(result = {}) {
+  const card = result?.card
+    ?? result?.compact_card?.card
+    ?? result?.user_facing?.card
+    ?? (result?.summary?.headline || result?.summary?.one_line_reason
+      ? {
+          title: result?.summary?.headline ?? result?.title ?? 'CPC card',
+          plainEnglish: result?.summary?.one_line_reason ?? result?.plain_english ?? 'This card explains the market in plain English.',
+          settlement: result?.settlement ?? 'Settlement follows the market rules.',
+          route: result?.route ?? result?.market_type ?? 'cpc/general',
+          cpcRead: result?.cpc_read ?? result?.cpcRead ?? 'WATCH',
+          modelRead: result?.model_read ?? result?.cpc_read_text ?? result?.summary?.one_line_reason ?? 'no rated view',
+          evidenceStatus: result?.evidence_status ?? 'provisional',
+          baseRate: result?.base_rate ?? result?.baseRate ?? 'unavailable',
+          priceContext: result?.price_context ?? result?.priceContext,
+          ticker: result?.ticker ?? null,
+          marketId: result?.market_id ?? null,
+          eventId: result?.event_id ?? null,
+        }
+      : null)
+    ?? result
+  const blockedReason = result?.reason
+    ?? result?.compact_card?.reason
+    ?? result?.compact_card?.reason_code
+    ?? result?.user_facing?.summary?.one_line_reason
+    ?? null
+  const sourceSummary = result?.source?.platform
+    ? `${result.source.platform} market card`
+    : result?.pipeline
+      ? `${result.pipeline} market card`
+      : 'Source summary unavailable.'
+  const warnings = []
+  if (result?.price_inputs_used === false) warnings.push('Price context is display-only and not used in scoring.')
+  if (result?.research_only === true) warnings.push('Research only. No trades or sends.')
+  return buildAppCardSummary({
+    card,
+    sourceSummary,
+    warnings,
+    blockedReason,
+  })
+}
+
+function buildCardToolResult(result) {
+  const summary = extractAppCard(result)
+  const text = renderAppCardText(summary)
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: summary,
   }
 }
 
 function buildCompositeToolResult(result) {
-  const payload = result?.compact_card ?? result
+  const payload = extractAppCard(result)
+  const text = renderAppCardText(payload)
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: 'text', text }],
     structuredContent: payload,
   }
 }
@@ -110,20 +212,7 @@ function createServer(options = {}) {
       inputSchema: {},
     },
     async () => {
-      const status = {
-        appName: APP_NAME,
-        version: APP_VERSION,
-        dataFile: DATA_FILE,
-        noteCount: noteStore.stats().count,
-        launchedAt: new Date().toISOString(),
-        transport: 'streamable-http',
-        perplexityKeyAvailable: hasPerplexityKey(),
-      }
-
-      return {
-        content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
-        structuredContent: status,
-      }
+      return buildAppStatusToolResult()
     }
   )
 
@@ -148,8 +237,8 @@ function createServer(options = {}) {
     )
   }
 
-  // Full-output research tools (analyze, mentions, settled history, MLB preview).
-  // Each returns complete text + full structured object; pass compact:true for the short card.
+  // Research tools are card-first in the app surface. Compact mode trims the
+  // content string further, but structuredContent stays concise either way.
   for (const tool of buildResearchTools({
     pipelineService: options.pipelineService,
     marketLinkAnalyzer: options.marketLinkAnalyzer,
