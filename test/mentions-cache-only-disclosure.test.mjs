@@ -32,9 +32,7 @@ import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.m
 
 // ---- fixtures ---------------------------------------------------------------
 
-// Mirrors today's real artifact: a stub source-health record produced with no
-// live fetch and no janitor-recognized freshness field (discovered_at is not in
-// sourceTimestamp()'s recognized set), so it trips FETCH_CACHE_ONLY.
+// True cache-only stub: no live fetch and no freshness timestamp.
 function writeCacheOnlySource() {
   const dir = mkdtempSync(join(tmpdir(), 'cpc-cacheonly-'));
   const path = join(dir, 'KXLOVEISLMENTION-26JUN19.json');
@@ -42,8 +40,37 @@ function writeCacheOnlySource() {
     event_ticker: 'KXLOVEISLMENTION-26JUN19',
     status: 'NO_DECLARED_SOURCES',
     urls: [],
-    discovered_at: '2026-06-19T14:04:23.727Z',
     discovered_by: 'discover-sources.mjs',
+  }, null, 2));
+  return path;
+}
+
+function writeFreshDiscoveredSource() {
+  const dir = mkdtempSync(join(tmpdir(), 'cpc-discovered-'));
+  const path = join(dir, 'KXLOVEISLMENTION-26JUN19.json');
+  writeFileSync(path, JSON.stringify({
+    event_ticker: 'KXLOVEISLMENTION-26JUN19',
+    status: 'NO_DECLARED_SOURCES',
+    urls: [],
+    discovered_at: new Date().toISOString(),
+    discovered_by: 'discover-sources.mjs',
+  }, null, 2));
+  return path;
+}
+
+function writeFreshProducedResearch() {
+  const dir = mkdtempSync(join(tmpdir(), 'cpc-produced-'));
+  const path = join(dir, 'KXLOVEISLMENTION-26JUN19.json');
+  writeFileSync(path, JSON.stringify({
+    event_ticker: 'KXLOVEISLMENTION-26JUN19',
+    event_title: 'What will someone say?',
+    profile: 'earnings_mentions',
+    produced_at: new Date().toISOString(),
+    produced_by: 'collect-mentions-research.mjs',
+    source_status: 'SOURCE_FETCHED',
+    declared_source_urls: [],
+    source_research_stats: { sources_used: 0 },
+    markets: [{ market_ticker: 'KXLOVEISLMENTION-26JUN19-KID', keyword: 'kid/kids' }],
   }, null, 2));
   return path;
 }
@@ -142,6 +169,26 @@ test('detector flags cache-only source health and returns a recognized disclosur
 
 test('detector does NOT require a disclosure when source health has a live fetch timestamp', () => {
   const path = writeLiveSource();
+  const res = detectSourceHealthDisclosure({
+    packetType: 'mentions-daily',
+    sourceHealthPaths: [path],
+  });
+  assert.equal(res.needsDisclosure, false);
+  assert.equal(res.disclosureLine, null);
+});
+
+test('detector does NOT require a disclosure for fresh discovered_at source artifacts', () => {
+  const path = writeFreshDiscoveredSource();
+  const res = detectSourceHealthDisclosure({
+    packetType: 'mentions-daily',
+    sourceHealthPaths: [path],
+  });
+  assert.equal(res.needsDisclosure, false);
+  assert.equal(res.disclosureLine, null);
+});
+
+test('detector does NOT require a disclosure for fresh produced_at research artifacts', () => {
+  const path = writeFreshProducedResearch();
   const res = detectSourceHealthDisclosure({
     packetType: 'mentions-daily',
     sourceHealthPaths: [path],
