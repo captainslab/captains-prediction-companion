@@ -15,7 +15,7 @@
 - **No logic fork:** the backtest calls the real `eloToLambdas`/`computeAdvance`; constants are passed as an optional config. Default output (no config) must be byte-identical to today — existing WC tests must stay green.
 - **Determinism:** no `Math.random`, no argless `new Date()` inside library logic; train/test split is a fixed hash of `date+homeCode+awayCode`.
 - **Commits:** one commit per task; stage only the task's files (never `git add -A`). End commit messages with the Co-Authored-By trailer.
-- eloratings results columns (0-indexed, tab): `0 year,1 month,2 day,3 homeCode,4 awayCode,5 homeGoals,6 awayGoals,7 typeCode,8 venueCode,9 eloChange,10 homeElo,11 awayElo`.
+- eloratings results columns (0-indexed, tab): `0 year,1 month,2 day,3 homeCode,4 awayCode,5 homeGoals,6 awayGoals,7 typeCode (competition not round),8 venueCode,9 eloChange,10 homeEloPost,11 awayEloPost`. **Cols 10/11 are POST-match**; the prediction basis is PRE-match: `homeElo = col10 − col9`, `awayElo = col11 + col9`. Never feed post-match Elo to the model (look-ahead leakage).
 - All new code lives under `scripts/worldcup/backtest/`; tests under `test/worldcup/backtest/`.
 
 ---
@@ -27,7 +27,7 @@
 - Test: `test/worldcup/backtest/results-tsv.test.mjs`
 
 **Interfaces:**
-- Produces: `parseResultsRow(line: string): MatchRow | null` and `parseResultsTsv(text: string): MatchRow[]`, where `MatchRow = {date, homeCode, awayCode, homeGoals, awayGoals, typeCode, venueCode, homeElo, awayElo}` (date = `YYYY-MM-DD`; goals/elo are numbers).
+- Produces: `parseResultsRow(line: string): MatchRow | null` and `parseResultsTsv(text: string): MatchRow[]`, where `MatchRow = {date, homeCode, awayCode, homeGoals, awayGoals, typeCode, venueCode, eloChange, homeEloPost, awayEloPost, homeElo, awayElo}` (date = `YYYY-MM-DD`; numbers are numbers). **`homeElo`/`awayElo` are PRE-match ratings** derived from the post-match columns (eloratings cols 10/11 are post-match; using them directly to predict the match is look-ahead leakage). `homeElo = col10 − eloChange`, `awayElo = col11 + eloChange`; `eloChange = col9` (home team's signed change; Elo is zero-sum per match). `homeEloPost`/`awayEloPost` keep the raw post values for traceability.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -36,12 +36,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseResultsRow, parseResultsTsv } from '../../../scripts/worldcup/backtest/lib/results-tsv.mjs';
 
-test('parseResultsRow parses an eloratings results row', () => {
+test('parseResultsRow parses a row and derives PRE-match Elo', () => {
+  // Raw cols 10/11 (2144/2081) are POST-match; pre-match = post -/+ eloChange(-6).
   const row = '2022\t12\t18\tAR\tFR\t3\t3\tWC\tQA\t-6\t2144\t2081\t0\t0\t1\t3';
   assert.deepEqual(parseResultsRow(row), {
     date: '2022-12-18', homeCode: 'AR', awayCode: 'FR',
     homeGoals: 3, awayGoals: 3, typeCode: 'WC', venueCode: 'QA',
-    homeElo: 2144, awayElo: 2081,
+    eloChange: -6, homeEloPost: 2144, awayEloPost: 2081,
+    homeElo: 2150, awayElo: 2075,
   });
 });
 
@@ -73,15 +75,19 @@ export function parseResultsRow(line) {
   if (f.length < 12) return null;
   const year = Number(f[0]); const month = Number(f[1]); const day = Number(f[2]);
   const homeGoals = Number(f[5]); const awayGoals = Number(f[6]);
-  const homeElo = Number(f[10]); const awayElo = Number(f[11]);
-  if (![year, month, day, homeGoals, awayGoals, homeElo, awayElo].every(Number.isFinite)) return null;
+  const eloChange = Number(f[9]);
+  const homeEloPost = Number(f[10]); const awayEloPost = Number(f[11]);
+  if (![year, month, day, homeGoals, awayGoals, eloChange, homeEloPost, awayEloPost].every(Number.isFinite)) return null;
   if (!f[3] || !f[4]) return null;
   return {
     date: `${year}-${pad2(month)}-${pad2(day)}`,
     homeCode: f[3], awayCode: f[4],
     homeGoals, awayGoals,
     typeCode: f[7] || null, venueCode: f[8] || null,
-    homeElo, awayElo,
+    eloChange, homeEloPost, awayEloPost,
+    // PRE-match ratings (post -/+ change): the prediction basis, no look-ahead.
+    homeElo: homeEloPost - eloChange,
+    awayElo: awayEloPost + eloChange,
   };
 }
 

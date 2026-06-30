@@ -28,6 +28,10 @@
 **Known Facts:**
 - The `typeCode` column represents the COMPETITION, not the round. All 2022 World Cup matches have `typeCode = "WC"`.
 - Penalty shootouts are recorded as draws with no winner — the separate shootouts source is required to identify the true winner of knockout matches decided on penalties.
+- **`homeElo`/`awayElo` (cols 10/11) are POST-match ratings** (verified by chaining: a team's post value equals its pre value at its next match). `eloChange` (col 9) is the home team's signed change for this match; the away change is its negation (Elo is zero-sum per match).
+- **CRITICAL — derive PRE-match Elo for prediction** (using post-match Elo to predict the same match is look-ahead leakage):
+  - `homeEloPre = homeEloPost − eloChange`  (= col10 − col9)
+  - `awayEloPre = awayEloPost + eloChange`  (= col11 + col9)
 
 ---
 
