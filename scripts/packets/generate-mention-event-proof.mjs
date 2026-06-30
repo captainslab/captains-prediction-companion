@@ -49,6 +49,7 @@ import {
   describeMentionsHermesInvocation,
 } from './generate-mentions-daily.mjs';
 import { loadModelRouting, resolveTier } from '../mentions/model-router.mjs';
+import { detectSourceHealthDisclosure, CACHE_ONLY_DISCLOSURE_LINE } from '../cron/cpc-packet-janitor.mjs';
 
 // --- arg parsing -----------------------------------------------------------
 
@@ -215,7 +216,7 @@ function buildModelRead(sanitized, routeResult) {
   ];
 }
 
-function renderSingleEventPacket({ date, sanitized, routeResult }) {
+function renderSingleEventPacket({ date, sanitized, routeResult, sourceHealthDisclosure = null }) {
   const inputs = sanitized.model_safe_inputs || {};
   const facts = Array.isArray(sanitized.confirmed_facts) ? sanitized.confirmed_facts : [];
   const editorial = sanitized.editorial_context || {};
@@ -233,6 +234,7 @@ function renderSingleEventPacket({ date, sanitized, routeResult }) {
   lines.push(`generated_utc: ${date}`);
   lines.push('Market Context — NOT IN SCORE: market prices are display-only and never a model input.');
   lines.push('No trades placed by this workflow. Research only.');
+  if (sourceHealthDisclosure) lines.push(sourceHealthDisclosure);
   lines.push('');
 
   lines.push('1. EVENT PREVIEW — WHY THIS MATTERS');
@@ -346,8 +348,16 @@ function main() {
   const sanitized = sanitizeResearchArtifact(normalized);
   assertNoMarketLeak(sanitized.model_safe_inputs);
 
+  const disclosureProbe = detectSourceHealthDisclosure({
+    stateRoot: path.join(process.cwd(), 'state'),
+    date,
+    packetType: 'mentions-daily',
+    filePath: path.join(process.cwd(), 'state', 'packets', date, 'mentions-daily', `${eventId}.txt`),
+  });
+  const sourceHealthDisclosure = disclosureProbe.needsDisclosure ? CACHE_ONLY_DISCLOSURE_LINE : null;
+
   // 5) Render the customer-facing single-event packet.
-  const packetText = renderSingleEventPacket({ date, sanitized, routeResult });
+  const packetText = renderSingleEventPacket({ date, sanitized, routeResult, sourceHealthDisclosure });
 
   // 6) Contract + price-isolation proof.
   const contract = validateCpcCustomerPacket(packetText);
@@ -358,6 +368,7 @@ function main() {
     sanitized_artifact: sanitized,
     prompt_contract: { packet_type: promptContract.packet_type, route: promptContract.route, submarket: promptContract.submarket },
     cpc_model_output: { note: 'Deterministic CPC model output is produced by CPC code, not by any external model.' },
+    source_health_disclosure: sourceHealthDisclosure,
   };
   const { dir: bankDir } = writeResearchBankArtifacts({
     date,

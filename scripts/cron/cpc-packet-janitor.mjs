@@ -302,6 +302,8 @@ function sourceTimestamp(value) {
   const candidates = [
     value.generated_utc,
     value.generated_at,
+    value.produced_at,
+    value.discovered_at,
     value.updated_utc,
     value.updated_at,
     value.fetched_utc,
