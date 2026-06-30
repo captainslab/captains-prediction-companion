@@ -13,6 +13,23 @@ import { ensurePerplexityEnvLoaded } from '../../mentions/mentions-research-perp
 const PPLX_URL = 'https://api.perplexity.ai/chat/completions';
 const KEY_PATH = resolve(homedir(), '.config/cpc/perplexity.key');
 const DEFAULT_MODEL = 'sonar';
+const STAGE_LABELS = Object.freeze({
+  group: 'Group stage',
+  round_of_32: 'Round of 32',
+  round_of_16: 'Round of 16',
+  quarter_final: 'Quarterfinal',
+  semi_final: 'Semifinal',
+  third_place: 'Third-place match',
+  final: 'Final',
+});
+const ROUND_STAGE_LABELS = Object.freeze({
+  3: STAGE_LABELS.round_of_32,
+  4: STAGE_LABELS.round_of_16,
+  5: STAGE_LABELS.quarter_final,
+  6: STAGE_LABELS.semi_final,
+  7: STAGE_LABELS.third_place,
+  8: STAGE_LABELS.final,
+});
 
 export const PERPLEXITY_UNAVAILABLE = 'PERPLEXITY_UNAVAILABLE';
 
@@ -61,6 +78,32 @@ function normalizeTextList(value) {
   return text ? [text] : [];
 }
 
+function normalizedGroupLabel(group) {
+  const text = String(group ?? '').trim();
+  if (!text) return null;
+  if (/^group\s+/i.test(text)) return text.replace(/\s+/g, ' ');
+  if (/^[A-L]$/i.test(text)) return `Group ${text.toUpperCase()}`;
+  return text.replace(/\s+/g, ' ');
+}
+
+function stageLabel(stage) {
+  const key = String(stage ?? '').trim().toLowerCase();
+  return STAGE_LABELS[key] ?? null;
+}
+
+function stageLabelFromRound(round) {
+  const numeric = Number(round);
+  return ROUND_STAGE_LABELS[numeric] ?? null;
+}
+
+function stageSummary(match) {
+  const stage = stageLabel(match?.stage);
+  const round = stageLabelFromRound(match?.round);
+  const group = normalizedGroupLabel(match?.group);
+  if (stage && String(match?.stage ?? '').trim().toLowerCase() !== 'group') return stage;
+  return group ?? stage ?? round ?? 'unknown';
+}
+
 function extractJsonPayload(text) {
   if (typeof text !== 'string') return null;
   const trimmed = text.trim();
@@ -92,7 +135,7 @@ function extractJsonPayload(text) {
 
 function buildPrompt({ date, matches }) {
   const matchLines = (matches || []).map((match, idx) => (
-    `${idx + 1}. ${match.home_team} vs ${match.away_team} | match_id ${match.match_id} | kickoff ${kickoffLabel(match)} | venue ${match.venue ?? 'unknown'} | group ${match.group ?? 'group stage'}`
+    `${idx + 1}. ${match.home_team} vs ${match.away_team} | match_id ${match.match_id} | kickoff ${kickoffLabel(match)} | venue ${match.venue ?? 'unknown'} | stage ${stageSummary(match)}`
   )).join('\n');
 
   return [

@@ -2,7 +2,7 @@
 // World Cup matchday packet generator.
 //
 // Usage:
-//   node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--dry-run]
+//   node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--refresh-lineups] [--dry-run]
 //
 // Flow:
 //   1. Load static structure for date
@@ -17,13 +17,15 @@
 //   5. Write packet + audit artifacts
 //   6. If lineups confirmed, also write lineup-locked packet
 
-import { resolve } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { fetchStaticStructure } from './source-adapters/static-structure.mjs';
 import { fetchTeamBaseline } from './source-adapters/team-baseline.mjs';
 import { buildOpponentMatchup, loadCachedMatchup } from './source-adapters/opponent-matchup.mjs';
-import { fetchMatchdayData, loadCachedMatchday } from './source-adapters/matchday-data.mjs';
+import { loadCachedMatchday } from './source-adapters/matchday-data.mjs';
 import { loadCachedMarketContext, normalizeMarketContext } from './source-adapters/market-context.mjs';
 import { runWorldCupPerplexityResearch } from './source-adapters/perplexity-research.mjs';
 import { composeEvidenceLedgerForGame } from './lib/evidence-ledger.mjs';
@@ -31,18 +33,24 @@ import { composeMultiLaneCeilingBoard } from './lib/multi-lane-ceiling.mjs';
 import { renderWorldCupPacket, writeWorldCupPacket } from './lib/packet-renderer.mjs';
 import { CPC_MATCHDAY_TIMEZONE, localDateInTimeZone, filterMatchesForLocalDate } from './lib/matchday-window.mjs';
 import { findLatestPriorBaseline } from './lib/composite-baseline.mjs';
+import { evaluateLineupCacheFreshness, isFreshLineupCache } from './lib/lineup-freshness.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const LINEUP_FETCHER = join(__dirname, 'source-adapters', 'fetch-official-lineups.mjs');
 
 function slugify(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null };
+  const opts = { date: null, stateRoot: 'state', dryRun: false, help: false, matchId: null, packetStage: null, refreshLineups: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
     else if (a === '--state-root') opts.stateRoot = argv[++i];
     else if (a === '--match-id') opts.matchId = argv[++i];
+    else if (a === '--packet-stage') opts.packetStage = argv[++i];
+    else if (a === '--refresh-lineups') opts.refreshLineups = true;
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${a}`);
@@ -62,11 +70,212 @@ function readJsonIfExists(path) {
   }
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
+function writeJson(path, payload) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+
+function researchKeyToken(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  return slugify(text);
+}
+
+function researchPairKey(homeTeam, awayTeam) {
+  const home = researchKeyToken(homeTeam);
+  const away = researchKeyToken(awayTeam);
+  if (!home || !away) return null;
+  return `pair:${home}|${away}`;
+}
+
+function researchRecordKeys(record = {}) {
+  const keys = [];
+  const push = (prefix, value) => {
+    const token = researchKeyToken(value);
+    if (token) keys.push(`${prefix}:${token}`);
+  };
+
+  push('match_id', record.match_id ?? record.matchId);
+  push('event_id', record.event_id ?? record.eventId ?? record.source_event_id);
+  push('event_ticker', record.event_ticker ?? record.eventTicker ?? record.market_ticker ?? record.marketTicker);
+
+  const pair = researchPairKey(
+    record.home_team ?? record.homeTeam,
+    record.away_team ?? record.awayTeam,
+  );
+  if (pair) keys.push(pair);
+
+  return [...new Set(keys)];
+}
+
+function researchMatchKeys(match = {}, matchday = null) {
+  const keys = [];
+  const push = (prefix, value) => {
+    const token = researchKeyToken(value);
+    if (token) keys.push(`${prefix}:${token}`);
+  };
+
+  push('match_id', match.match_id);
+  push('event_id', matchday?.source?.event_id ?? match?.event_id ?? match?.source_event_id);
+  push('event_ticker', match?.event_ticker ?? match?.market_context?.event_ticker ?? match?.market_context?.ticker);
+
+  const pair = researchPairKey(match?.home_team, match?.away_team);
+  if (pair) keys.push(pair);
+
+  return [...new Set(keys)];
+}
+
+function buildResearchIndex(researchArtifact = {}) {
+  return (Array.isArray(researchArtifact?.records) ? researchArtifact.records : []).map((record, index) => ({
+    record,
+    index,
+    keys: researchRecordKeys(record),
+    used: false,
+  }));
+}
+
+function normalizeResearchSummary(value, max = 200) {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return 'summary unavailable';
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
+}
+
+export function attachWorldCupResearchContext(match, {
+  matchday = null,
+  researchIndex = [],
+  researchStatus = 'ok',
+  sourceId = 'perplexity',
+  sourceLabel = 'Perplexity research',
+} = {}) {
+  const keys = researchMatchKeys(match, matchday);
+  const entry = researchIndex.find((candidate) =>
+    !candidate.used && candidate.keys.some((key) => keys.includes(key)),
+  );
+
+  if (!entry) {
+    return {
+      ...match,
+      live_context: {
+        status: 'unavailable',
+        source_id: sourceId,
+        source_label: sourceLabel,
+        reason: researchStatus === 'ok'
+          ? 'no live context attached to this match'
+          : `research ${researchStatus}`,
+      },
+    };
+  }
+
+  entry.used = true;
+  const record = entry.record ?? {};
+  return {
+    ...match,
+    live_context: {
+      status: 'gathered',
+      source_id: sourceId,
+      source_label: sourceLabel,
+      matched_by: entry.keys.find((key) => keys.includes(key)) ?? 'match_id',
+      match_keys: keys,
+      record_index: entry.index,
+      match_id: String(match.match_id ?? record.match_id ?? '').trim() || null,
+      event_id: String(matchday?.source?.event_id ?? match?.event_id ?? '').trim() || null,
+      source_quality: record.source_quality ?? null,
+      lineup_status: record.lineup_status ?? null,
+      summary: normalizeResearchSummary(record.summary ?? record.note ?? ''),
+      team_news: Array.isArray(record.team_news) ? record.team_news : (record.team_news ? [record.team_news] : []),
+      injuries: Array.isArray(record.injuries) ? record.injuries : (record.injuries ? [record.injuries] : []),
+      suspensions: Array.isArray(record.suspensions) ? record.suspensions : (record.suspensions ? [record.suspensions] : []),
+      citations: Array.isArray(record.citations) ? record.citations : [],
+      notes: record.notes ?? null,
+    },
+  };
+}
+
+function buildLineupAdjustment(matchday, lineupLockedVerified) {
+  const missingFields = ['player_ratings', 'key_absence_flags', 'expected_starters'];
+  if (lineupLockedVerified) {
+    return {
+      status: 'blocked',
+      flag: 'LINEUP_ADJUSTED_MODEL_MISSING',
+      basis: 'baseline composite',
+      missing_fields: missingFields,
+      reason: 'matchday artifact only exposes starting XI names/positions/numbers',
+    };
+  }
+  return {
+    status: 'unavailable',
+    flag: 'LINEUP_ADJUSTED_MODEL_MISSING',
+    basis: 'baseline composite',
+    missing_fields: missingFields,
+    reason: matchday?.ok ? 'official starting lineup not verified' : 'matchday data not loaded',
+  };
+}
+
+function buildPacketGate({ date, packetStage, stateRoot, compositeProvenance, matches, researchArtifact }) {
+  const reasons = [];
+  const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
+
+  if (compositeProvenance?.provisional) {
+    reasons.push({
+      code: 'CURRENT_TEAM_BASELINE_REQUIRED',
+      scope: 'packet',
+      detail: `same-date team baseline for ${date} is missing; prior baseline from ${compositeProvenance.source_date} is diagnostic only`,
+      next_artifact: resolve(stateRoot, 'worldcup', date, 'discovery', 'team_baseline.json'),
+      diagnostic_prior_path: compositeProvenance.source_path ?? null,
+    });
+  }
+
+  if (packetStage === 'lineup_lock' || packetStage === 'lineup_locked') {
+    for (const match of matches) {
+      const matchdayPath = resolve(stateRoot, 'worldcup', date, 'matchday', `${match.match_id}.json`);
+      if (!match.lineup_locked_verified) {
+        reasons.push({
+          code: 'OFFICIAL_LINEUP_VERIFICATION_REQUIRED',
+          scope: 'match',
+          match_id: match.match_id,
+          match_label: `${match.home_team} vs ${match.away_team}`,
+          detail: match.lineup_freshness?.reason ?? 'official starting XI not verified',
+          next_artifact: matchdayPath,
+        });
+        continue;
+      }
+      if (match.lineup_adjustment?.status === 'blocked' || match.model_consumes_lineup !== true) {
+        reasons.push({
+          code: 'LINEUP_ADJUSTED_MODEL_REQUIRED',
+          scope: 'match',
+          match_id: match.match_id,
+          match_label: `${match.home_team} vs ${match.away_team}`,
+          detail: match.lineup_adjustment?.reason ?? 'confirmed XI is present but no lineup-adjusted model path is sourced',
+          missing_fields: match.lineup_adjustment?.missing_fields ?? [],
+          next_artifact: matchdayPath,
+        });
+      }
+    }
+  }
+
+  if (!researchArtifact || !researchArtifact.schema) {
+    reasons.push({
+      code: 'PACKET_LOCAL_SOURCE_PROOF_REQUIRED',
+      scope: 'packet',
+      detail: 'Perplexity research artifact missing before packet write',
+      next_artifact: resolve(packetDir, `worldcup-${date}-${packetStage}.research.perplexity.json`),
+    });
+  }
+
+  return {
+    blocked: reasons.length > 0,
+    reasons,
+  };
+}
+
+export async function generateMatchdayPacket(inputOpts = null) {
+  const opts = inputOpts ?? parseArgs(process.argv.slice(2));
   if (opts.help) {
-    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--dry-run]');
-    process.exit(0);
+    console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--packet-stage STAGE] [--refresh-lineups] [--dry-run]');
+    return;
   }
 
   const date = opts.date;
@@ -92,7 +301,11 @@ async function main() {
   let baseline = readJsonIfExists(baselinePath);
   if (!baseline) {
     console.log(`[worldcup] no cached baseline; fetching...`);
-    baseline = await fetchTeamBaseline({ stateRoot, date });
+    baseline = await fetchTeamBaseline({
+      stateRoot,
+      date,
+      structure,
+    });
     if (!baseline.ok) {
       // Pre-lock fallback: reuse the most recent PRIOR baseline (last available
       // composite) rather than emitting an empty all-BLOCKED board. Labeled
@@ -101,17 +314,38 @@ async function main() {
       if (prior) {
         console.log(`[worldcup] team baseline unavailable for ${date}; using PRIOR baseline from ${prior.sourceDate} (PRE_LOCK / provisional).`);
         baseline = prior.baseline;
-        compositeProvenance = { source_date: prior.sourceDate, provisional: true };
+        compositeProvenance = { source_date: prior.sourceDate, source_path: prior.path, provisional: true };
       } else {
         console.log(`[worldcup] WARNING: no team baseline (current or prior) available. Using empty fallback.`);
         baseline = { teams: [], team_count: 0 };
+        compositeProvenance = { source_date: null, source_path: null, provisional: true };
       }
+    } else if (!opts.dryRun) {
+      writeJson(baselinePath, baseline);
+      console.log(`[worldcup] baseline cached: ${baselinePath}`);
     }
+  }
+  if (!compositeProvenance && baseline?.teams?.length) {
+    compositeProvenance = { source_date: date, source_path: baselinePath, provisional: false };
   }
   const teamBaselines = Object.fromEntries((baseline.teams || []).map(t => [t.team_name, t]));
 
   // 3. Filter matches for today (operating timezone = America/Chicago, not UTC).
   let todayMatches = filterMatchesForLocalDate(structure.matches, date, CPC_MATCHDAY_TIMEZONE);
+  const shouldRefreshLineups = !opts.dryRun && (
+    opts.refreshLineups
+    || opts.packetStage === 'lineup_lock'
+    || opts.packetStage === 'lineup_locked'
+  );
+  const lineupRefreshStartedAt = shouldRefreshLineups ? new Date().toISOString() : null;
+
+  if (shouldRefreshLineups) {
+    console.log('[worldcup] refreshing official lineups before lineup-sensitive calculations...');
+    const refresh = spawnSync(process.execPath, [LINEUP_FETCHER, '--date', date, '--state-root', stateRoot], { stdio: 'inherit' });
+    if (refresh.status !== 0) {
+      throw new Error(`official lineup refresh failed with status ${refresh.status}`);
+    }
+  }
 
   // Optional single-match mode: emit a standalone packet for one fixture,
   // written under a distinct base name so it never collides with or
@@ -138,29 +372,10 @@ async function main() {
     matches: todayMatches,
     stateRoot,
   });
-  // "captured" = research records that actually carry sourced context (a known
-  // lineup posture or non-Low source quality), as opposed to the lineup-confirm
-  // count. Without this the Source Quality line under-reports real capture as 0.
   const researchRecords = research.artifact?.records ?? [];
-  const capturedCount = researchRecords.filter((r) => {
-    const ls = String(r?.lineup_status || '').toLowerCase();
-    const sq = String(r?.source_quality || '').toLowerCase();
-    // Source-quality values are verbose ("High - ...", "Low - No search ...");
-    // match on prefix, not exact, so a Low/Unknown record never counts as
-    // captured context.
-    const lsCaptured = ls && !ls.startsWith('unknown') && !ls.startsWith('not ');
-    const sqCaptured = sq && !sq.startsWith('low') && !sq.startsWith('unknown') && !sq.startsWith('none');
-    return lsCaptured || sqCaptured;
-  }).length;
-  const researchSummary = {
-    status: research.status,
-    ok: research.ok,
-    outPath: research.outPath,
-    match_count: research.artifact?.match_count ?? todayMatches.length,
-    source_quality: research.artifact?.source_quality ?? null,
-    captured: researchRecords.length ? capturedCount : null,
-    reason: research.artifact?.reason ?? null,
-  };
+  const researchIndex = buildResearchIndex(research.artifact);
+  let attachedResearchCount = 0;
+  let attachedResearchMatchIds = [];
 
   const boards = [];
   const auditRecords = [];
@@ -178,13 +393,43 @@ async function main() {
 
     // 3b. Matchday data
     const matchday = loadCachedMatchday(stateRoot, date, match.match_id);
-    const lineupStatus = matchday.ok
-      ? (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending')
+    const lineupFreshness = evaluateLineupCacheFreshness(matchday, {
+      matchId: match.match_id,
+      kickoffUtc: match.kickoff_utc,
+      refreshStartedAtIso: shouldRefreshLineups ? lineupRefreshStartedAt : null,
+    });
+    if (shouldRefreshLineups && !lineupFreshness.verified) {
+      console.warn(`[worldcup] lineup verification not satisfied for match ${match.match_id}: ${lineupFreshness.reason}`);
+    }
+    const rawLineupStatus = matchday.ok
+      ? ((matchday.home?.lineup_status === 'lineup_confirmed' && matchday.away?.lineup_status === 'lineup_confirmed')
+        ? 'lineup_confirmed'
+        : (matchday.home?.lineup_status || matchday.away?.lineup_status || 'lineup_pending'))
       : 'lineup_pending';
+    const lineupLockedVerified = rawLineupStatus === 'lineup_confirmed' && lineupFreshness.verified === true;
+    const lineupStatus = lineupLockedVerified ? 'lineup_confirmed' : 'lineup_pending';
+    const lineupAdjustment = buildLineupAdjustment(matchday, lineupLockedVerified);
+    const modelConsumesLineup = lineupLockedVerified && lineupAdjustment.status === 'ready';
     match.lineup_status = lineupStatus;
+    match.lineup_locked_verified = lineupLockedVerified;
+    match.model_consumes_lineup = modelConsumesLineup;
+    match.lineup_freshness = lineupFreshness;
+    match.lineup_adjustment = lineupAdjustment;
     // Expose the (price-free) lineup payload to the renderer for the
     // lineup-locked block. Only specific fields are read downstream.
     match.matchday = matchday.ok ? matchday : null;
+    const researchAttachedMatch = attachWorldCupResearchContext(match, {
+      matchday: match.matchday,
+      researchIndex,
+      researchStatus: research.status,
+      sourceId: research.artifact?.source_id ?? 'perplexity',
+      sourceLabel: 'Perplexity research',
+    });
+    Object.assign(match, researchAttachedMatch);
+    if (match.live_context?.status === 'gathered') {
+      attachedResearchCount += 1;
+      attachedResearchMatchIds.push(match.match_id);
+    }
 
     // 3c. Build composite input
     // Layer scores must be 0-100. Team baselines carry normalized 0-100
@@ -206,7 +451,9 @@ async function main() {
       set_piece_matchup: { present: !!matchup.ok, score: matchup.home?.set_piece_vs_opponent?.score ?? null, basis: matchup.home?.set_piece_vs_opponent?.basis },
       goalkeeper_edge: { present: !!matchup.ok, score: matchup.home?.goalkeeper_vs_opponent_chance_quality?.score ?? null, basis: matchup.home?.goalkeeper_vs_opponent_chance_quality?.basis },
       squad_availability: { present: matchday.ok, score: null, basis: 'squad availability', missing_reason: matchday.ok ? null : 'matchday data not loaded' },
-      lineup_strength_delta: { present: lineupStatus === 'lineup_confirmed', score: null, basis: 'lineup strength delta', missing_reason: lineupStatus !== 'lineup_confirmed' ? 'lineups not confirmed' : null },
+      lineup_strength_delta: { present: false, score: null, basis: 'baseline composite', missing_reason: lineupLockedVerified
+        ? `LINEUP_ADJUSTED_MODEL_MISSING: ${lineupAdjustment.reason}; missing_fields=${lineupAdjustment.missing_fields.join(', ')}`
+        : (matchday.ok ? 'lineups not confirmed or lineup cache not verified' : 'matchday data not loaded') },
       rest_travel_venue_climate: { present: false, score: null, basis: 'rest/travel/venue/climate', missing_reason: 'not yet sourced' },
       tournament_incentive_state: { present: false, score: null, basis: 'tournament incentive', missing_reason: 'not yet sourced' },
       knockout_extra_time_penalty: { present: false, score: null, basis: 'knockout extra time / penalties', missing_reason: (!match.stage || match.stage === 'group') ? 'group stage' : 'not yet sourced' },
@@ -223,7 +470,9 @@ async function main() {
       set_piece_matchup: { present: !!matchup.ok, score: matchup.away?.set_piece_vs_opponent?.score ?? null, basis: matchup.away?.set_piece_vs_opponent?.basis },
       goalkeeper_edge: { present: !!matchup.ok, score: matchup.away?.goalkeeper_vs_opponent_chance_quality?.score ?? null, basis: matchup.away?.goalkeeper_vs_opponent_chance_quality?.basis },
       squad_availability: { present: matchday.ok, score: null, basis: 'squad availability', missing_reason: matchday.ok ? null : 'matchday data not loaded' },
-      lineup_strength_delta: { present: lineupStatus === 'lineup_confirmed', score: null, basis: 'lineup strength delta', missing_reason: lineupStatus !== 'lineup_confirmed' ? 'lineups not confirmed' : null },
+      lineup_strength_delta: { present: false, score: null, basis: 'baseline composite', missing_reason: lineupLockedVerified
+        ? `LINEUP_ADJUSTED_MODEL_MISSING: ${lineupAdjustment.reason}; missing_fields=${lineupAdjustment.missing_fields.join(', ')}`
+        : (matchday.ok ? 'lineups not confirmed or lineup cache not verified' : 'matchday data not loaded') },
       rest_travel_venue_climate: { present: false, score: null, basis: 'rest/travel/venue/climate', missing_reason: 'not yet sourced' },
       tournament_incentive_state: { present: false, score: null, basis: 'tournament incentive', missing_reason: 'not yet sourced' },
       knockout_extra_time_penalty: { present: false, score: null, basis: 'knockout extra time / penalties', missing_reason: (!match.stage || match.stage === 'group') ? 'group stage' : 'not yet sourced' },
@@ -252,7 +501,7 @@ async function main() {
       awayLedger: ledger.away,
       marketContexts,
       isKnockout,
-      lineupConfirmed: lineupStatus === 'lineup_confirmed',
+      lineupConfirmed: lineupLockedVerified,
     });
 
     boards.push(board);
@@ -262,16 +511,48 @@ async function main() {
       board,
       matchup: matchup.ok ? matchup : null,
       matchday: matchday.ok ? matchday : null,
+      live_context: match.live_context ?? null,
       market_context: marketCtx.ok ? marketCtx : null,
       parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
+      lineup_freshness: lineupFreshness,
+      lineup_locked_verified: lineupLockedVerified,
+      model_consumes_lineup: modelConsumesLineup,
+      lineup_adjustment: lineupAdjustment,
     });
   }
 
-  // 4. Render packet
-  const packetStage = todayMatches.some(m => m.lineup_status === 'lineup_confirmed')
-    ? 'lineup_locked'
-    : 'morning_board';
+  const packetStage = opts.packetStage
+    || (todayMatches.some(m => m.lineup_status === 'lineup_confirmed')
+      ? 'lineup_locked'
+      : 'morning_board');
+  const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
+  const packetBaseName = `worldcup-${date}-${packetStage}${nameSuffix}`;
+  const researchSnapshotPath = resolve(packetDir, `${packetBaseName}.research.perplexity.json`);
+  const researchSummary = {
+    status: research.status,
+    ok: research.ok,
+    match_count: todayMatches.length,
+    record_count: researchRecords.length,
+    attached_count: attachedResearchCount,
+    attached_match_ids: attachedResearchMatchIds,
+    preview_attached_count: 0,
+    preview_attached_match_ids: [],
+    source_quality: research.artifact?.source_quality ?? null,
+    reason: research.artifact?.reason ?? null,
+    attachment_contract: research.artifact?.attachment_contract ?? null,
+    outPath: researchSnapshotPath,
+    sourceOutPath: research.outPath,
+  };
+  const packetGate = buildPacketGate({
+    date,
+    packetStage,
+    stateRoot,
+    compositeProvenance,
+    matches: todayMatches,
+    researchArtifact: research.artifact,
+  });
 
+  // 4. Render packet
   const packetText = renderWorldCupPacket({
     matches: todayMatches,
     boards,
@@ -279,24 +560,29 @@ async function main() {
       date,
       packet_stage: packetStage,
       composite_provenance: compositeProvenance,
+      packet_gate: packetGate,
       research: researchSummary,
     },
   });
 
   // 5. Write packet + audit artifacts
-  const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
   mkdirSync(packetDir, { recursive: true });
 
   if (!opts.dryRun) {
+    if (research.artifact) {
+      writeFileSync(researchSnapshotPath, `${JSON.stringify(research.artifact, null, 2)}\n`, 'utf8');
+      console.log(`[worldcup] research snapshot written: ${researchSnapshotPath}`);
+    }
     const { txtPath, metaPath } = writeWorldCupPacket({
       dir: packetDir,
-      baseName: `worldcup-${date}-${packetStage}${nameSuffix}`,
+      baseName: packetBaseName,
       packetText,
       meta: {
         date,
         packet_stage: packetStage,
         match_count: todayMatches.length,
         composite_provenance: compositeProvenance,
+        packet_gate: packetGate,
         research: researchSummary,
       },
     });
@@ -309,6 +595,7 @@ async function main() {
       generated_at: new Date().toISOString(),
       date,
       packet_stage: packetStage,
+      packet_gate: packetGate,
       records: auditRecords,
       research: research.artifact,
     }, null, 2), 'utf8');
@@ -321,7 +608,16 @@ async function main() {
   }
 }
 
-main().catch(e => {
-  console.error(e);
-  process.exit(1);
-});
+async function main() {
+  await generateMatchdayPacket(parseArgs(process.argv.slice(2)));
+}
+
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main()
+    .then(() => process.exit(0))
+    .catch(e => {
+      console.error(e);
+      process.exit(1);
+    });
+}
