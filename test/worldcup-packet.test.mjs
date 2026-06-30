@@ -8,6 +8,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { attachWorldCupResearchContext } from '../scripts/worldcup/generate-matchday-packet.mjs';
 import { composeEvidenceLedgerForGame } from '../scripts/worldcup/lib/evidence-ledger.mjs';
@@ -99,7 +101,7 @@ test('missing lineups → match disclosed as pre-lock and no full PICK is emitte
   // disclosed as pre-lock forecast-only output that uses the prior composite.
   assert.ok(text.includes('Status: Pre-lock, lineups not confirmed'),
     'pending lineups must be disclosed as pre-lock');
-  assert.ok(text.includes("Model basis: latest prior team composite, not today's official starting lineup"),
+  assert.ok(text.includes('Model basis: same-date team baseline; official starting lineup not yet verified'),
     'pre-lock model basis must be stated');
   assert.ok(/Model-rated side \(forecast only\)/.test(text),
     'edges must be framed as forecast-only');
@@ -121,8 +123,8 @@ test('confirmed lineups with strong evidence → clear model side, marked lineup
 test('stale or identity-mismatched lineup cache keeps the packet pre-lock', () => {
   const freshness = evaluateLineupCacheFreshness({
     ok: true,
-    match_id: '400021443',
-    source: { event_id: '400099999', event_state: 'pre' },
+    match_id: '400099999',
+    source: { event_id: '760488', event_state: 'pre' },
     fetched_utc: '2026-06-11T18:40:00Z',
   }, {
     matchId: '400021443',
@@ -134,6 +136,30 @@ test('stale or identity-mismatched lineup cache keeps the packet pre-lock', () =
   const text = renderWorldCupPacket({ matches: [match], boards: [board], meta: { date: '2026-06-11' } });
   assert.ok(text.includes('Status: Pre-lock, lineups not confirmed'));
   assert.ok(!text.includes('LINEUP LOCKED'));
+});
+
+test('confirmed lineup fetched seconds after kickoff verifies inside grace window', () => {
+  const freshness = evaluateLineupCacheFreshness({
+    ok: true,
+    match_id: '400021522',
+    source: { event_id: '760522', event_state: 'pre' },
+    fetched_utc: '2026-06-30T01:00:30Z',
+    home: {
+      lineup_status: 'lineup_confirmed',
+      lineup: { starting_xi: [{ name: 'Home One', position: 'F', number: '9' }] },
+    },
+    away: {
+      lineup_status: 'lineup_confirmed',
+      lineup: { starting_xi: [{ name: 'Away One', position: 'F', number: '9' }] },
+    },
+  }, {
+    matchId: '400021522',
+    kickoffUtc: '2026-06-30T01:00:00Z',
+    refreshStartedAtIso: '2026-06-30T00:55:00Z',
+  });
+
+  assert.equal(freshness.verified, true);
+  assert.equal(freshness.accepted_with_kickoff_grace, true);
 });
 
 test('market context is labeled NOT IN SCORE and shown as display-only', () => {
@@ -609,6 +635,26 @@ test('first-half lanes stay BLOCKED_MODEL_LAYER_MISSING', () => {
   assert.ok(firstHalfLanes.length >= 4, 'all four 1st-half lanes present');
   for (const l of firstHalfLanes) {
     assert.equal(l.recommendation, 'BLOCKED_MODEL_LAYER_MISSING', `${l.lane} must stay blocked`);
+  }
+});
+
+test('world cup production logic contains no Netherlands-Morocco match-specific hardcoding', () => {
+  const files = [
+    'scripts/worldcup/generate-matchday-packet.mjs',
+    'scripts/worldcup/lib/lineup-freshness.mjs',
+    'scripts/worldcup/source-adapters/static-structure.mjs',
+    'scripts/worldcup/lib/packet-renderer.mjs',
+    'scripts/worldcup/source-adapters/perplexity-research.mjs',
+  ];
+
+  for (const relativePath of files) {
+    let content = readFileSync(resolve(relativePath), 'utf8');
+    if (relativePath.endsWith('packet-renderer.mjs')) {
+      content = content.replace(/'Netherlands': 'NED',\n/, '');
+    }
+    assert.doesNotMatch(content, /400021522/, `${relativePath} must not hardcode the Netherlands-Morocco match id`);
+    assert.doesNotMatch(content, /Morocco/, `${relativePath} must not hardcode Morocco`);
+    assert.doesNotMatch(content, /Netherlands/, `${relativePath} must not hardcode Netherlands beyond the generic FIFA code override`);
   }
 });
 

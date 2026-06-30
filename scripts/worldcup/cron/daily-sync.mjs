@@ -12,6 +12,7 @@
 
 import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { fetchStaticStructure, loadCachedStructure } from '../source-adapters/static-structure.mjs';
 import { fetchTeamBaseline, loadCachedTeamBaseline } from '../source-adapters/team-baseline.mjs';
@@ -33,50 +34,76 @@ function writeJson(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2), 'utf8');
 }
 
-async function main() {
-  const { date, stateRoot, dryRun } = parseArgs(process.argv.slice(2));
+export async function runDailySync({
+  date,
+  stateRoot = 'state',
+  dryRun = false,
+  fetchStaticStructureImpl = fetchStaticStructure,
+  fetchTeamBaselineImpl = fetchTeamBaseline,
+  writeJsonImpl = writeJson,
+  log = console,
+} = {}) {
   const discoveryDir = resolve(stateRoot, 'worldcup', date, 'discovery');
 
-  console.log(`[worldcup-sync] ${new Date().toISOString()} syncing ${date} (dry-run: ${dryRun})`);
+  log.log(`[worldcup-sync] ${new Date().toISOString()} syncing ${date} (dry-run: ${dryRun})`);
 
-  const structure = await fetchStaticStructure({ stateRoot, date });
+  const structure = await fetchStaticStructureImpl({
+    stateRoot,
+    date,
+    fifaUrl: process.env.WORLDCUP_STATIC_STRUCTURE_FIFA_URL,
+    espnUrl: process.env.WORLDCUP_STATIC_STRUCTURE_ESPN_URL,
+    openfootballUrl: process.env.WORLDCUP_STATIC_STRUCTURE_OPENFOOTBALL_URL,
+  });
   if (!structure.ok || structure.match_count === 0) {
     // Keep an existing cache; only hard-fail when we have nothing at all.
     const cached = loadCachedStructure(stateRoot, date);
     if (cached.ok) {
-      console.log(`[worldcup-sync] live structure unavailable; keeping existing cache (${cached.match_count ?? '?'} matches)`);
+      log.log(`[worldcup-sync] live structure unavailable; keeping existing cache (${cached.match_count ?? '?'} matches)`);
     } else {
-      console.error(`[worldcup-sync] ERROR: no structure source available. Errors: ${(structure.errors || []).join('; ')}`);
-      process.exit(1);
+      throw new Error(`no structure source available. Errors: ${(structure.errors || []).join('; ')}`);
     }
   } else if (!dryRun) {
     mkdirSync(discoveryDir, { recursive: true });
-    writeJson(resolve(discoveryDir, 'static_structure.json'), structure);
-    console.log(`[worldcup-sync] structure cached: ${structure.match_count} matches from ${structure.source_id}`);
+    writeJsonImpl(resolve(discoveryDir, 'static_structure.json'), structure);
+    log.log(`[worldcup-sync] structure cached: ${structure.match_count} matches from ${structure.source_id}`);
   } else {
-    console.log(`[worldcup-sync] DRY RUN — would cache ${structure.match_count} matches from ${structure.source_id}`);
+    log.log(`[worldcup-sync] DRY RUN — would cache ${structure.match_count} matches from ${structure.source_id}`);
   }
 
-  const baseline = await fetchTeamBaseline({ stateRoot, date });
+  const baseline = await fetchTeamBaselineImpl({
+    stateRoot,
+    date,
+    structure: structure?.ok ? structure : null,
+  });
   if (!baseline.ok || baseline.team_count === 0) {
     const cached = loadCachedTeamBaseline(stateRoot, date);
     if (cached.ok) {
-      console.log(`[worldcup-sync] live baseline unavailable; keeping existing cache (${cached.team_count ?? '?'} teams)`);
+      log.log(`[worldcup-sync] live baseline unavailable; keeping existing cache (${cached.team_count ?? '?'} teams)`);
     } else {
-      console.log(`[worldcup-sync] WARNING: no team baseline available (composite will fail soft to MISSING layers)`);
+      log.log(`[worldcup-sync] WARNING: no team baseline available (composite will fail soft to MISSING layers)`);
     }
   } else if (!dryRun) {
     mkdirSync(discoveryDir, { recursive: true });
-    writeJson(resolve(discoveryDir, 'team_baseline.json'), baseline);
-    console.log(`[worldcup-sync] baseline cached: ${baseline.team_count} teams from ${baseline.source_id}`);
+    writeJsonImpl(resolve(discoveryDir, 'team_baseline.json'), baseline);
+    log.log(`[worldcup-sync] baseline cached: ${baseline.team_count} teams from ${baseline.source_id}`);
   } else {
-    console.log(`[worldcup-sync] DRY RUN — would cache ${baseline.team_count} teams from ${baseline.source_id}`);
+    log.log(`[worldcup-sync] DRY RUN — would cache ${baseline.team_count} teams from ${baseline.source_id}`);
   }
 
-  console.log(`[worldcup-sync] done`);
+  log.log('[worldcup-sync] done');
 }
 
-main().catch(e => {
-  console.error(`[worldcup-sync] FATAL: ${e.message}`);
-  process.exit(1);
-});
+async function main() {
+  const { date, stateRoot, dryRun } = parseArgs(process.argv.slice(2));
+  await runDailySync({ date, stateRoot, dryRun });
+}
+
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main()
+    .then(() => process.exit(0))
+    .catch(e => {
+      console.error(`[worldcup-sync] FATAL: ${e.message}`);
+      process.exit(1);
+    });
+}

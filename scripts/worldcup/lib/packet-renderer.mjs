@@ -30,6 +30,23 @@ import {
 
 const CHICAGO_TZ = 'America/Chicago';
 const EASTERN_TZ = 'America/New_York';
+const STAGE_LABELS = Object.freeze({
+  group: 'Group stage',
+  round_of_32: 'Round of 32',
+  round_of_16: 'Round of 16',
+  quarter_final: 'Quarterfinal',
+  semi_final: 'Semifinal',
+  third_place: 'Third-place match',
+  final: 'Final',
+});
+const ROUND_STAGE_LABELS = Object.freeze({
+  3: STAGE_LABELS.round_of_32,
+  4: STAGE_LABELS.round_of_16,
+  5: STAGE_LABELS.quarter_final,
+  6: STAGE_LABELS.semi_final,
+  7: STAGE_LABELS.third_place,
+  8: STAGE_LABELS.final,
+});
 
 // --- Source-backed preview integration ---------------------------------------
 // Resolve a Kalshi World Cup event ticker (KXWCGAME-<YYMONDD><HOME3><AWAY3>)
@@ -92,7 +109,7 @@ function worldCupModelSummary(match, board) {
     summary.projection = `${match.home_team} ${gp.projected_home_goals}-${gp.projected_away_goals} ${match.away_team}`;
     summary.total_environment = totalProfile(gp.projected_total_goals);
   }
-  summary.caveat = 'Pre-lineup; latest prior team composite, not official starting lineup.';
+  summary.caveat = 'Pre-lineup; team baseline only, not official starting lineup.';
   return summary;
 }
 
@@ -165,8 +182,52 @@ function pct(p) {
   return p == null ? 'N/A' : `${(p * 100).toFixed(0)}%`;
 }
 
+function normalizedGroupLabel(group) {
+  const text = String(group ?? '').trim();
+  if (!text) return null;
+  if (/^group\s+/i.test(text)) return text.replace(/\s+/g, ' ');
+  if (/^[A-L]$/i.test(text)) return `Group ${text.toUpperCase()}`;
+  return text.replace(/\s+/g, ' ');
+}
+
+function stageLabel(stage) {
+  const key = String(stage ?? '').trim().toLowerCase();
+  return STAGE_LABELS[key] ?? null;
+}
+
+function stageLabelFromRound(round) {
+  const numeric = Number(round);
+  return ROUND_STAGE_LABELS[numeric] ?? null;
+}
+
+function isKnockoutStage(stage) {
+  const key = String(stage ?? '').trim().toLowerCase();
+  return Boolean(key && key !== 'group');
+}
+
+function inferStageFromText(text) {
+  const value = String(text ?? '');
+  if (!value) return null;
+  if (/Round of 32/i.test(value)) return STAGE_LABELS.round_of_32;
+  if (/Round of 16/i.test(value)) return STAGE_LABELS.round_of_16;
+  if (/Quarter(?:final)?/i.test(value)) return STAGE_LABELS.quarter_final;
+  if (/Semi(?:final)?/i.test(value)) return STAGE_LABELS.semi_final;
+  if (/Third(?:-place|\s+place)|3rd/i.test(value)) return STAGE_LABELS.third_place;
+  if (/(?:\bWorld Cup\b.*\bFinal\b|\bFinal\b)/i.test(value) && !/Quarter|Semi|Third|3rd/i.test(value)) return STAGE_LABELS.final;
+  return null;
+}
+
 function safeStage(match) {
-  return match?.group ?? match?.stage ?? 'Group stage';
+  const stage = stageLabel(match?.stage);
+  const round = stageLabelFromRound(match?.round);
+  const group = normalizedGroupLabel(match?.group);
+  const sourcedStage = inferStageFromText(match?.live_context?.summary ?? match?.preview_context?.summary);
+  if (isKnockoutStage(match?.stage) && stage) return stage;
+  if (group) return group;
+  if (stage) return stage;
+  if (round) return round;
+  if (sourcedStage) return sourcedStage;
+  return 'Stage unavailable';
 }
 
 function kickoffDisplay(match) {
@@ -352,6 +413,16 @@ function isLineupLocked(match) {
 
 function isForecastHeld(match) {
   return match?.lineup_status === 'lineup_confirmed' && match?.model_consumes_lineup !== true;
+}
+
+function currentBaselineSummary(provenance) {
+  if (provenance?.provisional) {
+    return `prior baseline from ${provenance.source_date ?? 'unknown date'} retained for diagnostics only`;
+  }
+  if (provenance?.source_date) {
+    return `same-date team baseline from ${provenance.source_date}`;
+  }
+  return 'same-date team baseline';
 }
 
 function isGoalkeeperPosition(position) {
@@ -855,7 +926,7 @@ function slatePreviewBlock(matches = [], boards = []) {
   // Group rollup.
   const groups = new Map();
   for (const m of matches) {
-    const g = m.group ?? m.stage ?? 'Group stage';
+    const g = safeStage(m);
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(`${m.home_team} vs ${m.away_team}`);
   }
@@ -872,12 +943,12 @@ function slatePreviewBlock(matches = [], boards = []) {
   lines.push('  Advancement / standings math: not sourced — omitted rather than invented.');
   if (lockedNames.length) {
     if (lockedNames.length === matches.length) {
-      lines.push('  Lineup/source: official starting XIs confirmed for all matches; the prior team composite still powers the forecast.');
+      lines.push('  Lineup/source: official starting XIs confirmed for all matches; a customer-ready packet still requires a lineup-adjusted model path.');
     } else {
-      lines.push(`  Lineup/source: official starting XIs confirmed for ${lockedNames.join(', ')}; remaining matches are pre-lineup and use the prior team composite.`);
+      lines.push(`  Lineup/source: official starting XIs confirmed for ${lockedNames.join(', ')}; remaining matches are still pre-lineup.`);
     }
   } else {
-    lines.push('  Lineup/source: no official starting XIs confirmed yet; all matches use the prior team composite.');
+    lines.push('  Lineup/source: no official starting XIs confirmed yet; pre-lock output depends on the same-date team baseline only.');
   }
   lines.push('');
   return lines.join('\n');
@@ -914,10 +985,10 @@ function formatMatch(match, board, provenance = null, previewLines = null) {
   lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
   if (locked) {
     lines.push('  Status: LINEUP LOCKED — official starting XI confirmed');
-    lines.push(`  Model basis: lineups confirmed; projection still uses the latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''} (no lineup-adjusted model path)`);
+    lines.push(`  Model basis: confirmed lineup visible; forecast uses ${currentBaselineSummary(provenance)} and requires a lineup-adjusted model path for customer-ready lineup-lock output`);
   } else {
     lines.push('  Status: Pre-lock, lineups not confirmed');
-    lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}, not today's official starting lineup`);
+    lines.push(`  Model basis: ${currentBaselineSummary(provenance)}; official starting lineup not yet verified`);
   }
   lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
   if (gp) {
@@ -943,9 +1014,77 @@ function formatMatch(match, board, provenance = null, previewLines = null) {
   return lines.join('\n');
 }
 
+function formatBlockedReason(reason) {
+  const scope = reason.scope === 'match'
+    ? `${reason.match_label ?? reason.match_id ?? 'match'}`
+    : 'packet';
+  const detail = compactText(reason.detail ?? 'missing requirement', 220);
+  const nextArtifact = reason.next_artifact ? ` | next artifact: ${reason.next_artifact}` : '';
+  return `  - [${reason.code}] ${scope}: ${detail}${nextArtifact}`;
+}
+
+function renderBlockedWorldCupPacket({ matches, meta = {} }) {
+  const date = meta.date ?? new Date().toISOString().slice(0, 10);
+  const packetGate = meta.packet_gate ?? { blocked: true, reasons: [] };
+  const research = meta.research ?? null;
+  const reasons = Array.isArray(packetGate.reasons) ? packetGate.reasons : [];
+  const packetReasons = reasons.filter((reason) => reason.scope !== 'match');
+
+  const lines = [];
+  lines.push(header('MATCHDAY BLOCKED', date));
+  lines.push('Packet status: BLOCKED — no customer-ready forecast emitted.');
+  lines.push('Why: one or more required same-date model, lineup, or source-proof inputs are missing or fail verification.\n');
+
+  lines.push(section('1. Blockers'));
+  if (!reasons.length) {
+    lines.push('  No blocker details were attached.');
+  } else {
+    for (const reason of reasons) lines.push(formatBlockedReason(reason));
+  }
+  lines.push('');
+
+  lines.push(section('2. Match Coverage'));
+  for (const match of matches) {
+    const matchReasons = reasons.filter((reason) => reason.match_id && String(reason.match_id) === String(match.match_id));
+    lines.push(`▶ ${match.home_team} vs ${match.away_team}  [${safeStage(match)}]`);
+    lines.push(`  ${kickoffDisplay(match)}${match.venue ? ` | ${match.venue}` : ''}`);
+    lines.push('  Status: BLOCKED — forecast withheld');
+    lines.push(`  Lineup verification: ${lineupsStatusText(match)}`);
+    if (matchReasons.length) {
+      for (const reason of matchReasons) lines.push(formatBlockedReason(reason));
+    } else if (packetReasons.length) {
+      lines.push('  Packet-level blockers apply to this match as well.');
+    }
+    lines.push(liveContextCoverage(match));
+    lines.push('');
+  }
+
+  lines.push(section('3. Source Proof'));
+  lines.push(`  Packet-local Perplexity snapshot: ${research?.outPath ?? 'missing'}`);
+  lines.push(`  Shared Perplexity source artifact: ${research?.sourceOutPath ?? 'missing'}`);
+  lines.push(`  Research status: ${research?.status ?? 'unknown'}`);
+  if (research?.reason) {
+    lines.push(`  Research note: ${compactText(research.reason, 220)}`);
+  }
+  lines.push('');
+
+  lines.push(section('4. Market Context'));
+  lines.push('  Market prices are display-only when present and are NOT IN SCORE.');
+  lines.push('  This blocked packet withholds any customer-ready forecast regardless of market context.');
+  lines.push('');
+
+  lines.push('─'.repeat(70));
+  lines.push('Market prices are display-only when present and are NOT IN SCORE.');
+  lines.push('Customer-ready forecast withheld until the listed artifacts are refreshed and re-rendered.');
+  lines.push('No trades placed. Research only.');
+  lines.push('─'.repeat(70));
+  return lines.join('\n');
+}
+
 export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const date = meta.date ?? new Date().toISOString().slice(0, 10);
   const provenance = meta.composite_provenance ?? null;
+  const packetGate = meta.packet_gate ?? null;
   const research = meta.research ?? null;
   const researchRoot = meta.research_root ?? undefined;
   const packetStage = meta.packet_stage ?? null;
@@ -954,19 +1093,21 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   const lineupLockedPacket = packetStage === 'lineup_locked' || (!isMorningPreview && confirmedCount > 0);
   const hasMarketContext = (boards || []).some((board) => (board?.lanes || []).some((lane) => lane?.market_context));
 
+  if (packetGate?.blocked) {
+    return renderBlockedWorldCupPacket({ matches, meta });
+  }
+
   const lines = [];
   lines.push(header('MATCHDAY FORECAST', date));
-  if (provenance?.provisional) {
-    if (lineupLockedPacket) {
-      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}; ${confirmedCount} match(es) now carry confirmed official starting XIs (see per-match status).`);
-      lines.push('Lineup-aware note: confirmed lineups are shown per match; projections still use the prior team composite because no lineup-adjusted model path is sourced yet.\n');
-    } else if (isMorningPreview) {
-      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, morning pre-lock preview.`);
-      lines.push('Lineup-aware note: this preview is pre-lock; goalscorer outputs remain provisional until official starting lineups are available.\n');
-    } else {
-      lines.push(`Model basis: latest prior team composite from ${provenance.source_date}, not today's official starting lineup.`);
-      lines.push('Pre-lock forecast: lineups are not confirmed. Model uses the latest available team composite from prior matches until starting XI data is available.\n');
-    }
+  if (lineupLockedPacket) {
+    lines.push(`Model basis: ${currentBaselineSummary(provenance)}.`);
+    lines.push('Lineup-aware note: confirmed lineups are shown per match; customer-ready lineup-lock output requires a lineup-adjusted team model path.\n');
+  } else if (isMorningPreview) {
+    lines.push(`Model basis: ${currentBaselineSummary(provenance)}.`);
+    lines.push('Lineup-aware note: this preview is pre-lock; official starting lineups are not yet verified.\n');
+  } else if (provenance?.source_date) {
+    lines.push(`Model basis: ${currentBaselineSummary(provenance)}.`);
+    lines.push('Pre-lock forecast: official starting lineups are not yet verified.\n');
   }
 
   lines.push(whyItMattersBlock(matches, boards));
@@ -1012,7 +1153,8 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   // 4. Model Limits
   lines.push(section('4. Model Limits'));
   lines.push('  First-half markets are unavailable because no half-split model layer is sourced.');
-  lines.push('  Pre-lock forecasts use the latest prior team composite until starting XI data is available.\n');
+  lines.push('  Prior-date baselines are diagnostic only and block customer-ready output when same-date basis is missing.');
+  lines.push('  Confirmed-lineup packets require a lineup-adjusted team model path; otherwise the packet is blocked.\n');
 
   // 5. Source Quality
   lines.push(section('5. Source Quality'));
@@ -1038,7 +1180,7 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
   if (matches.some(isForecastHeld)) {
     lines.push('  Model basis: official starting XIs are confirmed, but the public forecast is held until the model consumes the confirmed XI state.');
   } else {
-    lines.push(`  Model basis: latest prior team composite${provenance?.provisional ? ` from ${provenance.source_date}` : ''}; not today's official starting lineup.`);
+    lines.push(`  Model basis: ${currentBaselineSummary(provenance)}.`);
   }
   if (liveContextCount > 0) {
     lines.push(`  Perplexity research: live supplemental context captured for ${liveContextCount}/${matches.length} matches.`);

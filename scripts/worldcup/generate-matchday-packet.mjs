@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchStaticStructure } from './source-adapters/static-structure.mjs';
 import { fetchTeamBaseline } from './source-adapters/team-baseline.mjs';
 import { buildOpponentMatchup, loadCachedMatchup } from './source-adapters/opponent-matchup.mjs';
-import { fetchMatchdayData, loadCachedMatchday } from './source-adapters/matchday-data.mjs';
+import { loadCachedMatchday } from './source-adapters/matchday-data.mjs';
 import { loadCachedMarketContext, normalizeMarketContext } from './source-adapters/market-context.mjs';
 import { runWorldCupPerplexityResearch } from './source-adapters/perplexity-research.mjs';
 import { composeEvidenceLedgerForGame } from './lib/evidence-ledger.mjs';
@@ -68,6 +68,11 @@ function readJsonIfExists(path) {
   } catch {
     return null;
   }
+}
+
+function writeJson(path, payload) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
 function researchKeyToken(value) {
@@ -209,11 +214,68 @@ function buildLineupAdjustment(matchday, lineupLockedVerified) {
   };
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
+function buildPacketGate({ date, packetStage, stateRoot, compositeProvenance, matches, researchArtifact }) {
+  const reasons = [];
+  const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
+
+  if (compositeProvenance?.provisional) {
+    reasons.push({
+      code: 'CURRENT_TEAM_BASELINE_REQUIRED',
+      scope: 'packet',
+      detail: `same-date team baseline for ${date} is missing; prior baseline from ${compositeProvenance.source_date} is diagnostic only`,
+      next_artifact: resolve(stateRoot, 'worldcup', date, 'discovery', 'team_baseline.json'),
+      diagnostic_prior_path: compositeProvenance.source_path ?? null,
+    });
+  }
+
+  if (packetStage === 'lineup_lock' || packetStage === 'lineup_locked') {
+    for (const match of matches) {
+      const matchdayPath = resolve(stateRoot, 'worldcup', date, 'matchday', `${match.match_id}.json`);
+      if (!match.lineup_locked_verified) {
+        reasons.push({
+          code: 'OFFICIAL_LINEUP_VERIFICATION_REQUIRED',
+          scope: 'match',
+          match_id: match.match_id,
+          match_label: `${match.home_team} vs ${match.away_team}`,
+          detail: match.lineup_freshness?.reason ?? 'official starting XI not verified',
+          next_artifact: matchdayPath,
+        });
+        continue;
+      }
+      if (match.lineup_adjustment?.status === 'blocked' || match.model_consumes_lineup !== true) {
+        reasons.push({
+          code: 'LINEUP_ADJUSTED_MODEL_REQUIRED',
+          scope: 'match',
+          match_id: match.match_id,
+          match_label: `${match.home_team} vs ${match.away_team}`,
+          detail: match.lineup_adjustment?.reason ?? 'confirmed XI is present but no lineup-adjusted model path is sourced',
+          missing_fields: match.lineup_adjustment?.missing_fields ?? [],
+          next_artifact: matchdayPath,
+        });
+      }
+    }
+  }
+
+  if (!researchArtifact || !researchArtifact.schema) {
+    reasons.push({
+      code: 'PACKET_LOCAL_SOURCE_PROOF_REQUIRED',
+      scope: 'packet',
+      detail: 'Perplexity research artifact missing before packet write',
+      next_artifact: resolve(packetDir, `worldcup-${date}-${packetStage}.research.perplexity.json`),
+    });
+  }
+
+  return {
+    blocked: reasons.length > 0,
+    reasons,
+  };
+}
+
+export async function generateMatchdayPacket(inputOpts = null) {
+  const opts = inputOpts ?? parseArgs(process.argv.slice(2));
   if (opts.help) {
     console.log('Usage: node scripts/worldcup/generate-matchday-packet.mjs [--date YYYY-MM-DD] [--state-root state] [--match-id ID] [--packet-stage STAGE] [--refresh-lineups] [--dry-run]');
-    process.exit(0);
+    return;
   }
 
   const date = opts.date;
@@ -239,7 +301,11 @@ async function main() {
   let baseline = readJsonIfExists(baselinePath);
   if (!baseline) {
     console.log(`[worldcup] no cached baseline; fetching...`);
-    baseline = await fetchTeamBaseline({ stateRoot, date });
+    baseline = await fetchTeamBaseline({
+      stateRoot,
+      date,
+      structure,
+    });
     if (!baseline.ok) {
       // Pre-lock fallback: reuse the most recent PRIOR baseline (last available
       // composite) rather than emitting an empty all-BLOCKED board. Labeled
@@ -248,12 +314,19 @@ async function main() {
       if (prior) {
         console.log(`[worldcup] team baseline unavailable for ${date}; using PRIOR baseline from ${prior.sourceDate} (PRE_LOCK / provisional).`);
         baseline = prior.baseline;
-        compositeProvenance = { source_date: prior.sourceDate, provisional: true };
+        compositeProvenance = { source_date: prior.sourceDate, source_path: prior.path, provisional: true };
       } else {
         console.log(`[worldcup] WARNING: no team baseline (current or prior) available. Using empty fallback.`);
         baseline = { teams: [], team_count: 0 };
+        compositeProvenance = { source_date: null, source_path: null, provisional: true };
       }
+    } else if (!opts.dryRun) {
+      writeJson(baselinePath, baseline);
+      console.log(`[worldcup] baseline cached: ${baselinePath}`);
     }
+  }
+  if (!compositeProvenance && baseline?.teams?.length) {
+    compositeProvenance = { source_date: date, source_path: baselinePath, provisional: false };
   }
   const teamBaselines = Object.fromEntries((baseline.teams || []).map(t => [t.team_name, t]));
 
@@ -326,7 +399,7 @@ async function main() {
       refreshStartedAtIso: shouldRefreshLineups ? lineupRefreshStartedAt : null,
     });
     if (shouldRefreshLineups && !lineupFreshness.verified) {
-      throw new Error(`stale lineup cache for match ${match.match_id}; lineup_lock packets require the refreshed official XI snapshot`);
+      console.warn(`[worldcup] lineup verification not satisfied for match ${match.match_id}: ${lineupFreshness.reason}`);
     }
     const rawLineupStatus = matchday.ok
       ? ((matchday.home?.lineup_status === 'lineup_confirmed' && matchday.away?.lineup_status === 'lineup_confirmed')
@@ -336,11 +409,10 @@ async function main() {
     const lineupLockedVerified = rawLineupStatus === 'lineup_confirmed' && lineupFreshness.verified === true;
     const lineupStatus = lineupLockedVerified ? 'lineup_confirmed' : 'lineup_pending';
     const lineupAdjustment = buildLineupAdjustment(matchday, lineupLockedVerified);
+    const modelConsumesLineup = lineupLockedVerified && lineupAdjustment.status === 'ready';
     match.lineup_status = lineupStatus;
     match.lineup_locked_verified = lineupLockedVerified;
-    // A fresh official XI unlocks the public forecast; the separate
-    // lineup-adjusted model remains blocked until the missing layers exist.
-    match.model_consumes_lineup = lineupLockedVerified;
+    match.model_consumes_lineup = modelConsumesLineup;
     match.lineup_freshness = lineupFreshness;
     match.lineup_adjustment = lineupAdjustment;
     // Expose the (price-free) lineup payload to the renderer for the
@@ -444,29 +516,43 @@ async function main() {
       parsed_markets: marketContexts, // family / period / side / line / settlement / normalized_target
       lineup_freshness: lineupFreshness,
       lineup_locked_verified: lineupLockedVerified,
-      model_consumes_lineup: lineupLockedVerified,
+      model_consumes_lineup: modelConsumesLineup,
       lineup_adjustment: lineupAdjustment,
     });
   }
 
-  const researchSummary = {
-    status: research.status,
-    ok: research.ok,
-    outPath: research.outPath,
-    match_count: todayMatches.length,
-    record_count: researchRecords.length,
-    attached_count: attachedResearchCount,
-    attached_match_ids: attachedResearchMatchIds,
-    source_quality: research.artifact?.source_quality ?? null,
-    reason: research.artifact?.reason ?? null,
-  };
-
-  // 4. Render packet
   const packetStage = opts.packetStage
     || (todayMatches.some(m => m.lineup_status === 'lineup_confirmed')
       ? 'lineup_locked'
       : 'morning_board');
+  const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
+  const packetBaseName = `worldcup-${date}-${packetStage}${nameSuffix}`;
+  const researchSnapshotPath = resolve(packetDir, `${packetBaseName}.research.perplexity.json`);
+  const researchSummary = {
+    status: research.status,
+    ok: research.ok,
+    match_count: todayMatches.length,
+    record_count: researchRecords.length,
+    attached_count: attachedResearchCount,
+    attached_match_ids: attachedResearchMatchIds,
+    preview_attached_count: 0,
+    preview_attached_match_ids: [],
+    source_quality: research.artifact?.source_quality ?? null,
+    reason: research.artifact?.reason ?? null,
+    attachment_contract: research.artifact?.attachment_contract ?? null,
+    outPath: researchSnapshotPath,
+    sourceOutPath: research.outPath,
+  };
+  const packetGate = buildPacketGate({
+    date,
+    packetStage,
+    stateRoot,
+    compositeProvenance,
+    matches: todayMatches,
+    researchArtifact: research.artifact,
+  });
 
+  // 4. Render packet
   const packetText = renderWorldCupPacket({
     matches: todayMatches,
     boards,
@@ -474,24 +560,29 @@ async function main() {
       date,
       packet_stage: packetStage,
       composite_provenance: compositeProvenance,
+      packet_gate: packetGate,
       research: researchSummary,
     },
   });
 
   // 5. Write packet + audit artifacts
-  const packetDir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
   mkdirSync(packetDir, { recursive: true });
 
   if (!opts.dryRun) {
+    if (research.artifact) {
+      writeFileSync(researchSnapshotPath, `${JSON.stringify(research.artifact, null, 2)}\n`, 'utf8');
+      console.log(`[worldcup] research snapshot written: ${researchSnapshotPath}`);
+    }
     const { txtPath, metaPath } = writeWorldCupPacket({
       dir: packetDir,
-      baseName: `worldcup-${date}-${packetStage}${nameSuffix}`,
+      baseName: packetBaseName,
       packetText,
       meta: {
         date,
         packet_stage: packetStage,
         match_count: todayMatches.length,
         composite_provenance: compositeProvenance,
+        packet_gate: packetGate,
         research: researchSummary,
       },
     });
@@ -504,6 +595,7 @@ async function main() {
       generated_at: new Date().toISOString(),
       date,
       packet_stage: packetStage,
+      packet_gate: packetGate,
       records: auditRecords,
       research: research.artifact,
     }, null, 2), 'utf8');
@@ -516,10 +608,16 @@ async function main() {
   }
 }
 
+async function main() {
+  await generateMatchdayPacket(parseArgs(process.argv.slice(2)));
+}
+
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  main().catch(e => {
-    console.error(e);
-    process.exit(1);
-  });
+  main()
+    .then(() => process.exit(0))
+    .catch(e => {
+      console.error(e);
+      process.exit(1);
+    });
 }
