@@ -1,10 +1,10 @@
 // CPC research tool registry for the MCP server.
 //
 // Each entry is { name, config, handler } and is registered verbatim onto the
-// McpServer in src/server.js. Every handler returns a "full output" envelope:
-// the complete human-readable text in `content` and the complete result object
-// in `structuredContent`. Pass `compact: true` (or set MCP_COMPACT_DEFAULT=true)
-// to fall back to the short card instead.
+// McpServer in src/server.js. Every handler returns a compact, app-safe card by
+// default: a short human-readable summary in `content` and a structured card in
+// `structuredContent`. Pass `compact: true` (or set MCP_COMPACT_DEFAULT=true)
+// for the shortest one-line content version.
 //
 // Hard constraints carried from the project rules:
 //   - mentions tools run FRESH research and FAIL CLOSED. They never render from a
@@ -20,7 +20,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as z from 'zod/v4'
 
-import { buildFocusedKalshiMarketPlan, buildEventMarketPlanSummary } from './eventMarketTool.js'
+import { buildFocusedKalshiMarketPlan } from './eventMarketTool.js'
 import { analyzeCompositeMarketLink } from '../scripts/mlb/link-composite-card.mjs'
 import { generateMentionEventPacket, parseEventIdFromUrl } from '../scripts/packets/generate-mention-event.mjs'
 import { resolveOnlyMentionEvents, writeKalshiEventPackets } from '../scripts/packets/generate-mentions-daily.mjs'
@@ -28,6 +28,7 @@ import { loadHistory, buildSettledHistoryArtifact } from '../scripts/mentions/se
 import { buildSportsSettledHistory } from '../scripts/mentions/sports-settled-history.mjs'
 import { loadEarningsHistory, buildEarningsQuarterLayer } from '../scripts/mentions/earnings-quarter-history.mjs'
 import { loadMlbScoring, locateMlbArtifacts, buildMlbSlatePacket } from '../scripts/packets/generate-mlb-daily.mjs'
+import { buildAppCardSummary, renderAppCardText, PRICE_CONTEXT_DISPLAY_ONLY } from '../scripts/shared/cpc-card-summary.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const COMPACT_DEFAULT = process.env.MCP_COMPACT_DEFAULT === 'true'
@@ -45,27 +46,54 @@ function wantsCompact(arg) {
   return arg === true || (arg === undefined && COMPACT_DEFAULT)
 }
 
-function asText(value) {
-  return typeof value === 'string' ? value : JSON.stringify(value, null, 2)
-}
-
-// Full output by default: complete text in content + full object in structuredContent.
-function envelope({ text, data, compactText, compactData, compact }) {
-  const useCompact = wantsCompact(compact)
-  const outData = useCompact ? (compactData ?? data) : data
-  const outText = useCompact ? asText(compactText ?? compactData ?? text) : asText(text ?? data)
+function buildToolCardResponse(cardInput = {}, { compact = false, content = null, warnings = [], blockedReason = null, sourceSummary = null } = {}) {
+  const card = buildAppCardSummary({
+    ...cardInput,
+    sourceSummary: sourceSummary ?? cardInput.sourceSummary ?? 'Source summary unavailable.',
+    warnings,
+    blockedReason: blockedReason ?? cardInput.blockedReason ?? cardInput.blocked_reason ?? null,
+    modelRead: cardInput.modelRead ?? cardInput.model_read ?? null,
+  })
+  const text = content ?? (wantsCompact(compact)
+    ? `${card.title}. ${card.plain_english} Price context is display-only.`
+    : renderAppCardText(card))
   return {
-    content: [{ type: 'text', text: outText }],
-    structuredContent: outData,
+    content: [{ type: 'text', text }],
+    structuredContent: card,
   }
 }
 
-function errorEnvelope(message, extra = {}) {
+function buildBlockedToolCard(message, cardInput = {}, { compact = false, sourceSummary = null, warnings = [] } = {}) {
   return {
     isError: true,
-    content: [{ type: 'text', text: message }],
-    structuredContent: { status: 'error', error: message, ...extra },
+    ...buildToolCardResponse({
+      title: cardInput.title ?? 'Blocked',
+      plainEnglish: cardInput.plainEnglish ?? message,
+      settlement: cardInput.settlement ?? 'No output was produced.',
+      route: cardInput.route ?? 'tool/blocked',
+      cpcRead: cardInput.cpcRead ?? 'BLOCKED',
+      modelRead: cardInput.modelRead ?? cardInput.model_read ?? message,
+      evidenceStatus: cardInput.evidenceStatus ?? 'blocked',
+      baseRate: cardInput.baseRate ?? 'unavailable',
+      priceContext: cardInput.priceContext ?? PRICE_CONTEXT_DISPLAY_ONLY,
+      ticker: cardInput.ticker ?? null,
+      marketId: cardInput.marketId ?? null,
+      eventId: cardInput.eventId ?? null,
+    }, {
+      compact,
+      sourceSummary: sourceSummary ?? 'The tool could not produce an app-safe result.',
+      warnings: [...warnings, message],
+      blockedReason: message,
+      content: `Blocked: ${message}`,
+    }),
   }
+}
+
+function getAppCard(result = {}) {
+  return result?.compact_card?.card
+    ?? result?.user_facing?.card
+    ?? result?.card
+    ?? null
 }
 
 // America/Chicago is the canonical CPC date anchor (never UTC).
@@ -121,11 +149,11 @@ export function buildResearchTools({
     name: 'analyze_kalshi_market_url',
     config: {
       description:
-        'Call this immediately when the user pastes a kalshi.com/markets URL. Returns the FULL Captains Prediction Companion plan (complete card + context + market view). Pass compact:true for just the short card.',
+        'Call this immediately when the user pastes a kalshi.com/markets URL. Returns a concise CPC card with plain-English meaning, settlement, model read, and display-only price context.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         url: z.string().min(1).describe('A Kalshi market or event URL'),
-        compact: z.boolean().optional().describe('Return the short card instead of the full plan'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ url, compact }) => {
@@ -133,14 +161,37 @@ export function buildResearchTools({
         pipelineService?.recordRecentUrl?.(url)
         const composite = await marketLinkAnalyzer({ url })
         if (composite?.handled) {
-          const card = composite?.compact_card ?? composite
-          return envelope({ text: composite, data: composite, compactText: card, compactData: card, compact })
+          const card = getAppCard(composite) ?? composite?.compact_card?.card ?? composite?.compact_card ?? composite
+          return buildToolCardResponse(card, {
+            compact,
+            sourceSummary: 'Kalshi market page and CPC market route.',
+            warnings: ['Price context is display-only and not used in scoring.'],
+            content: wantsCompact(compact)
+              ? `${card?.title ?? 'Kalshi market'}. ${card?.plain_english ?? 'This card explains the market in plain English.'}`
+              : null,
+          })
         }
         const result = await buildFocusedKalshiMarketPlan({ url, venue: 'Kalshi' }, { pipelineService })
-        const card = buildEventMarketPlanSummary(result)
-        return envelope({ text: result, data: result, compactText: card, compactData: card, compact })
+        const card = getAppCard(result) ?? result?.user_facing?.card ?? result?.user_facing ?? result
+        return buildToolCardResponse(card, {
+          compact,
+          sourceSummary: 'Kalshi market page and CPC market route.',
+          warnings: ['Price context is display-only and not used in scoring.'],
+        })
       } catch (err) {
-        return errorEnvelope(`analyze_kalshi_market_url failed: ${err.message}`, { url })
+        return buildBlockedToolCard(`analyze_kalshi_market_url could not build a card.`, {
+          title: 'Kalshi market card blocked',
+          plainEnglish: 'The market card could not be built from the current input.',
+          route: 'analyze_kalshi_market_url',
+          modelRead: err.message,
+          ticker: null,
+          marketId: null,
+          eventId: null,
+        }, {
+          compact,
+          sourceSummary: 'Kalshi market page and CPC market route.',
+          warnings: [String(err.message ?? 'Unknown error')],
+        })
       }
     },
   })
@@ -152,19 +203,26 @@ export function buildResearchTools({
     name: 'mentions_research',
     config: {
       description:
-        'Run fresh Captains Prediction Companion mentions research for ANY Kalshi mention event (Trump/White House, Fed, sports announcer/rally, earnings, etc.) and return the complete rendered packet. Provide event_ticker (KX...) or event_url. Fresh every call, never cached; fails closed if no usable source-backed research exists.',
+        'Run fresh Captains Prediction Companion mentions research for any Kalshi mention event and return a concise card with the event meaning, model read, and source-backed status. Provide event_ticker (KX...) or event_url. Fresh every call, never cached; fails closed if no usable source-backed research exists.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         event_url: z.string().optional().describe('Kalshi event URL'),
         event_ticker: z.string().optional().describe('Kalshi event ticker (KX...)'),
         date: z.string().optional().describe('YYYY-MM-DD (defaults to America/Chicago today)'),
-        compact: z.boolean().optional().describe('Return a one-line summary instead of the full packet'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ event_url, event_ticker, date, compact }) => {
       const ticker = (event_ticker || parseEventIdFromUrl(event_url ?? '') || '').toUpperCase()
       if (!ticker) {
-        return errorEnvelope('mentions_research needs a valid event_ticker (KX...) or event_url')
+        return buildBlockedToolCard('mentions_research needs a valid event_ticker (KX...) or event_url', {
+          title: 'Mentions research blocked',
+          plainEnglish: 'The tool needs a Kalshi event ticker or event URL.',
+          route: 'mentions_research',
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: 'No event identifier was provided.',
+        }, { compact, sourceSummary: 'Fresh mentions research was not started.' })
       }
       const day = date || chicagoToday()
       const runStartedAtUtc = new Date().toISOString()
@@ -179,7 +237,16 @@ export function buildResearchTools({
         })
         const events = (only?.allEvents ?? []).filter((ev) => ev?.event_ticker === ticker)
         if (!events.length) {
-          return errorEnvelope(`mentions_research: event ${ticker} not found for ${day} (fail-closed)`, { event_ticker: ticker, date: day })
+          return buildBlockedToolCard(`mentions_research: event ${ticker} not found for ${day}.`, {
+            title: `Mentions research blocked for ${ticker}`,
+            plainEnglish: 'The requested event was not found for the selected date.',
+            route: 'mentions_research',
+            ticker,
+            eventId: ticker,
+            evidenceStatus: 'blocked',
+            cpcRead: 'BLOCKED',
+            modelRead: `No event found for ${day}.`,
+          }, { compact, sourceSummary: 'Fresh mentions research did not find a matching event.' })
         }
         const res = await packetWriter({
           events,
@@ -192,23 +259,61 @@ export function buildResearchTools({
           runStartedAtUtc,
         })
         const item = (res?.items ?? []).find((i) => i.name === ticker)
-        const text = item?.previewText
-        if (!text) {
-          return errorEnvelope(
-            `mentions_research: ${ticker} produced no customer packet (fail-closed — no usable source-backed evidence).`,
-            { event_ticker: ticker, date: day, failed: res?.failedTickers ?? [] },
+        if (!item?.previewText) {
+          return buildBlockedToolCard(
+            `mentions_research: ${ticker} produced no app-safe card for ${day}.`,
+            {
+              title: `Mentions research blocked for ${ticker}`,
+              plainEnglish: 'The research ran, but no customer-safe card was produced.',
+              route: 'mentions_research',
+              ticker,
+              eventId: ticker,
+              evidenceStatus: 'blocked',
+              cpcRead: 'BLOCKED',
+              modelRead: 'No usable source-backed evidence was available.',
+            },
+            {
+              compact,
+              sourceSummary: 'Fresh mentions research did not produce a usable packet.',
+              warnings: (res?.failedTickers ?? []).map((failed) => `Missing source coverage for ${failed}.`),
+            },
           )
         }
-        const compactLine = `mentions ${ticker} @ ${day} — packet rendered (${text.length} chars)`
-        return envelope({
-          text,
-          data: { event_ticker: ticker, date: day, previewText: text, failedTickers: res?.failedTickers ?? [] },
-          compactText: compactLine,
-          compactData: { summary: compactLine, event_ticker: ticker, date: day },
+        const warnings = []
+        if (Array.isArray(res?.failedTickers) && res.failedTickers.length) {
+          warnings.push(`Missing source coverage for ${res.failedTickers.length} event${res.failedTickers.length === 1 ? '' : 's'}.`)
+        }
+        return buildToolCardResponse({
+          title: `Mentions research for ${ticker}`,
+          plainEnglish: 'Fresh source-backed mentions research was rendered for the requested event.',
+          settlement: 'Settlement follows the exact wording rules in the market.',
+          route: 'mentions_research',
+          cpcRead: 'WATCH',
+          modelRead: `Fresh mentions research for ${ticker} is ready.`,
+          evidenceStatus: warnings.length === 0 ? 'complete' : 'thin',
+          baseRate: 'unavailable',
+          ticker,
+          marketId: ticker,
+          eventId: ticker,
+        }, {
           compact,
+          sourceSummary: 'Fresh mentions research card from the daily dry-run route.',
+          warnings: ['Price context is display-only and not used in scoring.', ...warnings],
         })
       } catch (err) {
-        return errorEnvelope(`mentions_research failed (fail-closed, no cache): ${err.message}`, { event_ticker: ticker, date: day })
+        return buildBlockedToolCard(`mentions_research failed: ${err.message}`, {
+          title: `Mentions research blocked for ${ticker}`,
+          plainEnglish: 'The research could not complete.',
+          route: 'mentions_research',
+          ticker,
+          eventId: ticker,
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: String(err.message ?? 'Unknown error'),
+        }, {
+          compact,
+          sourceSummary: 'Fresh mentions research failed before a card could be built.',
+        })
       }
     },
   })
@@ -218,36 +323,77 @@ export function buildResearchTools({
     name: 'earnings_mention_research',
     config: {
       description:
-        'Run the manual EARNINGS-CALL mention research path for a single Kalshi earnings event and return the full rendered packet. Use only for earnings-call mention markets; for other families use mentions_research. Fresh every call, fails closed.',
+        'Run the manual earnings-call mention research path for a single Kalshi earnings event and return a concise card with the event meaning, model read, and source-backed status. Use only for earnings-call mention markets; for other families use mentions_research. Fresh every call, fails closed.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         event_url: z.string().optional().describe('Kalshi event URL'),
         event_id: z.string().optional().describe('Kalshi event id (KX...)'),
         date: z.string().optional().describe('YYYY-MM-DD (defaults to America/Chicago today)'),
-        compact: z.boolean().optional().describe('Return a short summary line instead of the full packet'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ event_url, event_id, date, compact }) => {
       const eventId = event_id || parseEventIdFromUrl(event_url ?? '')
       if (!eventId) {
-        return errorEnvelope('earnings_mention_research needs a valid event_id (KX...) or event_url')
+        return buildBlockedToolCard('earnings_mention_research needs a valid event_id (KX...) or event_url', {
+          title: 'Earnings mention research blocked',
+          plainEnglish: 'The tool needs a Kalshi event id or event URL.',
+          route: 'earnings_mention_research',
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: 'No event identifier was provided.',
+        }, { compact, sourceSummary: 'Fresh earnings mention research was not started.' })
       }
       const day = date || chicagoToday()
       try {
         const result = await earningsMentionRunner({ eventUrl: event_url ?? null, eventId, date: day })
-        const packetText = readFileSync(result.packetPath, 'utf8')
-        const compactLine =
-          `earnings mention ${eventId} @ ${day} — route=${result?.route?.route ?? 'n/a'} ` +
-          `janitor=${result?.janitor?.verdict ?? 'n/a'} sources=${result?.sanitized?.source_urls?.length ?? 0}`
-        return envelope({
-          text: packetText,
-          data: { packetText, ...result },
-          compactText: compactLine,
-          compactData: { summary: compactLine, packetPath: result.packetPath },
+        const sourceCount = Array.isArray(result?.sanitized?.source_urls) ? result.sanitized.source_urls.length : 0
+        if (sourceCount <= 0) {
+          return buildBlockedToolCard(`earnings_mention_research: ${eventId} has no declared source URLs for ${day}.`, {
+            title: 'Earnings mention research blocked',
+            plainEnglish: 'The research ran, but no declared source URLs were available for the event.',
+            route: 'earnings_mention_research',
+            eventId,
+            ticker: eventId,
+            evidenceStatus: 'blocked',
+            cpcRead: 'BLOCKED',
+            modelRead: 'No usable source-backed event evidence was available.',
+          }, {
+            compact,
+            sourceSummary: 'Fresh earnings research did not produce declared source URLs.',
+          })
+        }
+        return buildToolCardResponse({
+          title: `Earnings mention research for ${eventId}`,
+          plainEnglish: 'Fresh source-backed research was rendered for the earnings mention event.',
+          settlement: 'Settlement follows the market rules for the exact earnings wording.',
+          route: 'earnings_mention_research',
+          cpcRead: 'WATCH',
+          modelRead: `Fresh earnings research for ${eventId} is ready.`,
+          evidenceStatus: 'complete',
+          baseRate: 'unavailable',
+          ticker: eventId,
+          marketId: eventId,
+          eventId,
+        }, {
           compact,
+          sourceSummary: `Fresh earnings research card with ${sourceCount} declared source URL${sourceCount === 1 ? '' : 's'}.`,
+          warnings: ['Price context is display-only and not used in scoring.'],
         })
       } catch (err) {
-        return errorEnvelope(`earnings_mention_research failed (fail-closed, no cache): ${err.message}`, { event_id: eventId, date: day })
+        return buildBlockedToolCard(`earnings_mention_research failed: ${err.message}`, {
+          title: 'Earnings mention research blocked',
+          plainEnglish: 'The research could not complete.',
+          route: 'earnings_mention_research',
+          eventId,
+          ticker: eventId,
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: String(err.message ?? 'Unknown error'),
+        }, {
+          compact,
+          sourceSummary: 'Fresh earnings research failed before a card could be built.',
+        })
       }
     },
   })
@@ -257,7 +403,7 @@ export function buildResearchTools({
     name: 'settled_event_history',
     config: {
       description:
-        'Look up settled-event history (price-free base rates) for a Kalshi series. Routes by family: family="sports" uses the sports settled engine, family="earnings" uses the per-company quarter history, otherwise the generic settled-history match. Returns the full artifact (sample size, hit rate, settlement breakdown, match tier).',
+        'Look up settled-event history (price-free base rates) for a Kalshi series and return a concise card with the sample size, hit rate, and settlement summary. Routes by family: family="sports" uses the sports settled engine, family="earnings" uses the per-company quarter history, otherwise the generic settled-history match.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         series_ticker: z.string().optional().describe('Kalshi series ticker to scope history'),
@@ -267,7 +413,7 @@ export function buildResearchTools({
         entity: z.string().optional().describe('Entity/company ticker (earnings) or actor (general/sports)'),
         horizon: z.string().optional(),
         max_samples: z.number().int().positive().optional(),
-        compact: z.boolean().optional().describe('Return just the summary note'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ series_ticker, family = 'general', event_title, route, entity, horizon, max_samples, compact }) => {
@@ -281,17 +427,66 @@ export function buildResearchTools({
             entity: entity ?? null,
             horizon: horizon ?? 'event',
           })
-          const note = artifact?.note ?? artifact?.settledLayer?.note ?? 'sports settled history'
-          return envelope({ text: artifact, data: artifact, compactText: note, compactData: { note }, compact })
+          const sampleSize = artifact?.sample_size ?? artifact?.settledLayer?.sample_size ?? null
+          const hitRate = artifact?.hit_rate ?? artifact?.settledLayer?.hit_rate ?? null
+          return buildToolCardResponse({
+            title: `Settled history for ${series_ticker ?? 'the requested sports series'}`,
+            plainEnglish: 'This card shows price-free settled history for the sports family.',
+            settlement: 'No price is used here. It is a historical reference card only.',
+            route: `settled_event_history/${family}`,
+            cpcRead: 'WATCH',
+            modelRead: artifact?.note ?? 'Sports settled history is ready.',
+            evidenceStatus: artifact?.usable === false ? 'unavailable' : 'complete',
+            baseRate: {
+              sample_size: sampleSize,
+              hit_rate: hitRate,
+              tier: artifact?.match_tier ?? artifact?.settledLayer?.match_tier ?? null,
+              summary: artifact?.note ?? 'sports settled history',
+            },
+            priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+            ticker: series_ticker ?? null,
+            marketId: series_ticker ?? null,
+            eventId: series_ticker ?? null,
+          }, {
+            compact,
+            sourceSummary: 'Price-free settled history sample for the sports family.',
+            warnings: artifact?.usable === false ? ['No settled samples were available.'] : [],
+          })
         }
         if (family === 'earnings') {
           const ticker = entity ?? series_ticker
-          if (!ticker) return errorEnvelope('earnings family needs entity (company ticker)')
+          if (!ticker) {
+            return buildBlockedToolCard('earnings family needs entity (company ticker)', {
+              title: 'Earnings settled history blocked',
+              plainEnglish: 'The earnings history tool needs a company ticker.',
+              route: 'settled_event_history/earnings',
+              evidenceStatus: 'blocked',
+              cpcRead: 'BLOCKED',
+              modelRead: 'No company ticker was provided.',
+            }, { compact, sourceSummary: 'Price-free earnings settled history could not be started.' })
+          }
           const quarters = await loadEarningsHistory({ ticker })
           const layer = buildEarningsQuarterLayer({ ticker, terms: [], quarters })
-          const data = { ticker, quarters, layer }
-          const note = `earnings history ${ticker}: ${Array.isArray(quarters) ? quarters.length : 0} quarter(s)`
-          return envelope({ text: data, data, compactText: note, compactData: { note }, compact })
+          return buildToolCardResponse({
+            title: `Earnings settled history for ${ticker}`,
+            plainEnglish: 'This card shows price-free settled history for the earnings family.',
+            settlement: 'No price is used here. It is a historical reference card only.',
+            route: 'settled_event_history/earnings',
+            cpcRead: 'WATCH',
+            modelRead: `Earnings settled history for ${ticker} is ready.`,
+            evidenceStatus: Array.isArray(quarters) && quarters.length > 0 ? 'complete' : 'unavailable',
+            baseRate: {
+              sample_size: Array.isArray(quarters) ? quarters.length : 0,
+              summary: `quarters=${Array.isArray(quarters) ? quarters.length : 0}`,
+            },
+            priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+            ticker,
+            marketId: ticker,
+            eventId: ticker,
+          }, {
+            compact,
+            sourceSummary: 'Price-free settled history sample for the earnings family.',
+          })
         }
         const records = await loadHistory({ seriesTicker: series_ticker ?? null })
         const artifact = buildSettledHistoryArtifact({
@@ -302,15 +497,44 @@ export function buildResearchTools({
           seriesTicker: series_ticker ?? null,
           maxSamples: max_samples ?? 5,
         })
-        return envelope({
-          text: artifact,
-          data: artifact,
-          compactText: artifact.note,
-          compactData: { note: artifact.note, hit_rate: artifact.hit_rate, sample_size: artifact.sample_size },
+        return buildToolCardResponse({
+          title: `Settled history for ${series_ticker ?? 'the requested series'}`,
+          plainEnglish: 'This card shows price-free settled history for the requested series.',
+          settlement: 'No price is used here. It is a historical reference card only.',
+          route: `settled_event_history/${family}`,
+          cpcRead: 'WATCH',
+          modelRead: artifact?.note ?? 'Settled history is ready.',
+          evidenceStatus: artifact?.usable === false ? 'unavailable' : 'complete',
+          baseRate: {
+            sample_size: artifact?.sample_size ?? null,
+            hit_rate: artifact?.hit_rate ?? null,
+            tier: artifact?.match_tier ?? null,
+            summary: artifact?.note ?? 'unavailable',
+          },
+          priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+          ticker: series_ticker ?? null,
+          marketId: series_ticker ?? null,
+          eventId: series_ticker ?? null,
+        }, {
           compact,
+          sourceSummary: 'Price-free settled history sample.',
+          warnings: artifact?.usable === false ? ['No settled samples were available.'] : [],
         })
       } catch (err) {
-        return errorEnvelope(`settled_event_history failed: ${err.message}`, { series_ticker, family })
+        return buildBlockedToolCard(`settled_event_history failed: ${err.message}`, {
+          title: 'Settled history blocked',
+          plainEnglish: 'The settled history card could not be built.',
+          route: `settled_event_history/${family}`,
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: String(err.message ?? 'Unknown error'),
+          ticker: series_ticker ?? null,
+          marketId: series_ticker ?? null,
+          eventId: series_ticker ?? null,
+        }, {
+          compact,
+          sourceSummary: 'Price-free settled history could not be built.',
+        })
       }
     },
   })
@@ -320,29 +544,46 @@ export function buildResearchTools({
     name: 'run_composite_model',
     config: {
       description:
-        'Explicitly run the CPC composite model for a Kalshi market URL and return the full composite board (per-team composite scores, routed lane, model output). Use this when the user wants the composite read for an MLB market, even if analyze_kalshi_market_url did not auto-route to it. Pass compact:true for just the card.',
+        'Explicitly run the CPC composite model for a Kalshi market URL and return a concise MLB card with the routed lane, plain-English meaning, model read, and display-only price context. Use this when the user wants the composite read for an MLB market.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         url: z.string().min(1).describe('Kalshi market/event URL to route into the composite model'),
         date: z.string().optional().describe('YYYY-MM-DD slate date (defaults to America/Chicago today)'),
-        compact: z.boolean().optional().describe('Return the compact card instead of the full board'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ url, date, compact }) => {
       const day = date || chicagoToday()
       try {
         const result = await marketLinkAnalyzer({ url, date: day, forceHandle: true })
-        const card = result?.compact_card ?? result
+        const card = getAppCard(result) ?? result?.compact_card?.card ?? result?.compact_card ?? result
         if (result?.ok === false) {
-          return {
-            isError: false,
-            content: [{ type: 'text', text: asText(result) }],
-            structuredContent: result,
-          }
+          return buildBlockedToolCard(result?.reason ?? 'run_composite_model could not build a card.', {
+            title: 'MLB composite blocked',
+            plainEnglish: 'The MLB composite card could not be built from the current input.',
+            route: 'run_composite_model',
+            modelRead: result?.reason ?? 'Blocked by route or source availability.',
+          }, {
+            compact,
+            sourceSummary: 'Kalshi market page and MLB composite route.',
+            warnings: [result?.reason_code ?? result?.reason ?? 'Blocked result.'],
+          })
         }
-        return envelope({ text: result, data: result, compactText: card, compactData: card, compact })
+        return buildToolCardResponse(card, {
+          compact,
+          sourceSummary: 'Kalshi market page and MLB composite model.',
+          warnings: ['Price context is display-only and not used in scoring.'],
+        })
       } catch (err) {
-        return errorEnvelope(`run_composite_model failed: ${err.message}`, { url, date: day })
+        return buildBlockedToolCard(`run_composite_model failed: ${err.message}`, {
+          title: 'MLB composite blocked',
+          plainEnglish: 'The MLB composite card could not be built.',
+          route: 'run_composite_model',
+          modelRead: String(err.message ?? 'Unknown error'),
+        }, {
+          compact,
+          sourceSummary: 'Kalshi market page and MLB composite route.',
+        })
       }
     },
   })
@@ -352,11 +593,11 @@ export function buildResearchTools({
     name: 'mlb_sports_preview',
     config: {
       description:
-        'Return the full Captains Prediction Companion MLB slate preview packet for a date. Requires the daily scoring pipeline to have already produced picks for that date; otherwise fails with guidance. Defaults to America/Chicago today.',
+        'Return a concise Captains Prediction Companion MLB slate preview card for a date. Requires the daily scoring pipeline to have already produced picks for that date; otherwise fails with guidance. Defaults to America/Chicago today.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         date: z.string().optional().describe('YYYY-MM-DD (defaults to America/Chicago today)'),
-        compact: z.boolean().optional().describe('Return slate counts instead of the full packet'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ date, compact }) => {
@@ -364,22 +605,60 @@ export function buildResearchTools({
       try {
         const scoring = loadMlbScoring('state', day)
         if (!scoring) {
-          return errorEnvelope(`No MLB scoring found for ${day}. Run the daily MLB pipeline first.`, { date: day })
+          return buildBlockedToolCard(`No MLB scoring found for ${day}. Run the daily MLB pipeline first.`, {
+            title: 'MLB preview blocked',
+            plainEnglish: 'The daily MLB pipeline has not produced scoring for this date.',
+            route: 'mlb_sports_preview',
+            evidenceStatus: 'blocked',
+            cpcRead: 'BLOCKED',
+            modelRead: `No MLB scoring found for ${day}.`,
+            eventId: day,
+          }, { compact, sourceSummary: 'Latest MLB slate packet was not available.' })
         }
         const artifacts = locateMlbArtifacts('state', day)
         const slate = buildMlbSlatePacket({ date: day, scoring, artifacts })
         if (!slate) {
-          return errorEnvelope(`No MLB slate could be built for ${day} (no qualifying picks).`, { date: day })
+          return buildBlockedToolCard(`No MLB slate could be built for ${day} (no qualifying picks).`, {
+            title: 'MLB preview blocked',
+            plainEnglish: 'The daily MLB pipeline did not produce a qualifying slate.',
+            route: 'mlb_sports_preview',
+            evidenceStatus: 'blocked',
+            cpcRead: 'BLOCKED',
+            modelRead: `No qualifying picks were available for ${day}.`,
+            eventId: day,
+          }, { compact, sourceSummary: 'Latest MLB slate packet was not available.' })
         }
-        return envelope({
-          text: slate.text,
-          data: slate,
-          compactText: `MLB ${day} — ${slate.counts.board}/${slate.counts.total} board picks, ${slate.counts.lineupPending} awaiting lineups`,
-          compactData: { date: day, counts: slate.counts },
+        return buildToolCardResponse({
+          title: `MLB slate preview for ${day}`,
+          plainEnglish: 'This card summarizes the latest MLB slate packet for the selected date.',
+          settlement: 'Preview only. No settlement is attached to the preview itself.',
+          route: 'mlb_sports_preview',
+          cpcRead: 'WATCH',
+          modelRead: `MLB slate packet for ${day} is ready.`,
+          evidenceStatus: 'complete',
+          baseRate: {
+            summary: `${slate.counts.board}/${slate.counts.total} board picks, ${slate.counts.lineupPending} awaiting lineups`,
+          },
+          priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+          eventId: day,
+        }, {
           compact,
+          sourceSummary: 'Latest MLB slate packet generated by the daily pipeline.',
+          warnings: [
+            `${slate.counts.board}/${slate.counts.total} board picks.`,
+            `${slate.counts.lineupPending} awaiting lineups.`,
+          ],
         })
       } catch (err) {
-        return errorEnvelope(`mlb_sports_preview failed: ${err.message}`, { date: day })
+        return buildBlockedToolCard(`mlb_sports_preview failed: ${err.message}`, {
+          title: 'MLB preview blocked',
+          plainEnglish: 'The MLB preview card could not be built.',
+          route: 'mlb_sports_preview',
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: String(err.message ?? 'Unknown error'),
+          eventId: day,
+        }, { compact, sourceSummary: 'Latest MLB slate packet could not be built.' })
       }
     },
   })
@@ -390,33 +669,65 @@ export function buildResearchTools({
     name: 'sports_preview',
     config: {
       description:
-        'Return the latest Captains Prediction Companion preview packet for a sport vertical, as generated by its daily cron. sport="nascar" (Sunday race), "ufc" (weekly card), or "worldcup" (matchday board). Optional match filters World Cup to one match by team slug (e.g. "portugal-uzbekistan" or "portugal"). Read-only — surfaces the freshest banked packet; if none exists it fails with guidance. Defaults to America/Chicago today.',
+        'Return the latest Captains Prediction Companion preview card for a sport vertical, as generated by its daily cron. sport="nascar" (Sunday race), "ufc" (weekly card), or "worldcup" (matchday board). Optional match filters World Cup to one match by team slug (e.g. "portugal-uzbekistan" or "portugal"). Read-only — surfaces the freshest banked packet; if none exists it fails with guidance. Defaults to America/Chicago today.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         sport: z.enum(['nascar', 'ufc', 'worldcup']).describe('Which sport vertical to preview'),
         date: z.string().optional().describe('YYYY-MM-DD (defaults to America/Chicago today)'),
         match: z.string().optional().describe('Single-match filter by team slug, e.g. "portugal-uzbekistan" (World Cup)'),
-        compact: z.boolean().optional().describe('Return a one-line summary instead of the full packet'),
+        compact: z.boolean().optional().describe('Return the shortest card text instead of the default concise card'),
       },
     },
     handler: async ({ sport, date, match, compact }) => {
       const day = date || chicagoToday()
       try {
-        const { text, file } = await sportsRunner({ sport, date: day, match: match ?? null })
+        const { text } = await sportsRunner({ sport, date: day, match: match ?? null })
         if (!text) {
           const scope = match ? `no ${sport} packet matching "${match}"` : `no ${sport} packet`
-          return errorEnvelope(`sports_preview: ${scope} found for ${day}. The daily cron generates these; run it for that date first.`, { sport, date: day, match: match ?? null })
+          return buildBlockedToolCard(`sports_preview: ${scope} found for ${day}. The daily cron generates these; run it for that date first.`, {
+            title: `${sport.toUpperCase()} preview blocked`,
+            plainEnglish: 'The latest banked preview packet was not available.',
+            route: `sports_preview/${sport}`,
+            evidenceStatus: 'blocked',
+            cpcRead: 'BLOCKED',
+            modelRead: `No ${sport} packet was available for ${day}.`,
+            eventId: day,
+          }, {
+            compact,
+            sourceSummary: 'Latest banked sport preview packet was not available.',
+          })
         }
-        const compactLine = `${sport} preview @ ${day} — ${file ?? 'packet'} (${text.length} chars)`
-        return envelope({
-          text,
-          data: { sport, date: day, match: match ?? null, file: file ?? null, packetText: text },
-          compactText: compactLine,
-          compactData: { summary: compactLine, sport, date: day, file: file ?? null },
+        return buildToolCardResponse({
+          title: `${sport.toUpperCase()} preview for ${day}`,
+          plainEnglish: 'This card summarizes the latest banked preview packet for the selected sport.',
+          settlement: 'Preview only. No settlement is attached to the preview itself.',
+          route: `sports_preview/${sport}`,
+          cpcRead: 'WATCH',
+          modelRead: `${sport.toUpperCase()} preview packet for ${day} is ready.`,
+          evidenceStatus: 'complete',
+          baseRate: {
+            summary: `${text.length} characters of preview text`,
+          },
+          priceContext: PRICE_CONTEXT_DISPLAY_ONLY,
+          eventId: day,
+        }, {
           compact,
+          sourceSummary: 'Latest banked sport preview packet generated by the daily pipeline.',
+          warnings: match ? [`Filtered to ${match}.`] : [],
         })
       } catch (err) {
-        return errorEnvelope(`sports_preview failed: ${err.message}`, { sport, date: day })
+        return buildBlockedToolCard(`sports_preview failed: ${err.message}`, {
+          title: `${sport.toUpperCase()} preview blocked`,
+          plainEnglish: 'The sport preview card could not be built.',
+          route: `sports_preview/${sport}`,
+          evidenceStatus: 'blocked',
+          cpcRead: 'BLOCKED',
+          modelRead: String(err.message ?? 'Unknown error'),
+          eventId: day,
+        }, {
+          compact,
+          sourceSummary: 'Latest banked sport preview packet could not be built.',
+        })
       }
     },
   })
