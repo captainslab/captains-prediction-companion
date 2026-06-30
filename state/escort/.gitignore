@@ -1,0 +1,4 @@
+# Escort self-improvement memory is local learning state, not committed product behavior.
+# Keep the dir + schema (README) tracked; ignore the append-only logs themselves.
+lessons.jsonl
+blockers.jsonl
