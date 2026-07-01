@@ -15,6 +15,16 @@ export const ADVANCES_BASELINE_TOTAL_GOALS = 2.4;
 export const ADVANCES_GRID_MAX = 10;
 export const ADVANCES_CALIBRATION_STATUS = 'V1_PROVISIONAL';
 
+// Tunable constants for the backtest/calibration harness. Defaults reproduce the
+// legacy hardcoded behavior exactly; the calibration harness tunes these on a
+// train split without forking the model's computation.
+export const DEFAULT_ADVANCES_CONFIG = {
+  eloGoalSupremacyDivisor: ELO_GOAL_SUPREMACY_DIVISOR,
+  baselineTotalGoals: ADVANCES_BASELINE_TOTAL_GOALS,
+  homeAdvantageElo: 0,
+  penaltyPrior: 0.5,
+};
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -51,6 +61,7 @@ function extractSourceText(evidence = null) {
 }
 
 export function eloToLambdas(eloTeam, eloOpp, opts = {}) {
+  const cfg = { ...DEFAULT_ADVANCES_CONFIG, ...(opts.config || {}) };
   const team = resolveElo(eloTeam, null);
   const opp = resolveElo(eloOpp, null);
   if (team === null || opp === null) {
@@ -61,14 +72,14 @@ export function eloToLambdas(eloTeam, eloOpp, opts = {}) {
       lambdaOpp: null,
       goalSupremacy: null,
       eloDiff: null,
-      baselineTotalGoals: opts.baselineTotalGoals ?? ADVANCES_BASELINE_TOTAL_GOALS,
-      divisor: opts.divisor ?? ELO_GOAL_SUPREMACY_DIVISOR,
+      baselineTotalGoals: opts.baselineTotalGoals ?? cfg.baselineTotalGoals,
+      divisor: opts.divisor ?? cfg.eloGoalSupremacyDivisor,
     };
   }
 
-  const baselineTotalGoals = Number(opts.baselineTotalGoals ?? ADVANCES_BASELINE_TOTAL_GOALS) || ADVANCES_BASELINE_TOTAL_GOALS;
-  const divisor = Number(opts.divisor ?? ELO_GOAL_SUPREMACY_DIVISOR) || ELO_GOAL_SUPREMACY_DIVISOR;
-  const eloDiff = team - opp;
+  const baselineTotalGoals = Number(opts.baselineTotalGoals ?? cfg.baselineTotalGoals) || ADVANCES_BASELINE_TOTAL_GOALS;
+  const divisor = Number(opts.divisor ?? cfg.eloGoalSupremacyDivisor) || ELO_GOAL_SUPREMACY_DIVISOR;
+  const eloDiff = (team - opp) + Number(cfg.homeAdvantageElo || 0);
   const goalSupremacy = clamp(eloDiff / divisor, -1.35, 1.35);
   const halfTotal = baselineTotalGoals / 2;
 
@@ -165,10 +176,10 @@ export function extraTimePoisson(lambdaA, lambdaB, etFraction = 1 / 3) {
   };
 }
 
-export function penaltyWin({ evidence = null } = {}) {
+export function penaltyWin({ evidence = null, penaltyPrior = 0.5 } = {}) {
   const raw = resolveElo(
-    evidence?.penaltyWin ?? evidence?.penalty_win ?? evidence?.penalty_probability ?? 0.5,
-    0.5,
+    evidence?.penaltyWin ?? evidence?.penalty_win ?? evidence?.penalty_probability ?? penaltyPrior,
+    penaltyPrior,
   );
   const strongEvidence = evidence?.strongKeeperTakerEvidence;
   const sourceText = extractSourceText(strongEvidence);
@@ -193,7 +204,9 @@ export function computeAdvance({
   bracket = null,
   lineup = null,
   evidence = null,
+  config = null,
 } = {}) {
+  const cfg = { ...DEFAULT_ADVANCES_CONFIG, ...(config || {}) };
   const missingInputs = [];
   const limitations = [];
   const teamIsHome = bracket?.team_is_home !== false;
@@ -243,7 +256,7 @@ export function computeAdvance({
     };
   }
 
-  const lambdas = eloToLambdas(teamElo, oppElo, evidence?.eloPrior ?? {});
+  const lambdas = eloToLambdas(teamElo, oppElo, { ...(evidence?.eloPrior ?? {}), config: cfg });
   if (!lambdas.ok) {
     return {
       ...baseArtifact,
@@ -267,7 +280,7 @@ export function computeAdvance({
 
   const reg = regulationWDL(regGrid.matrix, teamIsHome);
   const et = extraTimePoisson(lambdas.lambdaTeam, lambdas.lambdaOpp);
-  const pen = penaltyWin({ evidence });
+  const pen = penaltyWin({ evidence, penaltyPrior: cfg.penaltyPrior });
   const pAdvance = reg.pWin + (reg.pDraw * (et.etWin + (et.etDraw * pen.penWin)));
   const lineupNotes = lineupLimitations(lineup);
 
