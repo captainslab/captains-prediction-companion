@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process';
 
 import {
   fetchKalshiEvents,
-  fetchMentionEventsBySeries,
+  discoverMentionEvents,
   filterMentionEvents,
   filterByEventDate,
   deriveEventDate,
@@ -143,6 +143,39 @@ export function annotateResearchRoutes(candidates) {
   return candidates;
 }
 
+// Build an optional JS-rendering page fetcher for the scraper-first layer.
+// The calendar/mentions board is a client-rendered SPA, so a plain fetch sees
+// no events. When MENTIONS_PAGE_FETCH_CMD is set (e.g. a firecrawl render
+// command with a {url} placeholder), we shell out to it and feed the rendered
+// HTML to the scraper. When it is NOT set — the default in cron — there is no
+// browser dependency and discovery falls through to the free, deterministic
+// /series category scan. firecrawl (or any renderer) is therefore opt-in and
+// never load-bearing.
+export function buildPageFetcherFromEnv(env = process.env) {
+  const tmpl = env.MENTIONS_PAGE_FETCH_CMD;
+  if (!tmpl || !tmpl.trim()) return undefined;
+  return async (url) => {
+    const cmd = tmpl.includes('{url}') ? tmpl.replaceAll('{url}', url) : `${tmpl} ${url}`;
+    const r = spawnSync('bash', ['-lc', cmd], {
+      encoding: 'utf8',
+      timeout: Number(env.MENTIONS_PAGE_FETCH_TIMEOUT_MS || '120000'),
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return { ok: r.status === 0, status: r.status ?? 0, text: r.stdout || '', error: r.stderr || null };
+  };
+}
+
+// Dedupe candidate events by event_ticker, first writer wins.
+function dedupeByTicker(events) {
+  const byTicker = new Map();
+  for (const ev of events) {
+    const t = ev?.event_ticker;
+    if (!t) continue;
+    if (!byTicker.has(t)) byTicker.set(t, ev);
+  }
+  return [...byTicker.values()];
+}
+
 async function discoverCandidates({ stateRoot, env, eventsFile }) {
   if (eventsFile) {
     // Test/recovery hook: read candidate events from a local JSON file
@@ -151,13 +184,17 @@ async function discoverCandidates({ stateRoot, env, eventsFile }) {
     return annotateResearchRoutes(Array.isArray(parsed) ? parsed : (parsed.events ?? []));
   }
   const candidates = [];
+  // Scraper-FIRST board scan with deterministic /series category fallback.
+  const disc = await discoverMentionEvents({ pageFetcher: buildPageFetcherFromEnv(env) });
+  console.log(`[mentions-watch] discovery sources: scrape=${JSON.stringify(disc.sources.scrape ?? {})} series=${JSON.stringify(disc.sources.series ?? {})}`);
+  candidates.push(...filterMentionEvents(disc.events).mentionEvents);
+  // Broad language discovery — catches mention markets nested under series that
+  // are not themselves tagged/named "mention".
   const broad = await fetchKalshiEvents('broad');
   candidates.push(...filterMentionEvents(broad.events).mentionEvents);
-  const series = await fetchMentionEventsBySeries();
-  candidates.push(...filterMentionEvents(series.events).mentionEvents);
   const alpha = await collectAlphaMentionIntake({ stateRoot, env, fallbackEvents: [] });
   candidates.push(...(alpha.events || []));
-  return annotateResearchRoutes(candidates);
+  return annotateResearchRoutes(dedupeByTicker(candidates));
 }
 
 // ─── single-run lock ──────────────────────────────────────────────────────────

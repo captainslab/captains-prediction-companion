@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  Trimmed, representative capture of a JS-RENDERED https://kalshi.com/calendar/mentions
+  board (the inert pre-hydration stub carries none of this). Contains only real
+  event tickers + anchor hrefs as the live render exposes them. No market
+  pricing data is embedded. Used to prove scrapeMentionsCalendar() captures:
+    - the event title + event ticker for the proof event (Obama),
+    - visible board markets,
+    - an expanded "show markets" section,
+    - a closed / history section when the render exposes it.
+-->
+<html>
+<body>
+  <main>
+    <section data-testid="mentions-board">
+      <a href="/markets/kxobamamention/obama-mention/KXOBAMAMENTION-26JUN19">
+        What will Obama say during his MS NOW interview?
+      </a>
+      <a href="/markets/kxberniemention/bernie-says/KXBERNIEMENTION-26JUN18">Bernie says</a>
+      <a href="/markets/kxmamdanimention/what-will-zohran-mamdani-say-/KXMAMDANIMENTION-26JUN18">Mamdani mention</a>
+      <a href="/markets/kxlastwordmention/last-word/KXLASTWORDMENTION-26JUN18">Last Word</a>
+      <a href="/markets/kxlatenightmention/late-night-mention/KXLATENIGHTMENTION-26JUN19">Late night</a>
+
+      <!-- expanded "show markets" sub-rows under the Obama event -->
+      <div data-testid="show-markets" aria-expanded="true">
+        <a href="/markets/kxobamamention/obama-mention/KXOBAMAMENTION-26JUN19-CHIC">Chicago</a>
+        <a href="/markets/kxobamamention/obama-mention/KXOBAMAMENTION-26JUN19-IRAN">Iran</a>
+        <a href="/markets/kxobamamention/obama-mention/KXOBAMAMENTION-26JUN19-TRUM">Trump</a>
+      </div>
+    </section>
+
+    <!-- closed / settled history section -->
+    <section data-testid="closed-history">
+      <h3>Recently closed</h3>
+      <a href="/markets/kxberniemention/bernie-says/KXBERNIEMENTION-26MAY03">Bernie says (settled)</a>
+    </section>
+  </main>
+</body>
+</html>
