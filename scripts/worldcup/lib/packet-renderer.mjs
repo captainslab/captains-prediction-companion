@@ -152,16 +152,68 @@ function worldCupEventTicker(match, packetDate) {
   return `KXWCGAME-${y.slice(2)}${mon}${d}${teamCode(match?.home_team)}${teamCode(match?.away_team)}`;
 }
 
+function advanceLane(board) {
+  return board?.advances
+    ?? (board?.lanes || []).find((entry) => entry.lane === 'team_to_advance')?.advances
+    ?? null;
+}
+
+function marketContextDisplayLine(mc) {
+  if (!mc) return null;
+  const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
+  const parts = [
+    `${mc.normalized_target ?? mc.ticker ?? 'N/A'}`,
+    mc.side ? `side:${mc.side}` : null,
+    mc.implied_probability != null ? `imp:${(mc.implied_probability * 100).toFixed(1)}%` : null,
+    `settles:${settle}`,
+  ].filter(Boolean);
+  return `MARKET CONTEXT — DISPLAY ONLY / NOT IN SCORE: ${parts.join(' | ')}`;
+}
+
+function advanceDisplayLine(board, match) {
+  const adv = advanceLane(board);
+  if (!adv) return null;
+  const tName = adv.team_name ?? match?.home_team ?? 'team';
+  const oName = adv.opponent_name ?? match?.away_team ?? 'opponent';
+  if (adv.status !== 'READY') {
+    const friendly = (adv.missing_inputs ?? []).map((code) => {
+      if (code === 'eloTeam') return `published Elo baseline for ${tName}`;
+      if (code === 'eloOpp') return `published Elo baseline for ${oName}`;
+      if (code === 'bracket') return 'bracket / next-round context';
+      return code;
+    });
+    const miss = friendly.length ? ` | missing: ${friendly.join('; ')}` : '';
+    return `Advances model ${adv.status} — settles on advancing (incl. extra time + penalties)${miss}`;
+  }
+  const teamName = tName;
+  const oppName = oName;
+  const lean = adv.lean === 'TEAM_ADVANCES' ? `${teamName} advances`
+    : adv.lean === 'OPPONENT_ADVANCES' ? `${oppName} advances`
+      : 'advances lean unavailable';
+  const reg = `reg ${pct(adv.reg?.pWin)} / draw ${pct(adv.reg?.pDraw)} / loss ${pct(adv.reg?.pLoss)}`;
+  const et = `ET ${pct(adv.et?.etWin)} / draw ${pct(adv.et?.etDraw)} / loss ${pct(adv.et?.etLoss)}`;
+  const pen = `pen ${pct(adv.pen?.penWin)}`;
+  const limitations = Array.isArray(adv.limitations) && adv.limitations.length
+    ? ` | limitations: ${adv.limitations.join('; ')}`
+    : '';
+  return `${teamName} to advance ${(adv.p_advance * 100).toFixed(0)}% vs ${oppName}; includes extra time and penalties; model_mode ${adv.model_mode}; Poisson path ${reg}; ${et}; ${pen}${limitations}`;
+}
+
 // Market-neutral model summary for the preview's model-read fields. Only
 // model-side (price-free) projection language is passed; never odds/price.
-function worldCupModelSummary(match, board) {
+export function worldCupModelSummary(match, board) {
   const gp = projectionFor(board);
-  const summary = { result_edge: resultEdgePhrase(board, match) };
+  const summary = {
+    result_edge: resultEdgePhrase(board, match),
+    advances: advanceDisplayLine(board, match),
+  };
   if (gp) {
     summary.projection = `${match.home_team} ${gp.projected_home_goals}-${gp.projected_away_goals} ${match.away_team}`;
     summary.total_environment = totalProfile(gp.projected_total_goals);
   }
   summary.caveat = 'Pre-lineup; team baseline only, not official starting lineup.';
+  const marketContext = advanceLane(board)?.market_context ?? null;
+  if (marketContext) summary.display_only_market_line = marketContextDisplayLine(marketContext);
   return summary;
 }
 
@@ -366,6 +418,7 @@ const DISPLAY_LABELS = {
   spread_full_game: 'Goal Spread',
   total_goals: 'Total Goals',
   both_teams_to_score: 'BTTS',
+  team_to_advance: 'Team to Advance',
 };
 function displayLabel(lane) {
   return DISPLAY_LABELS[lane.lane] ?? lane.label;
@@ -593,7 +646,7 @@ function lineupLockDisplay(match) {
   if (!match?.kickoff_utc) return 'Kickoff: TBD';
   const d = new Date(match.kickoff_utc);
   if (Number.isNaN(d.getTime())) return 'Kickoff: TBD';
-  return displayPair(new Date(d.getTime() - (45 * 60 * 1000)));
+  return displayPair(new Date(d.getTime() - (50 * 60 * 1000)));
 }
 
 function starterMinutesForPosition(position) {
@@ -790,7 +843,7 @@ function whyItMattersBlock(matches = [], boards = []) {
   lines.push(`  Today's games: ${games}.`);
   lines.push(`  Timing-sensitive matches: ${timingSensitive}.`);
   lines.push('  Pre-lock / lineup-sensitive lanes: result, total goals, BTTS, goal spread, and anytime goalscorer.');
-  lines.push('  Watch lineup-lock windows: each match is scheduled 45 minutes before kickoff.');
+  lines.push('  Watch lineup-lock windows: each match is scheduled 50 minutes before kickoff.');
   lines.push(`  Individual lineup-lock packets: ${lineupPackets}.`);
   lines.push('  Goalscorer outputs stay provisional until an official starting lineup is verified.');
   lines.push('');
@@ -861,6 +914,15 @@ function laneSidePhrase(lane, match) {
   if (lane.lane === 'both_teams_to_score') {
     return rec === 'YES' ? 'Both teams to score' : rec === 'NO' ? 'No / clean sheet' : 'no clear BTTS side';
   }
+  if (lane.lane === 'team_to_advance') {
+    const adv = lane.advances ?? null;
+    if (!adv || adv.status !== 'READY') {
+      return adv?.status === 'RESEARCH_ONLY' ? 'advances research only' : adv?.status === 'BLOCKED' ? 'advances blocked' : 'no clear advance side';
+    }
+    if (adv.lean === 'TEAM_ADVANCES') return `${adv.team_name} to advance`;
+    if (adv.lean === 'OPPONENT_ADVANCES') return `${adv.opponent_name} to advance`;
+    return 'no clear advance side';
+  }
   return 'model side';
 }
 
@@ -911,6 +973,23 @@ function formatLane(lane, match, provisional) {
     const csr = lane.p_btts_no >= 0.6 ? 'high' : lane.p_btts_no >= 0.45 ? 'moderate' : 'low';
     lines.push(`    Clean-sheet risk: ${csr}`);
     lines.push(confidenceLine(lane.confidence, provisional));
+  } else if (lane.lane === 'team_to_advance' && lane.advances) {
+    const adv = lane.advances;
+    lines.push(`  [${label}] ${adv.status === 'READY' ? `${adv.team_name} advances read` : `Advances model ${adv.status}`}`);
+    lines.push('    Settlement: advances market includes extra time and penalties; not regulation-only.');
+    lines.push(`    Model mode: ${adv.model_mode}`);
+    if (adv.status === 'READY') {
+      lines.push(`    Poisson path: regulation ${pct(adv.reg?.pWin)} / draw ${pct(adv.reg?.pDraw)} / loss ${pct(adv.reg?.pLoss)}.`);
+      lines.push(`    Extra time: ${pct(adv.et?.etWin)} / draw ${pct(adv.et?.etDraw)} / loss ${pct(adv.et?.etLoss)}.`);
+      lines.push(`    Penalties: ${pct(adv.pen?.penWin)}.`);
+      lines.push(`    Advance probability: ${pct(adv.p_advance)} (${adv.lean === 'TEAM_ADVANCES' ? 'team advances' : 'opponent advances'}).`);
+    } else {
+      lines.push(`    Missing inputs: ${adv.missing_inputs?.length ? adv.missing_inputs.join(', ') : 'n/a'}`);
+      if (Array.isArray(adv.limitations) && adv.limitations.length) {
+        lines.push(`    Limitations: ${adv.limitations.join('; ')}`);
+      }
+    }
+    lines.push(confidenceLine(lane.confidence, provisional));
   } else if (lane.lane === 'spread_full_game' && lane.projected_goal_margin_home != null) {
     const m = lane.projected_goal_margin_home;
     const marginPhrase = m === 0 ? 'even (0.0 goals)'
@@ -936,15 +1015,14 @@ function formatLane(lane, match, provisional) {
   // Market half — display only, always labeled NOT IN SCORE.
   if (lane.market_context) {
     const mc = lane.market_context;
-    const settle = mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a';
     const gaps = [
       lane.edge_home_pp != null ? `H:${lane.edge_home_pp}pp` : null,
       lane.edge_draw_pp != null ? `D:${lane.edge_draw_pp}pp` : null,
       lane.edge_away_pp != null ? `A:${lane.edge_away_pp}pp` : null,
     ].filter(Boolean).join(' ') || 'n/a (no model fair probability)';
-    lines.push(`    MARKET (NOT IN SCORE): ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${settle} | model−market gap ${gaps}`);
+    lines.push(`    MARKET CONTEXT — DISPLAY ONLY / NOT IN SCORE: ${mc.normalized_target ?? mc.ticker ?? 'N/A'} | imp:${mc.implied_probability != null ? (mc.implied_probability * 100).toFixed(1) + '%' : 'N/A'} | settles:${mc.settlement ? `${mc.settlement.scope}${mc.settlement.explicit ? '' : ' (default)'}` : 'n/a'} | model−market gap ${gaps}`);
   } else {
-    lines.push('    MARKET (NOT IN SCORE): no market context attached');
+    lines.push('    MARKET CONTEXT — DISPLAY ONLY / NOT IN SCORE: no market context attached');
   }
   lines.push('');
   return lines.join('\n');
@@ -974,6 +1052,10 @@ function slatePreviewBlock(matches = [], boards = []) {
   for (let i = 0; i < matches.length; i++) {
     const m = matches[i];
     lines.push(`   • ${m.home_team} vs ${m.away_team} [${safeStage(m)}] — ${kickoffDisplay(m).replace(/^Kickoff: /, '')} — ${slateStatusLabel(m)}`);
+    const adv = isKnockoutStage(m?.stage) ? advanceDisplayLine(boards[i], m) : null;
+    if (adv) {
+      lines.push(`     Advances: ${adv}`);
+    }
   }
   // Group rollup.
   const groups = new Map();
@@ -990,6 +1072,10 @@ function slatePreviewBlock(matches = [], boards = []) {
   const favs = matches.map((m, i) => favoredTeam(boards[i], m)).filter((f) => f && f !== 'no clear edge');
   if (favs.length) {
     lines.push(`  Model-rated side (forecast only): ${favs.join(', ')}.`);
+  }
+  const advanceReads = matches.map((m, i) => isKnockoutStage(m?.stage) ? advanceDisplayLine(boards[i], m) : null).filter(Boolean);
+  if (advanceReads.length) {
+    lines.push(`  Advances read: ${advanceReads.join(' | ')}.`);
   }
   const lockedNames = matches.filter((m) => isLineupLocked(m)).map((m) => `${m.home_team} vs ${m.away_team}`);
   lines.push('  Advancement / standings math: not sourced — omitted rather than invented.');
@@ -1043,6 +1129,10 @@ function formatMatch(match, board, provenance = null, previewLines = null) {
     lines.push(`  Model basis: ${currentBaselineSummary(provenance)}; official starting lineup not yet verified`);
   }
   lines.push(`  Match forecast: ${resultEdgePhrase(board, match)}`);
+  const advanceRead = isKnockoutStage(match?.stage) ? advanceDisplayLine(board, match) : null;
+  if (advanceRead) {
+    lines.push(`  Advances forecast: ${advanceRead}`);
+  }
   if (gp) {
     lines.push(`  ${goalForecastLine(match, board).replace(/^Goal forecast: /, 'Goal forecast: ')}`);
     lines.push(`  ${totalGoalsForecastLine(board).replace(/^Total goals forecast: /, 'Total goals forecast: ')}`);
@@ -1204,7 +1294,6 @@ export function renderWorldCupPacket({ matches, boards, meta = {} }) {
 
   // 4. Model Limits
   lines.push(section('4. Model Limits'));
-  lines.push('  First-half markets are unavailable because no half-split model layer is sourced.');
   lines.push('  Prior-date baselines are diagnostic only and block customer-ready output when same-date basis is missing.');
   lines.push('  Confirmed-lineup packets require a lineup-adjusted team model path; otherwise the packet is blocked.\n');
 

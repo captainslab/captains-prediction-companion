@@ -24,6 +24,8 @@ import { fileURLToPath } from 'node:url';
 
 import { fetchStaticStructure } from './source-adapters/static-structure.mjs';
 import { fetchTeamBaseline } from './source-adapters/team-baseline.mjs';
+import { loadCachedEloBaseline } from './lib/elo-baseline.mjs';
+import { loadCachedAdvancesMarkets, applyAdvancesClassification } from './lib/advances-classifier.mjs';
 import { buildOpponentMatchup, loadCachedMatchup } from './source-adapters/opponent-matchup.mjs';
 import { loadCachedMatchday } from './source-adapters/matchday-data.mjs';
 import { loadCachedMarketContext, normalizeMarketContext } from './source-adapters/market-context.mjs';
@@ -329,9 +331,14 @@ export async function generateMatchdayPacket(inputOpts = null) {
     compositeProvenance = { source_date: date, source_path: baselinePath, provisional: false };
   }
   const teamBaselines = Object.fromEntries((baseline.teams || []).map(t => [t.team_name, t]));
+  const eloBaseline = loadCachedEloBaseline(stateRoot, date);
 
   // 3. Filter matches for today (operating timezone = America/Chicago, not UTC).
   let todayMatches = filterMatchesForLocalDate(structure.matches, date, CPC_MATCHDAY_TIMEZONE);
+  // KXWCADVANCE: classify knockout/advances markets from the cached series map so
+  // FIFA-feed stage gaps don't hide the advances read (no price data enters here).
+  const advancesMarkets = loadCachedAdvancesMarkets(stateRoot, date);
+  todayMatches = todayMatches.map((m) => applyAdvancesClassification(m, advancesMarkets));
   const shouldRefreshLineups = !opts.dryRun && (
     opts.refreshLineups
     || opts.packetStage === 'lineup_lock'
@@ -502,6 +509,16 @@ export async function generateMatchdayPacket(inputOpts = null) {
       marketContexts,
       isKnockout,
       lineupConfirmed: lineupLockedVerified,
+      match,
+      bracket: {
+        stage: match.stage ?? null,
+        round: match.round ?? null,
+        next_round: match.next_round ?? null,
+        next_round_label: match.next_round_label ?? null,
+        match_id: match.match_id ?? null,
+        team_is_home: true,
+      },
+      eloBaseline: eloBaseline.ok ? eloBaseline : null,
     });
 
     boards.push(board);

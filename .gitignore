@@ -48,6 +48,7 @@ lib
 !scripts/worldcup/lib/packet-renderer.mjs
 !scripts/worldcup/lib/market-parser.mjs
 !scripts/worldcup/lib/match-probabilities.mjs
+!scripts/worldcup/backtest/lib/
 .DS_store
 
 # Next.js

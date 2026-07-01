@@ -18,6 +18,8 @@
 
 import { LANE_STATUSES } from './evidence-ledger.mjs';
 import { computeMatchProbabilities } from './match-probabilities.mjs';
+import { computeAdvance } from './advances-model.mjs';
+import { findCachedEloRecord } from './elo-baseline.mjs';
 import {
   projectTeamGoals,
   buildScoreGrid,
@@ -53,7 +55,11 @@ function impliedToDecimal(imp) {
   return round1(1 / imp);
 }
 
-function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lineupConfirmed, probs, goalModel) {
+function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lineupConfirmed, probs, goalModel, {
+  match = null,
+  bracket = null,
+  eloBaseline = null,
+} = {}) {
   const base = {
     lane: lane.key,
     label: lane.label,
@@ -87,6 +93,63 @@ function laneSignal(lane, homeLedger, awayLedger, marketContext, isKnockout, lin
     base.recommendation = 'BLOCKED_MODEL_LAYER_MISSING';
     base.explanation = 'No 1st-half model layer (goals/shots by half not sourced). Market shown as reference only; no edge computed.';
     if (marketContext) base.market_context = referenceContext(marketContext);
+    return base;
+  }
+
+  if (lane.key === 'team_to_advance') {
+    const defaultSide = marketContext?.side === 'away' ? 'away' : 'home';
+    const teamSide = defaultSide;
+    const teamName = teamSide === 'away' ? match?.away_team : match?.home_team;
+    const oppName = teamSide === 'away' ? match?.home_team : match?.away_team;
+    const teamRecord = findCachedEloRecord(eloBaseline, teamName);
+    const oppRecord = findCachedEloRecord(eloBaseline, oppName);
+    const derivedBracket = bracket
+      ? { ...bracket, team_is_home: teamSide !== 'away' }
+      : {
+          stage: match?.stage ?? null,
+          round: match?.round ?? null,
+          next_round: match?.next_round ?? null,
+          next_round_label: match?.next_round_label ?? null,
+          match_id: match?.match_id ?? null,
+          team_is_home: teamSide !== 'away',
+        };
+    const advance = computeAdvance({
+      eloTeam: teamRecord?.elo_rating ?? null,
+      eloOpp: oppRecord?.elo_rating ?? null,
+      bracket: derivedBracket,
+      lineup: { confirmed: lineupConfirmed === true },
+      evidence: {
+        source: eloBaseline?.source_id ?? null,
+        retrieved_at: eloBaseline?.retrieved_at ?? null,
+      },
+    });
+
+    base.advances = {
+      ...advance,
+      team_name: teamName ?? null,
+      opponent_name: oppName ?? null,
+      team_side: teamSide,
+      market_context: marketContext ? referenceContext(marketContext) : null,
+      cached_elo_source: eloBaseline?.source_id ?? null,
+      cached_elo_retrieved_at: eloBaseline?.retrieved_at ?? null,
+      team_elo: teamRecord?.elo_rating ?? null,
+      opponent_elo: oppRecord?.elo_rating ?? null,
+    };
+    base.advance_team_name = teamName ?? null;
+    base.advance_opponent_name = oppName ?? null;
+    base.advance_team_side = teamSide;
+    base.market_context = marketContext ? referenceContext(marketContext) : null;
+    base.recommendation = advance.status === 'READY'
+      ? (advance.p_advance >= 0.58
+        ? `PICK_${teamSide.toUpperCase()}`
+        : advance.p_advance >= 0.53
+          ? `LEAN_${teamSide.toUpperCase()}`
+          : 'WATCH')
+      : advance.status;
+    base.confidence = advance.status === 'READY' ? (advance.p_advance >= 0.58 ? 'medium' : 'low') : 'low';
+    base.explanation = advance.status === 'READY'
+      ? `${teamName} advances probability ${(advance.p_advance * 100).toFixed(0)}% via ${advance.model_mode}; includes extra time and penalties.`
+      : `Advances model ${advance.status}${advance.missing_inputs?.length ? `; missing ${advance.missing_inputs.join(', ')}` : ''}.`;
     return base;
   }
 
@@ -257,6 +320,9 @@ export function composeMultiLaneCeilingBoard({
   isKnockout = false,
   lineupConfirmed = false,
   drawIncentive = false,
+  match = null,
+  bracket = null,
+  eloBaseline = null,
 } = {}) {
   // 1X2 probabilities computed from ledgers BEFORE any market attachment.
   const probs = computeMatchProbabilities({ homeLedger, awayLedger, drawIncentive });
@@ -292,8 +358,10 @@ export function composeMultiLaneCeilingBoard({
         ? marketContexts.find(m => !m.market_type || m.market_type === 'match_winner')
         : null)
       || null;
-    return laneSignal(lane, homeLedger, awayLedger, mc, isKnockout, lineupConfirmed, probs, goalModel);
+    return laneSignal(lane, homeLedger, awayLedger, mc, isKnockout, lineupConfirmed, probs, goalModel, { match, bracket, eloBaseline });
   });
+
+  const advancesLane = lanes.find((lane) => lane.lane === 'team_to_advance') ?? null;
 
   const pickLanes = lanes.filter(l => l.recommendation.startsWith('PICK'));
   const leanLanes = lanes.filter(l => l.recommendation.startsWith('LEAN'));
@@ -301,6 +369,7 @@ export function composeMultiLaneCeilingBoard({
 
   return {
     lanes,
+    advances: advancesLane?.advances ?? null,
     pick_count: pickLanes.length,
     lean_count: leanLanes.length,
     watch_count: watchLanes.length,

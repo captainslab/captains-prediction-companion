@@ -276,6 +276,15 @@ function buildQuickRead({ model, research, sport, packet_type }) {
     18,
   );
 
+  const advances = truncateWords(
+    firstText(
+      model?.advances,
+      model?.advance_read,
+      model?.advance_projection,
+    ) || '',
+    22,
+  );
+
   const resultEdge = truncateWords(
     firstText(
       model?.result_edge,
@@ -293,6 +302,7 @@ function buildQuickRead({ model, research, sport, packet_type }) {
     result_edge: scrubCustomerText(`Result edge: ${resultEdge}`),
     projected: scrubCustomerText(`Projected: ${projected}`),
     total_environment: scrubCustomerText(`Total environment: ${totalEnvironment}`),
+    advances: advances ? scrubCustomerText(`Advances: ${advances}`) : '',
     key_source_context: scrubCustomerText(keySourceContext),
     model_caveat: scrubCustomerText(`Model caveat: ${modelCaveat}`),
   };
@@ -319,15 +329,20 @@ function assembleText({ headline, whyItMatters, storyline, quickRead, displayOnl
     `- ${quickRead.result_edge}`,
     `- ${quickRead.projected}`,
     `- ${quickRead.total_environment}`,
+    quickRead.advances ? `- ${quickRead.advances}` : '',
     `- ${quickRead.key_source_context}`,
     `- ${quickRead.model_caveat}`,
   ];
 
   if (displayOnlyMarketLine) {
-    lines.push(`Market context (display only, NOT IN SCORE): ${displayOnlyMarketLine}`);
+    if (/^MARKET CONTEXT — DISPLAY ONLY \/ NOT IN SCORE:/i.test(displayOnlyMarketLine)) {
+      lines.push(displayOnlyMarketLine);
+    } else {
+      lines.push(`Market context (display only, NOT IN SCORE): ${displayOnlyMarketLine}`);
+    }
   }
 
-  return scrubCustomerText(lines.join('\n'));
+  return scrubCustomerText(lines.filter(Boolean).join('\n'));
 }
 
 function usableResearch(research) {

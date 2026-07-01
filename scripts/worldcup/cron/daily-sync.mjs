@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 import { fetchStaticStructure, loadCachedStructure } from '../source-adapters/static-structure.mjs';
 import { fetchTeamBaseline, loadCachedTeamBaseline } from '../source-adapters/team-baseline.mjs';
+import { writeEloBaseline } from '../source-adapters/elo-ratings-fetch.mjs';
+import { writeAdvancesMarkets } from '../source-adapters/advances-markets-fetch.mjs';
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', dryRun: false };
@@ -40,6 +42,8 @@ export async function runDailySync({
   dryRun = false,
   fetchStaticStructureImpl = fetchStaticStructure,
   fetchTeamBaselineImpl = fetchTeamBaseline,
+  writeEloBaselineImpl = writeEloBaseline,
+  writeAdvancesMarketsImpl = writeAdvancesMarkets,
   writeJsonImpl = writeJson,
   log = console,
 } = {}) {
@@ -88,6 +92,41 @@ export async function runDailySync({
     log.log(`[worldcup-sync] baseline cached: ${baseline.team_count} teams from ${baseline.source_id}`);
   } else {
     log.log(`[worldcup-sync] DRY RUN — would cache ${baseline.team_count} teams from ${baseline.source_id}`);
+  }
+
+  // Published Elo baseline (eloratings.net) — the advances model's rating spine.
+  // Cached once per day; fail-soft so a fetch hiccup never blocks the sync.
+  if (!dryRun) {
+    try {
+      const elo = await writeEloBaselineImpl(stateRoot, date, { retrievedAt: new Date().toISOString() });
+      if (elo.ok) {
+        log.log(`[worldcup-sync] elo baseline cached: ${elo.count} published ratings (eloratings.net)`);
+      } else {
+        log.log(`[worldcup-sync] WARNING: published Elo unavailable (${elo.error}); advances lanes block on missing Elo`);
+      }
+    } catch (error) {
+      log.log(`[worldcup-sync] WARNING: published Elo fetch threw (${error.message}); advances lanes block on missing Elo`);
+    }
+  } else {
+    log.log('[worldcup-sync] DRY RUN — would cache published Elo baseline from eloratings.net');
+  }
+
+  // KXWCADVANCE advances-market classification (Kalshi public series) — maps
+  // today's knockout advances fixtures to FIFA match_ids. Fail-soft; no price kept.
+  if (!dryRun) {
+    try {
+      const structForMap = structure?.ok ? structure : loadCachedStructure(stateRoot, date);
+      const advances = await writeAdvancesMarketsImpl(stateRoot, date, structForMap?.matches || [], { retrievedAt: new Date().toISOString() });
+      if (advances.ok) {
+        log.log(`[worldcup-sync] advances markets cached: ${advances.count} knockout fixtures (KXWCADVANCE)`);
+      } else {
+        log.log(`[worldcup-sync] WARNING: advances-market discovery unavailable (${advances.error})`);
+      }
+    } catch (error) {
+      log.log(`[worldcup-sync] WARNING: advances-market discovery threw (${error.message})`);
+    }
+  } else {
+    log.log('[worldcup-sync] DRY RUN — would cache KXWCADVANCE advances classification');
   }
 
   log.log('[worldcup-sync] done');
