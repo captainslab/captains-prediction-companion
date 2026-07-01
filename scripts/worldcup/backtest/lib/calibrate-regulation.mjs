@@ -19,7 +19,11 @@ export function evaluateConfig(records, config) {
   return { brier: brier / n, logLoss: ll / n, n: records.length, reliability: reliabilityBins(pts) };
 }
 
-export function tuneRegulation(records, grid = [DEFAULT_ADVANCES_CONFIG]) {
+// baselineConfig is the reference the tuned winner is judged against on the
+// held-out test split. It defaults to DEFAULT_ADVANCES_CONFIG for back-compat,
+// but the recalibration CLI passes an explicit pinned legacy config so the
+// comparison stays honest even after the production default is bumped.
+export function tuneRegulation(records, grid = [DEFAULT_ADVANCES_CONFIG], baselineConfig = DEFAULT_ADVANCES_CONFIG) {
   const { train, test } = splitTrainTest(records);
   let best = null;
   for (const config of grid) {
@@ -27,7 +31,7 @@ export function tuneRegulation(records, grid = [DEFAULT_ADVANCES_CONFIG]) {
     if (!best || m.logLoss < best.trainLogLoss) best = { config, trainLogLoss: m.logLoss };
   }
   return {
-    baseline: evaluateConfig(test, DEFAULT_ADVANCES_CONFIG),
+    baseline: evaluateConfig(test, baselineConfig),
     best,
     test: evaluateConfig(test, best.config),
   };

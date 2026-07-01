@@ -1,16 +1,22 @@
 // World Cup team-advances model.
 //
 // Generative Elo -> Poisson path:
-//   1. Convert the Elo gap into an expected-goal supremacy using a conservative
-//      600 Elo points per 1 goal of supremacy prior.
+//   1. Convert the Elo gap into an expected-goal supremacy using a 250 Elo
+//      points per 1 goal of supremacy prior. This divisor was recalibrated from
+//      the legacy 600 against 2018-2024 neutral-venue international results
+//      (eloratings.net): out-of-sample it cut regulation W/D/L log-loss from
+//      0.9735 -> 0.9271 and Brier 0.5777 -> 0.5470 by sharpening the model out
+//      of severe under-confidence. See scripts/worldcup/backtest/run-calibration.mjs.
 //   2. Split the match's expected 90-minute goal total around that supremacy.
 //   3. Use the Poisson score grid for regulation, then a 30-minute extra-time
 //      slice (lambda * 1/3), then penalties with a tight capped prior.
 //
 // The model is deliberately baseline-only: no player adjustment, no price data,
-// no odds, no liquidity, and no scorecard-style weighting.
+// no odds, no liquidity, and no scorecard-style weighting. It is still only
+// partially calibrated (residual under-confidence remains), so calibration
+// status stays V1_PROVISIONAL, not BACKTESTED.
 
-export const ELO_GOAL_SUPREMACY_DIVISOR = 600;
+export const ELO_GOAL_SUPREMACY_DIVISOR = 250;
 export const ADVANCES_BASELINE_TOTAL_GOALS = 2.4;
 export const ADVANCES_GRID_MAX = 10;
 export const ADVANCES_CALIBRATION_STATUS = 'V1_PROVISIONAL';
@@ -21,6 +27,18 @@ export const ADVANCES_CALIBRATION_STATUS = 'V1_PROVISIONAL';
 export const DEFAULT_ADVANCES_CONFIG = {
   eloGoalSupremacyDivisor: ELO_GOAL_SUPREMACY_DIVISOR,
   baselineTotalGoals: ADVANCES_BASELINE_TOTAL_GOALS,
+  homeAdvantageElo: 0,
+  penaltyPrior: 0.5,
+};
+
+// Pre-recalibration constants (legacy divisor 600). Pinned so the calibration
+// harness always measures the tuned config against the ORIGINAL baseline rather
+// than the live default — otherwise, once DEFAULT_ADVANCES_CONFIG is bumped, the
+// "beats baseline out-of-sample" comparison would become self-referential
+// (250 vs 250) and the recalibration report would no longer be reproducible.
+export const LEGACY_ADVANCES_CONFIG = {
+  eloGoalSupremacyDivisor: 600,
+  baselineTotalGoals: 2.4,
   homeAdvantageElo: 0,
   penaltyPrior: 0.5,
 };
