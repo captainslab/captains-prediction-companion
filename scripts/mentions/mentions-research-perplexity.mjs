@@ -321,6 +321,32 @@ function describeSettlementFit(phrase, requiredCount = null, speaker = null) {
   return fit;
 }
 
+// Factual world-claims that assert a title/partner/relationship (or its absence)
+// require source support. Without a citation, the model has no basis to assert
+// e.g. "not a Netflix title" — which is often flat wrong (KPop Demon Hunters and
+// One Piece are both real Netflix titles). Strip such unsupported claims.
+const UNSUPPORTED_CLAIM_PATTERNS = Object.freeze([
+  /\bnot a\b[^.;]*\b(title|partner|project)\b/i,
+  /\bno known\b[^.;]*\bproject\b/i,
+  /\bno\b[^.;]*\b(content|partnership|collaboration)\b/i,
+  /\b(irrelevant|unrelated)\b/i,
+]);
+
+const NO_EVIDENCE_TEXT = 'No direct evidence in current packet research.';
+
+/**
+ * Guard unsupported factual world-claims in customer-facing reasoning text.
+ * When the term has no source support (no citations / inline refs) and the text
+ * asserts a title/partner/relevance claim, replace it with a neutral, honest
+ * "no direct evidence" statement instead of publishing an unverified assertion.
+ */
+export function sanitizeUnsupportedClaim(text, { hasSourceSupport = false } = {}) {
+  const raw = typeof text === 'string' ? text.trim() : '';
+  if (!raw || hasSourceSupport) return raw;
+  const hasUnsupportedClaim = UNSUPPORTED_CLAIM_PATTERNS.some((re) => re.test(raw));
+  return hasUnsupportedClaim ? NO_EVIDENCE_TEXT : raw;
+}
+
 export function buildResearchTermNote({
   phrase,
   reason = null,
@@ -332,7 +358,11 @@ export function buildResearchTermNote({
   speaker = null,
   citations = [],
 } = {}) {
-  const baseReason = trimWords(reason, 20);
+  const citationList = Array.isArray(citations)
+    ? citations.filter((v) => typeof v === 'string' && v.trim())
+    : [];
+  const hasSourceSupport = citationList.length > 0;
+  const baseReason = sanitizeUnsupportedClaim(trimWords(reason, 20), { hasSourceSupport });
   const usable = [proofPct, handicapPct, kalshiNativePct].some((v) => Number.isFinite(Number(v)));
   if (!usable || !baseReason) return null;
 

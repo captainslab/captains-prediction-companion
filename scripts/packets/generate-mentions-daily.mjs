@@ -1128,6 +1128,17 @@ function injectSourceHealthDisclosure(text, sourceHealthDisclosure) {
   return `${head}\n\n${disclosure}\n${tail}`;
 }
 
+// Prefer the contract's declared settlement_sources URL (e.g. the issuer IR page
+// that actually resolves the market) over the generic Kalshi event page.
+export function pickSettlementSourceLink(event, ticker) {
+  const sources = Array.isArray(event?.settlement_sources) ? event.settlement_sources : [];
+  const declared = sources
+    .map((entry) => (typeof entry?.url === 'string' ? entry.url.trim() : ''))
+    .find(Boolean);
+  if (declared) return declared;
+  return event?.event_url ?? event?.url ?? `https://kalshi.com/events/${ticker}`;
+}
+
 export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null, presentation = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
@@ -1314,8 +1325,8 @@ export function buildMentionsSynthesisInput({
     event: {
       title: s.title,
       subtitle: s.sub_title,
-      date_time: trustedPresentation?.event_time_iso ?? s.close,
-      settlement_source_link: event?.event_url ?? event?.url ?? `https://kalshi.com/events/${s.ticker}`,
+      date_time: trustedPresentation?.event_time_iso ?? null,
+      settlement_source_link: pickSettlementSourceLink(event, s.ticker),
       rules_primary: rules.primary,
     },
     presentation: trustedPresentation,

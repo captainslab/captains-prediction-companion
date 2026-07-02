@@ -25,6 +25,7 @@ import {
   classifyEdnqRisk,
   normalizeQualificationResult,
 } from './qualification-risk.mjs';
+import { sanitizeUnsupportedClaim } from './mentions-research-perplexity.mjs';
 
 export const SECTION_ORDER = Object.freeze([
   '1. FAST READ',
@@ -428,7 +429,10 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   const score = cpcCell(term);
   lines.push(sectionLabelHeader(rank, term._short, score, tier));
   lines.push('');
-  pushCardBlock(lines, 'Why:', note.catalyst ?? term.catalyst ?? 'MISSING');
+  const whyText = sanitizeUnsupportedClaim(note.catalyst ?? term.catalyst ?? 'MISSING', {
+    hasSourceSupport: termHasSourceRefs(term, note),
+  });
+  pushCardBlock(lines, 'Why:', whyText);
   pushCardBlock(lines, 'Settlement:', note.settlement_fit ?? term.settlement_fit ?? 'MISSING');
   pushCardBlock(lines, 'Evidence:', cardEvidenceLabel(term, note));
   const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
@@ -581,7 +585,8 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
-  lines.push(`event_time_central: ${formatCentral(input?.presentation?.event_time_iso ?? e.date_time)}`);
+  const presentedEventIso = input?.presentation?.event_time_iso ?? e.date_time ?? null;
+  lines.push(`event_time_central: ${presentedEventIso ? formatCentral(presentedEventIso) : 'UNCONFIRMED'}`);
   lines.push(`date: ${maybe(input.date)}`);
   if (generatedAtUtc) {
     lines.push(`generated_utc: ${formatGeneratedStamp(generatedAtUtc)}`);

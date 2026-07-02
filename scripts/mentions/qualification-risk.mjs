@@ -28,6 +28,25 @@ const FALLBACK_TIME_FIELDS = Object.freeze([
   'occurrence_datetime',
 ]);
 
+// Settlement-expiration fields more than this many days after the market's own
+// (ticker/packet) date are treated as far-future ceilings / sentinels — e.g. an
+// end-of-year "2026-12-31" expiration stamped on an open-ended "live" market —
+// and are never used as the event-start time shown in the header.
+const SENTINEL_HORIZON_DAYS = 45;
+
+function isoToEpochDay(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : Math.floor(d.getTime() / 86400000);
+}
+
+function isFarFutureSentinel(candidate, referenceDate) {
+  const refDay = isoToEpochDay(referenceDate);
+  const candDay = isoToEpochDay(toEtDate(candidate.iso));
+  if (refDay == null || candDay == null) return false;
+  return candDay - refDay > SENTINEL_HORIZON_DAYS;
+}
+
 const DIRECT_ROUTE_RE = /\b(trump_event|trump_weekly|trump_monthly)\b/i;
 const TRUMP_RE = /\btrump\b/i;
 const RISK_PATTERNS = Object.freeze([
@@ -244,11 +263,22 @@ export function resolveMentionPresentationMetadata({ date = null, event = {} } =
       }
     }
   } else if (fallback.length) {
-    // Settlement-expiration fields (close_time / expected_expiration_time /
-    // occurrence_datetime) are far-future ceilings for open-ended "live now" markets,
-    // not the event-start date. Use the first only for display; never let these
-    // ceilings — or their disagreements with each other — fail-close the packet.
-    selected = fallback[0];
+    // Settlement-expiration fields (close_time / expiration_time /
+    // expected_expiration_time / occurrence_datetime) are ceilings, not the
+    // event-start date. Drop far-future sentinels (e.g. a Dec 31 expiration on
+    // an open-ended "live" market), then only trust the surviving ceilings when
+    // they AGREE on a single date (as they do for a fixed-time event). If every
+    // ceiling was a sentinel, or the survivors disagree, we have no trustworthy
+    // event start — mark it UNCONFIRMED rather than presenting an expiration
+    // ceiling as the event start. Ceilings never fail-close the packet.
+    const referenceDate = tickerDate || packetDate || null;
+    const nonSentinel = referenceDate
+      ? fallback.filter((candidate) => !isFarFutureSentinel(candidate, referenceDate))
+      : fallback.slice();
+    const distinctDates = new Set(
+      nonSentinel.map((candidate) => toEtDate(candidate.iso)).filter(Boolean),
+    );
+    selected = nonSentinel.length && distinctDates.size === 1 ? nonSentinel[0] : null;
   }
 
   const eventDate = selected ? toEtDate(selected.iso) : null;
