@@ -153,10 +153,22 @@ export function annotateResearchRoutes(candidates) {
 // hard script timeout.
 
 export const DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS = 20 * 1000;
+// The kalshi-series scan enumerates ~150+ mention-tagged series sequentially and
+// needs ~90s of real wall-clock; the 20s base budget aborted it on every tick,
+// silently starving discovery of its only reliable mention source (mention
+// markets often carry non-`open` status and are invisible to the broad scan).
+// Give that one source a wider default while broad/alpha keep the fast 20s
+// fail-fast budget. Worst-case total discovery ~160s — well under the 600s cron.
+export const DEFAULT_SERIES_DISCOVERY_TIMEOUT_MS = 120 * 1000;
 
-export function discoverySourceTimeoutMs(env = process.env) {
+// A MENTIONS_WATCH_DISCOVERY_TIMEOUT_SECONDS override, when set, still wins for
+// every source (operator escape hatch); otherwise the budget is per-source.
+export function discoverySourceTimeoutMs(env = process.env, sourceLabel) {
   const seconds = Number(env.MENTIONS_WATCH_DISCOVERY_TIMEOUT_SECONDS);
-  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS;
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  return sourceLabel === 'kalshi-series'
+    ? DEFAULT_SERIES_DISCOVERY_TIMEOUT_MS
+    : DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS;
 }
 
 // Run one discovery source against a deadline. The source receives an AbortSignal
@@ -227,7 +239,9 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
   const fetchKalshiEventsImpl = discovery.fetchKalshiEvents ?? fetchKalshiEvents;
   const fetchSeriesImpl = discovery.fetchMentionEventsBySeries ?? fetchMentionEventsBySeries;
   const collectAlphaImpl = discovery.collectAlphaMentionIntake ?? collectAlphaMentionIntake;
-  const timeoutMs = discovery.timeoutMs ?? discoverySourceTimeoutMs(env);
+  // An injected discovery.timeoutMs (tests / recovery) applies uniformly across
+  // sources; otherwise each source resolves its own budget by label.
+  const timeoutFor = (label) => discovery.timeoutMs ?? discoverySourceTimeoutMs(env, label);
 
   const candidates = [];
   const sources = [];
@@ -235,14 +249,14 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
   const broad = await runDiscoverySource('kalshi-broad', async (signal) => {
     const res = await fetchKalshiEventsImpl('broad', { signal });
     return filterMentionEvents(res?.events ?? []).mentionEvents;
-  }, timeoutMs);
+  }, timeoutFor('kalshi-broad'));
   sources.push(broad);
   candidates.push(...broad.events);
 
   const series = await runDiscoverySource('kalshi-series', async (signal) => {
     const res = await fetchSeriesImpl({ signal });
     return filterMentionEvents(res?.events ?? []).mentionEvents;
-  }, timeoutMs);
+  }, timeoutFor('kalshi-series'));
   sources.push(series);
   candidates.push(...series.events);
 
@@ -256,7 +270,7 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
       fetchImpl: (url, opts = {}) => fetch(url, { ...opts, signal }),
     });
     return res?.events ?? [];
-  }, timeoutMs);
+  }, timeoutFor('alpha-intake'));
   sources.push(alpha);
   candidates.push(...alpha.events);
 
