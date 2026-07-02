@@ -18,6 +18,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world';
 
@@ -32,20 +33,64 @@ function parseArgs(argv) {
   return opts;
 }
 
-// Token set, lowercased, with the noise token "dr" dropped so "Congo DR" and
-// "DR Congo" reconcile. Returns a stable sorted key.
-function teamKey(name) {
+// Team names diverge between our static structure and ESPN's scoreboard feed
+// (e.g. "IR Iran" vs "Iran", "Cabo Verde" vs "Cape Verde", "Türkiye" vs
+// "Turkey", "Côte d'Ivoire" vs "Ivory Coast"). Since neither side carries a
+// shared id, we join by canonicalizing both names to a stable key. Aliases map
+// known-divergent spellings to one canonical form; diacritics are folded (not
+// dropped) so accented letters do not decay into whitespace.
+
+// Standalone qualifier/noise tokens dropped so spellings reconcile. We do NOT
+// drop directional prefixes like "ir"/"dr": order-independent sorting already
+// reconciles "Congo DR"/"DR Congo" (both -> congo-dr) and "IR Iran" is handled
+// by the alias map, so dropping them would over-collapse (e.g. Republic of
+// Congo into DR Congo).
+const NOISE_TOKENS = new Set(['rep', 'republic', 'and']);
+
+// Applied to the fully normalized string (lowercased, diacritics folded,
+// punctuation stripped, whitespace collapsed) → single canonical spelling.
+const TEAM_ALIASES = new Map([
+  ['cabo verde', 'cape verde'],
+  ['cape verde islands', 'cape verde'],
+  ['ir iran', 'iran'],
+  ['korea republic', 'south korea'],
+  ['korea south', 'south korea'],
+  ['turkiye', 'turkey'],
+  ['cote divoire', 'ivory coast'],
+  ['cote d ivoire', 'ivory coast'],
+  // "Congo DR"/"DR Congo" reconcile via sorted tokens (congo-dr); no bare-"congo"
+  // alias, so Republic of Congo stays distinct from DR Congo.
+  ['czechia', 'czech republic'],
+  ['usa', 'united states'],
+  ['united states of america', 'united states'],
+  ['bosnia herzegovina', 'bosnia and herzegovina'],
+]);
+
+// Lowercase, fold diacritics to ASCII, strip punctuation, collapse whitespace.
+function normalizeName(name) {
   return String(name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z\s]/g, ' ')
-    .split(/\s+/)
-    .filter((t) => t && t !== 'dr')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Canonical, order-stable key for a single team name. Returns a sorted,
+// hyphen-joined token key after alias resolution and noise-token removal.
+export function canonicalTeamKey(name) {
+  const normalized = normalizeName(name);
+  const aliased = TEAM_ALIASES.get(normalized) ?? normalized;
+  return aliased
+    .split(' ')
+    .filter((t) => t && !NOISE_TOKENS.has(t))
     .sort()
     .join('-');
 }
 
-function matchKey(home, away) {
-  return [teamKey(home), teamKey(away)].sort().join('|');
+export function matchKey(home, away) {
+  return [canonicalTeamKey(home), canonicalTeamKey(away)].sort().join('|');
 }
 
 async function getJson(url) {
@@ -162,4 +207,8 @@ async function main() {
   if (dryRun) console.log('[lineups] DRY RUN — no files written');
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Only run the fetcher when invoked directly, so the module can be imported
+// (e.g. by unit tests) without triggering a live scoreboard fetch.
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}
