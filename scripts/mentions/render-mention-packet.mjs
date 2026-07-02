@@ -18,13 +18,22 @@
 // Market price/liquidity is display-only context and never a score input.
 // All user-facing times are America/Chicago.
 
+import {
+  formatPmtAdvisoryContext,
+} from './pmt-advisory-context.mjs';
+import {
+  classifyEdnqRisk,
+  normalizeQualificationResult,
+} from './qualification-risk.mjs';
+import { sanitizeUnsupportedClaim } from './mentions-research-perplexity.mjs';
+
 export const SECTION_ORDER = Object.freeze([
   '1. FAST READ',
   '2. TOP YES CASE',
   '3. WEAK YES WATCHLIST',
   '4. WEAK NO / STRONG NO TRAPS',
   '5. SOURCE GAPS',
-  '6. QUALIFICATION RISK',
+  '6. QUALIFICATION RESULT / EDNQ RISK',
   '7. SETTLEMENT NOTES',
   '8. FULL STRIKE INVENTORY',
 ]);
@@ -37,7 +46,9 @@ const GAP_LABEL = 'RESEARCH GAP';
 const QUALIFICATION_STATE = 'qualification fallback';
 const QUALIFICATION_LABEL = 'QUALIFICATION RISK';
 const TIER_RANK = Object.freeze({ 'STRONG YES': 4, 'WEAK YES': 3, 'WEAK NO': 2, 'STRONG NO': 1, [GAP_LABEL]: 0 });
-const FORBIDDEN_CUSTOMER_JARGON_RE = /\b(EVIDENCE_LEAN|NO_CLEAR_PICK|WATCH|LEAN|PICK|source layer(?:s)?|event_proximity|proximity-only|stub|scaffold|composite score|source-backed composite)\b/i;
+const FORBIDDEN_CUSTOMER_JARGON_RE = /(?:\bEVIDENCE[ _]LEAN\b|\bNO[ _]CLEAR[ _]PICK\b|\bWATCH\b|\bLEAN\b|\bLEANS\b|\bpick\b|\bfade\b|\bbest bet\b|\bwager\b|\bbankroll\b|Call:|Market board|Side \/ market|\bsource layer(?:s)?\b|\bevent_proximity\b|\bproximity-only\b|\bstub\b|\bscaffold\b|\bcomposite score\b|\bsource-backed composite\b)/i;
+const COLD_CURRENT_CONTEXT_RE = /\b(no direct current context|weak current context|not a topic|not a focus|not a primary|not primary|not central|not relevant|irrelevant|cold|no current context|current context cold)\b/i;
+const SOURCES_META_NOTE = 'Sources: see packet meta/audit artifact.';
 
 function scoreToTier(score) {
   if (score === null || score === undefined || !Number.isFinite(Number(score))) return GAP_LABEL;
@@ -83,6 +94,25 @@ export function formatCentral(isoOrDate) {
     timeZoneName: 'short',
   });
   return fmt.format(d);
+}
+
+function formatGeneratedStamp(isoOrDate) {
+  const d = new Date(isoOrDate);
+  if (Number.isNaN(d.getTime())) return 'MISSING';
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  return fmt.format(d);
+}
+
+function formatGeneratedCentralStamp(isoOrDate) {
+  return formatCentral(isoOrDate);
 }
 
 // Short display term: the strike word, not the repeated event title.
@@ -148,7 +178,7 @@ function pushWrapped(lines, label, value, width = 76, indent = '   ') {
 function sectionLabelHeader(rank, term, score, tier) {
   // "#N" rank prefix keeps per-strike cards visually distinct from the numbered
   // section headers (e.g. section "3. WEAK YES WATCHLIST" vs card "#3 Democrat").
-  return `#${rank} ${term} — P(YES) ${score} — ${tier}`;
+  return `#${rank} ${term} — ${score} — ${tier}`;
 }
 
 function cpcCell(term) {
@@ -166,12 +196,231 @@ function renderedPosture(term) {
   return scoreToTier(numericScore(term));
 }
 
-function cardResearchLabel(term) {
-  return isResearchBacked(term) ? 'source-backed / fresh' : 'research gap';
+function termNarrativeText(term, note = {}) {
+  return [
+    note.reason,
+    note.catalyst,
+    term?.research_reason,
+    term?.catalyst,
+    term?.research_term_note?.catalyst,
+  ].filter(Boolean).join(' ').trim();
 }
 
-function cardReasonLabel(tier) {
-  return tier === 'STRONG NO' || tier === 'WEAK NO' ? 'Why it reads NO' : 'Why it could hit';
+function termHasSourceRefs(term, note = {}) {
+  const narrative = termNarrativeText(term, note);
+  return /\[\d+\]/.test(narrative)
+    || (Array.isArray(note.citations) && note.citations.length > 0)
+    || (Array.isArray(term?.research_term_note?.citations) && term.research_term_note.citations.length > 0);
+}
+
+function lowerJoined(parts) {
+  return parts.map((part) => String(part ?? '').trim()).filter(Boolean).join(' ').toLowerCase();
+}
+
+export function buildTrumpQualificationCheck(input = {}) {
+  const route = String(input?.research_provenance?.research_route ?? '').trim().toLowerCase();
+  const text = lowerJoined([
+    route,
+    input?.event?.title,
+    input?.event?.subtitle ?? input?.event?.sub_title,
+    input?.event?.rules_primary,
+    input?.event?.rules_secondary,
+  ]);
+  if (!route.startsWith('trump_') && !/\btrump\b/.test(text)) return null;
+
+  const highReason = 'Foreign-leader or diplomatic appearances can turn into photo ops, bilateral moments, or side events without stable remarks.';
+  const mediumHighReason = 'Formal signing events can be canceled, moved, or converted to non-qualifying paperwork/photo release.';
+  const mediumReason = 'Press conferences and formal remarks usually qualify, but the speaking block can narrow or shift.';
+  const lowReason = 'Rallies and long-form interviews usually keep Trump speaking continuously, so qualification risk is low.';
+
+  const matches = [
+    {
+      risk: 'HIGH',
+      event_type: 'foreign-leader joint appearance / bilateral / summit side event',
+      reason: highReason,
+      patterns: [
+        /\bpool spray\b/i,
+        /\bphoto op\b/i,
+        /\bbilateral meeting\b/i,
+        /\bforeign[- ]leader(?:\s+joint appearance)?\b/i,
+        /\bjoint appearance\b/i,
+        /\bworking lunch\b/i,
+        /\bmulti[- ]party\b/i,
+        /\bforeign[- ]leader press availability\b/i,
+        /\bpress availability\b/i,
+        /\bsummit side event\b/i,
+        /\bclosed[- ]door\b/i,
+        /\bschedule[- ]unstable\b/i,
+        /\btrade\/treaty\/diplomacy signing\b/i,
+        /\btrade signing\b/i,
+        /\btreaty signing\b/i,
+        /\bdiplomacy signing\b/i,
+      ],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'executive order signing',
+      reason: mediumHighReason,
+      patterns: [/\bexecutive order signing\b/i],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'proclamation signing',
+      reason: mediumHighReason,
+      patterns: [/\bproclamation signing\b/i],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'formal signing ceremony',
+      reason: mediumHighReason,
+      patterns: [/\bformal signing ceremony\b/i],
+    },
+    {
+      risk: 'MEDIUM-HIGH',
+      event_type: 'bill signing',
+      reason: mediumHighReason,
+      patterns: [
+        /\bsigning\b/i,
+      ],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'press conference',
+      reason: mediumReason,
+      patterns: [/\bpress conference\b/i],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'major policy speech',
+      reason: mediumReason,
+      patterns: [/\bmajor policy speech\b/i],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'cabinet meeting remarks',
+      reason: mediumReason,
+      patterns: [/\bcabinet meeting remarks\b/i, /\bcabinet meeting\b/i],
+    },
+    {
+      risk: 'MEDIUM',
+      event_type: 'formal public remarks',
+      reason: mediumReason,
+      patterns: [/\bformal public remarks\b/i, /\bpublic remarks\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'major campaign speech',
+      reason: lowReason,
+      patterns: [/\bmajor campaign speech\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'campaign rally',
+      reason: lowReason,
+      patterns: [/\bcampaign rally\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'major rally',
+      reason: lowReason,
+      patterns: [/\bmajor rally\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'rally',
+      reason: lowReason,
+      patterns: [/\brally\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'town hall',
+      reason: lowReason,
+      patterns: [/\btown hall\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'debate',
+      reason: lowReason,
+      patterns: [/\bdebate\b/i],
+    },
+    {
+      risk: 'LOW',
+      event_type: 'long-form TV interview',
+      reason: lowReason,
+      patterns: [/\blong[- ]form tv interview\b/i, /\btv interview\b/i, /\binterview\b/i],
+    },
+  ];
+
+  for (const candidate of matches) {
+    if (candidate.patterns.some((re) => re.test(text))) {
+      const hasSpecificSigning = /\bexecutive order\b/i.test(text)
+        || /\bproclamation\b/i.test(text)
+        || /\bformal signing ceremony\b/i.test(text);
+      const eventType = candidate.event_type === 'bill signing' && !hasSpecificSigning
+        ? 'bill signing'
+        : candidate.event_type;
+      return {
+        event_type: eventType,
+        ednq_risk: candidate.risk,
+        reason: candidate.reason,
+        content_term_note: 'Content-term reads are conditional on a qualifying spoken event.',
+      };
+    }
+  }
+
+  return {
+    event_type: 'Trump event',
+    ednq_risk: 'MEDIUM',
+    reason: mediumReason,
+    content_term_note: 'Content-term reads are conditional on a qualifying spoken event.',
+  };
+}
+
+function cardEvidenceLabel(term, note = {}) {
+  const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
+  const hasHistory = Boolean(provenance);
+  const narrative = termNarrativeText(term, note);
+  const coldCurrent = COLD_CURRENT_CONTEXT_RE.test(narrative);
+  const hasCurrent = Boolean(narrative) && !coldCurrent;
+  const short = String(term?._short ?? term?.short_term ?? term?.full_strike_text ?? '').trim();
+  const isCountTerm = (Number.isFinite(Number(term?.required_count)) && Number(term.required_count) > 1)
+    || /\(\s*\d+\+\s*times\s*\)/i.test(short)
+    || /\brepeat_requirement\b/i.test(String(term?.repeat_requirement ?? ''));
+
+  if (hasHistory && isCountTerm) return 'comparable history only; weak current context.';
+  if (hasHistory && coldCurrent) return 'comparable history only; weak current context.';
+  if (hasHistory && hasCurrent) return 'current-event context + comparable history.';
+  if (hasHistory) return 'comparable history only.';
+  if (hasCurrent) return 'current-event context.';
+  return 'no direct current context.';
+}
+
+function pushCardBlock(lines, label, value, width = 76) {
+  const safeValue = safeCustomerText(value, 'MISSING');
+  const wrapped = wrapText(safeValue, width);
+  lines.push(label);
+  if (!wrapped.length) {
+    lines.push('MISSING');
+    lines.push('');
+    return;
+  }
+  lines.push(wrapped[0]);
+  for (const continuation of wrapped.slice(1)) {
+    lines.push(continuation);
+  }
+  lines.push('');
+}
+
+function renderPmtAdvisoryBlock(lines, context) {
+  const advisoryLines = formatPmtAdvisoryContext(context)
+    .map((line) => safeCustomerText(line, null))
+    .filter(Boolean);
+  if (!advisoryLines.length) return;
+  lines.push('');
+  for (const line of advisoryLines) {
+    lines.push(line);
+  }
+  lines.push('');
 }
 
 function renderTermCard(lines, term, index, note = {}, { tierOverride = null } = {}) {
@@ -179,9 +428,17 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   const rank = index + 1;
   const score = cpcCell(term);
   lines.push(sectionLabelHeader(rank, term._short, score, tier));
-  pushWrapped(lines, `${cardReasonLabel(tier)}:`, note.catalyst ?? term.catalyst ?? 'MISSING');
-  pushWrapped(lines, 'Settlement fit:', note.settlement_fit ?? term.settlement_fit ?? 'MISSING');
-  lines.push(`   Research: ${cardResearchLabel(term)}`);
+  lines.push('');
+  const whyText = sanitizeUnsupportedClaim(note.catalyst ?? term.catalyst ?? 'MISSING', {
+    hasSourceSupport: termHasSourceRefs(term, note),
+  });
+  pushCardBlock(lines, 'Why:', whyText);
+  pushCardBlock(lines, 'Settlement:', note.settlement_fit ?? term.settlement_fit ?? 'MISSING');
+  pushCardBlock(lines, 'Evidence:', cardEvidenceLabel(term, note));
+  const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
+  if (provenance) {
+    pushCardBlock(lines, 'Provenance:', provenance);
+  }
 }
 
 function renderGapSummary(lines, gapTerms) {
@@ -196,21 +453,34 @@ function renderGapSummary(lines, gapTerms) {
   lines.push('  These strikes stay out of the YES/NO cards until research-backed evidence lands.');
 }
 
-function renderQualificationRiskSection(lines, qualificationTerms) {
-  lines.push('6. QUALIFICATION RISK');
-  if (!qualificationTerms.length) {
-    lines.push('- none');
-    lines.push('');
-    return;
+function renderQualificationRiskSection(lines, risk) {
+  lines.push('6. QUALIFICATION RESULT / EDNQ RISK');
+  lines.push(`- EDNQ result: ${risk.result_label} is a separate event-level result/outcome, not a spoken-term strike.`);
+  lines.push(`- CPC Read: ${normalizeQualificationResult(risk.cpc_read)}`);
+  lines.push('- Why EDNQ could happen:');
+  for (const line of risk.why_ednq?.length ? risk.why_ednq : ['No clear qualification-pathway indicator is confirmed yet.']) {
+    lines.push(`  - ${line}`);
   }
-  for (const term of qualificationTerms) {
-    const status = String(term?.qualification_status ?? '').trim().toLowerCase();
-    const proven = status === 'high' || status === 'medium';
-    lines.push(`- ${maybe(term._short)}`);
-    lines.push('  Settlement fit: separate settlement path if the event or rules do not qualify.');
-    lines.push(`  Read: ${proven ? `YES-leaning qualification risk proven (${status || 'unknown'})` : 'neutral fallback, not a pick.'}`);
+  lines.push('- Current qualification check:');
+  for (const line of risk.current_check?.length ? risk.current_check : ['Trusted event time not yet confirmed; do not treat settlement expiration as the event start.']) {
+    lines.push(`  - ${line}`);
   }
+  lines.push(`- Historical EDNQ pattern note: ${risk.historical_note}`);
+  if (risk.active_blockers?.length) {
+    lines.push('- Active metadata/source-window blockers:');
+    for (const blocker of risk.active_blockers) {
+      lines.push(`  - ${blocker}`);
+    }
+  } else {
+    lines.push('- Active metadata/source-window blockers: none');
+  }
+  lines.push(`- Qualification term inventory: ${risk.qualification_term_count > 0 ? risk.qualification_term_labels.join(', ') : 'none'}`);
   lines.push('');
+}
+
+function renderInventoryLabel(term) {
+  if (isQualificationRisk(term)) return null;
+  return maybe(term?._short ?? term?.short_term ?? shortTerm(term?.full_strike_text, ''));
 }
 
 // Best rendered tier from the customer board. Research gaps sort last.
@@ -266,6 +536,7 @@ function collectNotes(ranked, analyst) {
 
 function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = null, includeWeakYesLead = false } = {}) {
   lines.push(heading);
+  lines.push('');
   if (!terms.length) {
     lines.push('- none');
     lines.push('');
@@ -274,10 +545,7 @@ function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = 
   terms.forEach((term) => {
     const idx = ranked.indexOf(term);
     renderTermCard(lines, term, idx, notes[term._short] ?? {}, tierFilter ? { tierOverride: tierFilter(term) } : {});
-    lines.push('');
   });
-  if (lines[lines.length - 1] === '') lines.pop();
-  lines.push('');
 }
 
 /**
@@ -292,6 +560,11 @@ function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = 
  */
 export function renderMentionPacket(input, { analyst = null, redteam = null, generatedAtUtc = null, analystTier = 'none' } = {}) {
   if (!input || typeof input !== 'object') throw new Error('renderMentionPacket: input missing');
+  if (input?.presentation?.blocked) {
+    const code = input.presentation.blocker_code ?? 'BLOCKED_EVENT_METADATA_MISMATCH';
+    const reason = input.presentation.reason ?? 'event metadata mismatch';
+    throw new Error(`renderMentionPacket: ${code}: ${reason}`);
+  }
   const e = input.event ?? {};
   const summary = input.summary ?? {};
   const ranked = rankTerms(Array.isArray(input.terms) ? input.terms : [], e.title);
@@ -300,22 +573,37 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const notes = collectNotes(ranked, a);
   const qualificationTerms = ranked.filter(isQualificationRisk);
   const contentTerms = ranked.filter((term) => !isQualificationRisk(term));
+  const ednqRisk = classifyEdnqRisk({
+    event: e,
+    researchRoute: input?.research_provenance?.research_route ?? null,
+    qualificationTerms,
+    presentation: input?.presentation ?? null,
+  });
+  const pmtAdvisoryContext = input?.research_provenance?.pmt_advisory_context
+    ?? ranked.find((term) => term?.pmt_advisory_context)?.pmt_advisory_context
+    ?? null;
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
-  lines.push(`event_time_central: ${formatCentral(e.date_time)}`);
+  const presentedEventIso = input?.presentation?.event_time_iso ?? e.date_time ?? null;
+  lines.push(`event_time_central: ${presentedEventIso ? formatCentral(presentedEventIso) : 'UNCONFIRMED'}`);
   lines.push(`date: ${maybe(input.date)}`);
-  if (generatedAtUtc) lines.push(`generated_utc: ${generatedAtUtc}`);
+  if (generatedAtUtc) {
+    lines.push(`generated_utc: ${formatGeneratedStamp(generatedAtUtc)}`);
+    lines.push(`generated_central: ${formatGeneratedCentralStamp(generatedAtUtc)}`);
+  }
   lines.push(`settlement_source: ${maybe(e.settlement_source_link)}`);
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('Market Context - NOT IN SCORE: display-only context; never a score input.');
   lines.push('Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify.');
+  lines.push(`Content term count: ${contentTerms.length} content term${contentTerms.length === 1 ? '' : 's'}${qualificationTerms.length ? ` + ${qualificationTerms.length} EDNQ result${qualificationTerms.length === 1 ? '' : 's'}` : ''}.`);
   lines.push('');
 
   const bestTier = postCapBestPosture(contentTerms);
   const researchedCount = contentTerms.filter(isResearchBacked).length;
   lines.push('1. FAST READ');
   lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${contentTerms.length} term(s) have research-backed P(YES); best tier ${bestTier}. Research only — no trade.`));
+  renderPmtAdvisoryBlock(lines, pmtAdvisoryContext);
   lines.push('');
 
   const strongYes = [];
@@ -366,7 +654,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   }
   lines.push('');
 
-  renderQualificationRiskSection(lines, qualificationTerms);
+  renderQualificationRiskSection(lines, ednqRisk);
 
   lines.push('7. SETTLEMENT NOTES');
   const provenanceLines = Array.isArray(input.deterministic_provenance_lines)
@@ -378,15 +666,21 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   } else {
     lines.push('- none');
   }
+  if (ranked.some((term) => termHasSourceRefs(term, notes[term._short] ?? {}))) {
+    lines.push(SOURCES_META_NOTE);
+  }
   lines.push('');
 
   lines.push('8. FULL STRIKE INVENTORY');
-  for (const t of ranked) lines.push(`- ${maybe(t.full_strike_text)}`);
+  for (const t of contentTerms) {
+    const label = renderInventoryLabel(t);
+    if (label) lines.push(`- ${label}`);
+  }
   lines.push('');
 
   lines.push('---');
   lines.push(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`);
-  lines.push('Research only. No trades. No bankroll advice. Market context is never a score input.');
+  lines.push('Research only. No trades. Price context is display-only and never a score input.');
   return lines.join('\n');
 }
 
@@ -398,10 +692,6 @@ export function validateRenderedPacket(text, input) {
     if (idx < 0) throw new Error(`rendered packet missing section "${section}"`);
     if (idx < lastIdx) throw new Error(`rendered packet section out of order: "${section}"`);
     lastIdx = idx;
-  }
-  for (const term of input?.terms ?? []) {
-    const full = String(term.full_strike_text ?? '').trim();
-    if (full && !text.includes(full)) throw new Error(`rendered packet omitted full strike text: ${full}`);
   }
   if (!/research only/i.test(text)) throw new Error('rendered packet omitted research-only footer');
   if (!text.includes(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`)) {
@@ -415,5 +705,25 @@ export function validateRenderedPacket(text, input) {
   }
   if (/Most likely mention terms/i.test(text)) throw new Error('rendered packet leaked old Most likely mention terms scaffold format');
   if (/\|\s*scaffold\s*\|/i.test(text)) throw new Error('rendered packet leaked scaffold in board column');
+  if (/\[\d+\]/.test(text)) {
+    if (!text.includes(SOURCES_META_NOTE)) {
+      throw new Error('rendered packet included bracket refs but omitted compact sources note');
+    }
+  }
+  const inputTerms = Array.isArray(input?.terms) ? input.terms : [];
+  const contentTerms = inputTerms.filter((term) => !isQualificationRisk(term));
+  const qualificationTerms = inputTerms.filter(isQualificationRisk);
+  for (const term of contentTerms) {
+    const label = String(term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
+    if (label && !text.includes(label)) throw new Error(`rendered packet omitted short strike text: ${label}`);
+  }
+  const inventoryBlock = text.split('8. FULL STRIKE INVENTORY')[1] ?? '';
+  for (const term of qualificationTerms) {
+    const label = String(term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
+    if (label && inventoryBlock.includes(label)) throw new Error(`rendered packet leaked EDNQ term into full strike inventory: ${label}`);
+  }
+  if (qualificationTerms.length && !/6\. QUALIFICATION RESULT \/ EDNQ RISK/.test(text)) {
+    throw new Error('rendered packet omitted EDNQ qualification section');
+  }
   return true;
 }

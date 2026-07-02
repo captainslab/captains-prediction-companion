@@ -35,7 +35,7 @@ import {
   filterMentionEvents,
   fetchMentionEventsBySeries,
 } from './lib/kalshi-discovery.mjs';
-import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
+import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeDecisionStatus } from '../shared/decision-process.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
 import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
 import {
@@ -74,11 +74,18 @@ import {
   fetchRedteamFields,
 } from '../mentions/model-router.mjs';
 import {
+  detectSourceHealthDisclosure,
+} from '../cron/cpc-packet-janitor.mjs';
+import {
   renderMentionPacket,
   validateRenderedPacket,
   shortTerm,
   CUSTOMER_RENDERER_ID,
 } from '../mentions/render-mention-packet.mjs';
+import {
+  resolveMentionPresentationMetadata,
+  BLOCKED_EVENT_METADATA_MISMATCH,
+} from '../mentions/qualification-risk.mjs';
 import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
 import { gateMentionMarket } from '../mentions/lexical-gate.mjs';
 import {
@@ -106,6 +113,9 @@ import {
   filterBySport,
 } from '../mentions/sports-settled-history.mjs';
 import { buildSportsGameContext } from '../mentions/sports-game-context.mjs';
+import {
+  buildPmtAdvisoryContext,
+} from '../mentions/pmt-advisory-context.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -161,6 +171,12 @@ function validProfile(value) {
 
 function lowerJoined(parts) {
   return parts.map(asText).filter(Boolean).join(' ').toLowerCase();
+}
+
+function speakerLabelForEvent(event = {}) {
+  const text = lowerJoined([event?.title, event?.sub_title, event?.event_ticker, event?.series_ticker]);
+  if (/\btrump\b/.test(text)) return 'Trump';
+  return null;
 }
 
 // Adapter: fold event + market + legacy text fields into the event-like shape
@@ -703,6 +719,12 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
     source_status: market?.source_status ?? legacy?.source_status ?? null,
     lexical_gate: lexicalGate,
+    pmt_advisory_context: buildPmtAdvisoryContext({
+      route: route?.route ?? null,
+      eventTitle: event?.title ?? null,
+      eventSubtitle: event?.sub_title ?? event?.subtitle ?? null,
+      speaker: 'Trump',
+    }),
   };
 }
 
@@ -784,6 +806,12 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     posture_cap_reason: `lexical_gate:${decision}`,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
     lexical_gate: lexicalGate,
+    pmt_advisory_context: buildPmtAdvisoryContext({
+      route: route?.route ?? null,
+      eventTitle: event?.title ?? null,
+      eventSubtitle: event?.sub_title ?? event?.subtitle ?? null,
+      speaker: 'Trump',
+    }),
   };
 }
 
@@ -921,7 +949,7 @@ export function mentionCompositeToDecisionRow(composite) {
       ? `research did not run or returned no usable evidence for this event (source_status=${composite?.source_status})`
       : `no usable evidence channels present`;
     blocker = `${reasonCode}: no usable evidence channels for "${target}" (${why})`;
-    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a pick or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
+    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a rated view or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
     trigger = {
       price: null,
         event: `run mentions research for "${target}" (transcripts > quotes > context), then re-score`,
@@ -929,7 +957,7 @@ export function mentionCompositeToDecisionRow(composite) {
   } else if (proximityOnly) {
     postureFinal = 'WATCH';
     statusOverride = EDGE_STATUS.WATCH;
-    analysis = `LOW-SOURCE WATCH only -- no pick. Event timing exists, but transcript/history/topic evidence is missing for "${target}". Missing: ${missingCats.join(', ') || 'evidence channels'}.`;
+    analysis = `LOW-SOURCE WATCH only -- no rated view. Event timing exists, but transcript/history/topic evidence is missing for "${target}". Missing: ${missingCats.join(', ') || 'evidence channels'}.`;
     trigger = {
       price: null,
       event: 'upgrade only after transcript, direct quote, historical tendency, or topic-path evidence lands',
@@ -971,6 +999,7 @@ export function mentionCompositeToDecisionRow(composite) {
   });
   return {
     ...row,
+    pmt_advisory_context: composite?.pmt_advisory_context ?? null,
     proof_pct: composite?.proof_pct ?? null,
     handicap_pct: composite?.handicap_pct ?? null,
     kalshi_native_pct: composite?.kalshi_native_pct ?? null,
@@ -1085,11 +1114,39 @@ function renderResearchCitationProvenance(composites) {
   return lines.length > 1 ? lines : [];
 }
 
-export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null }) {
+function injectSourceHealthDisclosure(text, sourceHealthDisclosure) {
+  const disclosure = String(sourceHealthDisclosure ?? '').trim();
+  if (!disclosure) return text;
+  const body = String(text ?? '');
+  const anchor = '\n---\nrenderer_contract:';
+  const idx = body.lastIndexOf(anchor);
+  if (idx < 0) {
+    return `${body.trimEnd()}\n${disclosure}\n`;
+  }
+  const head = body.slice(0, idx).trimEnd();
+  const tail = body.slice(idx);
+  return `${head}\n\n${disclosure}\n${tail}`;
+}
+
+// Prefer the contract's declared settlement_sources URL (e.g. the issuer IR page
+// that actually resolves the market) over the generic Kalshi event page.
+export function pickSettlementSourceLink(event, ticker) {
+  const sources = Array.isArray(event?.settlement_sources) ? event.settlement_sources : [];
+  const declared = sources
+    .map((entry) => (typeof entry?.url === 'string' ? entry.url.trim() : ''))
+    .find(Boolean);
+  if (declared) return declared;
+  return event?.event_url ?? event?.url ?? `https://kalshi.com/events/${ticker}`;
+}
+
+export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null, presentation = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
   const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
   const summary = summarizeCompositeRun(composites);
+  const pmtAdvisoryContext = composites.find((c) => c?.pmt_advisory_context)?.pmt_advisory_context
+    ?? rows.find((r) => r?.pmt_advisory_context)?.pmt_advisory_context
+    ?? null;
 
   const blockedCount = rows.filter((r) => r.edge_status === EDGE_STATUS.BLOCKED).length;
   const prov = composites[0] ?? null;
@@ -1110,12 +1167,15 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     compositeSummary: summary,
     provenanceLines,
     sourceHealthDisclosure,
+    pmtAdvisoryContext,
+    presentation,
   });
   const text = renderMentionPacket(synthesisInput, {
     generatedAtUtc: new Date().toISOString(),
     analystTier: 'none',
   });
-  validateRenderedPacket(text, synthesisInput);
+  const finalText = injectSourceHealthDisclosure(text, sourceHealthDisclosure);
+  validateRenderedPacket(finalText, synthesisInput);
 
   // Raw per-contract inventory + market context -> audit artifact only.
   const inventoryLines = rows.map((r, i) =>
@@ -1135,7 +1195,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   });
 
   return {
-    text,
+    text: finalText,
     rows,
     synthesisInput,
     inventoryText,
@@ -1197,11 +1257,26 @@ export function normalizeLayerList(value) {
   return [];
 }
 
-export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl = null, inventoryPath = null, compositeSummary = {}, provenanceLines = [], sourceHealthDisclosure = null } = {}) {
+export function buildMentionsSynthesisInput({
+  date,
+  event,
+  rows = [],
+  sourceUrl = null,
+  inventoryPath = null,
+  compositeSummary = {},
+  provenanceLines = [],
+  sourceHealthDisclosure = null,
+  pmtAdvisoryContext = null,
+  presentation = null,
+} = {}) {
   const s = summarizeEvent(event);
+  const trustedPresentation = presentation ?? resolveMentionPresentationMetadata({ date, event });
   const rules = firstMarketRules(event);
   const contentRows = rows.filter((row) => row.is_qualification_term !== true);
   const qualificationRows = rows.filter((row) => row.is_qualification_term === true);
+  const advisoryContext = pmtAdvisoryContext
+    ?? rows.find((row) => row?.pmt_advisory_context)?.pmt_advisory_context
+    ?? null;
   // Compact each term to only what the model needs for the article.
   const terms = rows.map((row) => ({
     full_strike_text: row.side_target,
@@ -1233,6 +1308,7 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     handicap_reason: row.handicap_reason ?? null,
     research_citations: Array.isArray(row.research_citations) ? row.research_citations : [],
     research_term_note: row.research_term_note ?? null,
+    pmt_advisory_context: row.pmt_advisory_context ?? advisoryContext,
     market_context: {
       implied: row.implied_probability,
       bid_cents: row.market_yes_bid,
@@ -1249,10 +1325,11 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     event: {
       title: s.title,
       subtitle: s.sub_title,
-      date_time: s.close,
-      settlement_source_link: event?.event_url ?? event?.url ?? `https://kalshi.com/events/${s.ticker}`,
+      date_time: trustedPresentation?.event_time_iso ?? null,
+      settlement_source_link: pickSettlementSourceLink(event, s.ticker),
       rules_primary: rules.primary,
     },
+    presentation: trustedPresentation,
     synthesis_rules: {
       output_style: 'concise research article / Substack-style brief',
       research_only: true,
@@ -1278,6 +1355,9 @@ export function buildMentionsSynthesisInput({ date, event, rows = [], sourceUrl 
     },
     deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
     source_health_disclosure: sourceHealthDisclosure || null,
+    research_provenance: advisoryContext ? {
+      pmt_advisory_context: advisoryContext,
+    } : null,
     terms,
   };
 }
@@ -1304,6 +1384,7 @@ export function describeMentionsHermesInvocation(options = {}) {
 export function buildFullStrikeInventoryAppendix(input = {}) {
   const terms = Array.isArray(input.terms) ? input.terms : [];
   const strikes = terms
+    .filter((t) => t?.is_qualification_term !== true && !/event does not qualify/i.test(String(t?.full_strike_text ?? '')))
     .map((t) => String(t.full_strike_text ?? '').trim())
     .filter(Boolean);
   if (!strikes.length) return '';
@@ -1327,7 +1408,7 @@ export function validateSynthesizedMentionPacket(text, input) {
   if ((input?.synthesis_rules?.all_terms_proximity_only || input?.synthesis_rules?.all_terms_research_gap) && forbiddenJargon.test(text)) {
     throw new Error('Hermes packet violated research-gap labeling: used legacy customer jargon');
   }
-  for (const term of input?.terms ?? []) {
+  for (const term of (input?.terms ?? []).filter((t) => t?.is_qualification_term !== true && !/event does not qualify/i.test(String(t?.full_strike_text ?? '')))) {
     const full = String(term.full_strike_text ?? '').trim();
     if (full && !text.includes(full)) {
       throw new Error(`Hermes packet omitted full strike text: ${full}`);
@@ -1413,17 +1494,17 @@ function buildMentionProcess({ event, hasLocalEvidence = false, legacy = null })
       market_board_context: marketCount > 0 || Boolean(legacy),
     },
     topEvidence: [
-      marketCount > 0 ? `Kalshi board captured with ${marketCount} market(s).` : null,
+      marketCount > 0 ? `Kalshi market set captured with ${marketCount} market(s).` : null,
       rules.primary ? 'Settlement wording present in source packet.' : null,
       hasLocalEvidence ? 'Legacy source evidence present.' : null,
     ].filter(Boolean),
     settlementRules: rules.primary || rules.secondary || 'MISSING: exact settlement wording not present in packet.',
     verifiedFacts: hasLocalEvidence ? 'Legacy source evidence present; requires research review.' : 'No verified transcript/event facts supplied by packet generator.',
-    marketSignalText: marketCount > 0 ? 'Market board captured for research; no pick inferred.' : 'No market board captured.',
+    marketSignalText: marketCount > 0 ? 'Price context captured for research; no CPC read inferred from price.' : 'No price context captured.',
     socialChatter: 'Separated: packet generator does not promote X chatter to fact.',
     inference: 'Mention-market inference blocked until exact source, transcript path, and word-match rules are checked.',
     skepticReview: 'MISSING: no skeptic review in packet generator.',
-    finalJudgment: 'WATCH only; no pick without exact wording, source/event path, and public statement/schedule evidence.',
+    finalJudgment: 'WATCH only; no CPC read without exact wording, source/event path, and public statement/schedule evidence.',
     wouldChangeView: [
       'Official event or transcript source is identified.',
       'Exact word-match/alias rules are confirmed.',
@@ -1928,6 +2009,7 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
       proofPct: r.proof_pct ?? null,
       handicapPct: r.handicap_pct ?? null,
       requiredCount: r.required_count ?? null,
+      speaker: speakerLabelForEvent(event),
       citations: combinedCitations,
     });
     if (researchNote) {
@@ -1942,6 +2024,53 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
 export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
+  const presentation = resolveMentionPresentationMetadata({ date, event });
+
+  if (presentation.blocked) {
+    const blocker = {
+      event_ticker: s.ticker,
+      date,
+      stage: 'event_metadata',
+      blocker_code: BLOCKED_EVENT_METADATA_MISMATCH,
+      reason: presentation.reason,
+      title: presentation.title,
+      settlement_source: presentation.settlement_source,
+      packet_date: presentation.packet_date,
+      ticker_date: presentation.ticker_date,
+      event_time_iso: presentation.event_time_iso,
+      event_date: presentation.event_date,
+      event_time_source: presentation.event_time_source,
+      conflicts: presentation.conflicts,
+      blocked_at_utc: new Date().toISOString(),
+      delivered: false,
+    };
+    return {
+      blocked: true,
+      blocker,
+      text: null,
+      inventoryText: null,
+      rows: [],
+      synthesisInput: null,
+      researchProvenance: null,
+      marketCount: marketInfo.marketCount,
+      missingStrikeCount: marketInfo.missingStrikeCount,
+      missingMarkets: marketInfo.missingMarkets,
+      compositeSummary: {
+        market_count: marketInfo.marketCount,
+        scored_count: 0,
+        source_backed_count: 0,
+        proximity_only_count: 0,
+        best_posture: 'NO_CLEAR_PICK',
+        best_score: null,
+        pricing_excluded: true,
+      },
+      counts: {
+        total: marketInfo.marketCount,
+        blocked: marketInfo.marketCount,
+        scored: 0,
+      },
+    };
+  }
 
   // Phase 2 earnings alpha (earnings_call route only): the per-term quarter
   // layer and context delta are built once per event from fixtures/cache —
@@ -2034,6 +2163,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       .map((c) => ({ market_ticker: c.market_ticker, ...c.earnings_posture_adjustment })),
     sports_history: prov?.sports_history ?? null,
     sports_game_context: prov?.sports_game_context ?? null,
+    pmt_advisory_context: prov?.pmt_advisory_context ?? composites.find((c) => c?.pmt_advisory_context)?.pmt_advisory_context ?? null,
   } : null;
 
   // Preferred path: v2 customer renderer; raw inventory routed to a separate
@@ -2045,9 +2175,15 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     sourcePath: sourceUrl,
     inventoryPath,
     sourceHealthDisclosure,
+    presentation,
   });
   if (slate) {
-    if (researchProvenance) slate.synthesisInput.research_provenance = researchProvenance;
+    if (researchProvenance) {
+      slate.synthesisInput.research_provenance = {
+        ...(slate.synthesisInput.research_provenance ?? {}),
+        ...researchProvenance,
+      };
+    }
     return {
       text: slate.text,
       inventoryText: slate.inventoryText,
@@ -2073,7 +2209,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
   const lines = [];
   lines.push('TLDR BOARD:');
   lines.push(`  no markets parsed for ${s.title}; nothing to score or rank.`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push(`  decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push('');
   lines.push(renderDecisionProcess(process, { heading: 'Research Completeness' }));
   return {
@@ -2101,7 +2237,7 @@ function buildLegacyEventPacket({ date, event }) {
   const lines = [];
   lines.push('TLDR:');
   lines.push(`  market_type: ${process.marketType}`);
-  lines.push(`  decision_status: ${process.decisionStatus}`);
+  lines.push(`  decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push(`  composite_top_posture: ${compositeSummary.best_posture}`);
   lines.push(`  composite_top_score: ${compositeSummary.best_score === null ? 'MISSING' : compositeSummary.best_score}`);
   lines.push('  note: legacy artifact uses mention-composite only when evidence records are present.');
@@ -2127,7 +2263,7 @@ function buildLegacyEventPacket({ date, event }) {
   for (const l of renderCompositeEvidence([composite])) lines.push(l);
   lines.push('');
   lines.push(`verified_vs_inference: ${p.verified_vs_inference || 'MISSING'}`);
-  lines.push(`decision_status: ${process.decisionStatus}`);
+  lines.push(`decision_status: ${describeDecisionStatus(process.decisionStatus)}`);
   lines.push(`posture: ${compositeSummary.best_posture} (mention composite; research only, no trade)`);
   return header + lines.join('\n') + packetFooter();
 }
@@ -2135,15 +2271,15 @@ function buildLegacyEventPacket({ date, event }) {
 function buildEmptyDayPacket(date, primeAttempts = [], discovery = null, mentionStats = null) {
   const process = evaluateDecisionProcess({
     marketType: MARKET_TYPES.MENTION_MARKET,
-    rawDecision: 'NO CLEAR PICK',
+    rawDecision: 'PASS',
     checked: { x_chatter_separated: true },
     settlementRules: 'MISSING: no market/event packet.',
     verifiedFacts: 'MISSING: no mention-style events discovered.',
-    marketSignalText: 'No market board captured.',
+    marketSignalText: 'No price context captured.',
     socialChatter: 'Not used.',
     inference: 'No inference.',
     skepticReview: 'MISSING.',
-    finalJudgment: 'NO CLEAR PICK.',
+    finalJudgment: 'PASS.',
   });
 
   const classificationNote = mentionStats
@@ -2160,8 +2296,8 @@ function buildEmptyDayPacket(date, primeAttempts = [], discovery = null, mention
     [
       'TLDR:',
       `  market_type: ${process.marketType}`,
-      `  decision_status: ${process.decisionStatus}`,
-      '  note: no mention-style events found; no pick or lean.',
+      `  decision_status: ${describeDecisionStatus(process.decisionStatus)}`,
+      '  note: no mention-style events found; no rated view.',
       `  classification_note: ${classificationNote}`,
       '',
       renderDecisionProcess(process, { heading: 'Research Completeness' }),
@@ -2416,6 +2552,11 @@ export async function writeKalshiEventPackets({
   // Settled-history records (price-free, outcomes only) load once per run and
   // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
   const historyRecords = await loadHistory({ stateRoot });
+  const sourceHealthDisclosure = detectSourceHealthDisclosure({
+    stateRoot,
+    date,
+    packetType: PACKET_TYPE,
+  }).disclosureLine;
   for (const ev of events) {
     const ticker = ev?.event_ticker;
     if (!ticker || seen.has(ticker)) continue;
@@ -2440,10 +2581,35 @@ export async function writeKalshiEventPackets({
         );
       }
     }
-    const built = buildKalshiEventPacket({ date, event: mergedEvent, sourceUrl: sourcePath, inventoryPath, historyRecords, earningsQuarters, earningsContextSources });
+    const built = buildKalshiEventPacket({
+      date,
+      event: mergedEvent,
+      sourceUrl: sourcePath,
+      inventoryPath,
+      historyRecords,
+      earningsQuarters,
+      earningsContextSources,
+      sourceHealthDisclosure,
+    });
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
+
+    if (built.blocked) {
+      const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+      mkdirSync(blockerDir, { recursive: true });
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      writeFileSync(blockerPath, JSON.stringify({
+        ...built.blocker,
+        event_ticker: ticker,
+        date,
+        stage: 'event_metadata',
+        delivered: false,
+      }, null, 2));
+      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: ${built.blocker?.reason || 'event metadata mismatch'} (blocker: ${blockerPath})`);
+      failedTickers.push(ticker);
+      continue;
+    }
 
     // EVENT-LEVEL FAIL-CLOSED gate: if every decision row is BLOCKED (no usable
     // source evidence anywhere on the board — the NO_DECLARED_SOURCES /
@@ -2495,6 +2661,9 @@ export async function writeKalshiEventPackets({
       items.push({ name: inventoryName, ...invW });
     }
     let packetText = built.text;
+    if (sourceHealthDisclosure && !packetText.includes(sourceHealthDisclosure)) {
+      packetText = injectSourceHealthDisclosure(packetText, sourceHealthDisclosure);
+    }
     let modelSynthesisInvocation = null;
     if (!dryRun) {
       try {
