@@ -602,7 +602,7 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const bestTier = postCapBestPosture(contentTerms);
   const researchedCount = contentTerms.filter(isResearchBacked).length;
   lines.push('1. FAST READ');
-  lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${contentTerms.length} term(s) have research-backed P(YES); best tier ${bestTier}. Research only — no trade.`));
+  lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${contentTerms.length} term(s) have a researched P(YES) read; best tier ${bestTier}. Research only — no trade.`));
   renderPmtAdvisoryBlock(lines, pmtAdvisoryContext);
   lines.push('');
 

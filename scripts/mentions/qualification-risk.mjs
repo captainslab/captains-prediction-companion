@@ -373,6 +373,70 @@ function qualificationTermsSummary(qualificationTerms) {
   };
 }
 
+function ednqRouteFamily(route, directTrump) {
+  const r = asText(route).toLowerCase();
+  if (directTrump || r.startsWith('trump_')) return 'trump';
+  if (r === 'political_general' || r === 'debate_hearing' || r === 'fed_agency') return 'politics';
+  if (r === 'earnings_call') return 'earnings';
+  if (r === 'sports_announcer') return 'sports';
+  if (r === 'talk_show_media') return 'talk_show';
+  if (r === 'entertainment_reality') return 'entertainment';
+  if (r === 'topic_most_mentioned') return 'topic';
+  return 'generic';
+}
+
+const EDNQ_FAMILY_WORDING = Object.freeze({
+  politics: {
+    event_type: 'political event format',
+    no_format: 'No strong event-format indicator confirms qualification yet.',
+    cancel: 'Event could fail to qualify if it is canceled, postponed, replaced, materially changed, becomes private or unavailable, lacks public qualifying remarks from the covered speaker, or occurs outside the covered settlement window.',
+    source: 'Source/window risk rises when the source shows arrival footage, a photo op, a partial clip, or a short Q&A instead of qualifying remarks from the covered speaker.',
+    historical: 'Prior verified EDNQ outcomes clustered in unusual event structures such as format changes, non-qualifying appearances, or coverage gaps. This sample is limited and not exhaustive.',
+  },
+  earnings: {
+    event_type: 'earnings-call format',
+    no_format: 'No confirmed earnings-call schedule or format detail is set yet.',
+    cancel: 'Event could fail to qualify if the earnings call is canceled, rescheduled, or the wording is said outside the covered earnings call / Q&A window.',
+    source: 'Source/window risk rises when the webcast or transcript is delayed, partial, or the term appears only in written materials rather than the covered call.',
+    historical: 'EDNQ history for earnings-call mention markets is limited; treat qualification as event-specific rather than assuming a base rate.',
+  },
+  sports: {
+    event_type: 'live sports broadcast format',
+    no_format: 'No confirmed broadcast or announcer detail is set yet for this match.',
+    cancel: 'Event could fail to qualify if the match or broadcast is postponed, abandoned, or the wording is said outside the covered live broadcast window.',
+    source: 'Source/window risk rises when the broadcast feed, announcer coverage, or transcript is unavailable, partial, or differs from the covered coverage.',
+    historical: 'EDNQ history for sports-broadcast mention markets is limited; treat qualification as event-specific rather than assuming a base rate.',
+  },
+  talk_show: {
+    event_type: 'talk-show / broadcast format',
+    no_format: 'No confirmed show or segment detail is set yet for this appearance.',
+    cancel: 'Event could fail to qualify if the show is preempted, the segment is cut, or the wording is said outside the covered broadcast window.',
+    source: 'Source/window risk rises when the episode airing, guest lineup, or transcript is delayed, partial, or differs from the covered broadcast.',
+    historical: 'EDNQ history for talk-show mention markets is limited; treat qualification as event-specific rather than assuming a base rate.',
+  },
+  entertainment: {
+    event_type: 'episode broadcast format',
+    no_format: 'No confirmed episode detail is set yet for this show.',
+    cancel: 'Event could fail to qualify if the episode is preempted, rescheduled, or the wording is said outside the covered episode window.',
+    source: 'Source/window risk rises when the episode airing or transcript is delayed, partial, or differs from the covered broadcast.',
+    historical: 'EDNQ history for entertainment mention markets is limited; treat qualification as event-specific rather than assuming a base rate.',
+  },
+  topic: {
+    event_type: 'counting-window format',
+    no_format: 'No confirmed counting-window detail is set yet.',
+    cancel: 'Event could fail to qualify if the counting window is canceled, rescheduled, or the wording is counted outside the covered window.',
+    source: 'Source/window risk rises when the counting-window feed or transcript is delayed, partial, or differs from the covered window.',
+    historical: 'EDNQ history for word-bank / most-mentioned markets is limited; treat qualification as event-specific rather than assuming a base rate.',
+  },
+  generic: {
+    event_type: 'event format',
+    no_format: 'No strong format indicator confirms qualification yet.',
+    cancel: 'Event could fail to qualify if it is canceled, postponed, replaced, materially changed, becomes private or unavailable, or occurs outside the covered settlement window.',
+    source: 'Source/window risk rises when the covering source is delayed, partial, or unavailable, or the wording appears outside the covered window.',
+    historical: 'EDNQ history for this market type is limited; treat qualification as event-specific rather than assuming a base rate.',
+  },
+});
+
 export function normalizeQualificationResult(value) {
   const text = asText(value).toLowerCase();
   if (text === 'blocked') return 'blocked';
@@ -404,6 +468,49 @@ export function classifyEdnqRisk({
     for (const conflict of Array.isArray(presentation.conflicts) ? presentation.conflicts : []) {
       blockers.push(`${conflict.field}: ${conflict.expected} != ${conflict.actual}`);
     }
+  }
+
+  const family = ednqRouteFamily(route, directTrump);
+  if (family !== 'trump') {
+    const w = EDNQ_FAMILY_WORDING[family] ?? EDNQ_FAMILY_WORDING.generic;
+    const politicsPattern = family === 'politics' ? pattern : null;
+    let familyRisk = 'not confirmed';
+    if (presentationBlocked) familyRisk = 'blocked';
+    else if (politicsPattern?.risk === 'high') familyRisk = 'high';
+    else if (politicsPattern?.risk === 'medium') familyRisk = 'medium';
+    else if (politicsPattern?.risk === 'low') familyRisk = 'low';
+
+    const familyWhy = [];
+    familyWhy.push(politicsPattern?.label ? `Pattern match: ${politicsPattern.label}.` : w.no_format);
+    familyWhy.push(w.cancel);
+    familyWhy.push(w.source);
+    if (qualifier.count > 0) {
+      familyWhy.push(`EDNQ result tracked separately from ${qualifier.count} event-level result${qualifier.count === 1 ? '' : 's'} and excluded from the content-term inventory.`);
+    }
+    if (presentation?.reason) familyWhy.push(presentation.reason);
+
+    const familyCheck = [];
+    if (presentationBlocked) {
+      familyCheck.push(`BLOCKED_EVENT_METADATA_MISMATCH: ${presentation.reason || 'cached timing conflicts with trusted metadata'}.`);
+    } else if (presentation?.event_time_iso) {
+      familyCheck.push(`Trusted event time: ${presentation.event_time_iso} (${presentation.event_date || 'date unavailable'}).`);
+    } else {
+      familyCheck.push('Trusted event time not yet confirmed; do not treat settlement expiration as the event start.');
+    }
+
+    return {
+      event_type: politicsPattern?.label ?? w.event_type,
+      ednq_risk: normalizeQualificationResult(familyRisk),
+      cpc_read: normalizeQualificationResult(familyRisk),
+      result_label: 'Event does not qualify',
+      why_ednq: familyWhy,
+      current_check: familyCheck,
+      historical_note: w.historical,
+      active_blockers: blockers,
+      content_term_note: 'Content-term reads are conditional on qualification.',
+      qualification_term_count: qualifier.count,
+      qualification_term_labels: qualifier.labels,
+    };
   }
 
   let risk = 'not confirmed';
