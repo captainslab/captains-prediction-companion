@@ -132,6 +132,42 @@ export function selectNewTodayEvents(candidates, ledger, date) {
   return { fresh, seen, deferred, retryable };
 }
 
+// Earliest settlement/close timestamp (ms since epoch) across an event and its
+// markets. TIME fields only (close_time / expected_expiration_time) — never
+// price/odds/bid/ask/volume/OI — so delivery ordering keeps price isolation
+// intact. Returns Infinity when no timestamp is parseable.
+export function eventImminenceMs(event) {
+  const markets = Array.isArray(event?.markets) ? event.markets : [];
+  const stamps = [
+    event?.close_time,
+    event?.expected_expiration_time,
+    ...markets.flatMap((m) => [m?.close_time, m?.expected_expiration_time]),
+  ];
+  let earliest = Infinity;
+  for (const s of stamps) {
+    const ms = s ? Date.parse(s) : NaN;
+    if (Number.isFinite(ms) && ms < earliest) earliest = ms;
+  }
+  return earliest;
+}
+
+// Stable ordering: most imminent (soonest-closing) events first so the per-run
+// throttle never queues an about-to-start event behind ones with hours of
+// runway. Undated events keep their discovery order at the back.
+export function orderByImminence(events) {
+  return (Array.isArray(events) ? events : [])
+    .map((ev, idx) => ({ ev, idx, at: eventImminenceMs(ev) }))
+    .sort((a, b) => {
+      if (a.at !== b.at) {
+        if (!Number.isFinite(a.at)) return 1;
+        if (!Number.isFinite(b.at)) return -1;
+        return a.at - b.at;
+      }
+      return a.idx - b.idx;
+    })
+    .map((x) => x.ev);
+}
+
 // Annotate every candidate with its research route at discovery time — BEFORE
 // any source fetch or model extraction. The generator re-resolves through the
 // same shared resolver, so collector and generator can never disagree.
@@ -358,10 +394,14 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   // Throttle: never burst-deliver a big first-run batch. Events beyond the cap
   // are NOT touched in the ledger — they stay unseen and are picked up on the
   // next watcher run.
-  const attempted = fresh.slice(0, maxNewPerRun);
-  const queued = fresh.slice(maxNewPerRun);
-  const retried = retryable.slice(0, maxRetryPerRun);
-  const retryQueued = retryable.slice(maxRetryPerRun);
+  // Deliver the most imminent same-day events first so an about-to-start packet
+  // is never queued behind events with hours of runway.
+  const orderedFresh = orderByImminence(fresh);
+  const attempted = orderedFresh.slice(0, maxNewPerRun);
+  const queued = orderedFresh.slice(maxNewPerRun);
+  const orderedRetryable = orderByImminence(retryable);
+  const retried = orderedRetryable.slice(0, maxRetryPerRun);
+  const retryQueued = orderedRetryable.slice(maxRetryPerRun);
   console.log(`[mentions-watch] ${date}: ${fresh.length} new today event(s); processing ${attempted.length} this run (max_new_per_run=${maxNewPerRun})${queued.length ? `; ${queued.length} queued for next run: ${queued.map(e => e.event_ticker).join(', ')}` : ''}`);
   if (retryable.length) {
     console.log(`[mentions-watch] ${date}: ${retryable.length} retryable event(s); processing ${retried.length} this run (max_retry_per_run=${maxRetryPerRun}, max_retry_attempts=${maxRetryAttempts})${retryQueued.length ? `; ${retryQueued.length} queued for next run: ${retryQueued.map(e => e.event_ticker).join(', ')}` : ''}`);
@@ -457,7 +497,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
   return { fresh, seen, deferred, retryable, attempted, retried, queued, retryQueued, succeeded, failed, held };
 }
 
-export const DEFAULT_MAX_NEW_PER_RUN = 3;
+export const DEFAULT_MAX_NEW_PER_RUN = 6;
 export const DEFAULT_MAX_RETRY_PER_RUN = 2;
 export const DEFAULT_MAX_RETRY_ATTEMPTS = 3;
 
