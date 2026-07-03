@@ -52,6 +52,7 @@ const EARNINGS_RE = /\b(earnings|earnings call|quarterly results|guidance|eps|re
 // live show say "during the broadcast" (e.g. podcasts), which is not sports
 // announcer context. "game broadcast" and announcer-specific terms remain.
 const SPORTS_RE = /\b(announcer|commentator|commentary|pregame|postgame|espn|fox sports|tnt|cbs sports|nbc sports|game broadcast|play-by-play)\b/;
+const SPORTS_EVENT_RE = /\b(world cup|fifa|world series|super bowl|stanley cup|champions league|premier league|olympics?|grand prix|\bnba\b|\bnfl\b|\bmlb\b|\bnhl\b|\bmls\b|\bufc\b)\b/;
 const TALK_SHOW_RE = /\b(talk show|late night|tonight show|podcast|interview|press briefing|snl|saturday night live|kimmel|fallon|colbert|rogan|the view|meet the press)\b/;
 const ENTERTAINMENT_RE = /\b(reality tv|reality show|bachelor|bachelorette|survivor|big brother|love island|award show|oscars|academy awards|grammys|emmys)\b/;
 const POLITICAL_RE = /\b(president|trump|biden|vance|senate|congress|governor|mayor|election|debate|speech|rally|hearing|white house|secretary|minister|campaign|candidate)\b/;
@@ -175,6 +176,9 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
   }
   if (SPORTS_RE.test(text)) {
     return result('sports_announcer', 'broadcast_terms', { close_window_days: windowDays, horizon: 'event' });
+  }
+  if (SPORTS_EVENT_RE.test(text)) {
+    return result('sports_announcer', 'sports_event_terms', { close_window_days: windowDays, horizon: 'event' });
   }
   // Fed/FOMC/agency-testimony context routes before Trump so a Powell/FOMC
   // event is never mistaken for a generic political event. (No existing Trump
