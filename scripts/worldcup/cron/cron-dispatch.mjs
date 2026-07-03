@@ -22,7 +22,7 @@
 // Exit codes: 0 = ok (including nothing due), 1 = hard error.
 
 import { resolve, dirname, join } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +31,11 @@ import { filterMatchesForLocalDate, CPC_MATCHDAY_TIMEZONE } from '../lib/matchda
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GENERATOR = join(__dirname, '..', 'generate-matchday-packet.mjs');
 const LINEUP_FETCHER = join(__dirname, '..', 'source-adapters', 'fetch-official-lineups.mjs');
+// Packet delivery is delegated to the shared Telegram sender. It enforces the
+// send-time janitor gate (packet_gate + source-health) and keeps a per-date
+// delivery ledger, so it is safe to invoke every tick: blocked packets are
+// skipped, already-delivered packets are skipped, only eligible ones are sent.
+const SENDER = join(__dirname, '..', '..', 'packets', 'send-packets-telegram.mjs');
 // Phases where official starting XIs may be published — refresh the lineup
 // cache from source before generating so the packet can reach lineup_locked.
 const LINEUP_FETCH_PHASES = new Set(['lineup_window', 'post_lineup_final']);
@@ -155,6 +160,58 @@ function runGenerator({ date, stateRoot, dryRun }) {
   return r.status === 0;
 }
 
+// Packet-gate is a worldcup-only, model-side block written into each packet's
+// .meta.json (e.g. LINEUP_ADJUSTED_MODEL_REQUIRED). The shared sender/janitor
+// does NOT read it, so the dispatcher must enforce it: only stems whose
+// packet_gate is not blocked are eligible for delivery. A blocked packet is
+// never handed to the sender, so it can never go out.
+function eligibleUnblockedStems({ date, stateRoot }) {
+  const dir = resolve(stateRoot, 'packets', date, 'worldcup-matchday');
+  if (!existsSync(dir)) return [];
+  const stems = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.meta.json')) continue;
+    // Skip janitor repair sidecars (<stem>.janitor-repaired.meta.json); they are
+    // not canonical packets and have their own idempotency key, so treating them
+    // as stems could double-send a packet the ledger already recorded.
+    if (file.includes('.janitor-repaired.')) continue;
+    const meta = readJsonIfExists(resolve(dir, file));
+    // Fail CLOSED: only deliver when packet_gate explicitly clears the packet.
+    // A missing/unreadable meta or absent packet_gate must never be treated as
+    // eligible — a blocked packet's text alone can satisfy the shared janitor.
+    if (meta?.packet_gate?.blocked !== false) continue;
+    stems.push(file.replace(/\.meta\.json$/, ''));
+  }
+  return stems;
+}
+
+// Deliver eligible worldcup-matchday packets for the date. Two gate layers:
+//   1. packet_gate (here) — model-side block; blocked stems are never sent.
+//   2. the sender's janitor (source-health) + delivery ledger — enforces
+//      source freshness and exactly-once delivery.
+// Safe to invoke every tick: blocked/undelivered-eligible/already-delivered are
+// all handled. In dry-run it delegates to the sender's own --dry-run.
+function runPacketSender({ date, stateRoot, dryRun }) {
+  const stems = eligibleUnblockedStems({ date, stateRoot });
+  if (!stems.length) {
+    console.log(`[worldcup-dispatch] ${date}: no packet_gate-clear packets to deliver`);
+    return true;
+  }
+  const args = [
+    SENDER,
+    '--type', 'worldcup-matchday',
+    '--date', date,
+    '--state-root', stateRoot,
+    '--only', stems.join(','),
+  ];
+  if (dryRun) args.push('--dry-run');
+  const r = spawnSync(process.execPath, args, { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error(`[worldcup-dispatch] sender exited non-zero (status ${r.status})`);
+  }
+  return r.status === 0;
+}
+
 // Best-effort: pull official starting XIs into the matchday cache so the
 // generator can lock the lineup. Failure (e.g. source down / XIs not yet
 // posted) is non-fatal — the generator falls back to the pre-lock board.
@@ -215,7 +272,6 @@ async function main() {
   const { actions, note } = computeDueActions({ matches: todayMatches, now: nowDate, stateRoot, date });
 
   if (note) console.log(`[worldcup-dispatch] ${nowDate.toISOString()} ${date}: ${note}`);
-  if (actions.length === 0) return;
 
   for (const action of actions) {
     console.log(`[worldcup-dispatch] due: ${JSON.stringify(action)}`);
@@ -242,6 +298,16 @@ async function main() {
       writeMarker(stateRoot, date, action.marker, { action });
       console.log(`[worldcup-dispatch] graded ${action.match_id}: ${graded.grade ?? graded.error}`);
     }
+  }
+
+  // Delivery pass — run every tick (not only when a new packet was generated)
+  // so any eligible, undelivered packet is sent as soon as its gate clears and
+  // transient send failures are retried next tick. The sender's ledger makes
+  // this exactly-once; its janitor keeps blocked packets from going out.
+  // Surface a hard sender failure as a non-zero exit so cron alerts instead of
+  // silently logging a missed delivery (returns true when nothing is eligible).
+  if (!runPacketSender({ date, stateRoot, dryRun })) {
+    process.exitCode = 1;
   }
 
   if (dryRun) console.log(`[worldcup-dispatch] DRY RUN — no packets written, no markers set.`);
