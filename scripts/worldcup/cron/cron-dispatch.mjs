@@ -171,8 +171,15 @@ function eligibleUnblockedStems({ date, stateRoot }) {
   const stems = [];
   for (const file of readdirSync(dir)) {
     if (!file.endsWith('.meta.json')) continue;
+    // Skip janitor repair sidecars (<stem>.janitor-repaired.meta.json); they are
+    // not canonical packets and have their own idempotency key, so treating them
+    // as stems could double-send a packet the ledger already recorded.
+    if (file.includes('.janitor-repaired.')) continue;
     const meta = readJsonIfExists(resolve(dir, file));
-    if (meta?.packet_gate?.blocked === true) continue; // respect packet_gate
+    // Fail CLOSED: only deliver when packet_gate explicitly clears the packet.
+    // A missing/unreadable meta or absent packet_gate must never be treated as
+    // eligible — a blocked packet's text alone can satisfy the shared janitor.
+    if (meta?.packet_gate?.blocked !== false) continue;
     stems.push(file.replace(/\.meta\.json$/, ''));
   }
   return stems;
@@ -297,7 +304,11 @@ async function main() {
   // so any eligible, undelivered packet is sent as soon as its gate clears and
   // transient send failures are retried next tick. The sender's ledger makes
   // this exactly-once; its janitor keeps blocked packets from going out.
-  runPacketSender({ date, stateRoot, dryRun });
+  // Surface a hard sender failure as a non-zero exit so cron alerts instead of
+  // silently logging a missed delivery (returns true when nothing is eligible).
+  if (!runPacketSender({ date, stateRoot, dryRun })) {
+    process.exitCode = 1;
+  }
 
   if (dryRun) console.log(`[worldcup-dispatch] DRY RUN — no packets written, no markers set.`);
 }
