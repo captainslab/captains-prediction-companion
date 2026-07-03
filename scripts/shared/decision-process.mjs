@@ -105,6 +105,14 @@ const MARKET_ONLY_ITEMS = new Set([
   'line_ladder_comparison',
 ]);
 
+const DECISION_STATUS_DISPLAY = Object.freeze({
+  [DECISION_STATUSES.NO_CLEAR_PICK]: 'no rated view',
+  [DECISION_STATUSES.WATCH]: 'monitor only',
+  [DECISION_STATUSES.MARKET_ONLY_LEAN]: 'market signal only',
+  [DECISION_STATUSES.EVIDENCE_LEAN]: 'higher-rated model view',
+  [DECISION_STATUSES.STRONG_EVIDENCE_LEAN]: 'top-rated model view',
+});
+
 function normalizeText(v) {
   if (v == null) return '';
   if (typeof v === 'string') return v;
@@ -166,6 +174,10 @@ function settlementItemFor(marketType) {
   if (marketType === MARKET_TYPES.MENTION_MARKET) return 'exact_settlement_wording';
   if (marketType === MARKET_TYPES.POLITICS_PERSONNEL || marketType === MARKET_TYPES.ELECTION) return 'settlement_rule_fit';
   return null;
+}
+
+export function describeDecisionStatus(status) {
+  return DECISION_STATUS_DISPLAY[status] ?? 'no rated view';
 }
 
 function completeEnoughForEvidenceLean(marketType, checked, missing) {
