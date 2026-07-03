@@ -67,6 +67,12 @@ export async function fetchEloRatingsSnapshot({ retrievedAt = null, fetchImpl = 
 
 export function buildEloBaseline(snapshot, { date = null, round = null } = {}) {
   return {
+    // Published Elo is a per-team reference ratings table, not a per-match
+    // source: its records are keyed by team, and fixtures join to it by team
+    // name downstream. Mark it as a reference source so the send-time
+    // source-health janitor does not demand a per-match join key
+    // (FETCH_JOIN_KEY_MISSING) and hard-block delivery of otherwise-clean packets.
+    source_type: 'reference',
     source_id: snapshot.source_id,
     source_url: snapshot.source_url,
     retrieved_at: snapshot.retrieved_at,
