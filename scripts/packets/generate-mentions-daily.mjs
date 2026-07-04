@@ -2004,6 +2004,9 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
     const researchNote = buildResearchTermNote({
       phrase: targetMentionFromMarket(m),
       reason: r.reason ?? null,
+      proofReason: r.proof_reason ?? null,
+      handicapReason: r.handicap_reason ?? null,
+      repeatRequirement: r.repeat_requirement ?? null,
       kalshiNativePct: r.kalshi_native_pct ?? null,
       kalshiNativeN: r.kalshi_native_n ?? null,
       proofPct: r.proof_pct ?? null,

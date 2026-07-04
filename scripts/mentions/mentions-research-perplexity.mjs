@@ -333,6 +333,7 @@ const UNSUPPORTED_CLAIM_PATTERNS = Object.freeze([
 ]);
 
 const NO_EVIDENCE_TEXT = 'No direct evidence in current packet research.';
+const RESEARCH_GAP_CATALYST = 'No term-specific catalyst research recorded; rated on exact-word settlement fit only.';
 
 /**
  * Guard unsupported factual world-claims in customer-facing reasoning text.
@@ -350,6 +351,10 @@ export function sanitizeUnsupportedClaim(text, { hasSourceSupport = false } = {}
 export function buildResearchTermNote({
   phrase,
   reason = null,
+  proofReason = null,
+  handicapReason = null,
+  repeatRequirement = null,
+  settlementFit = null,
   kalshiNativePct = null,
   kalshiNativeN = null,
   proofPct = null,
@@ -362,15 +367,33 @@ export function buildResearchTermNote({
     ? citations.filter((v) => typeof v === 'string' && v.trim())
     : [];
   const hasSourceSupport = citationList.length > 0;
-  const baseReason = sanitizeUnsupportedClaim(trimWords(reason, 20), { hasSourceSupport });
-  const usable = [proofPct, handicapPct, kalshiNativePct].some((v) => Number.isFinite(Number(v)));
-  if (!usable || !baseReason) return null;
+  const reasonText = sanitizeUnsupportedClaim(trimWords(reason, 20), { hasSourceSupport });
+  const proofText = sanitizeUnsupportedClaim(trimWords(proofReason, 20), { hasSourceSupport });
+  const handicapText = sanitizeUnsupportedClaim(trimWords(handicapReason, 20), { hasSourceSupport });
+  const researchedReason = reasonText || proofText || handicapText || null;
 
-  let catalyst = baseReason;
-  if (Number.isFinite(Number(kalshiNativePct)) && Number.isFinite(Number(kalshiNativeN)) && Number(kalshiNativeN) >= 2) {
+  // Real, per-term signal: the settled comparable base rate (kalshi_native).
+  // Requires n>=2 to count as evidence, matching the provenance gate below.
+  const hasHistory = Number.isFinite(Number(kalshiNativePct))
+    && Number.isFinite(Number(kalshiNativeN)) && Number(kalshiNativeN) >= 2;
+  let historyClause = null;
+  if (hasHistory) {
     const total = Number(kalshiNativeN);
     const yes = Math.max(0, Math.min(total, Math.round((Number(kalshiNativePct) / 100) * total)));
-    catalyst = `${baseReason}; historically YES in ${yes}/${total} comparable events`;
+    historyClause = `historically YES in ${yes}/${total} comparable events`;
+  }
+
+  // When the artifact has real catalyst research, lead with it. Otherwise lead
+  // with the per-term base rate (distinct per strike) so cards do not all read
+  // as the same generic filler; fall back to the honest gap line only when
+  // there is neither research nor comparable history.
+  let catalyst;
+  if (researchedReason) {
+    catalyst = historyClause ? `${researchedReason}; ${historyClause}` : researchedReason;
+  } else if (historyClause) {
+    catalyst = `Comparable base rate only: ${historyClause} (no term-specific catalyst research recorded).`;
+  } else {
+    catalyst = RESEARCH_GAP_CATALYST;
   }
 
   let provenance = null;
@@ -382,7 +405,9 @@ export function buildResearchTermNote({
 
   const note = {
     catalyst: trimWords(catalyst, 28),
-    settlement_fit: describeSettlementFit(phrase, requiredCount, speaker),
+    settlement_fit: settlementFit && String(settlementFit).trim()
+      ? String(settlementFit).trim()
+      : describeSettlementFit(phrase, requiredCount, speaker),
     trap_risk: null,
   };
   if (provenance) {
