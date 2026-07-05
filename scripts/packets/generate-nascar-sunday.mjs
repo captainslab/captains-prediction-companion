@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { detectSourceHealthDisclosure, CACHE_ONLY_DISCLOSURE_LINE } from '../cron/cpc-packet-janitor.mjs';
 import {
   parsePacketArgs,
   ensurePacketDir,
@@ -291,11 +292,12 @@ function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, art
   });
 }
 
-function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount }) {
+function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount, stateRoot = 'state' }) {
   const s = summarizeEvent(event);
   const userFacing = Array.isArray(ceiling.userFacingLines) && ceiling.userFacingLines.length
     ? ceiling.userFacingLines
     : ceiling.ceilings.map((entry) => `${entry.driver_name} ${entry.ceiling_label}`);
+  const disclosure = detectSourceHealthDisclosure({ packetType: PACKET_TYPE, date, stateRoot });
   const body = [
     'TLDR BOARD:',
     '  CEILING_BOARD_PRESENT',
@@ -310,7 +312,8 @@ function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount 
     `- ${ceiling.fieldBucket?.summary ?? 'no field bucket summary available.'}`,
     '',
     '--- Market Context - NOT IN SCORE ---',
-    'Market pricing remains audit-only until a scored join exists. The ceiling board is the source of truth for this dry run.',
+    'Market pricing remains audit-only until a scored join exists. The ceiling board is the source of truth for this packet.',
+    ...(disclosure.needsDisclosure ? ['', '--- Source Freshness ---', disclosure.disclosureLine ?? CACHE_ONLY_DISCLOSURE_LINE] : []),
   ].join('\n');
 
   const inventoryText = buildInventoryArtifact({
@@ -384,11 +387,11 @@ function tryRunWorkspaceFixturesOnly(date) {
   }
 }
 
-export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult }) {
+export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult, stateRoot = 'state' }) {
   const s = summarizeEvent(event);
   const ceiling = loadNascarCeiling(artifacts);
   if (ceiling?.ceilings?.length && !ceiling?.candidates?.length) {
-    return buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount: s.marketCount });
+    return buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount: s.marketCount, stateRoot });
   }
   const built = buildNascarRows({ event, ceiling });
   const header = packetHeader({
@@ -568,7 +571,7 @@ async function main() {
       const ticker = ev?.event_ticker;
       if (!ticker) continue;
       const sourcePath = resolve(opts.stateRoot, 'nascar', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const built = buildRacePacket({ date: opts.date, event: ev, sourcePath, artifacts, workspaceResult });
+      const built = buildRacePacket({ date: opts.date, event: ev, sourcePath, artifacts, workspaceResult, stateRoot: opts.stateRoot });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
