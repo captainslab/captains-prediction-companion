@@ -28,6 +28,7 @@ import {
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 import { routeNascarMarket } from '../nascar/lib/router.mjs';
+import { BLOCKED_LIVE_RESEARCH_MISSING, runNascarLiveResearch } from '../nascar/live-research.mjs';
 import {
   buildDecisionRow,
   renderSectionedPacket,
@@ -70,6 +71,95 @@ function nascarNum(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function compactText(value) {
+  if (value === null || value === undefined) return null;
+  const text = Array.isArray(value) ? value.join(' ') : String(value);
+  const cleaned = text.replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || null;
+}
+
+function truncateText(value, limit = 180) {
+  const text = compactText(value);
+  if (!text) return null;
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
+}
+
+function getLiveResearchArtifact(liveResearch = null) {
+  if (!liveResearch) return null;
+  if (liveResearch.artifact && typeof liveResearch.artifact === 'object') return liveResearch.artifact;
+  return liveResearch;
+}
+
+function renderLiveResearchSection(liveResearch = null) {
+  const artifact = getLiveResearchArtifact(liveResearch);
+  if (!artifact) return null;
+
+  const layers = artifact.layers && typeof artifact.layers === 'object' ? artifact.layers : {};
+  const layerNames = [
+    'race_event_identity',
+    'entry_list_drivers',
+    'qualifying_starting_order',
+    'practice_speed',
+    'recent_driver_form',
+    'track_history_gen7_comparables',
+    'team_manufacturer_notes',
+    'penalties_inspection_news',
+    'weather_track_condition',
+  ];
+  const sourceUrls = Array.isArray(artifact.source_urls) ? artifact.source_urls : [];
+  const driverNotes = Array.isArray(artifact.drivers) ? artifact.drivers : [];
+  const missingLayers = [];
+  const lines = ['--- Live Research (Perplexity) ---'];
+  lines.push(`generated_utc: ${artifact.generated_utc ?? liveResearch?.generated_utc ?? 'unknown'}`);
+  lines.push(`event_ticker: ${artifact.event_ticker ?? 'unknown'}`);
+  lines.push(`model: ${artifact.model ?? 'unknown'}`);
+  lines.push('');
+  lines.push('source_urls:');
+  if (sourceUrls.length) {
+    for (const source of sourceUrls) {
+      const title = compactText(source?.title);
+      const url = compactText(source?.url) ?? 'unknown';
+      lines.push(title ? `- ${url} (${title})` : `- ${url}`);
+    }
+  } else {
+    lines.push('- none returned');
+  }
+  lines.push('');
+  lines.push('evidence_ledger:');
+  for (const layerName of layerNames) {
+    const layer = layers[layerName] ?? { status: 'missing', notes: null, sources: [], fetched_utc: artifact.generated_utc ?? liveResearch?.generated_utc ?? 'unknown' };
+    const sourceCount = Array.isArray(layer.sources) ? layer.sources.length : 0;
+    const status = String(layer.status ?? 'missing').toLowerCase() === 'ok' ? 'ok' : 'missing';
+    if (status === 'missing') missingLayers.push(layerName);
+    lines.push(`- ${layerName}: ${status} (${sourceCount} source${sourceCount === 1 ? '' : 's'})`);
+    const notes = truncateText(layer.notes, 220);
+    if (notes) lines.push(`  notes: ${notes}`);
+  }
+  lines.push('');
+  lines.push('per-driver notes:');
+  if (driverNotes.length) {
+    for (const note of driverNotes) {
+      const driver = compactText(note?.driver) ?? 'unknown driver';
+      const summary = truncateText(note?.notes, 200) ?? 'no note returned';
+      const sourceCount = Array.isArray(note?.sources) ? note.sources.length : 0;
+      lines.push(`- ${driver}: ${summary} (${sourceCount} source${sourceCount === 1 ? '' : 's'})`);
+    }
+  } else {
+    lines.push('- none returned');
+  }
+  lines.push('');
+  lines.push('confidence_limits: narrative-only display context; live research does not set score, ranking, posture, or ceiling math.');
+  lines.push('Missing layers:');
+  if (missingLayers.length) {
+    for (const layerName of missingLayers) lines.push(`- ${layerName}`);
+  } else {
+    lines.push('- none');
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -292,13 +382,15 @@ function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, art
   });
 }
 
-function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount, stateRoot = 'state' }) {
+function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount, stateRoot = 'state', liveResearch = null }) {
   const s = summarizeEvent(event);
   const userFacing = Array.isArray(ceiling.userFacingLines) && ceiling.userFacingLines.length
     ? ceiling.userFacingLines
     : ceiling.ceilings.map((entry) => `${entry.driver_name} ${entry.ceiling_label}`);
   const disclosure = detectSourceHealthDisclosure({ packetType: PACKET_TYPE, date, stateRoot });
   const body = [
+    renderLiveResearchSection(liveResearch),
+    '',
     'TLDR BOARD:',
     '  CEILING_BOARD_PRESENT',
     `  ceiling_source: ${ceiling.source}`,
@@ -314,7 +406,7 @@ function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount,
     '--- Market Context - NOT IN SCORE ---',
     'Market pricing remains audit-only until a scored join exists. The ceiling board is the source of truth for this packet.',
     ...(disclosure.needsDisclosure ? ['', '--- Source Freshness ---', disclosure.disclosureLine ?? CACHE_ONLY_DISCLOSURE_LINE] : []),
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const inventoryText = buildInventoryArtifact({
     marketType: 'nascar_win',
@@ -387,11 +479,11 @@ function tryRunWorkspaceFixturesOnly(date) {
   }
 }
 
-export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult, stateRoot = 'state' }) {
+export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult, stateRoot = 'state', liveResearch = null }) {
   const s = summarizeEvent(event);
   const ceiling = loadNascarCeiling(artifacts);
   if (ceiling?.ceilings?.length && !ceiling?.candidates?.length) {
-    return buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount: s.marketCount, stateRoot });
+    return buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount: s.marketCount, stateRoot, liveResearch });
   }
   const built = buildNascarRows({ event, ceiling });
   const header = packetHeader({
@@ -405,11 +497,13 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
   if (!built || !built.rows.length) {
     const proc = buildNascarProcess({ event, marketCount: s.marketCount, ceiling, artifacts });
     const body = [
+      renderLiveResearchSection(liveResearch),
+      '',
       'TLDR BOARD:',
       `  no per-driver win markets parsed for ${s.title}; nothing to rank.`,
       '',
       renderDecisionProcess(proc, { heading: 'Research Completeness' }),
-    ].join('\n');
+    ].filter(Boolean).join('\n');
     return {
       text: [header, body, packetFooter()].join('\n\n'),
       inventoryText: buildInventoryArtifact({ marketType: 'nascar_win', date, eventTicker: s.ticker, inventoryLines: [], meta: { mode: 'NO_WIN_MARKETS' } }),
@@ -424,6 +518,8 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
   // Per-driver market pricing goes to the audit inventory only.
   if (built.mode === 'MARKET_ONLY') {
     const body = [
+      renderLiveResearchSection(liveResearch),
+      '',
       'TLDR BOARD:',
       '  BLOCKED_MODEL_LAYER_MISSING',
       '',
@@ -435,7 +531,7 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
       '',
       '--- Market Context - NOT IN SCORE ---',
       'Market data stored in audit artifact for reference; not displayed in customer packet without model layer.',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
     return {
       text: [header, body, packetFooter()].join('\n\n'),
       inventoryText: buildInventoryArtifact({ marketType: 'nascar_win', date, eventTicker: s.ticker, inventoryLines: built.rows.map((r, i) =>
@@ -450,11 +546,15 @@ export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceR
 
   const modeNote = `Ceiling model joined for ${built.joined}/${built.marketCount} drivers (source: ${ceiling.source}). Edge = model fair win − market implied.`;
 
-  const body = renderSectionedPacket(built.rows, {
-    tldrNote: modeNote,
-    auditArtifacts: [`${date}-${s.ticker}.inventory.txt`, sourcePath].filter(Boolean),
-    perSectionLimit: 16,
-  });
+  const body = [
+    renderLiveResearchSection(liveResearch),
+    '',
+    renderSectionedPacket(built.rows, {
+      tldrNote: modeNote,
+      auditArtifacts: [`${date}-${s.ticker}.inventory.txt`, sourcePath].filter(Boolean),
+      perSectionLimit: 16,
+    }),
+  ].filter(Boolean).join('\n');
 
   const inventoryLines = built.rows.map((r, i) =>
     `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | fair=${r.fair_probability_or_range} score=${r.composite_score} implied=${r.implied_probability} ask=${r.market_yes_ask} edge=${r.edge_cents_or_pp === null ? 'MISSING' : `${r.edge_cents_or_pp}pp`} conf=${r.confidence}`);
@@ -571,7 +671,24 @@ async function main() {
       const ticker = ev?.event_ticker;
       if (!ticker) continue;
       const sourcePath = resolve(opts.stateRoot, 'nascar', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const built = buildRacePacket({ date: opts.date, event: ev, sourcePath, artifacts, workspaceResult, stateRoot: opts.stateRoot });
+      const liveResearch = await runNascarLiveResearch({
+        date: opts.date,
+        event: ev,
+        stateRoot: opts.stateRoot,
+      });
+      if (!liveResearch?.ok) {
+        console.error(`${BLOCKED_LIVE_RESEARCH_MISSING} event=${ticker} reason=${liveResearch?.reason ?? 'unknown'}`);
+        process.exit(1);
+      }
+      const built = buildRacePacket({
+        date: opts.date,
+        event: ev,
+        sourcePath,
+        artifacts,
+        workspaceResult,
+        stateRoot: opts.stateRoot,
+        liveResearch,
+      });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
