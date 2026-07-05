@@ -129,6 +129,7 @@ function sportFromPacketType(packetType = '') {
   if (p.includes('mlb')) return 'mlb';
   if (p.includes('ufc')) return 'ufc';
   if (p.includes('worldcup')) return 'worldcup';
+  if (p.includes('nascar')) return 'nascar';
   if (p.includes('mention')) return 'mentions';
   return null;
 }
@@ -280,6 +281,9 @@ function discoverSourceHealthPaths(context) {
     paths.push(...listJsonFiles(resolve(stateRoot, 'worldcup', date, 'discovery')));
     paths.push(...listJsonFiles(resolve(stateRoot, 'packets', date, 'worldcup-matchday'))
       .filter((p) => /audit/i.test(basename(p))));
+  } else if (sport === 'nascar') {
+    paths.push(resolve(stateRoot, 'nascar', date, 'source_registry.json'));
+    paths.push(resolve(stateRoot, 'nascar', date, 'discovery.json'));
   } else if (sport === 'mentions') {
     paths.push(...listJsonFiles(resolve(stateRoot, 'mentions', date, 'sources')));
     paths.push(...listJsonFiles(resolve(stateRoot, 'mentions', date, 'research')));

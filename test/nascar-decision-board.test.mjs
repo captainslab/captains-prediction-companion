@@ -1,11 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   buildNascarRows,
   buildRacePacket,
   loadNascarCeiling,
 } from '../scripts/packets/generate-nascar-sunday.mjs';
+import { validatePacketText } from '../scripts/cron/cpc-packet-janitor.mjs';
+import { validateCpcCustomerPacket } from '../scripts/packets/lib/cpc-packet-validator.mjs';
 import { looksLikeRawInventoryDump } from '../scripts/shared/decision-packet.mjs';
 
 // A minimal Kalshi NASCAR win-market event: per-driver binary contracts keyed
@@ -144,6 +150,146 @@ test('JOINED packet: real model edge rows with composite scores surface above BL
 });
 
 test('loadNascarCeiling ignores artifacts without candidates', () => {
-  // A fixtures-only placeholder with `ceilings` (not `candidates`) must NOT join.
   assert.equal(loadNascarCeiling([]), null);
+});
+
+test('Toyota / Save Mart 350 packet joins the real ceiling_board.json without fabricating model fields', () => {
+  const ceilingPath = 'state/nascar/2026-06-28/ceiling_board.json';
+  const eventPath = 'state/nascar/2026-06-28/kalshi-events/KXNASCARRACE-TOYSM26.json';
+  const loaded = loadNascarCeiling([ceilingPath]);
+  assert.ok(loaded, 'real ceiling board must load');
+  assert.equal(loaded.source, ceilingPath);
+  assert.equal(Array.isArray(loaded.ceilings), true);
+  assert.equal(loaded.ceilings.length, 2);
+
+  const packet = buildRacePacket({
+    date: '2026-06-28',
+    event: JSON.parse(readFileSync(eventPath, 'utf8')),
+    sourcePath: eventPath,
+    artifacts: [ceilingPath],
+    workspaceResult: null,
+  });
+
+  assert.ok(packet.text.includes('CPC Packet: Toyota / Save Mart 350 Winner'));
+  assert.ok(packet.text.includes('Driver A Win'));
+  assert.ok(packet.text.includes('Driver B Top 10'));
+  assert.doesNotMatch(packet.text, /BLOCKED_MODEL_LAYER_MISSING/);
+  assert.doesNotMatch(packet.text, /score=|probability=|edge=|odds=|ranking=|confidence=/i);
+  assert.doesNotMatch(packet.inventoryText, /score=|probability=|edge=|odds=|ranking=|confidence=/i);
+  assert.equal(looksLikeRawInventoryDump(packet.text), false);
+  assert.equal(looksLikeRawInventoryDump(packet.inventoryText), true);
+  const contract = validateCpcCustomerPacket(packet.text);
+  assert.equal(contract.valid, true, contract.errors.join('; '));
+});
+
+test('ceiling-only NASCAR packet avoids dry-run chatter and janitor dry-run codes', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-ceiling-only-'));
+  const ceilingPath = join(tmpRoot, 'ceiling_board.json');
+  const ceilingArtifact = {
+    ceilings: [
+      {
+        driver_name: 'Denny Hamlin',
+        ceiling_label: 'Win lane ceiling',
+        lane_type: 'win',
+        pool_entry_reason: 'top-tier model fit',
+        basis: 'composite score',
+      },
+    ],
+    source: ceilingPath,
+    userFacingLines: ['- Denny Hamlin win lane ceiling'],
+    fieldBucket: { summary: 'field bucket summary' },
+  };
+  writeFileSync(ceilingPath, `${JSON.stringify(ceilingArtifact, null, 2)}\n`);
+
+  try {
+    const packet = buildRacePacket({
+      date: '2026-07-05',
+      event: nascarEvent({ markets: [] }),
+      sourcePath: '/tmp/nascar-event.json',
+      artifacts: [ceilingPath],
+      workspaceResult: null,
+    });
+
+    assert.ok(packet, 'packet built');
+    assert.match(packet.text, /source of truth for this packet\./);
+    assert.doesNotMatch(packet.text, /\b(would send|dry-run|dry run|no telegram send|preview only)\b/i);
+
+    const validation = validatePacketText(packet.text, {
+      packetType: 'nascar-sunday',
+      filePath: 'state/packets/2026-07-05/nascar-sunday/x.txt',
+    });
+    const dryRunErrors = validation.errors.filter((err) =>
+      err.code === 'DRY_RUN_CHATTER_PRESENT' || err.code === 'DRY_RUN_ONLY_OUTPUT');
+    assert.equal(dryRunErrors.length, 0, dryRunErrors.map((err) => err.code).join(', '));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('ceiling-only NASCAR packet clears source-health gate when stale disclosure is present', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-source-health-'));
+  const date = '2026-07-05';
+  const ceilingPath = join(tmpRoot, 'nascar', date, 'ceiling_board.json');
+  const sourceRegistryPath = join(tmpRoot, 'nascar', date, 'source_registry.json');
+  const ceilingArtifact = {
+    ceilings: [
+      {
+        driver_name: 'Denny Hamlin',
+        ceiling_label: 'Win lane ceiling',
+        lane_type: 'win',
+        pool_entry_reason: 'top-tier model fit',
+        basis: 'composite score',
+      },
+    ],
+    source: ceilingPath,
+    userFacingLines: ['- Denny Hamlin win lane ceiling'],
+    fieldBucket: { summary: 'field bucket summary' },
+  };
+  const sourceRegistry = {
+    schema_version: 'nascar_source_registry_v1',
+    mode: 'fixtures-only',
+    checked_at_utc: '2026-02-13T12:00:00.000Z',
+    sources: {
+      official: {
+        status: 'ok',
+        record_count: 1,
+        errors: [],
+      },
+    },
+  };
+  mkdirSync(dirname(ceilingPath), { recursive: true });
+  writeFileSync(ceilingPath, `${JSON.stringify(ceilingArtifact, null, 2)}\n`);
+  writeFileSync(sourceRegistryPath, `${JSON.stringify(sourceRegistry, null, 2)}\n`);
+
+  try {
+    const packet = buildRacePacket({
+      date,
+      event: nascarEvent({ markets: [] }),
+      sourcePath: '/tmp/nascar-event.json',
+      artifacts: [ceilingPath],
+      workspaceResult: null,
+      stateRoot: tmpRoot,
+    });
+
+    assert.ok(packet, 'packet built');
+    assert.match(packet.text, /cache-only|stale-source|Live fetch unavailable/i);
+
+    const validation = validatePacketText(packet.text, {
+      packetType: 'nascar-sunday',
+      filePath: 'state/packets/2026-07-05/nascar-sunday/x.txt',
+      requireSourceHealth: true,
+      date,
+      stateRoot: tmpRoot,
+      packetText: packet.text,
+    });
+
+    const errorCodes = validation.errors.map((err) => err.code);
+    const warningCodes = validation.warnings.map((warn) => warn.code);
+    assert.notEqual(validation.verdict, 'JANITOR_BLOCKED');
+    assert.ok(!errorCodes.includes('FETCH_SOURCE_MISSING'), errorCodes.join(', '));
+    assert.ok(!errorCodes.includes('FETCH_SOURCE_STALE'), errorCodes.join(', '));
+    assert.ok(warningCodes.includes('FETCH_SOURCE_STALE'), warningCodes.join(', '));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
