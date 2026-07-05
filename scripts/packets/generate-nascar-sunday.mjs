@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { detectSourceHealthDisclosure, CACHE_ONLY_DISCLOSURE_LINE } from '../cron/cpc-packet-janitor.mjs';
 import {
   parsePacketArgs,
   ensurePacketDir,
@@ -73,13 +74,24 @@ function nascarNum(value) {
 
 /**
  * Load a NASCAR ceiling board (the model signal) for a date from located
- * artifacts. Returns { candidates: [], source, lanes } or null. Read-only.
+ * artifacts. Prefers the real `ceilings[]` board shape, but still accepts the
+ * older scored `candidates[]` shape for legacy fixtures. Read-only.
  */
 export function loadNascarCeiling(artifacts = []) {
   for (const fp of artifacts) {
     if (!fp.endsWith('.json')) continue;
     const data = readJsonIfExists(fp);
     if (!data) continue;
+    if (Array.isArray(data.ceilings) && data.ceilings.length) {
+      return {
+        ceilings: data.ceilings,
+        source: fp,
+        lanes: data.supported_market_lanes ?? data.lanes ?? [],
+        fieldBucket: data.field_bucket ?? null,
+        userFacingLines: data.user_facing_lines ?? [],
+        schemaVersion: data.schema_version ?? null,
+      };
+    }
     if (Array.isArray(data.candidates) && data.candidates.length) {
       return { candidates: data.candidates, source: fp, lanes: data.lanes ?? [] };
     }
@@ -280,6 +292,58 @@ function buildNascarProcess({ event = null, marketCount = 0, ceiling = null, art
   });
 }
 
+function buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount, stateRoot = 'state' }) {
+  const s = summarizeEvent(event);
+  const userFacing = Array.isArray(ceiling.userFacingLines) && ceiling.userFacingLines.length
+    ? ceiling.userFacingLines
+    : ceiling.ceilings.map((entry) => `${entry.driver_name} ${entry.ceiling_label}`);
+  const disclosure = detectSourceHealthDisclosure({ packetType: PACKET_TYPE, date, stateRoot });
+  const body = [
+    'TLDR BOARD:',
+    '  CEILING_BOARD_PRESENT',
+    `  ceiling_source: ${ceiling.source}`,
+    `  ceilings: ${ceiling.ceilings.length}`,
+    `  win_markets_discovered: ${marketCount}`,
+    '',
+    '=== CEILING BOARD ===',
+    ...userFacing.map((line) => `- ${line}`),
+    '',
+    '=== FIELD / LONGSHOTS ===',
+    `- ${ceiling.fieldBucket?.summary ?? 'no field bucket summary available.'}`,
+    '',
+    '--- Market Context - NOT IN SCORE ---',
+    'Market pricing remains audit-only until a scored join exists. The ceiling board is the source of truth for this packet.',
+    ...(disclosure.needsDisclosure ? ['', '--- Source Freshness ---', disclosure.disclosureLine ?? CACHE_ONLY_DISCLOSURE_LINE] : []),
+  ].join('\n');
+
+  const inventoryText = buildInventoryArtifact({
+    marketType: 'nascar_win',
+    date,
+    eventTicker: s.ticker,
+    inventoryLines: ceiling.ceilings.map((entry) =>
+      `- ${entry.driver_name} | ${entry.ceiling_label} | lane=${entry.lane_type} | pool=${entry.pool_entry_reason} | basis=${entry.basis}`),
+    meta: {
+      mode: 'CEILINGS_ONLY',
+      ceiling_source: ceiling.source,
+      ceiling_count: ceiling.ceilings.length,
+      win_markets: marketCount,
+    },
+  });
+
+  return {
+    text: [packetHeader({
+      title: `Captain NASCAR — CPC Packet: ${s.title}`,
+      date,
+      packetType: PACKET_TYPE,
+      sources: [sourcePath, KALSHI_SOURCES.nascar.page_url, ceiling.source].filter(Boolean),
+    }), body, packetFooter()].join('\n\n'),
+    inventoryText,
+    marketCount,
+    missingStrikeCount: 0,
+    missingMarkets: false,
+  };
+}
+
 function locateNascarArtifacts(stateRoot, date) {
   const root = resolve(stateRoot, 'nascar');
   if (!existsSync(root)) return [];
@@ -323,9 +387,12 @@ function tryRunWorkspaceFixturesOnly(date) {
   }
 }
 
-export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult }) {
+export function buildRacePacket({ date, event, sourcePath, artifacts, workspaceResult, stateRoot = 'state' }) {
   const s = summarizeEvent(event);
   const ceiling = loadNascarCeiling(artifacts);
+  if (ceiling?.ceilings?.length && !ceiling?.candidates?.length) {
+    return buildCeilingOnlyPacket({ date, event, sourcePath, ceiling, marketCount: s.marketCount, stateRoot });
+  }
   const built = buildNascarRows({ event, ceiling });
   const header = packetHeader({
     title: `Captain NASCAR — CPC Packet: ${s.title}`,
@@ -504,7 +571,7 @@ async function main() {
       const ticker = ev?.event_ticker;
       if (!ticker) continue;
       const sourcePath = resolve(opts.stateRoot, 'nascar', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const built = buildRacePacket({ date: opts.date, event: ev, sourcePath, artifacts, workspaceResult });
+      const built = buildRacePacket({ date: opts.date, event: ev, sourcePath, artifacts, workspaceResult, stateRoot: opts.stateRoot });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
       missingStrikeTextCount += built.missingStrikeCount;
