@@ -1,14 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 import {
   buildNascarRows,
   buildRacePacket,
   loadNascarCeiling,
 } from '../scripts/packets/generate-nascar-sunday.mjs';
+import { validatePacketText } from '../scripts/cron/cpc-packet-janitor.mjs';
 import { validateCpcCustomerPacket } from '../scripts/packets/lib/cpc-packet-validator.mjs';
 import { looksLikeRawInventoryDump } from '../scripts/shared/decision-packet.mjs';
 
@@ -222,4 +223,116 @@ test('Toyota / Save Mart 350 packet joins the ceiling_board.json shape without f
   assert.equal(contract.valid, true, contract.errors.join('; '));
 
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('ceiling-only NASCAR packet avoids dry-run chatter and janitor dry-run codes', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-ceiling-only-'));
+  const ceilingPath = join(tmpRoot, 'ceiling_board.json');
+  const ceilingArtifact = {
+    ceilings: [
+      {
+        driver_name: 'Denny Hamlin',
+        ceiling_label: 'Win lane ceiling',
+        lane_type: 'win',
+        pool_entry_reason: 'top-tier model fit',
+        basis: 'composite score',
+      },
+    ],
+    source: ceilingPath,
+    userFacingLines: ['- Denny Hamlin win lane ceiling'],
+    fieldBucket: { summary: 'field bucket summary' },
+  };
+  writeFileSync(ceilingPath, `${JSON.stringify(ceilingArtifact, null, 2)}\n`);
+
+  try {
+    const packet = buildRacePacket({
+      date: '2026-07-05',
+      event: nascarEvent({ markets: [] }),
+      sourcePath: '/tmp/nascar-event.json',
+      artifacts: [ceilingPath],
+      workspaceResult: null,
+    });
+
+    assert.ok(packet, 'packet built');
+    assert.match(packet.text, /source of truth for this packet\./);
+    assert.doesNotMatch(packet.text, /\b(would send|dry-run|dry run|no telegram send|preview only)\b/i);
+
+    const validation = validatePacketText(packet.text, {
+      packetType: 'nascar-sunday',
+      filePath: 'state/packets/2026-07-05/nascar-sunday/x.txt',
+    });
+    const dryRunErrors = validation.errors.filter((err) =>
+      err.code === 'DRY_RUN_CHATTER_PRESENT' || err.code === 'DRY_RUN_ONLY_OUTPUT');
+    assert.equal(dryRunErrors.length, 0, dryRunErrors.map((err) => err.code).join(', '));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('ceiling-only NASCAR packet clears source-health gate when stale disclosure is present', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-source-health-'));
+  const date = '2026-07-05';
+  const ceilingPath = join(tmpRoot, 'nascar', date, 'ceiling_board.json');
+  const sourceRegistryPath = join(tmpRoot, 'nascar', date, 'source_registry.json');
+  const ceilingArtifact = {
+    ceilings: [
+      {
+        driver_name: 'Denny Hamlin',
+        ceiling_label: 'Win lane ceiling',
+        lane_type: 'win',
+        pool_entry_reason: 'top-tier model fit',
+        basis: 'composite score',
+      },
+    ],
+    source: ceilingPath,
+    userFacingLines: ['- Denny Hamlin win lane ceiling'],
+    fieldBucket: { summary: 'field bucket summary' },
+  };
+  const sourceRegistry = {
+    schema_version: 'nascar_source_registry_v1',
+    mode: 'fixtures-only',
+    checked_at_utc: '2026-02-13T12:00:00.000Z',
+    sources: {
+      official: {
+        status: 'ok',
+        record_count: 1,
+        errors: [],
+      },
+    },
+  };
+  mkdirSync(dirname(ceilingPath), { recursive: true });
+  writeFileSync(ceilingPath, `${JSON.stringify(ceilingArtifact, null, 2)}\n`);
+  writeFileSync(sourceRegistryPath, `${JSON.stringify(sourceRegistry, null, 2)}\n`);
+
+  try {
+    const packet = buildRacePacket({
+      date,
+      event: nascarEvent({ markets: [] }),
+      sourcePath: '/tmp/nascar-event.json',
+      artifacts: [ceilingPath],
+      workspaceResult: null,
+      stateRoot: tmpRoot,
+    });
+
+    assert.ok(packet, 'packet built');
+    assert.match(packet.text, /cache-only|stale-source|Live fetch unavailable/i);
+
+    const validation = validatePacketText(packet.text, {
+      packetType: 'nascar-sunday',
+      filePath: 'state/packets/2026-07-05/nascar-sunday/x.txt',
+      requireSourceHealth: true,
+      date,
+      stateRoot: tmpRoot,
+      packetText: packet.text,
+    });
+
+    const errorCodes = validation.errors.map((err) => err.code);
+    const warningCodes = validation.warnings.map((warn) => warn.code);
+    assert.notEqual(validation.verdict, 'JANITOR_BLOCKED');
+    assert.ok(!errorCodes.includes('FETCH_SOURCE_MISSING'), errorCodes.join(', '));
+    assert.ok(!errorCodes.includes('FETCH_SOURCE_STALE'), errorCodes.join(', '));
+    assert.ok(warningCodes.includes('FETCH_SOURCE_STALE'), warningCodes.join(', '));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
