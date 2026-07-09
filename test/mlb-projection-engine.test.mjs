@@ -61,6 +61,37 @@ test('run means scale with opponent run prevention and home boost', () => {
   assert.ok(means.lambdaAway < 305 / 75, 'away suppressed vs raw offense');
 });
 
+test('empty-sample starter ERA does not poison run prevention or flip the home side into a heavy underdog', () => {
+  const record = sampleRecord({
+    away_pitcher: {
+      mlb_id: 700001,
+      era: 0,
+      k_pct: 0.18,
+      batters_faced: 12,
+      games_started: 0,
+      innings_pitched: '3.0',
+    },
+    home_pitcher: {
+      mlb_id: 700002,
+      era: 2.95,
+      k_pct: 0.24,
+      batters_faced: 420,
+      games_started: 18,
+      innings_pitched: '116.1',
+    },
+    away_team_stats: { runs_scored: 295, runs_allowed: 315, gamesPlayed: 75 },
+    home_team_stats: { runs_scored: 365, runs_allowed: 285, gamesPlayed: 75 },
+    away_bullpen: { era: 4.25 },
+    home_bullpen: { era: 3.45 },
+  });
+
+  const means = projectRunMeans(record, LEAGUE);
+  assert.ok(means.lambdaHome > LEAGUE, `expected home lambda above league average, got ${means.lambdaHome}`);
+
+  const p = buildGameProjections({ record, leagueRPG: LEAGUE, lineup_status: 'confirmed', weather_status: 'complete' });
+  assert.ok(p.score.outputs.moneyline_home > 0.5, `expected home win prob > 0.5, got ${p.score.outputs.moneyline_home}`);
+});
+
 test('confirmed lineup yields real numeric projections for ML/total/team/YRFI/Ks', () => {
   const p = buildGameProjections({ record: sampleRecord(), leagueRPG: LEAGUE, as_of: '2026-06-17T00:00:00Z', lineup_status: 'confirmed', weather_status: 'complete' });
 

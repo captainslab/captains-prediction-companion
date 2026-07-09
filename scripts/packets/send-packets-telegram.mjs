@@ -312,6 +312,154 @@ function janitorAlert(entryName, janitor) {
   return `JANITOR_BLOCKED ${entryName}: ${janitor.errors?.[0]?.code ?? 'PACKET_QC_FAILED'}`;
 }
 
+// ---------------------------------------------------------------------------
+// Slate-expiry gate — fail closed when a game has already started.
+//
+// A CPC packet is a PRE-GAME read. Once first pitch has passed the packet is no
+// longer deliverable, so delivery must fail closed: never send, never mark the
+// packet delivered, and record why it was blocked. Detection is delivery-time
+// only and reads solely the customer text (no market/price data).
+// ---------------------------------------------------------------------------
+
+// Returns { present, ms, raw } for the packet's "First pitch: <ISO>Z" line.
+// present=false → no such line (gate not applicable). ms=NaN → line present but
+// unparseable (fail closed).
+export function parseFirstPitchUtc(packetText) {
+  const text = packetText ?? '';
+  if (!/First pitch:/i.test(text)) return { present: false, ms: null, raw: null };
+  const m = /First pitch:\s*(\S+)/i.exec(text);
+  const raw = m ? m[1] : null;
+  const ms = raw ? Date.parse(raw) : NaN;
+  return { present: true, ms: Number.isFinite(ms) ? ms : NaN, raw };
+}
+
+function parseMatchup(packetText) {
+  const text = packetText ?? '';
+  const titled = /Captain MLB\s*[—-]\s*(.+?)\s+(?:CPC Read|Pre-Final-Lineup|Game Board)\b/.exec(text);
+  if (titled) return titled[1].trim();
+  const bare = /^([A-Za-z .'()-]+ at [A-Za-z .'()-]+)\s*$/m.exec(text);
+  return bare ? bare[1].trim() : 'unknown matchup';
+}
+
+function parseGameDate(packetText) {
+  const m = /Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/.exec(packetText ?? '');
+  return m ? m[1] : 'unknown date';
+}
+
+// Pure decision: is this packet's slate still deliverable at nowMs?
+export function evaluateSlateExpiry({ packetText, nowMs }) {
+  const fp = parseFirstPitchUtc(packetText);
+  if (!fp.present) {
+    return { blocked: false, verdict: DELIVERY_VERDICTS.SEND_ALLOWED, firstPitchUtc: null, reason: null };
+  }
+  if (!Number.isFinite(fp.ms)) {
+    return {
+      blocked: true,
+      verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,
+      firstPitchUtc: null,
+      reason: 'unparseable first pitch (fail-closed)',
+    };
+  }
+  const firstPitchUtc = new Date(fp.ms).toISOString();
+  if (fp.ms <= nowMs) {
+    return {
+      blocked: true,
+      verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,
+      firstPitchUtc,
+      reason: `${parseMatchup(packetText)} (${parseGameDate(packetText)}) already started at ${firstPitchUtc} — EXPIRED_SLATE_BLOCKED`,
+    };
+  }
+  return { blocked: false, verdict: DELIVERY_VERDICTS.SEND_ALLOWED, firstPitchUtc, reason: null };
+}
+
+// Deliver one document-type packet entry. Runs the slate-expiry gate FIRST, so
+// an expired slate never reaches the janitor or Telegram and is never marked
+// delivered. Send functions are injectable for testing. Returns a status:
+// 'sent' | 'blocked_expired' | 'blocked_janitor' | 'dryrun'.
+export async function deliverDocumentEntry({
+  entry,
+  dir,
+  packetType,
+  date,
+  stateRoot,
+  ledgerPath,
+  ledger,
+  force,
+  dryRun,
+  pace = false,
+  nowMs = Date.now(),
+  sendMessage = tgSendMessage,
+  sendDocument = tgSendDocument,
+  inspect = inspectPacketFile,
+}) {
+  const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
+  const filePath = join(dir, fileName);
+  const packetText = readFileSync(filePath, 'utf8');
+
+  // Fail-closed gate — before any janitor call or any Telegram request.
+  const expiry = evaluateSlateExpiry({ packetText, nowMs });
+  if (expiry.blocked) {
+    console.error(`EXPIRED_SLATE_BLOCKED ${entry.name}: ${expiry.reason}`);
+    ledger.blocked = ledger.blocked || {};
+    ledger.blocked[entry.name] = {
+      utc: new Date().toISOString(),
+      verdict: expiry.verdict,
+      reason: expiry.reason,
+      first_pitch_utc: expiry.firstPitchUtc,
+    };
+    if (!dryRun) saveLedger(ledgerPath, ledger);
+    return { status: 'blocked_expired', verdict: expiry.verdict, reason: expiry.reason };
+  }
+
+  const janitor = inspect(filePath, {
+    date,
+    stateRoot,
+    packetType,
+    ledgerPath,
+    idempotencyKey: entry.name,
+    ...buildJanitorOptions({ packetType, dryRun, ledgerPath, force }),
+  });
+  if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+    console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+    return { status: 'blocked_janitor', verdict: janitor.verdict };
+  }
+  const deliveryPath = janitor?.repaired_path ?? filePath;
+  const deliveryName = basename(deliveryPath);
+  const text = readFileSync(deliveryPath, 'utf8');
+  const notice = cpcPacketCaption(text, entry.name, packetType);
+  if (dryRun) {
+    return {
+      status: 'dryrun',
+      verdict: janitor?.verdict ?? DELIVERY_VERDICTS.SEND_ALLOWED,
+      notice,
+      document_file: deliveryName,
+    };
+  }
+  if (pace) await sleep(SEND_PACING_MS);
+  const noticeId = await sendMessage(notice);
+  await sleep(SEND_PACING_MS);
+  const documentId = await sendDocument(deliveryPath);
+  ledger.delivered[entry.name] = {
+    utc: new Date().toISOString(),
+    message_ids: [noticeId, documentId],
+    notice_message_id: noticeId,
+    document_message_id: documentId,
+    document_file: deliveryName,
+    delivery_mode: 'document_txt',
+    janitor_verdict: janitor.verdict,
+    janitor_sidecar: janitor.sidecar_path,
+    janitor_repaired_path: janitor.repaired_path ?? undefined,
+    forced: force || undefined,
+  };
+  saveLedger(ledgerPath, ledger);
+  return {
+    status: 'sent',
+    verdict: janitor.verdict,
+    message_ids: [noticeId, documentId],
+    document_file: deliveryName,
+  };
+}
+
 async function main() {
   const dir = resolve(stateRoot, 'packets', date, packetType);
   const ledgerPath = join(dir, '.delivery-ledger.json');
@@ -371,54 +519,34 @@ async function main() {
       continue;
     }
     if (isDocumentPacketType(packetType)) {
-      const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
-      const filePath = join(dir, fileName);
-      const janitor = inspectPacketFile(filePath, {
+      const outcome = await deliverDocumentEntry({
+        entry,
+        dir,
+        packetType,
         date,
         stateRoot,
-        packetType,
         ledgerPath,
-        idempotencyKey: entry.name,
-        ...buildJanitorOptions({ packetType, dryRun, ledgerPath, force }),
+        ledger,
+        force,
+        dryRun,
+        pace: sent > 0,
       });
-      if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
+      if (outcome.status === 'sent') {
+        sent += 1;
+        console.log(`sent ${entry.name} — notice + 1 document (${outcome.document_file}) janitor=${outcome.verdict}`);
+      } else if (outcome.status === 'dryrun') {
+        wouldSend += 1;
+        logDryRunVerdict(entry.name, { verdict: outcome.verdict }, {
+          notice: outcome.notice,
+          documentName: outcome.document_file,
+        });
+      } else if (outcome.status === 'blocked_expired' || outcome.status === 'blocked_janitor') {
         if (dryRun) {
           wouldBlock += 1;
-          logDryRunVerdict(entry.name, janitor);
-        } else {
-          console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
+          logDryRunVerdict(entry.name, { verdict: outcome.verdict });
         }
         blockedEntries.push(entry.name);
-        continue;
       }
-      const deliveryPath = janitor?.repaired_path ?? filePath;
-      const deliveryName = basename(deliveryPath);
-      const text = readFileSync(deliveryPath, 'utf8');
-      const notice = cpcPacketCaption(text, entry.name, packetType);
-      if (dryRun) {
-        wouldSend += 1;
-        logDryRunVerdict(entry.name, janitor, { notice, documentName: deliveryName });
-        continue;
-      }
-      if (sent) await sleep(SEND_PACING_MS);
-      const noticeId = await tgSendMessage(notice);
-      await sleep(SEND_PACING_MS);
-      const documentId = await tgSendDocument(deliveryPath);
-      ledger.delivered[entry.name] = {
-        utc: new Date().toISOString(),
-        message_ids: [noticeId, documentId],
-        notice_message_id: noticeId,
-        document_message_id: documentId,
-        document_file: deliveryName,
-        delivery_mode: 'document_txt',
-        janitor_verdict: janitor.verdict,
-        janitor_sidecar: janitor.sidecar_path,
-        janitor_repaired_path: janitor.repaired_path ?? undefined,
-        forced: force || undefined,
-      };
-      saveLedger(ledgerPath, ledger);
-      sent += 1;
-      console.log(`sent ${entry.name} — notice + 1 document (${deliveryName}) janitor=${janitor.verdict}`);
       continue;
     }
     const pieces = [];

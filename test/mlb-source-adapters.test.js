@@ -25,6 +25,9 @@ import {
   fixtureBaseballSavantEnvelope,
 } from '../scripts/mlb/source-adapters/baseball-savant-readonly.mjs';
 import {
+  fetchContextReadonly,
+} from '../scripts/mlb/source-adapters/context-readonly.mjs';
+import {
   loadDynamicCompositeSlate,
   runComposite,
 } from '../scripts/mlb/late-slate-composite-refresh.mjs';
@@ -1692,4 +1695,82 @@ test('PASS moneylines do not emit combo candidates', async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('live MLB context adapter surfaces batting orders when the live boxscore has them and leaves them empty otherwise', async () => {
+  const fetchImpl = async url => {
+    const value = typeof url === 'string' ? url : url.toString();
+    if (value.includes('/game/300001/feed/live')) {
+      return makeJsonResponse({
+        gameData: {
+          probablePitchers: {
+            away: { fullName: 'Ada Ace' },
+            home: { fullName: 'Byron Bear' },
+          },
+          weather: { condition: 'Clear', temp: '71' },
+          venue: { fieldInfo: { roofType: 'Open' } },
+        },
+        liveData: {
+          boxscore: {
+            teams: {
+              away: {
+                batters: Array.from({ length: 9 }, (_, i) => ({ id: i + 1 })),
+                battingOrder: ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+              },
+              home: {
+                batters: Array.from({ length: 9 }, (_, i) => ({ id: i + 11 })),
+                battingOrder: ['10', '11', '12', '13', '14', '15', '16', '17', '18'],
+              },
+            },
+          },
+        },
+      });
+    }
+    if (value.includes('/game/300002/feed/live')) {
+      return makeJsonResponse({
+        gameData: {
+          probablePitchers: {
+            away: { fullName: 'Cora Cutter' },
+            home: { fullName: 'Dex Darter' },
+          },
+          weather: { condition: 'Cloudy', temp: '69' },
+          venue: { fieldInfo: { roofType: 'Open' } },
+        },
+        liveData: {
+          boxscore: {
+            teams: {
+              away: {
+                batters: [],
+              },
+              home: {
+                batters: [],
+              },
+            },
+          },
+        },
+      });
+    }
+    return makeJsonResponse({}, 404);
+  };
+
+  const envelope = await fetchContextReadonly({
+    outputDir: 'state/mlb/2026-05-15/discovery',
+    fixturesOnly: false,
+    fetchImpl,
+    now: new Date('2026-05-15T14:00:00.000Z'),
+    mlbGames: [
+      { game_pk: 300001, away_team: 'Alpha City Aces', home_team: 'Beta Town Bears' },
+      { game_pk: 300002, away_team: 'Gamma City Gulls', home_team: 'Delta Town Ducks' },
+    ],
+  });
+
+  assert.equal(envelope.records.length, 2);
+  const withOrders = envelope.records.find(record => record.game_pk === 300001);
+  const withoutOrders = envelope.records.find(record => record.game_pk === 300002);
+  assert.equal(withOrders.away_batting_order.length, 9);
+  assert.equal(withOrders.home_batting_order.length, 9);
+  assert.deepEqual(withOrders.away_batting_order, ['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+  assert.deepEqual(withOrders.home_batting_order, ['10', '11', '12', '13', '14', '15', '16', '17', '18']);
+  assert.deepEqual(withoutOrders.away_batting_order, []);
+  assert.deepEqual(withoutOrders.home_batting_order, []);
 });
