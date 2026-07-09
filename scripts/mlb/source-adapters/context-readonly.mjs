@@ -93,6 +93,8 @@ function normalizeRecord({ game, checkedAtUtc, livePayload, summaryPayload, sour
     home_team: game.home_team ?? null,
     checked_at_utc: checkedAtUtc,
     lineup_status: lineupStatus(livePayload),
+    away_batting_order: safeArray(livePayload?.liveData?.boxscore?.teams?.away?.battingOrder),
+    home_batting_order: safeArray(livePayload?.liveData?.boxscore?.teams?.home?.battingOrder),
     probable_pitchers: {
       away: livePayload?.gameData?.probablePitchers?.away?.fullName ?? game.probable_pitchers?.away ?? null,
       home: livePayload?.gameData?.probablePitchers?.home?.fullName ?? game.probable_pitchers?.home ?? null,

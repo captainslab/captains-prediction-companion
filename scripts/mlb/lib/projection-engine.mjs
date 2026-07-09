@@ -88,6 +88,16 @@ function teamRatePerGame(stats, key) {
   return (Number.isFinite(v) && g > 0) ? v / g : null;
 }
 
+function starterEra(p) {
+  const e = Number(p?.era);
+  const gs = Number(p?.games_started);
+  const ip = Number.parseFloat(p?.innings_pitched);
+  if (!Number.isFinite(e) || e <= 0) return NaN;
+  if (Number.isFinite(gs) && gs < 1) return NaN;
+  if (Number.isFinite(ip) && ip < 10) return NaN;
+  return e;
+}
+
 // Opponent run prevention per 9, blended starter + bullpen + team defense.
 function runPrevention(starterEra, bullpenEra, teamRunsAllowedPerGame, leagueRPG) {
   const parts = [];
@@ -117,8 +127,8 @@ export function projectRunMeans(record, leagueRPG) {
   if (offAway == null || offHome == null) return null;
 
   // Opponent run prevention: away offense faces HOME pitching, and vice versa.
-  const prevHomePitch = runPrevention(Number(hp?.era), Number(record?.home_bullpen?.era), teamRatePerGame(h, 'runs_allowed'), leagueRPG);
-  const prevAwayPitch = runPrevention(Number(ap?.era), Number(record?.away_bullpen?.era), teamRatePerGame(a, 'runs_allowed'), leagueRPG);
+  const prevHomePitch = runPrevention(starterEra(hp), Number(record?.home_bullpen?.era), teamRatePerGame(h, 'runs_allowed'), leagueRPG);
+  const prevAwayPitch = runPrevention(starterEra(ap), Number(record?.away_bullpen?.era), teamRatePerGame(a, 'runs_allowed'), leagueRPG);
 
   const lambdaAway = clampLambda(offAway * (prevHomePitch / leagueRPG));
   const lambdaHome = clampLambda(offHome * (prevAwayPitch / leagueRPG) * MODEL.HOME_RUN_BOOST);

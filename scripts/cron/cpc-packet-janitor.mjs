@@ -29,6 +29,9 @@ export const DELIVERY_VERDICTS = Object.freeze({
   SEND_ALLOWED_AFTER_REPAIR: 'SEND_ALLOWED_AFTER_REPAIR',
   JANITOR_WARNING: 'JANITOR_WARNING',
   JANITOR_BLOCKED: 'JANITOR_BLOCKED',
+  // Delivery-time gate: the slate is no longer deliverable (a target game has
+  // already started). Fail closed — never send, never mark delivered.
+  EXPIRED_SLATE_BLOCKED: 'EXPIRED_SLATE_BLOCKED',
 });
 
 const MAX_REPAIR_ATTEMPTS = 1;
