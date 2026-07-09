@@ -140,6 +140,42 @@ export const CPC_CHANNEL_MAP = Object.freeze({
   alerts: '#cpc-alerts',
 });
 
+export const CAPTAINS_CREW_ROUTES = Object.freeze([
+  'operator-dry-runs',
+  'delivery-logs',
+  'daily-brief',
+  'research-cards',
+  'packet-index',
+  'settlement-reviews',
+  'source-gaps',
+  'mentions-packets',
+  'earnings-packets',
+  'mlb-packets',
+  'ufc-packets',
+  'nascar-packets',
+  'soccer-packets',
+  'politics-packets',
+  'other-packets',
+]);
+
+export const CAPTAINS_CREW_ROUTE_ENV = Object.freeze({
+  'operator-dry-runs': 'DISCORD_WEBHOOK_OPERATOR_DRY_RUNS',
+  'delivery-logs': 'DISCORD_WEBHOOK_DELIVERY_LOGS',
+  'daily-brief': 'DISCORD_WEBHOOK_DAILY_BRIEF',
+  'research-cards': 'DISCORD_WEBHOOK_RESEARCH_CARDS',
+  'packet-index': 'DISCORD_WEBHOOK_PACKET_INDEX',
+  'settlement-reviews': 'DISCORD_WEBHOOK_SETTLEMENT_REVIEWS',
+  'source-gaps': 'DISCORD_WEBHOOK_SOURCE_GAPS',
+  'mentions-packets': 'DISCORD_WEBHOOK_MENTIONS_PACKETS',
+  'earnings-packets': 'DISCORD_WEBHOOK_EARNINGS_PACKETS',
+  'mlb-packets': 'DISCORD_WEBHOOK_MLB_PACKETS',
+  'ufc-packets': 'DISCORD_WEBHOOK_UFC_PACKETS',
+  'nascar-packets': 'DISCORD_WEBHOOK_NASCAR_PACKETS',
+  'soccer-packets': 'DISCORD_WEBHOOK_SOCCER_PACKETS',
+  'politics-packets': 'DISCORD_WEBHOOK_POLITICS_PACKETS',
+  'other-packets': 'DISCORD_WEBHOOK_OTHER_PACKETS',
+});
+
 export function routeDiscordPosts(packets = []) {
   return packets.map(({ packetType, packetText, title, artifactPaths }) => {
     const channel = CPC_CHANNEL_MAP[packetType] ?? '#cpc-alerts';
