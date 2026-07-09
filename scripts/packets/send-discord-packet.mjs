@@ -11,6 +11,8 @@
 //     --packet-type nascar-sunday \
 //     --title "CPC NASCAR — 2026-05-31"            # dry-run (default)
 //
+//   ...same command... --route operator-dry-runs   # Captain's Crew route dry-run
+//
 //   ...same command... --send                      # explicit live send
 //
 // Output reports: packet path, packet type, the SELECTED ENV VAR NAME (not its
@@ -18,16 +20,19 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { sendDiscordPacket, resolveWebhookEnv, DISCORD_ENV_BY_TYPE, DISCORD_FALLBACK_ENV } from '../shared/discord-send.mjs';
+import { sendDiscordPacket, sendDiscordRoute, resolveWebhookEnv, resolveRouteWebhookEnv, DISCORD_ENV_BY_TYPE, DISCORD_FALLBACK_ENV } from '../shared/discord-send.mjs';
+import { CAPTAINS_CREW_ROUTES, CAPTAINS_CREW_ROUTE_ENV } from '../shared/discord-format.mjs';
 
 const VALID_TYPES = new Set(Object.keys(DISCORD_ENV_BY_TYPE));
+const VALID_ROUTES = new Set(CAPTAINS_CREW_ROUTES);
 
 function parseArgs(argv) {
-  const opts = { packet: null, packetType: null, title: null, send: false, dryRun: true, help: false };
+  const opts = { packet: null, packetType: null, route: null, title: null, send: false, dryRun: true, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--packet') opts.packet = argv[++i];
     else if (a === '--packet-type') opts.packetType = argv[++i];
+    else if (a === '--route') opts.route = argv[++i];
     else if (a === '--title') opts.title = argv[++i];
     else if (a === '--send') { opts.send = true; opts.dryRun = false; }
     else if (a === '--dry-run') { opts.dryRun = true; opts.send = false; }
@@ -53,6 +58,7 @@ const HELP = `send-discord-packet — safe Discord delivery for CPC packets
 
   --packet <path>         path to the rendered SECTIONED board (.txt)
   --packet-type <type>    one of: ${[...VALID_TYPES].join(' | ')}
+  --route <name>          Captain's Crew route (alternative to --packet-type)
   --title <title>         optional channel post title
   --dry-run               plan only, no network (DEFAULT)
   --send                  explicit live send (requires a Discord webhook env var)
@@ -61,6 +67,9 @@ const HELP = `send-discord-packet — safe Discord delivery for CPC packets
     type-specific: ${Object.entries(DISCORD_ENV_BY_TYPE).map(([t, v]) => `${t} -> ${v}`).join(', ')}
     fallback:      ${DISCORD_FALLBACK_ENV}
 
+  Captain's Crew routes (dry-run default; operator-dry-runs is the first safe test route):
+${CAPTAINS_CREW_ROUTES.map((route) => `    ${route.padEnd(19)} -> ${CAPTAINS_CREW_ROUTE_ENV[route]}`).join('\n')}
+
   *.inventory.txt is rejected. Raw inventory is never sent to Discord.`;
 
 async function main() {
@@ -68,7 +77,11 @@ async function main() {
   if (opts.help) { console.log(HELP); process.exit(0); }
 
   if (!opts.packet) { console.error('ERROR: --packet <path> is required'); process.exit(2); }
-  if (!opts.packetType || !VALID_TYPES.has(opts.packetType)) {
+  if (opts.route && !VALID_ROUTES.has(opts.route)) {
+    console.error(`ERROR: --route must be one of: ${CAPTAINS_CREW_ROUTES.join(', ')}`);
+    process.exit(2);
+  }
+  if (!opts.route && (!opts.packetType || !VALID_TYPES.has(opts.packetType))) {
     console.error(`ERROR: --packet-type must be one of: ${[...VALID_TYPES].join(', ')}`);
     process.exit(2);
   }
@@ -83,14 +96,20 @@ async function main() {
   loadEnv('.env.local');
 
   const packetText = fs.readFileSync(opts.packet, 'utf8');
-  const title = opts.title ?? `CPC ${opts.packetType}`;
+  const packetLabel = opts.route ?? opts.packetType;
+  const title = opts.title ?? `CPC ${packetLabel}`;
 
   // Pre-resolve env presence for the report (names only).
-  const envInfo = resolveWebhookEnv(opts.packetType);
+  const envInfo = opts.route ? resolveRouteWebhookEnv(opts.route) : resolveWebhookEnv(opts.packetType);
 
   let result;
   try {
-    result = await sendDiscordPacket({
+    result = opts.route ? await sendDiscordRoute({
+      route: opts.route,
+      packetText,
+      title,
+      send: opts.send,
+    }) : await sendDiscordPacket({
       packetText,
       packetType: opts.packetType,
       title,
@@ -104,7 +123,7 @@ async function main() {
   const lines = [
     '=== Discord packet delivery ===',
     `packet_path     : ${path.resolve(opts.packet)}`,
-    `packet_type     : ${opts.packetType}`,
+    `${opts.route ? 'route           ' : 'packet_type     '}: ${packetLabel}`,
     `selected_env_var: ${result.selectedEnvVar ?? '(none present)'}`,
     `credential      : ${envInfo.present ? 'present' : 'MISSING'}`,
     `part_count      : ${result.partCount}`,
@@ -119,7 +138,7 @@ async function main() {
   if (!envInfo.present && opts.send) {
     lines.push('');
     lines.push(`To enable live send, set one of (env-only, never committed):`);
-    lines.push(`  ${envInfo.specificVar ?? DISCORD_ENV_BY_TYPE[opts.packetType]}   (preferred for ${opts.packetType})`);
+    lines.push(`  ${envInfo.specificVar ?? (opts.route ? CAPTAINS_CREW_ROUTE_ENV[opts.route] : DISCORD_ENV_BY_TYPE[opts.packetType])}   (preferred for ${packetLabel})`);
     lines.push(`  ${DISCORD_FALLBACK_ENV}   (fallback for all types)`);
   }
   console.log(lines.join('\n'));

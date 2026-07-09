@@ -25,6 +25,33 @@ All four guarantees below are covered by `test/discord-format.test.mjs`:
 | Secrets are scrubbed | `scrubSecrets()` redacts token/webhook/key shapes to `<REDACTED_*>` |
 | Canonical sections survive the transform | TLDR / Top Edge / Watchlist / Fades / Blocked / Audit pass through |
 
+## Captain's Crew routes
+
+The adapter now supports named Captain's Crew routes. Each route maps to a
+placeholder env var name only. No real webhook URL or token is stored here.
+
+Dry-run remains the default. `--send` is the only live-send switch, and it
+requires a real webhook env var to be present. `operator-dry-runs` is the first
+safe test route.
+
+| Route | Placeholder env var |
+|---|---|
+| `operator-dry-runs` | `DISCORD_WEBHOOK_OPERATOR_DRY_RUNS` |
+| `delivery-logs` | `DISCORD_WEBHOOK_DELIVERY_LOGS` |
+| `daily-brief` | `DISCORD_WEBHOOK_DAILY_BRIEF` |
+| `research-cards` | `DISCORD_WEBHOOK_RESEARCH_CARDS` |
+| `packet-index` | `DISCORD_WEBHOOK_PACKET_INDEX` |
+| `settlement-reviews` | `DISCORD_WEBHOOK_SETTLEMENT_REVIEWS` |
+| `source-gaps` | `DISCORD_WEBHOOK_SOURCE_GAPS` |
+| `mentions-packets` | `DISCORD_WEBHOOK_MENTIONS_PACKETS` |
+| `earnings-packets` | `DISCORD_WEBHOOK_EARNINGS_PACKETS` |
+| `mlb-packets` | `DISCORD_WEBHOOK_MLB_PACKETS` |
+| `ufc-packets` | `DISCORD_WEBHOOK_UFC_PACKETS` |
+| `nascar-packets` | `DISCORD_WEBHOOK_NASCAR_PACKETS` |
+| `soccer-packets` | `DISCORD_WEBHOOK_SOCCER_PACKETS` |
+| `politics-packets` | `DISCORD_WEBHOOK_POLITICS_PACKETS` |
+| `other-packets` | `DISCORD_WEBHOOK_OTHER_PACKETS` |
+
 ## Usage
 
 ```js
@@ -44,6 +71,10 @@ const { parts, channel, redactions, partCount } = buildDiscordPost({
 ```
 
 Returned shape: `{ parts: string[], channel: string|null, redactions: number, partCount: number }`.
+
+For named Captain's Crew routes, the sender API returns a redacted plan/result
+that includes the route name and selected env var name, but never the webhook
+value.
 
 ## Multi-sport routing (still dry-run)
 
@@ -82,11 +113,13 @@ board should never contain a secret in the first place.
 
 ## Going live (future, authorized only)
 
-Live send is **not** implemented. When it is, it must:
+Live send is disabled by default and only happens when `--send` is passed and a
+real webhook env var is present. When using the route layer, it must:
 
 1. Read the webhook URL from an **env var only** (never hard-coded, never logged).
 2. Require explicit authorization per the security screen.
 3. Reuse `buildDiscordPost()` so the 2000-char split, secret scrub, and
    raw-inventory refusal still apply.
+4. Keep route selection independent of packet prices or other market data.
 
 See [SECURITY_PRIVACY.md](./SECURITY_PRIVACY.md) → Discord rules.
