@@ -574,7 +574,7 @@ export function classifyGamePacketRead(gamePicks = [], event = null, { hasModelP
     };
   }
 
-  if (priceOnlyBlocked) {
+  if (priceOnlyBlocked && hasModelProjection) {
     return {
       call: 'NO CLEAR PICK',
       cpcRead: 'MODEL_ONLY',
@@ -584,6 +584,19 @@ export function classifyGamePacketRead(gamePicks = [], event = null, { hasModelP
       summary: 'scoring blocked on reference_price; composite/model layer is not price-dependent',
       whatItMeans: 'Reference price is missing, so board entry is blocked. Market-free projections still render below.',
       evidenceStatus: hasModelProjection ? 'model_ready_price_gap' : 'blocked',
+    };
+  }
+
+  if (priceOnlyBlocked) {
+    return {
+      call: 'NO CLEAR PICK',
+      cpcRead: 'BLOCKED',
+      readLine: 'no rated view',
+      scoringClassification: 'BLOCKED_SOURCE_GAP',
+      reason: 'BLOCKED_MODEL_LAYER_MISSING: reference_price gap and stats-backed model projection unavailable',
+      summary: 'reference_price gap plus missing stats-backed projection; no model read is claimed',
+      whatItMeans: 'CPC cannot promote a market read or model projection until stats-backed inputs are available.',
+      evidenceStatus: 'blocked_model_layer_missing',
     };
   }
 

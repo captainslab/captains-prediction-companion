@@ -447,6 +447,34 @@ test('reference-price-only gaps do not suppress a market-free model posture', ()
   assert.equal(read.cpcRead, 'MODEL_ONLY');
   assert.match(read.readLine, /market-context blocked/);
   assert.match(read.reason, /reference_price gap only/);
+
+  const blockedRead = classifyGamePacketRead(picks, null, { hasModelProjection: false });
+  assert.equal(blockedRead.cpcRead, 'BLOCKED');
+  assert.equal(blockedRead.readLine, 'no rated view');
+  assert.match(blockedRead.reason, /BLOCKED_MODEL_LAYER_MISSING/);
+  assert.doesNotMatch(blockedRead.reason, /model-free model still renders|model read available/i);
+
+  const packet = buildKalshiGamePacket({
+    date: '2026-07-08',
+    event: {
+      event_ticker: 'KXMLBGAME-26JUL081910KCNYM',
+      title: 'Kansas City Royals at New York Mets',
+      away_full: 'Kansas City Royals',
+      home_full: 'New York Mets',
+      markets: [],
+    },
+    artifacts: [],
+    primeAttempts: [],
+    kalshiSummary: { ok: true, total: 1, matched: 1, error: null },
+    sourcePath: '/tmp/kc.json',
+    gamePicks: picks,
+    statsRecord: null,
+    leagueRPG: null,
+    scope: 'GAME_PACKET',
+  });
+  assert.match(packet.text, /BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(packet.text, /stats-backed model projection unavailable/);
+  assert.doesNotMatch(packet.text, /MODEL_ONLY|model read available|market-free model projections still render/i);
 });
 
 test('game packets show projected lineup status when alpha is still pending', () => {
