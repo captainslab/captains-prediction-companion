@@ -1,40 +1,55 @@
-# Discord Output (Dry-Run Formatter)
+# Discord Delivery and Inventory
 
-CPC ships an **offline** Discord formatter at
-`scripts/shared/discord-format.mjs`. It transforms a rendered decision board into
-Discord-ready message parts. It does **not** send anything.
+CPC separates Discord support into three layers:
 
-## Hard guarantees
+1. **Formatting** — pure, offline message preparation.
+2. **Delivery** — dry-run by default; live webhook POST only with explicit `--send`.
+3. **Inventory** — GET-only guild structure snapshot with no message sends.
 
-The formatter is pure and offline. It:
+No bot token or webhook URL is committed, printed, or written to artifacts.
 
-1. **Never opens a network connection.**
-2. **Never reads a credential** (no bot token, no webhook URL).
-3. **Never sends a Discord message.**
+## 1. Offline formatter
 
-Live delivery is intentionally out of scope. Wiring an actual webhook/bot send is
-a separate, explicitly-authorized step. Until then, this module exists so output
-can be inspected and tested without any token.
-
-All four guarantees below are covered by `test/discord-format.test.mjs`:
+`scripts/shared/discord-format.mjs` transforms a rendered decision board into
+Discord-ready message parts. It never opens a network connection and never reads
+a credential.
 
 | Guarantee | How |
 |---|---|
 | No part exceeds Discord's 2000-char limit | `splitForDiscord()` splits at line boundaries with headroom (`DISCORD_SAFE_CHARS = 1850`) |
 | Raw inventory never reaches a channel | `buildDiscordPost()` throws if handed a raw inventory dump |
-| Secrets are scrubbed | `scrubSecrets()` redacts token/webhook/key shapes to `<REDACTED_*>` |
+| Secrets are scrubbed | `scrubSecrets()` redacts token, webhook, key, and bearer shapes |
 | Canonical sections survive the transform | TLDR / Top Edge / Watchlist / Fades / Blocked / Audit pass through |
 
-## Captain's Crew routes
+```js
+import { buildDiscordPost } from './scripts/shared/discord-format.mjs';
 
-The adapter now supports named Captain's Crew routes. Each route maps to a
-placeholder env var name only. No real webhook URL or token is stored here.
+const { parts, channel, redactions, partCount } = buildDiscordPost({
+  packetText,
+  title: 'CPC MLB — 2026-07-10',
+  channel: '#cpc-mlb',
+  artifactPaths: [
+    'state/packets/2026-07-10/mlb-daily/board.inventory.txt',
+  ],
+});
+```
 
-Dry-run remains the default. `--send` is the only live-send switch, and it
-requires a real webhook env var to be present. `operator-dry-runs` is the first
-safe test route.
+Returned shape:
 
-| Route | Placeholder env var |
+```text
+{ parts: string[], channel: string|null, redactions: number, partCount: number }
+```
+
+If `redactions > 0`, treat that as a generator defect. A rendered packet should
+never contain a credential in the first place.
+
+## 2. Captain's Crew delivery routes
+
+The route adapter supports 15 named destinations. Each route maps to an
+environment variable **name** only. The repository never contains the webhook
+value.
+
+| Route | Webhook environment variable |
 |---|---|
 | `operator-dry-runs` | `DISCORD_WEBHOOK_OPERATOR_DRY_RUNS` |
 | `delivery-logs` | `DISCORD_WEBHOOK_DELIVERY_LOGS` |
@@ -52,74 +67,118 @@ safe test route.
 | `politics-packets` | `DISCORD_WEBHOOK_POLITICS_PACKETS` |
 | `other-packets` | `DISCORD_WEBHOOK_OTHER_PACKETS` |
 
-## Usage
+`DISCORD_WEBHOOK_URL` remains the general fallback.
 
-```js
-import { buildDiscordPost } from './scripts/shared/discord-format.mjs';
+### Dry-run preview
 
-const { parts, channel, redactions, partCount } = buildDiscordPost({
-  packetText,                 // a rendered SECTIONED board (not raw inventory)
-  title: 'CPC MLB — 2026-05-31',
-  channel: '#cpc-mlb',        // logical hint only — never resolved or sent
-  artifactPaths: [            // linked as paths only; contents never posted
-    'state/packets/2026-05-31/mlb-daily/board.inventory.txt',
-  ],
-});
+Dry-run is the default and makes no network call:
 
-// `parts` is an array of <=2000-char strings ready to inspect or (later, with
-// explicit authorization) send. `redactions` should normally be 0.
+```bash
+node scripts/packets/send-discord-packet.mjs \
+  --packet state/packets/<date>/<type>/<packet>.txt \
+  --route operator-dry-runs \
+  --dry-run
 ```
 
-Returned shape: `{ parts: string[], channel: string|null, redactions: number, partCount: number }`.
+The report includes the selected environment variable **name**, part count,
+redaction count, and send status. It never prints the webhook value.
 
-For named Captain's Crew routes, the sender API returns a redacted plan/result
-that includes the route name and selected env var name, but never the webhook
-value.
+### Explicit live send
 
-## Multi-sport routing (still dry-run)
+A live POST happens only when all of these are true:
 
-`routeDiscordPosts()` maps packet types to logical channels via a static
-convention — no IDs, no tokens, no network:
+1. `--send` is supplied.
+2. The selected route or fallback webhook environment variable is present.
+3. The packet is a rendered board, not a raw inventory artifact.
+4. Formatting and secret-scrubbing complete successfully.
+
+```bash
+node scripts/packets/send-discord-packet.mjs \
+  --packet state/packets/<date>/<type>/<packet>.txt \
+  --route operator-dry-runs \
+  --send
+```
+
+Start with `operator-dry-runs`. Promote other routes one at a time only after the
+pilot output and destination are verified.
+
+## 3. Read-only guild inventory
+
+`scripts/discord/inventory-discord.mjs` snapshots the current Discord server
+structure before provisioning or route rollout.
+
+It uses GET-only Discord REST calls to collect:
+
+- guild identity
+- categories and child-channel order
+- channel types
+- role names and positions
+- webhook metadata by channel (`name`, `id`, `channelId` only)
+
+It does not create, edit, or delete channels, roles, permissions, or webhooks. It
+does not send messages and never writes webhook URLs or tokens.
+
+Required environment variables:
+
+```bash
+DISCORD_BOT_TOKEN=...
+DISCORD_GUILD_ID=...
+```
+
+Fallback names are `DISCORD_TOKEN` and `DISCORD_SERVER_ID`.
+
+Run:
+
+```bash
+node scripts/discord/inventory-discord.mjs
+```
+
+Successful output is written to:
+
+```text
+state/discord/inventory.json
+state/discord/inventory.md
+```
+
+Missing credentials fail closed with zero API calls. Discord `401` or `403`
+responses return `BLOCKED` and write no successful inventory snapshot.
+
+The inventory bot needs read-only access sufficient for `View Channels` and
+`Manage Webhooks` so webhook metadata can be listed. Do not grant message-send,
+channel-management, or role-management permissions for this inventory step.
+
+## Multi-sport logical routing
+
+`routeDiscordPosts()` still supports logical packet-type routing without IDs,
+tokens, or network access:
 
 ```js
-import { routeDiscordPosts, CPC_CHANNEL_MAP } from './scripts/shared/discord-format.mjs';
-
-// CPC_CHANNEL_MAP:
-//   mlb-daily      -> #cpc-mlb
-//   nascar-sunday  -> #cpc-nascar
-//   mentions-daily -> #cpc-mentions
-//   alerts         -> #cpc-alerts
+import { routeDiscordPosts } from './scripts/shared/discord-format.mjs';
 
 const payloads = routeDiscordPosts([
   { packetType: 'mlb-daily', packetText, title: 'CPC MLB' },
 ]);
-// payloads: [{ channel, parts, redactions, partCount }, ...]
 ```
+
+The logical channel map is formatting metadata. The live route adapter uses the
+explicit Captain's Crew route and its environment variable.
 
 ## Secret scrubbing patterns
 
-`scrubSecrets()` defensively redacts (even though generators are not supposed to
-emit these):
+`scrubSecrets()` defensively redacts:
 
-- Discord bot tokens (`mfa.*` and standard shapes)
-- Discord webhook URLs (`https://discord.com/api/webhooks/...`)
-- Telegram bot tokens (`digits:base64ish`)
-- `bot_token=` / `api_key=` / `client_secret=` / `webhook_url=` / `bearer ...`
-  assignments
-- Long opaque hex/base64 blobs (≥32 chars)
+- Discord bot tokens
+- Discord webhook URLs
+- Telegram bot tokens
+- `bot_token=`, `api_key=`, `client_secret=`, `webhook_url=`, and bearer assignments
+- long opaque hex/base64 blobs
 
-If `redactions > 0` on a packet body, treat it as a bug in the generator — the
-board should never contain a secret in the first place.
+## Safety boundary
 
-## Going live (future, authorized only)
+- Discord delivery never feeds model input, scoring, ranking, posture, or confidence.
+- Route selection depends only on the explicit route or packet type.
+- Market prices, odds, bid/ask, volume, open interest, spread, and movement do not select a route.
+- Telegram delivery remains separate and unchanged.
+- CPC remains research-only and places no trades.
 
-Live send is disabled by default and only happens when `--send` is passed and a
-real webhook env var is present. When using the route layer, it must:
-
-1. Read the webhook URL from an **env var only** (never hard-coded, never logged).
-2. Require explicit authorization per the security screen.
-3. Reuse `buildDiscordPost()` so the 2000-char split, secret scrub, and
-   raw-inventory refusal still apply.
-4. Keep route selection independent of packet prices or other market data.
-
-See [SECURITY_PRIVACY.md](./SECURITY_PRIVACY.md) → Discord rules.
+See [SECURITY_PRIVACY.md](./SECURITY_PRIVACY.md) for the full security screen.
