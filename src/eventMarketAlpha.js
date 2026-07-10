@@ -166,14 +166,12 @@ function normalizeWatchFor(value) {
 
 function buildPromptPayload(input) {
   const metadata = isObject(input.metadata) ? input.metadata : {};
+  // Price isolation: the model query carries only non-price identifiers. Market
+  // price / bid / ask / last_price are display-only and must never enter model input.
   const availableContracts = Array.isArray(metadata.available_contracts)
     ? metadata.available_contracts.map(contract => ({
         market_ticker: contract.market_ticker ?? null,
         label: contract.label ?? null,
-        market_yes: contract.market_yes ?? null,
-        yes_bid: contract.yes_bid ?? null,
-        yes_ask: contract.yes_ask ?? null,
-        last_price: contract.last_price ?? null,
       }))
     : [];
 
@@ -205,10 +203,6 @@ function buildPromptPayload(input) {
     evidence_strength: input.source_packet?.evidence_strength ?? null,
     market: {
       status: metadata.market_status ?? null,
-      market_yes: metadata.market_yes ?? null,
-      market_yes_bid: metadata.market_yes_bid ?? null,
-      market_yes_ask: metadata.market_yes_ask ?? null,
-      last_price: metadata.market_last_price ?? null,
     },
     available_contracts: availableContracts,
   };

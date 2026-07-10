@@ -178,17 +178,19 @@ function resolveDefaultModels(defaultModels = {}) {
 }
 
 function sortResultsByPriority(results = []) {
+  // Price isolation: ranking must never key off price/edge. Order by model
+  // confidence, then evidence strength, then a deterministic URL tiebreak.
+  // edge_cents / market_yes are display-only and must not influence order.
+  const confidenceScore = { high: 3, medium: 2, low: 1 };
+  const evidenceScore = { strong: 3, moderate: 2, thin: 1 };
   return [...results].sort((left, right) => {
-    const leftEdge = Math.abs(Number(left?.market_view?.trade_view?.edge_cents) || 0);
-    const rightEdge = Math.abs(Number(right?.market_view?.trade_view?.edge_cents) || 0);
-    if (rightEdge !== leftEdge) return rightEdge - leftEdge;
+    const leftConfidence = confidenceScore[String(left?.confidence ?? 'low')] ?? 0;
+    const rightConfidence = confidenceScore[String(right?.confidence ?? 'low')] ?? 0;
+    if (rightConfidence !== leftConfidence) return rightConfidence - leftConfidence;
 
-    const leftConfidence = String(left?.confidence ?? 'low');
-    const rightConfidence = String(right?.confidence ?? 'low');
-    const score = { high: 3, medium: 2, low: 1 };
-    if ((score[rightConfidence] ?? 0) !== (score[leftConfidence] ?? 0)) {
-      return (score[rightConfidence] ?? 0) - (score[leftConfidence] ?? 0);
-    }
+    const leftEvidence = evidenceScore[String(left?.evidence_strength ?? '').toLowerCase()] ?? 0;
+    const rightEvidence = evidenceScore[String(right?.evidence_strength ?? '').toLowerCase()] ?? 0;
+    if (rightEvidence !== leftEvidence) return rightEvidence - leftEvidence;
 
     return String(left?.source?.url ?? '').localeCompare(String(right?.source?.url ?? ''));
   });
@@ -254,13 +256,10 @@ function getResultEdgeCents(result) {
 }
 
 function hasActionableEdge(result) {
+  // Price isolation: "actionable" is decided purely by the model's own
+  // recommendation, never by a price/edge magnitude threshold.
   const recommendation = String(result?.summary?.recommendation ?? '').trim().toLowerCase();
-  if (ACTIONABLE_RECOMMENDATIONS.has(recommendation)) {
-    return true;
-  }
-
-  const edge = getResultEdgeCents(result);
-  return typeof edge === 'number' && Math.abs(edge) >= 3;
+  return ACTIONABLE_RECOMMENDATIONS.has(recommendation);
 }
 
 function buildNoEdgeReason(result) {
@@ -429,18 +428,9 @@ function fallbackResult(url, error) {
 }
 
 function countActionableEdges(results = []) {
-  return results.filter(result => {
-    const recommendation = String(result?.summary?.recommendation ?? '').trim().toLowerCase();
-    if (ACTIONABLE_RECOMMENDATIONS.has(recommendation)) {
-      return true;
-    }
-
-    const edge =
-      result?.market_view?.trade_view?.edge_cents ??
-      result?.market_view?.price_view?.edge_cents ??
-      null;
-    return typeof edge === 'number' && Math.abs(edge) >= 3;
-  }).length;
+  // Price isolation: count actionable cards purely from the model's own
+  // recommendation, never from a price/edge magnitude threshold.
+  return results.filter(hasActionableEdge).length;
 }
 
 function countEntities(results = []) {
