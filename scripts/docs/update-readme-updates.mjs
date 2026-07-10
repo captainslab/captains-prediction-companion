@@ -108,8 +108,9 @@ function buildStatusBlock(changelog, pkg) {
     ['Node requirement', '`>=18` (developed on Node 22)'],
     ['Trading posture', 'Read-only — **no orders, no bankroll automation**'],
     ['Composite scoring', 'Market-neutral — market price is **never** a composite input'],
-    ['Supported packets', 'MLB · NASCAR · mentions / politics'],
-    ['Discord output', 'Dry-run formatter only (offline, no live send)'],
+    ['Supported packets', 'MLB · World Cup · NASCAR · mentions / politics · UFC'],
+    ['Discord delivery', '15 named webhook routes — dry-run by default; live only with explicit `--send`'],
+    ['Discord inventory', 'GET-only guild snapshot — no sends and no secret output'],
   ];
   const out = [];
   out.push('| Field | Status |');
