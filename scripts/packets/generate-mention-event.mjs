@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 
 import { makeEmptyCpcResearchArtifact, assertCpcResearchArtifact } from '../shared/cpc-research-artifact-schema.mjs';
+import { buildPerplexityEntityAttachmentContract } from '../shared/perplexity-attachment-contract.mjs';
 import { CPC_RESEARCH_PROMPT_BUILDERS } from '../shared/perplexity-preview-prompts.mjs';
 import { sanitizeResearchArtifact, assertNoMarketLeak } from '../shared/preview-artifact-sanitizer.mjs';
 import { writeResearchBankArtifacts } from '../shared/cpc-research-bank.mjs';
@@ -440,6 +441,14 @@ export async function generateMentionEventPacket({
 
   const sanitized = sanitizeResearchArtifact(normalized);
   assertNoMarketLeak(sanitized.model_safe_inputs);
+  const attachmentContract = buildPerplexityEntityAttachmentContract({
+    entity_type: 'mention_event',
+    entity_ids: [eventId],
+    attached_entity_ids: Array.isArray(sanitized.source_urls) && sanitized.source_urls.length ? [eventId] : [],
+  });
+  if (!attachmentContract.all_entities_attached) {
+    throw new Error(`Perplexity attachment contract failed closed for ${eventId}: no source-backed event attachment`);
+  }
 
   const packetText = renderPacket({ date, eventId, eventUrl, artifact: sanitized, routeResult: route });
   const contract = validateCpcCustomerPacket(packetText);
@@ -470,6 +479,7 @@ export async function generateMentionEventPacket({
       price_isolation: priceIsolation,
       contract_valid: contract.valid,
       janitor_verdict: janitor.verdict,
+      attachment_contract: attachmentContract,
       dry_run: dryRun,
     },
     previewText: packetText,
@@ -498,6 +508,7 @@ export async function generateMentionEventPacket({
     source_urls: sanitized.source_urls,
     source_titles: sanitized.source_titles,
     source_freshness: sanitized.source_freshness,
+    attachment_contract: attachmentContract,
     unavailable_fields: sanitized.unavailable_fields ?? [],
     sanitized_removed: sanitized.sanitized_removed ?? [],
     contract_valid: contract.valid,
@@ -523,6 +534,7 @@ export async function generateMentionEventPacket({
     contract,
     janitor,
     priceIsolation,
+    attachmentContract,
     perplexity: { citations: perplexityRun.citations ?? [], search_results: perplexityRun.search_results ?? [], model: perplexityModel },
     dryRun,
   };
@@ -538,6 +550,7 @@ function printProof(result) {
   console.log(`route_resolver:      route=${result.route.route} basis=${result.route.basis} profile=${result.route.profile_key}`);
   console.log(`prompt_contract:     packet_type=${result.promptContract.packet_type} route=${result.promptContract.route} submarket=${result.promptContract.submarket}`);
   console.log(`source_count:        ${result.sanitized.source_urls.length}`);
+  console.log(`attachment_status:   ${result.attachmentContract.attached_count}/${result.attachmentContract.entity_count} event(s) attached`);
   console.log(`source_freshness:    ${result.sanitized.source_freshness.map((f) => f.freshness).join(', ')}`);
   console.log(`sanitized_removed:   ${JSON.stringify(result.sanitized.sanitized_removed ?? [])}`);
   console.log(`unavailable_fields:  ${JSON.stringify(result.sanitized.unavailable_fields ?? [])}`);
