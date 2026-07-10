@@ -89,6 +89,36 @@ Division of labor: **Codex = default executor** for code/test edits. **Claude Ag
 
 Use `scripts/agent/goal-template.md`: objective, branch/HEAD, no-touch, inspect-first, behavior, tests, proof, stop conditions.
 
+## Fighter Escort Operating Model — Cron-Driven Packet Escort
+
+The cron-driven CPC packet escort walks ONE packet/slate from origin to the send
+boundary and STOPS. Full spec: `docs/ESCORT_OPERATING_MODEL.md`. Command:
+`/escort-packet <EVENT>` (run as `/loop /escort-packet <EVENT>`). It wears four hats:
+
+1. **Fight escort** — locks onto one subject, walks checkpoint by checkpoint, does
+   not wander, stops at `PASS_READY_TO_SEND` or `BLOCKED`.
+2. **Emergency mechanic** — repairs only safe local issues (re-run
+   generation/render/audit); stops if a repair would touch a no-touch zone.
+3. **Procedure officer** — confirms procedure ran, evidence layers match the route,
+   quality holds; writes a proof artifact every run.
+4. **Self-improving Hermes worker** — records repeated blockers + successful repair
+   patterns to safe local files only; proposes (never auto-applies) risky changes.
+
+### Hard rules
+
+- One subject per loop. Max 2 repairs per checkpoint; max 1 re-walk per run;
+  same-fingerprint recurrence → `BLOCKED` (anti-spin, see §6).
+- Price/market data in the model path is **never** repaired → straight to `BLOCKED`.
+- A packet is ready ONLY when the §3 quality checklist fully passes and the proof
+  artifact exists. Self-report without proof = NOT ready.
+- Self-improvement may write ONLY to `state/escort/lessons.jsonl`,
+  `state/escort/blockers.jsonl`, `state/escort/runs/<run_id>.json`,
+  `docs/ESCORT_RUNBOOK.md`, `docs/ESCORT_REPAIR_PATTERNS.md`. Every learned rule must
+  carry source run ID, blocker fingerprint, repair attempted, outcome, safe-to-automate
+  flag, and required proof before reuse. Risky improvements need a separate reviewed goal.
+- Authority ends at the no-touch zones below. The escort delivers to the ropes; the
+  human throws the punch (authorizes the send). It never sends, pushes, or deploys.
+
 ## No-Touch Zones
 
 These files and systems must never be modified by any agent or subagent:

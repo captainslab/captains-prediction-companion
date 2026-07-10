@@ -110,3 +110,9 @@ state/goals/
 state/janitor/
 
 scratch/
+
+# Local generated/preview state and per-machine tooling config (Discord-readiness cleanup)
+state/previews/
+state/research/
+state/sports-research-cache/
+.claude/settings.json
