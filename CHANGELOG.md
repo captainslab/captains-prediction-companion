@@ -6,7 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — decision-packet refactor + docs system (2026-05-31)
+## [Unreleased] — public-alpha hardening, Discord delivery, and multi-sport expansion (2026-07-10)
+
+### Added
+- World Cup matchday pipeline with same-date team baselines, lineup gates, Elo→Poisson advances model, held-out calibration/backtest, and gate-respecting Telegram delivery
+- Discord delivery layer with 15 named Captain's Crew routes, env-only webhooks, dry-run by default, and explicit `--send` live mode
+- GET-only Discord guild inventory snapshot for categories, channels, roles, and webhook metadata; no sends and no secret output
+- NASCAR live Perplexity research layer with source-health disclosure and fail-closed missing-research handling
+- Scraper-first mentions discovery with deterministic category fallback, per-source deadlines, and degraded-source artifacts
+- Fail-closed Perplexity entity attachment contracts for mention-event and mentions-daily packets
+
+### Changed
+- Price isolation hardened across alpha prompts, board ordering, ranking, posture, and MLB primary selection; market values remain display/audit-only
+- MLB actionable posture now requires a model-backed `fair_value`; reference-price-only gaps render model output only when a stats-backed projection exists
+- Mentions routing keeps Trump event subjects out of sports classification while preserving weekly/monthly routing
+- MLB lineup/starter-expiry and World Cup packet gates fail closed before delivery
+- Operator docs, fan-out templates, and pre-send audit tooling refreshed for the current public-alpha workflow
+
+### Earlier in this Unreleased cycle — 2026-05-31
 
 ### Added
 - Shared sectioned decision-packet renderer (`scripts/shared/decision-packet.mjs`): one row schema + board layout used by every market type (MLB, NASCAR, mentions/politics)
@@ -37,13 +54,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Full suite: 528/528 passing on `node --test`
 
 ### Known limitations
-- Live Discord/webhook send is intentionally not implemented (dry-run only)
+- Discord live send is explicit and webhook-based; bot command/control and automatic server provisioning remain out of scope
 - MLB composite still depends on a stats source adapter for full-slate coverage (see `AGENTS.md` handoff)
 - No live order placement or bankroll automation by design
 
 ### Backlog
 - Wire stats-readonly adapter for full MLB slate composite coverage
-- Telegram/Discord live delivery behind explicit authorization
+- Roll Discord delivery out route-by-route after the `operator-dry-runs` pilot is verified
 
 ### Earlier in this Unreleased cycle — public-alpha prep (2026-05-25)
 
@@ -218,11 +235,3 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Event market app responses forced through tool output
 
 ---
-
-## [0.1.0] — Initial release (2026-03-27)
-
-### Added
-- Captains Prediction Companion starter: Node.js MCP server accepting Kalshi market URLs
-- Prediction card output: fair value, edge, confidence, reasoning
-- MCP transport at `POST /mcp` for ChatGPT and compatible clients
-- OpenRouter provider defaults normalized
