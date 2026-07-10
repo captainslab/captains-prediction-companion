@@ -148,6 +148,50 @@ function scopeAdjustedInputStatus(scope, status) {
   return status;
 }
 
+const SCORING_CLASS_RANK = Object.freeze({
+  CLEAR_PICK: 100,
+  PRE_LINEUP_PICK: 90,
+  LEAN: 80,
+  WATCH_FOR_PRICE: 55,
+  WATCH_FOR_LISTING: 50,
+  CORRELATED_ALTERNATE: 30,
+  PASS: 20,
+  FADE: 15,
+  BLOCKED: 10,
+  BLOCKED_SOURCE_GAP: 5,
+});
+
+function hasModelBackedScoringSignal(pick = {}) {
+  return pick?.fair_value != null && Number.isFinite(Number(pick.fair_value));
+}
+
+function isActionableScoringClassification(pick = {}) {
+  return ['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN'].includes(String(pick?.classification ?? '').toUpperCase());
+}
+
+/**
+ * Select a game's primary scored row using model posture, never market edge.
+ * A scorer-provided primary_pick remains authoritative for non-actionable rows
+ * and for actionable rows only when that row has a model-backed fair_value.
+ */
+export function selectPrimaryScoringPick(gamePicks = []) {
+  const picks = safeArray(gamePicks).filter(Boolean);
+  if (!picks.length) return null;
+  const flagged = picks.find((pick) => pick.primary_pick
+    && (!isActionableScoringClassification(pick) || hasModelBackedScoringSignal(pick)));
+  if (flagged) return flagged;
+
+  return picks.map((pick, index) => ({ pick, index })).sort((a, b) => {
+    const modelA = isActionableScoringClassification(a.pick) && hasModelBackedScoringSignal(a.pick) ? 1 : 0;
+    const modelB = isActionableScoringClassification(b.pick) && hasModelBackedScoringSignal(b.pick) ? 1 : 0;
+    if (modelB !== modelA) return modelB - modelA;
+    const rankA = SCORING_CLASS_RANK[String(a.pick.classification ?? '').toUpperCase()] ?? 0;
+    const rankB = SCORING_CLASS_RANK[String(b.pick.classification ?? '').toUpperCase()] ?? 0;
+    if (rankB !== rankA) return rankB - rankA;
+    return a.index - b.index;
+  })[0].pick;
+}
+
 function derivePacketStatusSnapshot({ gamePicks = [], statsRecord = null } = {}) {
   const picks = safeArray(gamePicks);
   const allMissing = picks.flatMap((pick) => safeArray(pick?.missing_confirmations));
@@ -325,13 +369,20 @@ export function loadMlbScoring(stateRoot, date) {
  * Convert one MLB pick record into a shared decision row. fair_value is the
  * MARKET-NEUTRAL model probability from the composite scoring core; kalshi_ask
  * is the market price. Edge derives from fair vs implied only.
- * A lineup_pending confirmation downgrades confidence but does NOT collapse the
- * row to WATCH — a strong pre-lineup edge still surfaces as a PICK.
+ * A lineup_pending confirmation downgrades confidence. Actionable
+ * classifications without a model-backed fair_value stay model-insufficient;
+ * market-derived edge is display-only and cannot promote the row.
  */
 export function mlbPickToDecisionRow(pick = {}) {
   const cls = String(pick.classification ?? 'PASS').toUpperCase();
-  const status = MLB_CLASSIFICATION_TO_STATUS[cls] ?? EDGE_STATUS.WATCH;
-  const posture = MLB_POSTURE[cls] ?? 'WATCH';
+  const modelBacked = hasModelBackedScoringSignal(pick);
+  const classificationNeedsModel = ['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN'].includes(cls);
+  const status = classificationNeedsModel && !modelBacked
+    ? EDGE_STATUS.WATCH
+    : (MLB_CLASSIFICATION_TO_STATUS[cls] ?? EDGE_STATUS.WATCH);
+  const posture = classificationNeedsModel && !modelBacked
+    ? 'MODEL_INSUFFICIENT'
+    : (MLB_POSTURE[cls] ?? 'WATCH');
   const missing = Array.isArray(pick.missing_confirmations) ? pick.missing_confirmations : [];
   const gates = Array.isArray(pick.gates_passed) ? pick.gates_passed : [];
   const lineupPending = missing.some((m) => /lineup/i.test(String(m)));
@@ -394,7 +445,6 @@ export function mlbPickToDecisionRow(pick = {}) {
     analysis,
     trigger,
     statusOverride: status,
-    edgeOverridePp: Number.isFinite(Number(pick.edge_pp)) ? Number(pick.edge_pp) : undefined,
     requireModelScore: true,
   });
 }
@@ -450,22 +500,33 @@ function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, ge
   ].join('\n');
 }
 
-function classifyGamePacketRead(gamePicks = []) {
+export function classifyGamePacketRead(gamePicks = [], event = null, { hasModelProjection = false } = {}) {
   const picks = Array.isArray(gamePicks) ? gamePicks : [];
-  const primary = picks.find((p) => p?.primary_pick) ?? picks[0] ?? null;
+  const primary = selectPrimaryScoringPick(picks);
   const lineupPending = picks.some((p) =>
     Array.isArray(p?.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m))));
+  const actionableLanes = new Set(
+    picks
+      .filter((p) => ['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN', 'WATCH_FOR_PRICE'].includes(String(p?.classification ?? '').toUpperCase()))
+      .map((p) => String(p?.market_lane ?? p?.classification ?? '').toUpperCase())
+      .filter(Boolean),
+  );
   const modeledFamilies = new Set(
     picks
-      .map((p) => String(p?.market_lane ?? p?.classification ?? '').toUpperCase())
+      .map((p) => String(p?.market_lane ?? '').toUpperCase())
       .filter(Boolean),
   );
 
   if (!primary) {
     return {
       call: 'NO CLEAR PICK',
+      cpcRead: 'PASS',
+      readLine: 'no rated view',
+      scoringClassification: null,
       reason: 'no model family crosses the threshold',
-      summary: 'model outputs remain provisional while no primary pick is available',
+      summary: 'model outputs remain provisional while no primary rated view is available',
+      whatItMeans: 'CPC does not have enough source-backed model agreement to prefer a side.',
+      evidenceStatus: 'blocked',
     };
   }
 
@@ -476,43 +537,124 @@ function classifyGamePacketRead(gamePicks = []) {
   })();
 
   const classification = String(primary.classification ?? '').toUpperCase();
-  const hasModelScore = primary.fair_value != null && Number.isFinite(Number(primary.fair_value));
-  if (hasModelScore && (['LEAN', 'CLEAR_PICK', 'PRE_LINEUP_PICK'].includes(classification) || Number(primary.edge_pp) > 0)) {
+  const hasModelScore = hasModelBackedScoringSignal(primary);
+  const priceOnlyBlocked = picks.length > 0 && picks.every((pick) => {
+    const pickClass = String(pick?.classification ?? '').toUpperCase();
+    const missing = safeArray(pick?.missing_confirmations);
+    return pickClass === 'BLOCKED_SOURCE_GAP'
+      && missing.length > 0
+      && missing.every((item) => /reference_price/i.test(String(item)));
+  });
+
+  if (['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN'].includes(classification)) {
+    if (!hasModelScore) {
+      return {
+        call: 'NO CLEAR PICK',
+        cpcRead: 'WATCH',
+        readLine: 'monitor only — model-insufficient',
+        scoringClassification: 'MODEL_INSUFFICIENT',
+        reason: `${classification} lacks model-backed fair_value`,
+        summary: `classification ${classification} withheld until a model-backed fair value/projection is present`,
+        whatItMeans: `Scoring marked ${classification}, but CPC will not promote it without model-backed signal.`,
+        evidenceStatus: lineupPending ? 'provisional_model_insufficient' : 'model_insufficient',
+      };
+    }
+    const cpcRead = classification === 'CLEAR_PICK'
+      ? 'PICK'
+      : (classification === 'PRE_LINEUP_PICK' ? 'EVIDENCE_LEAN' : 'LEAN');
     return {
       call: `EVIDENCE LEAN — ${marketLabel}`,
+      cpcRead,
+      readLine: `${classification} — ${marketLabel}`,
+      scoringClassification: classification,
       reason: 'required model families and context point the same way',
-      summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'modeled family data present',
+      summary: `model-backed scoring posture ${classification}; market price remains display-only`,
+      whatItMeans: `Board scoring marked this game ${classification} (${marketLabel}).`,
+      evidenceStatus: lineupPending ? 'provisional' : 'complete',
+    };
+  }
+
+  if (priceOnlyBlocked) {
+    return {
+      call: 'NO CLEAR PICK',
+      cpcRead: 'MODEL_ONLY',
+      readLine: 'model read available; market-context blocked',
+      scoringClassification: 'BLOCKED_SOURCE_GAP',
+      reason: 'reference_price gap only — market-free model still renders',
+      summary: 'scoring blocked on reference_price; composite/model layer is not price-dependent',
+      whatItMeans: 'Reference price is missing, so board entry is blocked. Market-free projections still render below.',
+      evidenceStatus: hasModelProjection ? 'model_ready_price_gap' : 'blocked',
+    };
+  }
+
+  if (hasModelScore && classification === 'WATCH_FOR_PRICE') {
+    return {
+      call: `EVIDENCE LEAN — ${marketLabel}`,
+      cpcRead: 'WATCH',
+      readLine: `model read available — ${marketLabel}`,
+      scoringClassification: classification,
+      reason: 'required model families and context point the same way',
+      summary: actionableLanes.size
+        ? `modeled families present: ${Array.from(actionableLanes).join(', ')}`
+        : 'modeled family data present',
+      whatItMeans: `The current source-backed model prefers ${marketLabel}.`,
+      evidenceStatus: lineupPending ? 'provisional' : 'complete',
     };
   }
 
   if (lineupPending) {
     return {
       call: 'NO CLEAR PICK',
+      cpcRead: 'PASS',
+      readLine: 'no rated view',
+      scoringClassification: classification || null,
       reason: 'projections provisional due lineup',
-      summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+      summary: actionableLanes.size
+        ? `modeled families present: ${Array.from(actionableLanes).join(', ')}`
+        : 'model outputs remain provisional',
+      whatItMeans: 'CPC is waiting for lineup confirmation before promoting the model read.',
+      evidenceStatus: 'provisional',
     };
   }
 
-  if (modeledFamilies.size > 1) {
+  if (actionableLanes.size > 1) {
     return {
       call: 'NO CLEAR PICK',
+      cpcRead: 'PASS',
+      readLine: 'monitor only',
+      scoringClassification: classification || null,
       reason: 'modeled families disagree',
-      summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+      summary: `modeled families present: ${Array.from(actionableLanes).join(', ')}`,
+      whatItMeans: 'CPC sees mixed model-family signals, so the read stays neutral.',
+      evidenceStatus: 'thin',
     };
   }
 
-  if (modeledFamilies.size === 1) {
+  if (actionableLanes.size === 1 || modeledFamilies.size === 1) {
+    const family = actionableLanes.size === 1
+      ? Array.from(actionableLanes)[0]
+      : Array.from(modeledFamilies)[0];
     return {
       call: 'NO CLEAR PICK',
+      cpcRead: 'PASS',
+      readLine: 'monitor only',
+      scoringClassification: classification || null,
       reason: 'single modeled family only',
-      summary: `modeled families present: ${Array.from(modeledFamilies).join(', ')}`,
+      summary: `modeled families present: ${family}`,
+      whatItMeans: 'CPC has one modeled family, but not enough cross-family support to promote the read.',
+      evidenceStatus: 'thin',
     };
   }
 
   return {
     call: 'NO CLEAR PICK',
+    cpcRead: 'PASS',
+    readLine: 'no rated view',
+    scoringClassification: classification || null,
     reason: 'no model family crosses the threshold',
     summary: modeledFamilies.size ? `modeled families present: ${Array.from(modeledFamilies).join(', ')}` : 'model outputs remain provisional',
+    whatItMeans: 'CPC does not have enough source-backed model agreement to prefer a side.',
+    evidenceStatus: 'unavailable',
   };
 }
 
@@ -895,7 +1037,7 @@ export function buildKalshiGamePacket({
   const lines = [];
 
   if (hasComposite) {
-    const read = classifyGamePacketRead(gamePicks);
+    const read = classifyGamePacketRead(gamePicks, event, { hasModelProjection: Boolean(statsRecord) });
     const statusSnapshot = derivePacketStatusSnapshot({ gamePicks, statsRecord });
     const projections = statsRecord
       ? buildGameProjections({

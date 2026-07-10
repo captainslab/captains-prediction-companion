@@ -1,0 +1,42 @@
+{
+  "source_id": "synthetic_mlb_projection_fixture",
+  "records": [
+    {
+      "game_pk": 824987,
+      "game_date": "2026-06-21",
+      "away_team": "Los Angeles Angels",
+      "home_team": "Athletics",
+      "away_team_abbrev": "LAA",
+      "home_team_abbrev": "ATH",
+      "venue": "Synthetic Park",
+      "away_pitcher": {
+        "name": "Reid Detmers",
+        "mlb_id": 100001,
+        "era": 3.5,
+        "k_pct": 0.28,
+        "games_started": 15,
+        "batters_faced": 360
+      },
+      "home_pitcher": {
+        "name": "Jack Perkins",
+        "mlb_id": 100002,
+        "era": 5.0,
+        "k_pct": 0.5,
+        "games_started": 15,
+        "batters_faced": 360
+      },
+      "away_team_stats": {
+        "runs_scored": 410,
+        "runs_allowed": 360,
+        "gamesPlayed": 80
+      },
+      "home_team_stats": {
+        "runs_scored": 400,
+        "runs_allowed": 420,
+        "gamesPlayed": 80
+      },
+      "away_bullpen": { "era": 4.0 },
+      "home_bullpen": { "era": 5.2 }
+    }
+  ]
+}

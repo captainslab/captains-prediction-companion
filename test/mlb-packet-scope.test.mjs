@@ -8,7 +8,12 @@ import {
   resolvePacketScope,
   buildInputStatusNote,
   buildKalshiGamePacket,
+  classifyGamePacketRead,
+  mlbPickToDecisionRow,
+  selectPrimaryScoringPick,
 } from '../scripts/packets/generate-mlb-daily.mjs';
+
+const SYNTHETIC_STATS_FIXTURE = join(import.meta.dirname, 'fixtures', 'mlb-stats-adapter.json');
 
 test('resolvePacketScope derives and honors explicit scope', () => {
   assert.equal(resolvePacketScope({}), 'FULL_DAY_PREVIEW');
@@ -90,6 +95,7 @@ test('game packets block ranked rows when MLB model score is missing', () => {
   });
 
   assert.match(packet.text, /NO CLEAR PICK/);
+  assert.match(packet.text, /lacks model-backed fair_value/);
   assert.match(packet.text, /BLOCKED_MODEL_LAYER_MISSING/);
   assert.doesNotMatch(packet.text, /BLOCKED \/ NEEDS SOURCE/);
   assert.doesNotMatch(packet.text, /score=MISSING/);
@@ -255,10 +261,10 @@ test('single-family game packets do not claim modeled families disagree and keep
     leagueRPG: 4.36,
     scope: 'GAME_PACKET',
     sourceRefs: {
-      event: 'state/mlb/2026-06-21/discovery/mlb_official_adapter.json',
-      stats: 'state/mlb/2026-06-21/discovery/stats_adapter.json',
-      weather: 'state/mlb/2026-06-21/discovery/weather_adapter.json',
-      context: 'state/mlb/2026-06-21/discovery/context_adapter.json',
+      event: 'synthetic://mlb/official',
+      stats: SYNTHETIC_STATS_FIXTURE,
+      weather: 'synthetic://mlb/weather',
+      context: 'synthetic://mlb/context',
     },
   });
 
@@ -269,7 +275,7 @@ test('single-family game packets do not claim modeled families disagree and keep
 });
 
 test('single-family fully sourced packets render a sharp model-backed storyline', () => {
-  const statsPath = join('state', 'mlb', '2026-06-21', 'discovery', 'stats_adapter.json');
+  const statsPath = SYNTHETIC_STATS_FIXTURE;
   const statsJson = JSON.parse(readFileSync(statsPath, 'utf8'));
   const statsRecord = statsJson.records.find((record) =>
     record?.game_pk === 824987
@@ -304,7 +310,7 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
       kalshi_ask: 0.4,
       kalshi_bid: 0.38,
       edge_pp: null,
-      gates_passed: ['starter confirmed', 'lineup locked', 'weather updated'],
+      gates_passed: ['starter confirmed', 'lineup confirmed', 'weather updated'],
       missing_confirmations: [],
       market_lane: 'moneyline',
     }],
@@ -360,6 +366,89 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
   assert.equal((packet.text.match(/No bankroll advice\./g) || []).length, 1);
 });
 
+test('actionable scoring without a model fair value stays monitor-only', () => {
+  const gamePicks = [{
+    market_ticker: 'KXMLBTOTAL-26JUL082210AZSD-8',
+    classification: 'CLEAR_PICK',
+    contract_title: 'Over 7.5 runs scored',
+    primary_pick: true,
+    fair_value: null,
+    edge_pp: 99,
+    kalshi_ask: 0.40,
+    market_lane: 'game_total',
+    missing_confirmations: [],
+    gates_passed: ['reference_price: sportsbook record found'],
+  }];
+
+  const read = classifyGamePacketRead(gamePicks, { away_full: 'Arizona', home_full: 'San Diego' });
+  assert.equal(read.cpcRead, 'WATCH');
+  assert.equal(read.scoringClassification, 'MODEL_INSUFFICIENT');
+  assert.match(read.readLine, /monitor only — model-insufficient/);
+
+  const row = mlbPickToDecisionRow(gamePicks[0]);
+  assert.equal(row.composite_posture, 'MODEL_INSUFFICIENT');
+  assert.equal(row.edge_status, 'BLOCKED');
+  assert.match(row.blocker_if_any, /model score missing/i);
+});
+
+test('primary selection ignores edge_pp and market fields', () => {
+  const modelBacked = {
+    market_ticker: 'KXMLB-MODEL',
+    classification: 'LEAN',
+    contract_title: 'Model-backed row',
+    primary_pick: false,
+    fair_value: 0.58,
+    edge_pp: -99,
+    kalshi_ask: 0.99,
+    market_lane: 'moneyline',
+  };
+  const priceFlagged = {
+    market_ticker: 'KXMLB-PRICE',
+    classification: 'CLEAR_PICK',
+    contract_title: 'Price-derived row',
+    primary_pick: true,
+    fair_value: null,
+    edge_pp: 99,
+    kalshi_ask: 0.01,
+    market_lane: 'moneyline',
+  };
+
+  assert.equal(selectPrimaryScoringPick([priceFlagged, modelBacked]), modelBacked);
+  const read = classifyGamePacketRead([priceFlagged, modelBacked], {
+    away_full: 'New York Yankees',
+    home_full: 'Boston Red Sox',
+  });
+  assert.equal(read.cpcRead, 'LEAN');
+  assert.equal(read.scoringClassification, 'LEAN');
+  assert.doesNotMatch(read.readLine, /Price-derived row/);
+
+  const modelLowPrice = mlbPickToDecisionRow({ ...modelBacked, kalshi_ask: 0.01, edge_pp: 99 });
+  const modelHighPrice = mlbPickToDecisionRow({ ...modelBacked, kalshi_ask: 0.99, edge_pp: -99 });
+  assert.equal(modelLowPrice.composite_posture, modelHighPrice.composite_posture);
+  assert.equal(modelLowPrice.composite_score, modelHighPrice.composite_score);
+});
+
+test('reference-price-only gaps do not suppress a market-free model posture', () => {
+  const picks = [
+    {
+      classification: 'BLOCKED_SOURCE_GAP',
+      missing_confirmations: ['reference_price'],
+      market_lane: 'moneyline',
+      game: 'Kansas City Royals at New York Mets',
+    },
+    {
+      classification: 'BLOCKED_SOURCE_GAP',
+      missing_confirmations: ['reference_price'],
+      market_lane: 'game_total',
+      game: 'Kansas City Royals at New York Mets',
+    },
+  ];
+  const read = classifyGamePacketRead(picks, null, { hasModelProjection: true });
+  assert.equal(read.cpcRead, 'MODEL_ONLY');
+  assert.match(read.readLine, /market-context blocked/);
+  assert.match(read.reason, /reference_price gap only/);
+});
+
 test('game packets show projected lineup status when alpha is still pending', () => {
   const packet = buildKalshiGamePacket({
     date: '2026-06-21',
@@ -406,10 +495,10 @@ test('game packets show projected lineup status when alpha is still pending', ()
     leagueRPG: 4.36,
     scope: 'GAME_PACKET',
     sourceRefs: {
-      event: 'state/mlb/2026-06-21/discovery/mlb_official_adapter.json',
-      stats: 'state/mlb/2026-06-21/discovery/stats_adapter.json',
-      weather: 'state/mlb/2026-06-21/discovery/weather_adapter.json',
-      context: 'state/mlb/2026-06-21/discovery/context_adapter.json',
+      event: 'synthetic://mlb/official',
+      stats: SYNTHETIC_STATS_FIXTURE,
+      weather: 'synthetic://mlb/weather',
+      context: 'synthetic://mlb/context',
     },
   });
 
