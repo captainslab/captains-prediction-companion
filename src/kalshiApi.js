@@ -136,11 +136,12 @@ function buildBoardPreview(markets = []) {
         market_status: normalizeString(market.status) || null,
       };
     })
-    .sort((left, right) => {
-      const rightYes = right.market_yes ?? -1;
-      const leftYes = left.market_yes ?? -1;
-      return rightYes - leftYes;
-    });
+    // Price isolation: board-preview ordering must not depend on price. Sort by
+    // ticker for a deterministic, price-free order. Price fields above are kept
+    // on each entry for display/logging only, never for selection.
+    .sort((left, right) =>
+      String(left.market_ticker ?? '').localeCompare(String(right.market_ticker ?? ''))
+    );
 }
 
 function selectMatchingMarket(markets, input) {

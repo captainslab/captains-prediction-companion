@@ -488,7 +488,12 @@ test('event market alpha computes fair value and a directional side for a specif
       assert.deepEqual(options.skills, []);
       assert.deepEqual(options.toolsets, []);
       assert.match(query, /"target_phrase":"Biden"/);
-      assert.match(query, /"market_yes":0\.84/);
+      // Price isolation: no market price / bid / ask / last_price may enter the
+      // model query. Only non-price identifiers and evidence are allowed.
+      assert.doesNotMatch(query, /market_yes/);
+      assert.doesNotMatch(query, /yes_bid/);
+      assert.doesNotMatch(query, /yes_ask/);
+      assert.doesNotMatch(query, /last_price/);
     }
   );
 
@@ -784,7 +789,7 @@ test('event market alpha sends exact phrase, speaker repertoire, transcript mech
 
   assert.equal(result.user_facing.market_view.target_phrase, 'Tariff');
   assert.equal(result.user_facing.status, 'needs_pricing');
-  assert.equal(result.user_facing.summary.one_line_reason, 'The contract has live Kalshi prices, but the alpha pipeline has not produced fair value or edge yet.');
+  assert.equal(result.user_facing.summary.one_line_reason, 'The contract has live Kalshi prices, but CPC has not produced a source-backed model read yet.');
   assert.equal(result.user_facing.market_view.trade_view.fair_yes, null);
   assert.equal(result.user_facing.market_view.trade_view.edge_cents, null);
 });
