@@ -181,3 +181,35 @@ test('manual FedEx earnings mention generator writes source-backed packet and ba
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('manual FedEx earnings mention generator fails closed when Perplexity returns no attached sources', async () => {
+  const root = tempRoot();
+  try {
+    await assert.rejects(
+      () => generateMentionEventPacket({
+        eventUrl: EVENT_URL,
+        eventId: EVENT_ID,
+        date: '2026-06-23',
+        stateRoot: root,
+        dryRun: true,
+        kalshiFetcher: async () => ({ ok: true, status: 200, json: fedexKalshiEvent(), error: null }),
+        env: { PERPLEXITY_API_KEY: 'pplx-test-key' },
+        perplexityImpl: async () => {
+          const artifact = fakePerplexityArtifact();
+          artifact.source_urls = [];
+          artifact.source_titles = [];
+          artifact.source_freshness = [];
+          return {
+            content: JSON.stringify(artifact),
+            citations: [],
+            search_results: [],
+          };
+        },
+        now: () => '2026-06-23T20:00:00Z',
+      }),
+      /Perplexity attachment contract failed closed/i,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

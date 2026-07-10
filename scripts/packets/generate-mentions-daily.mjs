@@ -36,6 +36,7 @@ import {
   fetchMentionEventsBySeries,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeDecisionStatus } from '../shared/decision-process.mjs';
+import { buildPerplexityEntityAttachmentContract } from '../shared/perplexity-attachment-contract.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
 import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
 import {
@@ -856,6 +857,29 @@ function summarizeCompositeRun(composites) {
     best_target: best?.result?.target_mention ?? null,
     pricing_excluded: true,
   };
+}
+
+function mentionAttachmentId(composite = {}, index = 0) {
+  return String(
+    composite.market_ticker
+      ?? composite?.result?.target_mention
+      ?? composite.side_target
+      ?? composite.full_strike_text
+      ?? composite.target_mention
+      ?? composite.marketTicker
+      ?? '',
+  ).trim() || `mention_term:${index + 1}`;
+}
+
+function buildMentionAttachmentContract(composites = []) {
+  const contentRows = (Array.isArray(composites) ? composites : []).filter((composite) => composite?.is_qualification_term !== true);
+  return buildPerplexityEntityAttachmentContract({
+    entity_type: 'mention_term',
+    entity_ids: contentRows.map((composite, index) => mentionAttachmentId(composite, index)),
+    attached_entity_ids: contentRows
+      .filter((composite) => hasBeyondProximityEvidence(composite))
+      .map((composite, index) => mentionAttachmentId(composite, index)),
+  });
 }
 
 // Mention composite posture -> shared edge vocabulary. The composite core is the
@@ -2131,6 +2155,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     });
   });
   const compositeSummary = summarizeCompositeRun(composites);
+  const attachmentContract = buildMentionAttachmentContract(composites);
   const prov = composites.find((c) => !c?.is_qualification_term) ?? bestComposite(composites) ?? null;
   const researchProvenance = prov ? {
     research_route: prov.research_route ?? null,
@@ -2194,6 +2219,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       missingStrikeCount: marketInfo.missingStrikeCount,
       missingMarkets: marketInfo.missingMarkets,
       compositeSummary,
+      attachmentContract,
       counts: slate.counts,
     };
   }
@@ -2219,6 +2245,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     missingStrikeCount: marketInfo.missingStrikeCount,
     missingMarkets: marketInfo.missingMarkets,
     compositeSummary,
+    attachmentContract,
     researchProvenance,
   };
 }
@@ -2694,6 +2721,7 @@ export async function writeKalshiEventPackets({
         continue;
       }
     }
+    const attachmentContract = built.attachmentContract ?? buildMentionAttachmentContract([]);
     const w = audit(dir, `${date}-${ticker}`, packetText, {
       event_ticker: ticker,
       market_count: built.marketCount,
@@ -2717,12 +2745,18 @@ export async function writeKalshiEventPackets({
       renderer_contract: CUSTOMER_RENDERER_ID,
       model_synthesis_required: false,
       model_synthesis_invocation: modelSynthesisInvocation ?? 'skipped_in_dry_run',
+      research_attachment_contract: attachmentContract,
       telegram_delivery_mode: 'document_txt',
       kalshi_source_api: KALSHI_SOURCES.broad.api_url,
       kalshi_source_page: KALSHI_SOURCES.broad.page_url,
       research_prime: allPrimeAttempts.map(({ label, ok, status, stderr, error, skipped }) => ({ label, ok, status, stderr, error, skipped })),
     }, { writeChunks: false });
-    items.push({ name: ticker, ...w, previewText: dryRun ? packetText : null });
+    items.push({
+      name: ticker,
+      ...w,
+      previewText: dryRun ? packetText : null,
+      attachmentContract,
+    });
   }
   return { items, failedTickers, totalMarketCount, missingMarketEventCount, missingStrikeTextCount };
 }

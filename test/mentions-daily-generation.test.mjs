@@ -347,7 +347,11 @@ test('CLI --only dry-run uses local artifacts before live discovery and builds a
   assert.equal(existsSync(packetDir), false, 'dry-run must not create deliverable packet artifacts');
   assert.ok(existsSync(join(eventDir, `${ticker}.json`)), 'local artifact remains in place for the fast path');
   assert.ok(built.items.some((item) => item.name === ticker && typeof item.previewText === 'string' && item.previewText.length > 0), 'dry-run builds a preview payload for the requested ticker');
-  const previewText = built.items.find((item) => item.name === ticker)?.previewText ?? '';
+  const builtItem = built.items.find((item) => item.name === ticker);
+  const previewText = builtItem?.previewText ?? '';
   assert.match(previewText, /2\. TOP YES CASE[\s\S]*5\. SOURCE GAPS[\s\S]*8\. FULL STRIKE INVENTORY/, 'preview uses the stacked card / sectioned packet format');
   assert.doesNotMatch(previewText, /RANKED BOARD|TOP RESEARCHED TERMS|CPC COMPOSITE BOARD/i);
+  assert.equal(builtItem?.attachmentContract?.entity_count, 1);
+  assert.equal(builtItem?.attachmentContract?.attached_count, 0);
+  assert.deepEqual(builtItem?.attachmentContract?.missing_entity_ids, [`${ticker}-TEST`]);
 });
