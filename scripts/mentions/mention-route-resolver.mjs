@@ -174,10 +174,19 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
   if (EARNINGS_RE.test(text)) {
     return result('earnings_call', 'earnings_terms', { close_window_days: windowDays, horizon: 'event' });
   }
-  if (SPORTS_RE.test(text)) {
+  // A Trump EVENT subject must not be captured by the sports branches: the
+  // all-market text can carry sports-like strike terms (World Cup, Olympics,
+  // ball, broadcast-adjacent words) that are not the event subject. Skip sports
+  // when the ticker/series/title marks a Trump event and let it fall through to
+  // the trump_weekly/trump_monthly/trump_event routing below (subject fields
+  // only — never market strikes/rules).
+  const subjectIsTrump =
+    TRUMP_RE.test(lowerJoined([event?.title, event?.sub_title, event?.subtitle, event?.event_title])) ||
+    /trump/.test(lowerJoined([event?.event_ticker, event?.series_ticker]));
+  if (!subjectIsTrump && SPORTS_RE.test(text)) {
     return result('sports_announcer', 'broadcast_terms', { close_window_days: windowDays, horizon: 'event' });
   }
-  if (SPORTS_EVENT_RE.test(text)) {
+  if (!subjectIsTrump && SPORTS_EVENT_RE.test(text)) {
     return result('sports_announcer', 'sports_event_terms', { close_window_days: windowDays, horizon: 'event' });
   }
   // Fed/FOMC/agency-testimony context routes before Trump so a Powell/FOMC

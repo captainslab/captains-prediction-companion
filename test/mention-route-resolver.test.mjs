@@ -128,6 +128,19 @@ test('detects trump_event for single event with 10-day window', () => {
   assert.ok(res.close_window_days > 8 && res.close_window_days < 21);
 });
 
+test('a Trump event with a sports-event strike term routes to trump, not sports', () => {
+  const event = fixture({
+    event_ticker: 'KXTRUMPMENTION-26JUN22',
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Trump say during the rally?',
+    markets: [{ title: 'Mentions "World Cup"', close_time: isoDaysOut(10) }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.equal(res.entity, 'trump');
+  assert.notEqual(res.route, 'sports_announcer');
+  assert.equal(res.route, 'trump_event');
+});
+
 test('detects talk_show_media route', () => {
   const event = fixture({
     event_ticker: 'KXSNLMENTION-26JUN13',
