@@ -68,6 +68,109 @@ export function looksLikeRawInventory(text = '') {
   return RAW_INVENTORY_MARKERS.some((m) => upper.includes(m.toUpperCase()));
 }
 
+// A line that is nothing but repeated decorative characters (=, -, _, *, ~, #, •
+// and the box-drawing horizontals ─ ━ ═). These are the "divider clutter" the
+// cron packet renderers emit between sections. We drop them in favor of real
+// Markdown headings + spacing. A real Markdown heading (`# text`) has text after
+// the marker, so it never matches.
+const DECORATIVE_DIVIDER = /^\s*[-=_*~#•─━═]{3,}\s*$/;
+// A pure box-drawing horizontal rule. Some renderers (e.g. the World Cup packet)
+// frame each section title BETWEEN two of these instead of using `=== ... ===`.
+const BOX_DIVIDER = /^\s*[─━═]{3,}\s*$/;
+// `=== ... ===` banner header with inner text.
+const BANNER_HEADER = /^\s*={2,}\s*(.+?)\s*={2,}\s*$/;
+// A leading `key: value` metadata line (word-ish key, a colon, then a value).
+const META_LINE = /^[A-Za-z_][\w .()\/-]*:\s+\S/;
+
+/**
+ * Convert a raw sectioned decision board into clean Discord Markdown WITHOUT
+ * changing meaning, section order, or content. This is a pure string transform:
+ *
+ *   - `=== Title ===`      -> `# Title`  (first banner)  / `## Section` (rest)
+ *   - a contiguous run of `key: value` metadata lines right under the title is
+ *     collapsed into one compact Discord subtext line (`-# a · b · c`)
+ *   - pure decorative divider lines (`----`, `====`, `****`, ...) are removed
+ *   - runs of blank lines are collapsed to a single blank line
+ *
+ * It never reorders sections, never touches market/price fields, and is applied
+ * only to already-scrubbed packet text. Route selection does not use its output.
+ */
+export function beautifyPacketMarkdown(text = '') {
+  const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+  const out = [];
+  let seenTitle = false;
+  let inLeadingMeta = false;
+  let metaBuffer = [];
+
+  const flushMeta = () => {
+    if (metaBuffer.length) out.push(`-# ${metaBuffer.join(' · ')}`);
+    metaBuffer = [];
+    inLeadingMeta = false;
+  };
+
+  // Emit a section heading, mirroring the `=== Title ===` semantics: the very
+  // first title becomes `# ...` (and may be followed by leading metadata); every
+  // later section becomes `## ...` with a blank separator line before it.
+  const pushHeading = (label) => {
+    flushMeta();
+    if (!seenTitle) {
+      out.push(`# ${label}`);
+      seenTitle = true;
+      inLeadingMeta = true; // metadata may follow the top title
+    } else {
+      if (out.length && out[out.length - 1].trim() !== '') out.push('');
+      out.push(`## ${label}`);
+    }
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const banner = line.match(BANNER_HEADER);
+    if (banner) {
+      pushHeading(banner[1].trim());
+      continue;
+    }
+    // Box-divider-sandwiched section title:  ─────  /  Title  /  ─────
+    // (opening rule, exactly one non-empty non-divider line, closing rule).
+    // A box rule that is NOT this exact shape (e.g. one wrapping a multi-line
+    // footer note) falls through and is dropped as decorative clutter below.
+    if (
+      BOX_DIVIDER.test(line) &&
+      lines[i + 1] !== undefined &&
+      lines[i + 1].trim() !== '' &&
+      !BOX_DIVIDER.test(lines[i + 1]) &&
+      lines[i + 2] !== undefined &&
+      BOX_DIVIDER.test(lines[i + 2])
+    ) {
+      pushHeading(lines[i + 1].trim());
+      i += 2; // consume the title line and the closing divider
+      continue;
+    }
+    // Drop pure decorative dividers (they are not headers — those matched above).
+    if (DECORATIVE_DIVIDER.test(line)) continue;
+    // Collapse the contiguous metadata block that immediately follows the title.
+    if (inLeadingMeta) {
+      if (META_LINE.test(line)) {
+        metaBuffer.push(line.trim());
+        continue;
+      }
+      flushMeta();
+    }
+    out.push(line);
+  }
+  flushMeta();
+
+  // Collapse 2+ consecutive blank lines to a single blank line, then trim ends.
+  const collapsed = [];
+  for (const l of out) {
+    if (l.trim() === '' && collapsed.length && collapsed[collapsed.length - 1].trim() === '') continue;
+    collapsed.push(l);
+  }
+  while (collapsed.length && collapsed[0].trim() === '') collapsed.shift();
+  while (collapsed.length && collapsed[collapsed.length - 1].trim() === '') collapsed.pop();
+  return collapsed.join('\n');
+}
+
 /**
  * Split text into Discord-safe parts at line boundaries where possible. Each
  * returned part is <= DISCORD_HARD_LIMIT including its "[part i/n]" prefix.
@@ -81,8 +184,14 @@ export function splitForDiscord(text, limit = DISCORD_SAFE_CHARS) {
   while (cursor < body.length) {
     let end = Math.min(cursor + limit, body.length);
     if (end < body.length) {
-      const nl = body.lastIndexOf('\n', end);
-      if (nl > cursor + Math.floor(limit * 0.4)) end = nl;
+      const slice = body.slice(cursor, end);
+      const minBreak = Math.floor(limit * 0.4);
+      // Prefer to break at a logical section boundary: a Markdown heading
+      // (`## ` / `# `), then a blank line, then any newline.
+      let breakAt = Math.max(slice.lastIndexOf('\n## '), slice.lastIndexOf('\n# '));
+      if (breakAt <= minBreak) breakAt = slice.lastIndexOf('\n\n');
+      if (breakAt <= minBreak) breakAt = slice.lastIndexOf('\n');
+      if (breakAt > minBreak) end = cursor + breakAt;
     }
     rawParts.push(body.slice(cursor, end).trim());
     cursor = end;
@@ -110,7 +219,11 @@ export function buildDiscordPost({ packetText, title = null, channel = null, art
     throw new Error('buildDiscordPost: refusing to post a RAW inventory dump to Discord — pass the sectioned board, link the inventory as an artifact instead');
   }
 
+  // Scrub secrets FIRST (before any reshaping), then convert the raw banner
+  // board into clean Discord Markdown. Order matters: scrub never depends on
+  // layout, and beautify only ever sees already-redacted text.
   const { text: scrubbed, redactions } = scrubSecrets(packetText);
+  const pretty = beautifyPacketMarkdown(scrubbed);
 
   const headerLines = [];
   if (title) headerLines.push(`**${title}**`);
@@ -118,9 +231,9 @@ export function buildDiscordPost({ packetText, title = null, channel = null, art
   // open the full audit locally. Paths are scrubbed too, defensively.
   const safeArtifacts = (artifactPaths || []).map((p) => scrubSecrets(String(p)).text);
 
-  let composed = scrubbed;
+  let composed = pretty;
   if (safeArtifacts.length) {
-    composed = `${scrubbed}\n\n— audit artifacts (open locally, not posted) —\n${safeArtifacts.map((p) => `• ${p}`).join('\n')}`;
+    composed = `${pretty}\n\n— audit artifacts (open locally, not posted) —\n${safeArtifacts.map((p) => `• ${p}`).join('\n')}`;
   }
   if (headerLines.length) composed = `${headerLines.join('\n')}\n\n${composed}`;
 
