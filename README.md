@@ -1,14 +1,39 @@
 # Captains Prediction Companion (CPC)
 
-**A ChatGPT-first, research-only operating system for prediction markets.** Paste a
-market or run a slate generator to get a source-backed decision packet: model
-posture, fair value where available, market comparison, confidence, blockers,
-and audit evidence.
+**An auditable, price-isolated decision-intelligence system for prediction
+markets, currently centered on Kalshi.**
 
-CPC runs as a Node MCP server with a dashboard and a growing set of batch
-pipelines. Current packet families cover MLB, World Cup, NASCAR,
-mentions/politics, and UFC. Delivery is read-only and gated: no orders, no
-bankroll automation, and no market data feeding the model score.
+CPC turns a market, event, or daily slate into a source-backed decision packet.
+It determines what settlement requires, gathers and grades the available
+evidence, applies market-specific research and models, estimates fair value when
+the evidence supports it, and shows how that independent view compares with the
+market. Each packet exposes confidence limits, missing inputs, source freshness,
+blockers, and supporting audit evidence.
+
+Unlike a generic market summarizer, CPC keeps market price, bid/ask, volume, open
+interest, liquidity, and movement out of model scoring, ranking, posture,
+confidence, and upgrades. Those values appear only as comparison context after
+the independent view is formed. When critical evidence is missing or stale, CPC
+fails closed instead of manufacturing a pick.
+
+CPC operates through a private ChatGPT app, Node MCP server, browser dashboard,
+and automated packet pipelines. Current workflows cover MLB moneylines, home
+runs, and strikeouts; World Cup matches, totals, team totals, and advancement;
+NASCAR; UFC; and exact-string mention and political markets. NFL and NCAA
+football pipelines are planned for rollout as the 2026 football season
+approaches, using CPC's shared evidence, price-isolation, source-health,
+decision-packet, and fail-closed standards.
+
+Delivery is built into the operating system. Telegram packets pass a
+deterministic Packet Janitor that checks structure, source health, stale or
+expired inputs, price leakage, and duplicate-send uncertainty before delivery.
+Discord provides offline formatting, secret scrubbing, raw-inventory refusal, 15
+named webhook routes, dry-run-by-default delivery, and a GET-only server
+inventory utility. Both delivery paths remain downstream of research and never
+feed back into model scoring.
+
+CPC is research-only. It never places trades, submits orders, or automates
+bankroll execution.
 
 Find Captain on Discord and X as **@CaptainMentions** or open an issue at
 [captainslab](https://github.com/captainslab).
@@ -32,6 +57,8 @@ Find Captain on Discord and X as **@CaptainMentions** or open an issue at
 | See what a packet looks like | Read [docs/PACKETS.md](./docs/PACKETS.md) |
 | Inventory a Discord server safely | `node scripts/discord/inventory-discord.mjs` |
 | Preview or send to Discord | Read [docs/DISCORD.md](./docs/DISCORD.md) |
+| Preview Telegram delivery safely | `node scripts/packets/send-packets-telegram.mjs --date YYYY-MM-DD --type mlb-daily --dry-run` |
+| Understand Telegram delivery gates | Read [docs/PACKET_JANITOR.md](./docs/PACKET_JANITOR.md) |
 | Run every command | Read [docs/USAGE.md](./docs/USAGE.md) |
 | Check what is safe to touch | Read [docs/SECURITY_PRIVACY.md](./docs/SECURITY_PRIVACY.md) |
 | Operate the repo as an agent | Read [docs/AGENT_GUIDE.md](./docs/AGENT_GUIDE.md) |
@@ -208,25 +235,58 @@ npm run docs:check      # CI-safe: fail if README is stale
 `docs:update` touches **only** the text between the `CPC:UPDATES` / `CPC:STATUS`
 markers. Everything else in the README is preserved byte-for-byte.
 
-## Discord delivery and inventory
+## Telegram and Discord delivery
 
-CPC keeps Discord safe by separating formatting, delivery, and inventory:
+Delivery is downstream of packet construction. Neither destination can alter
+evidence, scoring, ranking, posture, confidence, or fair value.
+
+### Telegram packet delivery
+
+`scripts/packets/send-packets-telegram.mjs` delivers CPC packets as a short
+notice plus the rendered `.txt` document. Before any network request, the
+deterministic Packet Janitor validates the packet and returns `SEND_ALLOWED`,
+`SEND_ALLOWED_AFTER_REPAIR`, `JANITOR_WARNING`, or `JANITOR_BLOCKED`.
+
+The Telegram path:
+
+- checks packet structure, source health, stale-source disclosure, price leakage,
+  missing evidence, and contradictory score/posture
+- blocks expired pre-game packets before they reach Telegram
+- excludes `*.inventory.txt` and `*.meta.json` audit artifacts from delivery
+- uses an idempotency ledger so reruns do not resend the same packet
+- applies at most one deterministic packaging repair and never rewrites evidence,
+  picks, scores, or rationale
+- supports dry-run proof showing exactly what would send or block
+
+```bash
+node scripts/packets/send-packets-telegram.mjs \
+  --date YYYY-MM-DD \
+  --type mlb-daily \
+  --dry-run
+```
+
+See [docs/PACKET_JANITOR.md](./docs/PACKET_JANITOR.md) for the complete delivery
+gate, verdicts, repair limits, source-health checks, and audit artifacts.
+
+### Discord delivery and inventory
+
+CPC separates Discord support into formatting, delivery, and inventory:
 
 - `scripts/shared/discord-format.mjs` is pure and offline. It splits messages
-  under Discord's 2000-character limit, scrubs secret-shaped text, and refuses
-  raw inventory artifacts.
+  under Discord's 2000-character limit, scrubs secret-shaped text, preserves the
+  canonical packet sections, and refuses raw inventory artifacts.
 - `scripts/packets/send-discord-packet.mjs` supports 15 named Captain's Crew
   routes. Dry-run is the default. A network send happens only with explicit
   `--send` and an env-only webhook URL.
 - `scripts/discord/inventory-discord.mjs` is GET-only. It snapshots categories,
   channels, roles, and webhook metadata without sending messages or writing
-  token/webhook values.
+  token or webhook values.
 
 ```bash
 # Read-only guild inventory. Requires DISCORD_BOT_TOKEN + DISCORD_GUILD_ID.
 node scripts/discord/inventory-discord.mjs
 
-# Preview one rendered packet against the first safe route. No network by default.
+# Preview one rendered packet. No network by default.
 node scripts/packets/send-discord-packet.mjs \
   --packet state/packets/<date>/<type>/<packet>.txt \
   --route operator-dry-runs \
@@ -234,7 +294,7 @@ node scripts/packets/send-discord-packet.mjs \
 ```
 
 See [docs/DISCORD.md](./docs/DISCORD.md) for route names, environment variables,
-and live-send safeguards.
+inventory behavior, and live-send safeguards.
 
 ## Where audit artifacts go
 
@@ -294,6 +354,7 @@ Full screen + agent preflight checklist: [docs/SECURITY_PRIVACY.md](./docs/SECUR
 | [docs/USAGE.md](./docs/USAGE.md) | Command reference |
 | [docs/PACKETS.md](./docs/PACKETS.md) | Decision-packet anatomy and section examples |
 | [docs/DISCORD.md](./docs/DISCORD.md) | Formatter, 15-route delivery adapter, inventory, and safety gates |
+| [docs/PACKET_JANITOR.md](./docs/PACKET_JANITOR.md) | Telegram pre-send validation, safe repairs, blocking rules, and delivery proof |
 | [docs/SECURITY_PRIVACY.md](./docs/SECURITY_PRIVACY.md) | Secrets, data, trading, delivery, and agent rules |
 | [docs/AGENT_GUIDE.md](./docs/AGENT_GUIDE.md) | How an agent should operate this repo |
 | [CHANGELOG.md](./CHANGELOG.md) | Full version history |
