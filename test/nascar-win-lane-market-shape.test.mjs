@@ -5,6 +5,10 @@ import {
   buildNascarRows,
   isWinLaneMarket,
 } from '../scripts/packets/generate-nascar-sunday.mjs';
+import {
+  normalizeNascarWinMarkets,
+} from '../scripts/nascar/lib/win-market-normalization.mjs';
+import { normalizeNascarDriverName } from '../scripts/nascar/lib/driver-name.mjs';
 
 // Regression coverage for two NASCAR packet bugs:
 //   1. buildNascarRows()'s win filter (`yes_sub_title || expiration_value`)
@@ -41,6 +45,51 @@ function topNMarket(ticker, driver, n, prices = {}) {
 const DOLLARS = { yes_bid_dollars: 0.18, yes_ask_dollars: 0.20, last_price_dollars: 0.19 };
 const CENTS = { yes_bid: 18, yes_ask: 20, last_price: 19 };
 
+const PRODUCTION_FIELD = [
+  'Ryan Blaney', 'Joey Logano', 'Kyle Larson', 'Austin Dillon', 'Daniel Suarez',
+  'Alex Bowman', 'Chase Elliott', 'Austin Cindric', 'Ross Chastain', 'Brad Keselowski',
+  'Erik Jones', 'Shane Van Gisbergen', 'Chris Buescher', 'Carson Hocevar', 'Ricky Stenhouse Jr',
+  'Ty Dillon', 'Josh Berry', 'Michael McDowell', 'Ryan Preece', 'Chase Briscoe',
+  'Todd Gilliland', 'Bubba Wallace', 'Ty Gibbs', 'John Nemechek', 'Connor Zilisch',
+  'William Byron', 'AJ Allmendinger', 'Denny Hamlin', 'Riley Herbst', 'Austin Hill',
+  'Tyler Reddick', 'Christopher Bell', 'Cole Custer', 'Zane Smith', 'Cody Ware',
+  'Noah Gragson', 'BJ McLeod', 'Chad Finchum',
+];
+
+test('official suffix variants join the same production driver identity', () => {
+  assert.equal(normalizeNascarDriverName('Ricky Stenhouse Jr.'), normalizeNascarDriverName('Ricky Stenhouse'));
+});
+
+function productionShapeEvent() {
+  const eventTicker = 'KXNASCARRACE-QUAKER26';
+  return {
+    event_ticker: eventTicker,
+    title: 'Quaker State 400 Winner',
+    product_metadata: { competition: 'NASCAR Cup Series' },
+    markets: PRODUCTION_FIELD.map((driver, index) => ({
+      ticker: `${eventTicker}-${String(index + 1).padStart(2, '0')}`,
+      event_ticker: eventTicker,
+      title: `Will ${driver} win the Quaker State 400?`,
+      subtitle: 'Quaker State 400 Winner',
+      yes_sub_title: driver,
+      no_sub_title: `Field excluding ${driver}`,
+      expiration_value: '',
+      rules_primary: `${driver} wins the race`,
+      occurrence_datetime: '2026-07-12T23:00:00Z',
+      expected_expiration_time: '2026-07-13T03:00:00Z',
+      close_time: '2026-07-12T23:00:00Z',
+      yes_bid_dollars: (0.01 + index / 1000).toFixed(3),
+      yes_ask_dollars: (0.02 + index / 1000).toFixed(3),
+      no_bid_dollars: (0.97 - index / 1000).toFixed(3),
+      no_ask_dollars: (0.98 - index / 1000).toFixed(3),
+      last_price_dollars: (0.015 + index / 1000).toFixed(3),
+      volume_fp: String(1000 + index),
+      open_interest_fp: String(2000 + index),
+      status: 'active',
+    })),
+  };
+}
+
 test('isWinLaneMarket: true winner markets included, top-N/fastest_lap excluded', () => {
   assert.equal(isWinLaneMarket(winMarket('W-HAML', 'Denny Hamlin')), true);
   assert.equal(isWinLaneMarket(topNMarket('T3-HAML', 'Denny Hamlin', 3)), false);
@@ -62,6 +111,35 @@ test('isWinLaneMarket: sparse winner listing with no classifiable wording stays 
   assert.equal(isWinLaneMarket({ ticker: 'W-X', yes_sub_title: 'Kyle Larson' }), true);
   // Not a per-driver binary at all -> not a win market.
   assert.equal(isWinLaneMarket({ ticker: 'NOPE' }), false);
+});
+
+test('production-shape event normalizes all 38 top-level win markets without dropping audit fields', () => {
+  const event = productionShapeEvent();
+  const before = structuredClone(event);
+  const normalized = normalizeNascarWinMarkets(event);
+
+  assert.equal(normalized.length, 38);
+  assert.equal(new Set(normalized.map((market) => market.ticker)).size, 38);
+  assert.deepEqual(event, before, 'normalization must not mutate the persisted event');
+
+  const first = normalized[0];
+  assert.equal(first.event_ticker, event.event_ticker);
+  assert.equal(first.yes_sub_title, 'Ryan Blaney');
+  assert.equal(first.title, 'Will Ryan Blaney win the Quaker State 400?');
+  assert.equal(first.subtitle, 'Quaker State 400 Winner');
+  assert.equal(first.expiration_value, null);
+  assert.equal(first.rules_primary, 'Ryan Blaney wins the race');
+  assert.equal(first.occurrence_datetime, '2026-07-12T23:00:00Z');
+  assert.equal(first.yes_bid_dollars, '0.010');
+  assert.equal(first.yes_ask_dollars, '0.020');
+  assert.equal(first.last_price_dollars, '0.015');
+  assert.equal(first.volume_fp, '1000');
+  assert.equal(first.open_interest_fp, '2000');
+
+  const built = buildNascarRows({ event: { ...event, markets: normalized }, ceiling: null });
+  assert.ok(built);
+  assert.equal(built.marketCount, 38);
+  assert.equal(built.rows.length, 38);
 });
 
 test('buildNascarRows excludes top-N lanes from the WIN board', () => {

@@ -6,6 +6,7 @@ export function normalizeNascarDriverName(value) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\([^)]*\)/g, '')
+    .replace(/\b(jr|sr|ii|iii|iv)\b\.?/gi, '')
     .replace(/\./g, '')
     .replace(/\s+/g, ' ')
     .trim()
