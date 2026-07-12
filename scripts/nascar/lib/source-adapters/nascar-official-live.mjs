@@ -161,6 +161,24 @@ function raceStartUtc(race) {
   return utcTimestamp(scheduled?.start_time_utc ?? race?.date_scheduled ?? race?.race_date);
 }
 
+function actualRaceLaps(weekendRace) {
+  const direct = numberOrNull(
+    weekendRace?.laps_completed
+    ?? weekendRace?.current_lap,
+  );
+  if (direct !== null) return Math.max(0, direct);
+  const resultLaps = (weekendRace?.results ?? [])
+    .map((row) => numberOrNull(row?.laps_completed ?? row?.laps_complete ?? row?.laps))
+    .filter((value) => value !== null);
+  return resultLaps.length ? Math.max(0, ...resultLaps) : 0;
+}
+
+function raceHasStarted(weekendRace, actualLaps) {
+  if (typeof weekendRace?.race_started === 'boolean') return weekendRace.race_started;
+  if (actualLaps > 0) return true;
+  return (weekendRace?.results ?? []).some((row) => numberOrNull(row?.finishing_position) > 0);
+}
+
 function selectRace(raceList, date) {
   const races = raceList?.series_1;
   if (!Array.isArray(races)) throw new Error('race list missing series_1');
@@ -196,13 +214,55 @@ function qualifyingRun(feed, race) {
   return runs.slice().sort((a, b) => String(b.run_date_utc ?? '').localeCompare(String(a.run_date_utc ?? '')))[0];
 }
 
+function practiceRun(feed, race) {
+  const runs = Array.isArray(feed?.weekend_runs)
+    ? feed.weekend_runs.filter((run) => Number(run?.run_type) === 1 && Number(run?.race_id) === Number(race.race_id))
+    : [];
+  return runs.slice().sort((a, b) => String(b.run_date_utc ?? '').localeCompare(String(a.run_date_utc ?? '')))[0] ?? null;
+}
+
 function driverName(row) {
   return String(row?.driver_fullname ?? row?.driver_name ?? '').trim();
 }
 
-function normalizeRows({ results, qualifying }) {
+function hasSourceValue(value) {
+  return value !== null && value !== undefined && value !== '';
+}
+
+function assertMatchingOfficialId({ row, field, expected, label }) {
+  if (!hasSourceValue(row?.[field])) return;
+  const actual = integerOrNull(row[field]);
+  if (actual !== expected) {
+    throw new Error(`${label} ${field} ${row[field]} conflicts with selected official ${field} ${expected}`);
+  }
+}
+
+function normalizeRows({ results, qualifying, practice = null, race }) {
+  const raceId = integerOrNull(race?.race_id);
+  const trackId = integerOrNull(race?.track_id);
+  if (!raceId || !trackId) throw new Error('selected official race_id/track_id is incomplete');
+
+  for (const row of results) {
+    assertMatchingOfficialId({ row, field: 'race_id', expected: raceId, label: 'weekend_race result' });
+    assertMatchingOfficialId({ row, field: 'track_id', expected: trackId, label: 'weekend_race result' });
+  }
+  for (const row of qualifying.results ?? []) {
+    assertMatchingOfficialId({ row, field: 'race_id', expected: raceId, label: 'qualifying result' });
+    assertMatchingOfficialId({ row, field: 'track_id', expected: trackId, label: 'qualifying result' });
+  }
+  for (const row of practice?.results ?? []) {
+    assertMatchingOfficialId({ row, field: 'race_id', expected: raceId, label: 'practice result' });
+    assertMatchingOfficialId({ row, field: 'track_id', expected: trackId, label: 'practice result' });
+  }
+
   const qualifyingByDriver = new Map(
     (qualifying.results ?? []).map((row) => [
+      row?.driver_id != null ? `id:${row.driver_id}` : `name:${normalizeNascarDriverName(row?.driver_name)}`,
+      row,
+    ]),
+  );
+  const practiceByDriver = new Map(
+    (practice?.results ?? []).map((row) => [
       row?.driver_id != null ? `id:${row.driver_id}` : `name:${normalizeNascarDriverName(row?.driver_name)}`,
       row,
     ]),
@@ -215,8 +275,8 @@ function normalizeRows({ results, qualifying }) {
     team: row.team_name ?? null,
     manufacturer: row.car_make ?? null,
     starting_grid_position: integerOrNull(row.starting_position),
-    race_id: integerOrNull(row.race_id),
-    track_id: integerOrNull(row.track_id),
+    race_id: raceId,
+    track_id: trackId,
     finishing_position: integerOrNull(row.finishing_position),
     source_record_id: row.result_id ?? null,
   }));
@@ -225,6 +285,7 @@ function normalizeRows({ results, qualifying }) {
       ? `id:${row.driver_id}`
       : `name:${normalizeNascarDriverName(driverName(row))}`;
     const detail = qualifyingByDriver.get(key);
+    const practiceDetail = practiceByDriver.get(key) ?? null;
     if (!detail) throw new Error(`qualifying detail missing for ${driverName(row)}`);
     return {
       query_type: 'practice_qualifying_entry',
@@ -234,9 +295,13 @@ function normalizeRows({ results, qualifying }) {
       qualifying_position: integerOrNull(detail.finishing_position),
       qualifying_speed: numberOrNull(detail.best_lap_speed),
       qualifying_lap_time: numberOrNull(detail.best_lap_time),
+      practice_rank: integerOrNull(practiceDetail?.finishing_position),
+      practice_speed: numberOrNull(practiceDetail?.best_lap_speed),
+      practice_lap_time: numberOrNull(practiceDetail?.best_lap_time),
       starting_position: integerOrNull(row.starting_position),
       effective_race_start: integerOrNull(row.starting_position),
-      race_id: integerOrNull(row.race_id),
+      race_id: raceId,
+      track_id: trackId,
       source_run_id: detail.run_id ?? null,
     };
   });
@@ -286,8 +351,12 @@ export async function fetchNascarOfficialLive({
     const results = weekendRace.results;
     validateGrid(results);
     const qualifying = qualifyingRun(feedResponse.payload, race);
-    const { activeRecords, practiceRecords } = normalizeRows({ results, qualifying });
+    const practice = practiceRun(feedResponse.payload, race);
+    const { activeRecords, practiceRecords } = normalizeRows({ results, qualifying, practice, race });
     const publication_at_utc = feedResponse.last_modified_utc ?? listResponse.last_modified_utc ?? null;
+    const actual_laps = actualRaceLaps(weekendRace);
+    const practiceRunCount = (feedResponse.payload.weekend_runs ?? []).filter((run) =>
+      Number(run?.race_id) === Number(race.race_id) && Number(run?.run_type) === 1).length;
     const officialRecord = {
       query_type: 'race_event_identity',
       race_id: integerOrNull(race.race_id),
@@ -297,6 +366,11 @@ export async function fetchNascarOfficialLive({
       track: String(race.track_name ?? '').trim(),
       scheduled_start_utc: raceStartUtc(race),
       race_date: race.race_date ?? null,
+      race_started: raceHasStarted(weekendRace, actual_laps),
+      actual_laps,
+      inspection_complete: weekendRace.inspection_complete === true,
+      infractions_count: Array.isArray(weekendRace.infractions) ? weekendRace.infractions.length : 0,
+      practice_run_count: practiceRunCount,
       source_urls: sourceUrls,
       publication_at_utc,
       race_list_last_modified_utc: listResponse.last_modified_utc,
@@ -332,7 +406,9 @@ export async function fetchNascarOfficialLive({
         outputDir,
         records: practiceRecords,
         source_urls: sourceUrls,
-        notes: ['Final effective_race_start is taken from the official starting_position; run_type 2 is retained as qualifying detail.'],
+        notes: [practice
+          ? 'Final effective_race_start uses official starting_position; run_type 2 qualifying and run_type 1 practice detail are joined by driver.'
+          : 'Final effective_race_start uses official starting_position; run_type 2 qualifying is present and no run_type 1 practice session was published.'],
       }),
     };
     const paths = writeArtifacts({ outputDir, artifacts });

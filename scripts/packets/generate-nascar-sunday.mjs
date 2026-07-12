@@ -27,17 +27,23 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
-import { routeNascarMarket } from '../nascar/lib/router.mjs';
 import { BLOCKED_LIVE_RESEARCH_MISSING, runNascarLiveResearch } from '../nascar/live-research.mjs';
 import {
   NASCAR_PACKET_INCOMPLETE,
   evaluateNascarEventIdentity,
   evaluateNascarRaceReadiness,
-  requiredNascarSectionTitles,
   formatNascarIncompleteReasons,
 } from '../nascar/lib/race-quality-gate.mjs';
 import { fetchNascarOfficialLive } from '../nascar/lib/source-adapters/nascar-official-live.mjs';
 import { normalizeNascarDriverName } from '../nascar/lib/driver-name.mjs';
+import {
+  isNascarWinLaneMarket,
+  normalizeNascarWinMarkets,
+} from '../nascar/lib/win-market-normalization.mjs';
+import {
+  buildNascarProductionEvidence,
+  persistNascarProductionArtifacts,
+} from '../nascar/lib/production-evidence.mjs';
 import {
   buildDecisionRow,
   renderSectionedPacket,
@@ -121,7 +127,7 @@ function renderLiveResearchSection(liveResearch = null) {
   const sourceUrls = Array.isArray(artifact.source_urls) ? artifact.source_urls : [];
   const driverNotes = Array.isArray(artifact.drivers) ? artifact.drivers : [];
   const missingLayers = [];
-  const lines = ['--- Live Research (Perplexity) ---'];
+  const lines = ['--- Current Event Evidence ---'];
   lines.push(`generated_utc: ${artifact.generated_utc ?? liveResearch?.generated_utc ?? 'unknown'}`);
   lines.push(`event_ticker: ${artifact.event_ticker ?? 'unknown'}`);
   lines.push(`model: ${artifact.model ?? 'unknown'}`);
@@ -141,11 +147,14 @@ function renderLiveResearchSection(liveResearch = null) {
   for (const layerName of layerNames) {
     const layer = layers[layerName] ?? { status: 'missing', notes: null, sources: [], fetched_utc: artifact.generated_utc ?? liveResearch?.generated_utc ?? 'unknown' };
     const sourceCount = Array.isArray(layer.sources) ? layer.sources.length : 0;
-    const status = String(layer.status ?? 'missing').toLowerCase() === 'ok' ? 'ok' : 'missing';
-    if (status === 'missing') missingLayers.push(layerName);
+    const rawStatus = String(layer.status ?? 'missing').toLowerCase();
+    const status = rawStatus === 'ok' ? 'ok' : rawStatus === 'source_unavailable' ? 'source_unavailable' : 'missing';
+    if (status !== 'ok') missingLayers.push(layerName);
     lines.push(`- ${layerName}: ${status} (${sourceCount} source${sourceCount === 1 ? '' : 's'})`);
     const notes = truncateText(layer.notes, 220);
     if (notes) lines.push(`  notes: ${notes}`);
+    if (layer.source_id ?? layer.source_adapter) lines.push(`  source_adapter: ${layer.source_id ?? layer.source_adapter}`);
+    if (layer.data_as_of_utc) lines.push(`  data_as_of_utc: ${layer.data_as_of_utc}`);
   }
   lines.push('');
   lines.push('per-driver notes:');
@@ -204,6 +213,14 @@ export function loadNascarCeiling(artifacts = []) {
  * never reads market price. Used only as the fair anchor for edge comparison.
  */
 function fairWinProbabilities(candidates = []) {
+  const supplied = candidates
+    .map((candidate) => ({
+      name: normalizeNascarDriverName(candidate.driver_name),
+      probability: nascarNum(candidate.fair_win_probability),
+    }));
+  if (supplied.length && supplied.every((candidate) => candidate.name && candidate.probability !== null && candidate.probability >= 0)) {
+    return new Map(supplied.map((candidate) => [candidate.name, candidate.probability]));
+  }
   const scored = candidates
     .map((c) => ({ name: normalizeNascarDriverName(c.driver_name), score: nascarNum(c.composite_score) }))
     .filter((c) => c.name && c.score !== null && c.score > 0);
@@ -230,14 +247,7 @@ function fairWinProbabilities(candidates = []) {
  * Market price fields are never read here — classification is wording-only.
  */
 export function isWinLaneMarket(m) {
-  if (!m || (!m.yes_sub_title && !m.expiration_value)) return false;
-  const title = m.title ?? m.yes_sub_title ?? '';
-  const rules = m.rules_primary ?? m.rules_summary ?? '';
-  if (!title && !rules) return true; // no wording to classify -> keep (fail-open)
-  const route = routeNascarMarket({ market_title: title, rules_summary: rules });
-  const lane = route?.market_lane ?? null;
-  if (lane && lane !== 'win') return false; // positively a non-win lane -> drop
-  return true;
+  return isNascarWinLaneMarket(m);
 }
 
 /**
@@ -251,7 +261,7 @@ export function isWinLaneMarket(m) {
  * Returns { rows, mode, joined, marketCount } or null when no win markets.
  */
 export function buildNascarRows({ event, ceiling = null }) {
-  const markets = Array.isArray(event?.markets) ? event.markets : [];
+  const markets = normalizeNascarWinMarkets(event);
   // Win lane = per-driver binary race-winner markets only. Same-event top3/
   // top5/top10/top20/fastest_lap contracts also carry a per-driver
   // yes_sub_title, so a bare `yes_sub_title || expiration_value` test wrongly
@@ -259,7 +269,7 @@ export function buildNascarRows({ event, ceiling = null }) {
   // NASCAR router to classify each market and keep only the win lane; markets
   // the router cannot resolve to a non-win lane stay on the board (fail-open)
   // so unclassifiable winner listings are never silently dropped.
-  const winMarkets = markets.filter((m) => isWinLaneMarket(m));
+  const winMarkets = markets;
   if (!winMarkets.length) return null;
 
   const candidatesByName = new Map();
@@ -300,15 +310,16 @@ export function buildNascarRows({ event, ceiling = null }) {
     let posture;
     let analysis;
     let trigger;
+    const cov = cand ? nascarNum(cand.fundamentals_layer_coverage ?? cand.layers_present) : null;
     const missingLayers = [];
 
     if (cand) {
       statusOverride = NASCAR_STATUS_TO_EDGE[laneStatus] ?? undefined;
       posture = NASCAR_STATUS_TO_POSTURE[laneStatus] ?? 'WATCH';
-      const cov = nascarNum(cand.fundamentals_layer_coverage);
       if (cov !== null && cov < 3) missingLayers.push(`fundamentals_coverage=${cov}/3`);
       const breakdownMissing = /Missing layers:\s*([^.]+)/.exec(cand.score_reasoning || '');
       if (breakdownMissing) missingLayers.push(...breakdownMissing[1].split(',').map((s) => s.trim()).filter(Boolean));
+      if (Array.isArray(cand.missing_or_low_evidence_flags)) missingLayers.push(...cand.missing_or_low_evidence_flags);
       analysis = winLane?.narrative
         ? winLane.narrative
         : `composite ${cand.composite_score} (${cand.fundamentals_layer_coverage_label || 'coverage n/a'}); win lane ${laneStatus || 'n/a'}`;
@@ -337,16 +348,18 @@ export function buildNascarRows({ event, ceiling = null }) {
       composite: {
         score: cand ? nascarNum(cand.composite_score) : null,
         posture,
-        layersPresent: cand ? nascarNum(cand.fundamentals_layer_coverage) : 0,
-        layersTotal: cand ? 4 : 4,
-        topEvidenceLayers: cand?.score_breakdown?.inputs_used?.map((x) => x.layer) ?? [],
+        layersPresent: cand ? cov : 0,
+        layersTotal: cand?.layer_breakdown?.length ?? 4,
+        topEvidenceLayers: cand?.score_breakdown?.inputs_used?.map((x) => x.layer)
+          ?? cand?.layer_breakdown?.filter((x) => x.value !== null).map((x) => x.layer)
+          ?? [],
         missingLayers,
         modelProbability: fairProb,
       },
       market: marketHalf,
       fair: fairProb !== null ? { probability: fairProb } : {},
       confidence: cand
-        ? (nascarNum(cand.fundamentals_layer_coverage) >= 3 ? CONFIDENCE.MEDIUM : CONFIDENCE.LOW)
+        ? (cand.confidence ?? (cov >= 3 ? CONFIDENCE.MEDIUM : CONFIDENCE.LOW))
         : CONFIDENCE.LOW,
       analysis,
       trigger,
@@ -409,7 +422,7 @@ function readFieldSummary({ rows, quality }) {
       const driver = String(row.side_target ?? '').replace(/\s+—\s+WIN$/, '').trim();
       return `- #${index + 1} ${driver} | posture=${row.composite_posture ?? 'WATCH'} | score=${row.composite_score ?? 'n/a'} | fair=${row.fair_probability_or_range ?? 'n/a'}`;
     });
-  return ['ranked win board (model-side composite score):', ...ranked, '', 'final starting order coverage:', ...byStart];
+  return { ranked, byStart };
 }
 
 function modelPosture(row) {
@@ -460,7 +473,6 @@ function renderDriverBullets(rows = [], { emptyLabel, includeWhy = false } = {})
 
 function buildBlockedPacket({ date, event, sourcePath, liveResearch = null, reasons = [] }) {
   const s = summarizeEvent(event);
-  const requiredSections = requiredNascarSectionTitles();
   const body = [
     renderLiveResearchSection(liveResearch),
     '',
@@ -471,13 +483,13 @@ function buildBlockedPacket({ date, event, sourcePath, liveResearch = null, reas
     `=== ${NASCAR_PACKET_INCOMPLETE} ===`,
     ...reasons.map((reason) => `- ${reason}`),
     '',
-    `=== ${requiredSections[5]} ===`,
+    '=== EVIDENCE ===',
     '- Official race identity, active field, final starting order, and deterministic market joins must all be present.',
     '',
-    `=== ${requiredSections[6]} ===`,
+    '=== CONFIDENCE ===',
     '- Packet blocked fail-closed. Customer delivery is not allowed for this race build.',
     '',
-    `=== ${requiredSections[7]} ===`,
+    '=== LIMITS ===',
     '- Market Context - NOT IN SCORE. Market prices remain display-only and cannot rescue missing official/model coverage.',
     '- Delivery remains blocked, no delivery ledger write occurs, and no implied pick is emitted while this marker is present.',
   ].filter(Boolean).join('\n');
@@ -500,6 +512,9 @@ function buildReadyRacePacket({ date, event, sourcePath, liveResearch = null, bu
   const s = summarizeEvent(event);
   const grouped = classifyRows(built.rows);
   const fieldLines = readFieldSummary({ rows: built.rows, quality });
+  const identity = quality.context.packetIdentity;
+  const gridCount = quality.context.startByName?.size ?? 0;
+  const candidateCount = Array.isArray(ceiling?.candidates) ? ceiling.candidates.length : 0;
   const evidenceLines = [
     `- Official race identity confirmed: ${quality.context.officialRaceName} at ${quality.context.officialTrack} (${quality.context.officialStartUtc}).`,
     `- Active field and final starting order cover ${quality.context.activeFieldCount} drivers with full discovered win-market coverage.`,
@@ -513,7 +528,7 @@ function buildReadyRacePacket({ date, event, sourcePath, liveResearch = null, bu
     `- Official race identity checked: ${quality.context.loaded.officialEnvelope?.checked_at_utc ?? 'missing'}.`,
     `- Active field checked: ${quality.context.loaded.activeFieldEnvelope?.checked_at_utc ?? 'missing'}; final order checked: ${quality.context.loaded.practiceEnvelope?.checked_at_utc ?? 'missing'}.`,
     `- Narrative research generated: ${quality.context.loaded.liveResearch?.generated_utc ?? 'missing'}.`,
-    '- Required timestamps are aligned, non-future, and within the configured source-age limit.',
+    '- Adapter check timestamps are aligned and current; historical data-as-of timestamps are disclosed per evidence layer and are never represented as live.',
   ];
   const limitLines = [
     '- Market Context - NOT IN SCORE. Market prices are display-only and remain in the audit inventory, not the customer board.',
@@ -525,13 +540,27 @@ function buildReadyRacePacket({ date, event, sourcePath, liveResearch = null, bu
     '',
     'TLDR BOARD:',
     '  RACE_READY',
-    `  race: ${quality.context.officialRaceName}`,
-    `  field_size: ${quality.context.activeFieldCount}`,
-    `  joined_drivers: ${built.joined}/${built.marketCount}`,
-    '  prices: display-only audit context; not a score input.',
+    `event_ticker: ${identity.event_ticker}`,
+    `race_id: ${identity.race_id}`,
+    `track_id: ${identity.track_id}`,
+    `series_id: ${identity.series_id}`,
+    `race_name: ${identity.race_name}`,
+    `track: ${identity.track}`,
+    `official_start_utc: ${identity.scheduled_start_utc}`,
+    `official_race_date: ${identity.race_date}`,
+    `field_size: ${quality.context.activeFieldCount}`,
+    `grid_count: ${gridCount}`,
+    `market_count: ${built.marketCount}`,
+    `candidate_count: ${candidateCount}`,
+    `ranked_count: ${built.rows.length}`,
+    `joined_drivers: ${built.joined}/${built.marketCount}`,
+    'market_context: display-only audit context; never a model input.',
     '',
     '=== FULL FIELD ===',
-    ...fieldLines,
+    ...fieldLines.byStart,
+    '',
+    '=== RANKED BOARD ===',
+    ...fieldLines.ranked,
     '',
     '=== STRONGEST ===',
     ...renderDriverBullets(grouped.strongest, { emptyLabel: 'none', includeWhy: true }),
@@ -666,6 +695,7 @@ export function buildRacePacket({
   discovery = null,
   activeFieldEnvelope = null,
   practiceEnvelope = null,
+  ceiling: suppliedCeiling = null,
   maxSourceAgeMs,
   nowMs = Date.now(),
 }) {
@@ -718,7 +748,7 @@ export function buildRacePacket({
 
   // Official event identity is validated before the ceiling board is loaded
   // or any driver-market join is attempted.
-  const ceiling = loadNascarCeiling(artifacts);
+  const ceiling = suppliedCeiling ?? loadNascarCeiling(artifacts);
   const built = buildNascarRows({ event, ceiling });
 
   // No win markets at all -> fall back to a research-completeness note (no dump).
@@ -845,7 +875,10 @@ async function main() {
       outputDir: resolve(opts.stateRoot, 'nascar', opts.date, 'discovery'),
     });
   }
-  if (existsSync(ceilingPath)) artifacts = [ceilingPath];
+  // Existing ceiling/discovery artifacts are eligible only in the explicit
+  // fixture lane. Production always rebuilds the selected event in-memory and
+  // replaces the current-event artifacts before packet construction.
+  if (fixturesOnly && existsSync(ceilingPath)) artifacts = [ceilingPath];
 
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
@@ -876,14 +909,49 @@ async function main() {
       const ticker = ev?.event_ticker;
       if (!ticker) continue;
       const sourcePath = resolve(opts.stateRoot, 'nascar', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const liveResearch = await runNascarLiveResearch({
+      let liveResearch = await runNascarLiveResearch({
         date: opts.date,
         event: ev,
         stateRoot: opts.stateRoot,
       });
       if (!liveResearch?.ok) {
-        console.error(`${BLOCKED_LIVE_RESEARCH_MISSING} event=${ticker} reason=${liveResearch?.reason ?? 'unknown'}`);
-        process.exit(1);
+        if (fixturesOnly) {
+          console.error(`${BLOCKED_LIVE_RESEARCH_MISSING} event=${ticker} reason=${liveResearch?.reason ?? 'unknown'}`);
+          process.exit(1);
+        }
+        console.error(`LIVE_RESEARCH_OPTIONAL_UNAVAILABLE event=${ticker} reason=${liveResearch?.reason ?? 'unknown'}`);
+        liveResearch = {
+          ok: false,
+          generated_utc: new Date().toISOString(),
+          event_ticker: ticker,
+          model: 'source_unavailable',
+          source_urls: [],
+          layers: {},
+          drivers: [],
+          _adapter_status: 'source_unavailable',
+          reason: liveResearch?.reason ?? 'live narrative research unavailable',
+        };
+      }
+      let production = null;
+      if (!fixturesOnly) {
+        if (!officialIngestion?.ok) {
+          console.error(`OFFICIAL_ADAPTER_NOT_FETCHED event=${ticker} reason=${officialIngestion?.reason ?? 'unknown'}`);
+          process.exit(1);
+        }
+        production = buildNascarProductionEvidence({
+          date: opts.date,
+          event: ev,
+          officialEnvelope: officialIngestion.envelopes.official,
+          activeFieldEnvelope: officialIngestion.envelopes.activeField,
+          practiceEnvelope: officialIngestion.envelopes.practiceQualifying,
+          liveResearch: liveResearch.artifact ?? liveResearch,
+          checkedAtUtc: officialIngestion.envelopes.official.checked_at_utc,
+        });
+        persistNascarProductionArtifacts({
+          stateRoot: opts.stateRoot,
+          date: opts.date,
+          built: production,
+        });
       }
       const built = buildRacePacket({
         date: opts.date,
@@ -894,8 +962,11 @@ async function main() {
         officialEnvelope: officialIngestion?.envelopes?.official ?? null,
         activeFieldEnvelope: officialIngestion?.envelopes?.activeField ?? null,
         practiceEnvelope: officialIngestion?.envelopes?.practiceQualifying ?? null,
+        sourceRegistry: production?.sourceRegistry ?? null,
+        discovery: production?.discovery ?? null,
+        ceiling: production?.ceiling ?? null,
         stateRoot: opts.stateRoot,
-        liveResearch,
+        liveResearch: production?.evidenceArtifact ?? liveResearch,
       });
       totalMarketCount += built.marketCount;
       if (built.missingMarkets) missingMarketEventCount += 1;
@@ -913,7 +984,8 @@ async function main() {
         market_count: built.marketCount,
         missing_markets: built.missingMarkets,
         missing_strike_text_count: built.missingStrikeCount,
-        artifact_count: artifacts.length,
+        artifact_count: production ? 5 : artifacts.length,
+        production_model_schema: production?.ceiling?.schema_version ?? null,
         workspace_attempt: workspaceResult,
         kalshi_source_api: KALSHI_SOURCES.nascar.api_url,
         kalshi_source_page: KALSHI_SOURCES.nascar.page_url,

@@ -35,6 +35,10 @@ function argValue(flag) {
 }
 const dryRun = args.includes('--dry-run');
 const force = args.includes('--force');
+const checkOnly = args.includes('--check-only');
+const documentOnly = args.includes('--document-only');
+const customCaption = argValue('--caption');
+const customIdempotencyKey = argValue('--idempotency-key');
 const date = argValue('--date') || new Date().toISOString().slice(0, 10);
 const stateRoot = argValue('--state-root') || 'state';
 const packetType = argValue('--type') || 'mentions-daily';
@@ -54,6 +58,18 @@ const excludeStems = (() => {
   if (!v) return null;
   return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
 })();
+const correctionMode = Boolean(customCaption || customIdempotencyKey || documentOnly || checkOnly);
+
+function validateCorrectionOptions() {
+  if (!correctionMode) return;
+  if (packetType !== 'nascar-sunday') throw new Error('correction delivery options are supported only for --type nascar-sunday');
+  if (!onlyStems || onlyStems.size !== 1) throw new Error('correction delivery requires exactly one --only packet stem');
+  if (!customCaption || !customIdempotencyKey || !documentOnly) {
+    throw new Error('correction delivery requires --caption, --idempotency-key, and --document-only');
+  }
+  if (force) throw new Error('correction delivery refuses --force');
+  if (dryRun && checkOnly) throw new Error('use --check-only without --dry-run');
+}
 
 // Load env from project .env if present (same pattern as scripts/mlb/_send-due.mjs)
 function loadEnv(file) {
@@ -65,13 +81,19 @@ function loadEnv(file) {
     if (!process.env[m[1]]) process.env[m[1]] = v;
   }
 }
-loadEnv('.env');
-loadEnv('.env.local');
+let envLoaded = false;
+function loadTelegramEnvOnce() {
+  if (envLoaded) return;
+  envLoaded = true;
+  loadEnv('.env');
+  loadEnv('.env.local');
+}
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const SEND_PACING_MS = 1500; // stay under Telegram's per-chat rate limit
 
 function resolveTelegramEnv() {
+  loadTelegramEnvOnce();
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
   if (!token || !chat) throw new Error('telegram env missing (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)');
@@ -376,6 +398,37 @@ export function evaluateSlateExpiry({ packetText, nowMs }) {
   return { blocked: false, verdict: DELIVERY_VERDICTS.SEND_ALLOWED, firstPitchUtc, reason: null };
 }
 
+export function evaluateNascarRaceExpiry({ packetText, nowMs }) {
+  const match = /^official_start_utc:\s*(\S+)\s*$/im.exec(packetText ?? '');
+  if (!match) {
+    return {
+      blocked: true,
+      verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,
+      firstPitchUtc: null,
+      reason: 'NASCAR official_start_utc is missing (fail-closed)',
+    };
+  }
+  const startMs = Date.parse(match[1]);
+  if (!Number.isFinite(startMs)) {
+    return {
+      blocked: true,
+      verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,
+      firstPitchUtc: null,
+      reason: 'NASCAR official_start_utc is unparseable (fail-closed)',
+    };
+  }
+  const startUtc = new Date(startMs).toISOString();
+  if (startMs <= nowMs) {
+    return {
+      blocked: true,
+      verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,
+      firstPitchUtc: startUtc,
+      reason: `NASCAR race already started at ${startUtc} — EXPIRED_SLATE_BLOCKED`,
+    };
+  }
+  return { blocked: false, verdict: DELIVERY_VERDICTS.SEND_ALLOWED, firstPitchUtc: startUtc, reason: null };
+}
+
 // Deliver one document-type packet entry. Runs the slate-expiry gate FIRST, so
 // an expired slate never reaches the janitor or Telegram and is never marked
 // delivered. Send functions are injectable for testing. Returns a status:
@@ -395,6 +448,11 @@ export async function deliverDocumentEntry({
   sendMessage = tgSendMessage,
   sendDocument = tgSendDocument,
   inspect = inspectPacketFile,
+  idempotencyKey = entry.name,
+  caption = null,
+  documentOnly = false,
+  checkOnly = false,
+  correctionMode = false,
 }) {
   const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
   const filePath = join(dir, fileName);
@@ -403,6 +461,9 @@ export async function deliverDocumentEntry({
   const nascarPreflight = evaluateNascarPacketText(packetText, {
     packetType,
     packetPath: filePath,
+    requirePersistedState: correctionMode,
+    stateRoot,
+    date,
   });
   if (!nascarPreflight.ok) {
     return {
@@ -413,17 +474,21 @@ export async function deliverDocumentEntry({
   }
 
   // Fail-closed gate — before any janitor call or any Telegram request.
-  const expiry = evaluateSlateExpiry({ packetText, nowMs });
+  const expiry = packetType === 'nascar-sunday'
+    ? evaluateNascarRaceExpiry({ packetText, nowMs })
+    : evaluateSlateExpiry({ packetText, nowMs });
   if (expiry.blocked) {
     console.error(`EXPIRED_SLATE_BLOCKED ${entry.name}: ${expiry.reason}`);
-    ledger.blocked = ledger.blocked || {};
-    ledger.blocked[entry.name] = {
-      utc: new Date().toISOString(),
-      verdict: expiry.verdict,
-      reason: expiry.reason,
-      first_pitch_utc: expiry.firstPitchUtc,
-    };
-    if (!dryRun) saveLedger(ledgerPath, ledger);
+    if (!correctionMode) {
+      ledger.blocked = ledger.blocked || {};
+      ledger.blocked[entry.name] = {
+        utc: new Date().toISOString(),
+        verdict: expiry.verdict,
+        reason: expiry.reason,
+        first_pitch_utc: expiry.firstPitchUtc,
+      };
+      if (!dryRun) saveLedger(ledgerPath, ledger);
+    }
     return { status: 'blocked_expired', verdict: expiry.verdict, reason: expiry.reason };
   }
 
@@ -432,17 +497,39 @@ export async function deliverDocumentEntry({
     stateRoot,
     packetType,
     ledgerPath,
-    idempotencyKey: entry.name,
-    ...buildJanitorOptions({ packetType, dryRun, ledgerPath, force }),
+    idempotencyKey,
+    ...buildJanitorOptions({
+      packetType,
+      dryRun: correctionMode ? true : dryRun,
+      ledgerPath,
+      force,
+    }),
+    ...(correctionMode ? { requireLedger: false, force: false, dryRun: true } : {}),
   });
   if (janitor?.verdict === DELIVERY_VERDICTS.JANITOR_BLOCKED) {
     console.error(`${janitorAlert(entry.name, janitor)} debug=${janitor.debug_path ?? '(none)'}`);
     return { status: 'blocked_janitor', verdict: janitor.verdict };
   }
+  if (ledger.delivered?.[idempotencyKey]) {
+    return {
+      status: 'duplicate_suppressed',
+      verdict: DELIVERY_VERDICTS.SEND_ALLOWED,
+      idempotency_key: idempotencyKey,
+    };
+  }
   const deliveryPath = janitor?.repaired_path ?? filePath;
   const deliveryName = basename(deliveryPath);
   const text = readFileSync(deliveryPath, 'utf8');
-  const notice = cpcPacketCaption(text, entry.name, packetType);
+  const notice = caption ?? cpcPacketCaption(text, entry.name, packetType);
+  if (checkOnly) {
+    return {
+      status: 'check_only_ready',
+      verdict: janitor?.verdict ?? DELIVERY_VERDICTS.SEND_ALLOWED,
+      idempotency_key: idempotencyKey,
+      notice,
+      document_file: deliveryName,
+    };
+  }
   if (dryRun) {
     return {
       status: 'dryrun',
@@ -452,13 +539,17 @@ export async function deliverDocumentEntry({
     };
   }
   if (pace) await sleep(SEND_PACING_MS);
-  const noticeId = await sendMessage(notice);
-  await sleep(SEND_PACING_MS);
-  const documentId = await sendDocument(deliveryPath);
-  ledger.delivered[entry.name] = {
+  let noticeId = null;
+  if (!documentOnly) {
+    noticeId = await sendMessage(notice);
+    await sleep(SEND_PACING_MS);
+  }
+  const documentId = await sendDocument(deliveryPath, documentOnly ? { caption: notice } : undefined);
+  ledger.delivered = ledger.delivered || {};
+  ledger.delivered[idempotencyKey] = {
     utc: new Date().toISOString(),
-    message_ids: [noticeId, documentId],
-    notice_message_id: noticeId,
+    message_ids: noticeId === null ? [documentId] : [noticeId, documentId],
+    notice_message_id: noticeId ?? undefined,
     document_message_id: documentId,
     document_file: deliveryName,
     delivery_mode: 'document_txt',
@@ -466,32 +557,44 @@ export async function deliverDocumentEntry({
     janitor_sidecar: janitor.sidecar_path,
     janitor_repaired_path: janitor.repaired_path ?? undefined,
     forced: force || undefined,
+    source_packet_stem: entry.name,
+    idempotency_key: idempotencyKey,
+    caption: documentOnly ? notice : undefined,
+    correction: correctionMode || undefined,
   };
   saveLedger(ledgerPath, ledger);
   return {
     status: 'sent',
     verdict: janitor.verdict,
-    message_ids: [noticeId, documentId],
+    message_ids: noticeId === null ? [documentId] : [noticeId, documentId],
+    document_message_id: documentId,
+    idempotency_key: idempotencyKey,
     document_file: deliveryName,
   };
 }
 
 async function main() {
+  validateCorrectionOptions();
   const dir = resolve(stateRoot, 'packets', date, packetType);
   const ledgerPath = join(dir, '.delivery-ledger.json');
 
   if (!existsSync(dir)) {
+    if (correctionMode) throw new Error(`correction packet directory missing: ${dir}`);
     console.log(`${packetType} ${date}: no packet directory — nothing to send`);
     return;
   }
 
   const ledger = loadLedger(ledgerPath);
-  if (!dryRun) ensureLedgerFile(ledgerPath, ledger);
+  if (correctionMode && (!existsSync(ledgerPath) || !ledger?.delivered || typeof ledger.delivered !== 'object')) {
+    throw new Error('correction delivery requires an existing valid delivery ledger');
+  }
+  if (!dryRun && !checkOnly && !correctionMode) ensureLedgerFile(ledgerPath, ledger);
   let plan = planDeliveries(dir, date, { preferBaseFile: isDocumentPacketType(packetType) });
 
   if (onlyStems || excludeStems) {
     plan = filterDeliveryPlan(plan, { onlyStems, excludeStems });
     if (!plan.length) {
+      if (correctionMode) throw new Error('correction --only stem matched no packet');
       console.log(`${packetType} ${date}: --only matched no packets — nothing to send`);
       if (dryRun) {
         console.log(`${packetType} ${date}: dry-run would_send=NO would_block=NO would_send_count=0 would_block_count=0 total_packets=0`);
@@ -501,6 +604,10 @@ async function main() {
   }
 
   const noEventsOnly = plan.length === 1 && plan[0].name === `${date}-no-events`;
+
+  if (correctionMode && (plan.length !== 1 || noEventsOnly)) {
+    throw new Error('correction delivery requires exactly one real event packet');
+  }
 
   if (plan.length === 0 || noEventsOnly) {
     const key = `${date}-no-events-status`;
@@ -521,7 +628,7 @@ async function main() {
     return;
   }
 
-  plan = filterAlreadyDeliveredPlan(plan, ledger, { force });
+  if (!correctionMode) plan = filterAlreadyDeliveredPlan(plan, ledger, { force });
 
   let sent = 0;
   let skipped = 0;
@@ -530,7 +637,7 @@ async function main() {
   const blockedEntries = [];
   for (const entry of plan) {
     if (entry.name === `${date}-no-events`) continue;
-    if (ledger.delivered[entry.name] && !force) {
+    if (!correctionMode && ledger.delivered[entry.name] && !force) {
       skipped += 1;
       continue;
     }
@@ -546,17 +653,29 @@ async function main() {
         force,
         dryRun,
         pace: sent > 0,
+        idempotencyKey: correctionMode ? customIdempotencyKey : entry.name,
+        caption: correctionMode ? customCaption : null,
+        documentOnly: correctionMode ? documentOnly : false,
+        checkOnly: correctionMode ? checkOnly : false,
+        correctionMode,
       });
       if (outcome.status === 'sent') {
         sent += 1;
-        console.log(`sent ${entry.name} — notice + 1 document (${outcome.document_file}) janitor=${outcome.verdict}`);
+        console.log(correctionMode
+          ? `sent ${entry.name} — 1 corrected document (${outcome.document_file}) document_id=${outcome.document_message_id} idempotency_key=${outcome.idempotency_key} janitor=${outcome.verdict}`
+          : `sent ${entry.name} — notice + 1 document (${outcome.document_file}) janitor=${outcome.verdict}`);
       } else if (outcome.status === 'dryrun') {
         wouldSend += 1;
         logDryRunVerdict(entry.name, { verdict: outcome.verdict }, {
           notice: outcome.notice,
           documentName: outcome.document_file,
         });
-      } else if (outcome.status === 'blocked_expired' || outcome.status === 'blocked_janitor') {
+      } else if (outcome.status === 'check_only_ready') {
+        console.log(`CHECK_ONLY_READY idempotency_key=${outcome.idempotency_key} document=${outcome.document_file}`);
+      } else if (outcome.status === 'duplicate_suppressed') {
+        skipped += 1;
+        console.log(`DUPLICATE_SUPPRESSED idempotency_key=${outcome.idempotency_key}`);
+      } else if (outcome.status === 'blocked_expired' || outcome.status === 'blocked_janitor' || outcome.status === 'blocked_incomplete') {
         if (dryRun) {
           wouldBlock += 1;
           logDryRunVerdict(entry.name, { verdict: outcome.verdict });
@@ -612,6 +731,10 @@ async function main() {
   }
   if (plan.length === 1 && blockedEntries.length === 1 && sent === 0) {
     throw new Error(`janitor blocked sole packet ${blockedEntries[0]}`);
+  }
+  if (checkOnly) {
+    console.log(`${packetType} ${date}: check-only complete total_packets=${plan.length}`);
+    return;
   }
   console.log(`${packetType} ${date}: delivered=${sent} skipped_already_delivered=${skipped} total_packets=${plan.length}`);
 }

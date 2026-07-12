@@ -397,7 +397,7 @@ test('NASCAR packet renders the live research section and keeps price isolation'
       nowMs: Date.parse('2026-07-05T13:00:00.000Z'),
     });
 
-    assert.match(packet.text, /--- Live Research \(Perplexity\) ---/);
+    assert.match(packet.text, /--- Current Event Evidence ---/);
     assert.match(packet.text, /evidence_ledger:/);
     assert.match(packet.text, /Missing layers:/);
     assert.match(packet.text, /- penalties_inspection_news/);
@@ -533,19 +533,21 @@ test('race readiness fails closed on mismatched identity, stale timestamps, and 
   }
 });
 
-test('race identity gate requires matchable product metadata, live ticker parity, and the supplied freshness limit', () => {
+test('race identity gate uses official identity when optional product metadata is absent, while retaining ticker and freshness gates', () => {
   const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-quality-parameters-'));
   const date = '2026-07-05';
   try {
     writeRaceQualityState(tmpRoot, date);
     const missingMetadata = evaluateNascarEventIdentity({
       date,
-      event: { ...nascarEvent(), product_metadata: undefined },
+      event: { ...nascarEvent(), product_metadata: { competition: 'NASCAR Cup Series' } },
       stateRoot: tmpRoot,
       liveResearch: liveResearchFixture(),
     });
-    assert.equal(missingMetadata.ok, false);
-    assert.ok(missingMetadata.errors.some((error) => error.code === 'EVENT_RACE_NAME_IDENTITY_MISSING'));
+    assert.equal(missingMetadata.ok, true, missingMetadata.errors.map((error) => error.code).join(', '));
+    assert.equal(missingMetadata.context.packetIdentity.race_name, 'Test 400');
+    assert.equal(missingMetadata.context.packetIdentity.track, 'Test Speedway');
+    assert.equal(missingMetadata.context.packetIdentity.race_date, date);
 
     const tickerMismatch = evaluateNascarEventIdentity({
       date,

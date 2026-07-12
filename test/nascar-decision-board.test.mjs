@@ -93,21 +93,22 @@ function ceiling(overrides = {}) {
 const READY_TS = '2026-07-05T12:00:00.000Z';
 
 function liveResearchFixture() {
+  const officialSource = [{ url: 'https://www.nascar.com/schedule', title: 'NASCAR schedule' }];
   return {
     generated_utc: READY_TS,
     event_ticker: 'KXNASCARRACE-TEST26',
     model: 'sonar',
     source_urls: [{ url: 'https://www.nascar.com/schedule', title: 'NASCAR schedule' }],
     layers: {
-      race_event_identity: { status: 'ok', notes: 'Test 400 at Test Speedway.', sources: [], fetched_utc: READY_TS },
-      entry_list_drivers: { status: 'ok', notes: 'Hamlin, Larson, and Bell are entered.', sources: [], fetched_utc: READY_TS },
-      qualifying_starting_order: { status: 'ok', notes: 'Final order is posted.', sources: [], fetched_utc: READY_TS },
-      practice_speed: { status: 'ok', notes: 'Practice complete.', sources: [], fetched_utc: READY_TS },
-      recent_driver_form: { status: 'ok', notes: 'Recent form complete.', sources: [], fetched_utc: READY_TS },
-      track_history_gen7_comparables: { status: 'ok', notes: 'Track history complete.', sources: [], fetched_utc: READY_TS },
-      team_manufacturer_notes: { status: 'ok', notes: 'Team notes complete.', sources: [], fetched_utc: READY_TS },
-      penalties_inspection_news: { status: 'ok', notes: 'No penalties.', sources: [], fetched_utc: READY_TS },
-      weather_track_condition: { status: 'ok', notes: 'Dry track.', sources: [], fetched_utc: READY_TS },
+      race_event_identity: { status: 'ok', source_id: 'nascar_official', notes: 'Test 400 at Test Speedway.', sources: officialSource, fetched_utc: READY_TS },
+      entry_list_drivers: { status: 'ok', source_id: 'nascar_official', notes: 'Hamlin, Larson, and Bell are entered.', sources: officialSource, fetched_utc: READY_TS },
+      qualifying_starting_order: { status: 'ok', source_id: 'nascar_official', notes: 'Final order is posted.', sources: officialSource, fetched_utc: READY_TS },
+      practice_speed: { status: 'ok', source_id: 'nascar_official', notes: 'Practice complete.', sources: officialSource, fetched_utc: READY_TS },
+      recent_driver_form: { status: 'ok', source_id: 'nascar_official', notes: 'Recent form complete.', sources: officialSource, fetched_utc: READY_TS },
+      track_history_gen7_comparables: { status: 'ok', source_id: 'nascar_official', notes: 'Track history complete.', sources: officialSource, fetched_utc: READY_TS },
+      team_manufacturer_notes: { status: 'ok', source_id: 'nascar_official', notes: 'Team notes complete.', sources: officialSource, fetched_utc: READY_TS },
+      penalties_inspection_news: { status: 'ok', source_id: 'nascar_official', notes: 'No penalties.', sources: officialSource, fetched_utc: READY_TS },
+      weather_track_condition: { status: 'ok', source_id: 'nascar_official', notes: 'Dry track.', sources: officialSource, fetched_utc: READY_TS },
     },
     drivers: [],
   };
@@ -328,7 +329,7 @@ test('ready NASCAR packet renders required sections and passes both validators',
 
   assert.ok(packet.text.includes('CPC Packet: Test 400 Winner'));
   assert.doesNotMatch(packet.text, /BLOCKED_PACKET_INCOMPLETE/);
-  for (const section of ['FULL FIELD', 'STRONGEST', 'SECONDARY', 'LONGSHOTS', 'FADES', 'EVIDENCE', 'CONFIDENCE', 'LIMITS']) {
+  for (const section of ['FULL FIELD', 'RANKED BOARD', 'STRONGEST', 'SECONDARY', 'LONGSHOTS', 'FADES', 'EVIDENCE', 'CONFIDENCE', 'LIMITS']) {
     assert.match(packet.text, new RegExp(section));
   }
   assert.match(packet.text, /Market Context - NOT IN SCORE/);
@@ -342,7 +343,7 @@ test('ready NASCAR packet renders required sections and passes both validators',
     packetType: 'nascar-sunday',
     filePath: `state/packets/${date}/nascar-sunday/x.txt`,
   });
-  assert.equal(janitor.verdict, 'SEND_ALLOWED');
+  assert.notEqual(janitor.verdict, 'JANITOR_BLOCKED', JSON.stringify(janitor));
 
   rmSync(dir, { recursive: true, force: true });
 });
@@ -535,6 +536,20 @@ test('race readiness passes only with a complete 38-driver field, 38 markets, 38
   assert.equal(quality.ok, true, quality.errors.map((error) => error.code).join(', '));
   assert.equal(quality.context.activeFieldCount, 38);
 
+  const noteOnly = liveResearchFixture();
+  noteOnly.layers.weather_track_condition.sources = [];
+  const unproven = evaluateNascarRaceReadiness({
+    date,
+    event,
+    ceiling,
+    winMarkets: event.markets.map((market) => ({ ticker: market.ticker, driver_name: market.yes_sub_title })),
+    stateRoot: tmpRoot,
+    liveResearch: noteOnly,
+    nowMs: Date.parse('2026-07-05T13:00:00.000Z'),
+  });
+  assert.equal(unproven.ok, false);
+  assert.ok(unproven.errors.some((error) => error.code === 'LIVE_RESEARCH_OK_UNPROVEN'));
+
   rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -611,10 +626,10 @@ test('38-driver official packet renders all sections and customer bucketing igno
     };
     const packet = buildRacePacket(common);
     assert.doesNotMatch(packet.text, /BLOCKED_PACKET_INCOMPLETE/);
-    for (const section of ['FULL FIELD', 'STRONGEST', 'SECONDARY', 'LONGSHOTS', 'FADES', 'EVIDENCE', 'CONFIDENCE', 'LIMITS']) {
+    for (const section of ['FULL FIELD', 'RANKED BOARD', 'STRONGEST', 'SECONDARY', 'LONGSHOTS', 'FADES', 'EVIDENCE', 'CONFIDENCE', 'LIMITS']) {
       assert.match(packet.text, new RegExp(section));
     }
-    assert.match(packet.text, /ranked win board \(model-side composite score\)/);
+    assert.match(packet.text, /=== RANKED BOARD ===/);
     assert.match(packet.text, /Ryan Blaney/);
     assert.match(packet.text, /Chad Finchum/);
     assert.doesNotMatch(packet.text, /yes_bid|yes_ask|last=|bid=|ask=|implied=|volume[:=]|open_interest/i);

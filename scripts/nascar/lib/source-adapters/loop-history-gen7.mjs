@@ -60,6 +60,70 @@ function loadSeason(season) {
   try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; }
 }
 
+/**
+ * Resolve a current track descriptor from the committed Gen-7 NASCAR loop
+ * snapshots.  The official schedule feed supplies the stable numeric track_id,
+ * but does not consistently carry track_type/restrictor-plate metadata.  Using
+ * the newest completed race at the same track_id keeps the join deterministic
+ * even when the public-facing venue is renamed (for example Atlanta ->
+ * EchoPark Speedway).
+ *
+ * This is historical fundamentals metadata only.  No market data is read.
+ */
+export function resolveGen7TrackProfile({
+  track_id = null,
+  track_name = null,
+  seasons = DEFAULT_SEASONS,
+} = {}) {
+  const wantedTrackId = num(track_id);
+  if (wantedTrackId === null) return null;
+
+  const matches = [];
+  const snapshots = [];
+  for (const season of seasons) {
+    if (season < GEN7_ERA_FLOOR_SEASON) continue;
+    const snap = loadSeason(season);
+    if (!snap || !Array.isArray(snap.races)) continue;
+    snapshots.push({
+      season,
+      snapshot_id: snap.snapshot_id ?? null,
+      captured_at_utc: snap.captured_at_utc ?? null,
+    });
+    for (const race of snap.races) {
+      if (Number(race?.track_id) !== wantedTrackId || race?.capture_status !== 'ok') continue;
+      matches.push({ season, ...race });
+    }
+  }
+  if (!matches.length) return null;
+
+  matches.sort((a, b) =>
+    String(b.race_date ?? '').localeCompare(String(a.race_date ?? ''))
+    || Number(b.season ?? 0) - Number(a.season ?? 0));
+  const latest = matches[0];
+  const trackTypes = matches.map((race) => race.track_type).filter(Boolean);
+  const typeCounts = new Map();
+  for (const type of trackTypes) typeCounts.set(type, (typeCounts.get(type) ?? 0) + 1);
+  const inferredTrackType = [...typeCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))[0]?.[0] ?? null;
+
+  return {
+    track_id: wantedTrackId,
+    track_name: track_name ?? latest.track_name ?? null,
+    historical_track_name: latest.track_name ?? null,
+    track_type: inferredTrackType,
+    restrictor_plate: typeof latest.restrictor_plate === 'boolean' ? latest.restrictor_plate : null,
+    scheduled_distance: num(latest.scheduled_distance),
+    completed_race_sample: matches.length,
+    latest_completed_race_date: latest.race_date ?? null,
+    seasons: [...new Set(matches.map((race) => race.season))].sort(),
+    snapshots,
+    source_urls: [
+      'https://cf.nascar.com/cacher/{season}/1/race_list_basic.json',
+      'https://cf.nascar.com/live/feeds/series_1/{race_id}/live_feed.json',
+    ],
+  };
+}
+
 function normName(name) {
   return String(name ?? '')
     .normalize('NFKD')
@@ -285,7 +349,12 @@ export function loopHistoryLayerInputs({ race = {}, driverNames = null, entryLis
   const rows = buildRaceRows({ seasons });
   const wantKeys = driverNames ? new Set(driverNames.map(normName)) : null;
   const trackId = race.track_id ?? null;
-  const trackType = race.track_type ?? null;
+  const trackProfile = resolveGen7TrackProfile({
+    track_id: trackId,
+    track_name: race.track_name ?? null,
+    seasons,
+  });
+  const trackType = race.track_type ?? trackProfile?.track_type ?? null;
 
   // Car/team-keyed equipment layers (separate key path). Built from the
   // upcoming entry list so equipment follows the CAR the driver is in THIS
@@ -385,6 +454,7 @@ export function loopHistoryLayerInputs({ race = {}, driverNames = null, entryLis
     source_id: 'nascar_loop_history_gen7',
     era_floor_season: GEN7_ERA_FLOOR_SEASON,
     track: { track_id: trackId, track_name: race.track_name ?? null, track_type: trackType },
+    track_profile: trackProfile,
     by_driver: byDriver,
     races_considered: rows.length,
     driver_count: Object.keys(byDriver).length,
