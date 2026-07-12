@@ -21,6 +21,10 @@ import {
   DELIVERY_VERDICTS,
   inspectPacketFile,
 } from '../cron/cpc-packet-janitor.mjs';
+import {
+  NASCAR_PACKET_INCOMPLETE,
+  evaluateNascarPacketText,
+} from '../nascar/lib/race-quality-gate.mjs';
 
 const TELEGRAM_SAFE_CHARS = 3500;
 
@@ -395,6 +399,18 @@ export async function deliverDocumentEntry({
   const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
   const filePath = join(dir, fileName);
   const packetText = readFileSync(filePath, 'utf8');
+
+  const nascarPreflight = evaluateNascarPacketText(packetText, {
+    packetType,
+    packetPath: filePath,
+  });
+  if (!nascarPreflight.ok) {
+    return {
+      status: 'blocked_incomplete',
+      verdict: DELIVERY_VERDICTS.JANITOR_BLOCKED,
+      reason: nascarPreflight.errors.map((error) => error.code).join(', ') || NASCAR_PACKET_INCOMPLETE,
+    };
+  }
 
   // Fail-closed gate — before any janitor call or any Telegram request.
   const expiry = evaluateSlateExpiry({ packetText, nowMs });
