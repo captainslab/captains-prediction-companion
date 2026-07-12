@@ -21,6 +21,7 @@ import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { validateCpcCustomerPacket } from '../packets/lib/cpc-packet-validator.mjs';
+import { evaluateNascarPacketText } from '../nascar/lib/race-quality-gate.mjs';
 
 export const JANITOR_VERSION = 'cpc_packet_janitor_v1';
 
@@ -120,6 +121,7 @@ function inferDateFromPath(filePath) {
 function inferPacketType(filePath = '', explicit = '') {
   if (explicit) return explicit;
   const p = String(filePath).toLowerCase();
+  if (p.includes('/nascar/') || p.includes('nascar')) return 'nascar-sunday';
   if (p.includes('/mentions/') || p.includes('mention')) return 'mentions-daily';
   if (p.includes('/worldcup/') || p.includes('worldcup')) return 'worldcup-matchday';
   if (p.includes('/ufc/') || p.includes('ufc')) return 'ufc-weekly';
@@ -853,6 +855,14 @@ export function validatePacketText(text, context = {}) {
       message: 'raw market price/liquidity text appears inside scoring/rationale/model section',
       details: leaks,
     });
+  }
+
+  const nascarGate = evaluateNascarPacketText(text, {
+    packetType,
+    packetPath: context.filePath,
+  });
+  if (!nascarGate.ok) {
+    errors.push(...nascarGate.errors);
   }
 
   const noClear = countNoClear(text);

@@ -1,13 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 
 import { buildPrompt, runNascarLiveResearch, BLOCKED_LIVE_RESEARCH_MISSING } from '../scripts/nascar/live-research.mjs';
 import { buildRacePacket } from '../scripts/packets/generate-nascar-sunday.mjs';
+import { evaluateNascarEventIdentity, evaluateNascarRaceReadiness } from '../scripts/nascar/lib/race-quality-gate.mjs';
 import { validateCpcCustomerPacket } from '../scripts/packets/lib/cpc-packet-validator.mjs';
+import { validatePacketText } from '../scripts/cron/cpc-packet-janitor.mjs';
 
 const require = createRequire(import.meta.url);
 const { auditPrompt } = require('../src/sports/perplexityClient.js');
@@ -17,7 +19,14 @@ function nascarEvent(overrides = {}) {
     event_ticker: 'KXNASCARRACE-TEST26',
     title: 'Test 400 Winner',
     venue: 'Test Speedway',
-    product_metadata: { competition: 'NASCAR Cup Series' },
+    scheduled_start_utc: '2026-07-05T19:00:00.000Z',
+    product_metadata: {
+      competition: 'NASCAR Cup Series',
+      race_name: 'Test 400',
+      track: 'Test Speedway',
+      scheduled_start_utc: '2026-07-05T19:00:00.000Z',
+      date: '2026-07-05',
+    },
     markets: [
       { ticker: 'KXNASCARRACE-TEST26-HAML', yes_sub_title: 'Denny Hamlin' },
       { ticker: 'KXNASCARRACE-TEST26-LARS', yes_sub_title: 'Kyle Larson' },
@@ -111,6 +120,68 @@ function liveResearchFixture() {
       },
     ],
   };
+}
+
+function liveResearchAllOkFixture() {
+  const fixture = liveResearchFixture();
+  fixture.layers.penalties_inspection_news = {
+    status: 'ok',
+    notes: 'No penalties or inspection issues reported.',
+    sources: [{ url: 'https://www.nascar.com/stats', title: 'NASCAR stats' }],
+    fetched_utc: fixture.generated_utc,
+  };
+  return fixture;
+}
+
+function writeRaceQualityState(tmpRoot, date) {
+  const root = join(tmpRoot, 'nascar', date);
+  const discoveryDir = join(root, 'discovery');
+  mkdirSync(discoveryDir, { recursive: true });
+  writeFileSync(join(root, 'source_registry.json'), `${JSON.stringify({
+    schema_version: 'nascar_source_registry_v1',
+    checked_at_utc: '2026-07-05T12:00:00.000Z',
+  }, null, 2)}\n`);
+  writeFileSync(join(root, 'discovery.json'), `${JSON.stringify({
+    schema_version: 'nascar_discovery_v1',
+    checked_at_utc: '2026-07-05T12:00:00.000Z',
+  }, null, 2)}\n`);
+  writeFileSync(join(discoveryDir, 'nascar_official_adapter.json'), `${JSON.stringify({
+    source_id: 'nascar_official',
+    status: 'ok',
+    checked_at_utc: '2026-07-05T12:00:00.000Z',
+    records: [{
+      race_id: 901,
+      track_id: 44,
+      series_id: 1,
+      race_name: 'Test 400',
+      track: 'Test Speedway',
+      scheduled_start_utc: '2026-07-05T19:00:00.000Z',
+      source_urls: [
+        'https://cf.nascar.com/cacher/2026/race_list_basic.json',
+        'https://cf.nascar.com/cacher/2026/1/901/weekend-feed.json',
+      ],
+    }],
+  }, null, 2)}\n`);
+  writeFileSync(join(discoveryDir, 'active_field_pool_adapter.json'), `${JSON.stringify({
+    source_id: 'active_field_pool',
+    status: 'ok',
+    checked_at_utc: '2026-07-05T12:00:00.000Z',
+    records: [
+      { driver_name: 'Denny Hamlin', race_id: 901, track_id: 44 },
+      { driver_name: 'Kyle Larson', race_id: 901, track_id: 44 },
+      { driver_name: 'Christopher Bell', race_id: 901, track_id: 44 },
+    ],
+  }, null, 2)}\n`);
+  writeFileSync(join(discoveryDir, 'practice_qualifying_adapter.json'), `${JSON.stringify({
+    source_id: 'practice_qualifying',
+    status: 'ok',
+    checked_at_utc: '2026-07-05T12:00:00.000Z',
+    records: [
+      { driver_name: 'Denny Hamlin', race_id: 901, effective_race_start: 1 },
+      { driver_name: 'Kyle Larson', race_id: 901, effective_race_start: 2 },
+      { driver_name: 'Christopher Bell', race_id: 901, effective_race_start: 3 },
+    ],
+  }, null, 2)}\n`);
 }
 
 function clientFromContent(content, model = 'sonar') {
@@ -283,19 +354,35 @@ test('NASCAR packet renders the live research section and keeps price isolation'
   const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-live-packet-'));
   const date = '2026-07-05';
   const ceilingPath = join(tmpRoot, 'ceiling_board.json');
+  writeRaceQualityState(tmpRoot, date);
   writeFileSync(ceilingPath, `${JSON.stringify({
-    ceilings: [
+    candidates: [
       {
         driver_name: 'Denny Hamlin',
-        ceiling_label: 'Win lane ceiling',
-        lane_type: 'win',
-        pool_entry_reason: 'top-tier model fit',
-        basis: 'composite score',
+        composite_score: 78,
+        fundamentals_layer_coverage: 4,
+        fundamentals_layer_coverage_label: '4/4 layers',
+        score_breakdown: { inputs_used: [{ layer: 'practice_speed' }] },
+        lanes: { win: { status: 'EVIDENCE_LEAN', narrative: 'Top full-field profile.' } },
+      },
+      {
+        driver_name: 'Kyle Larson',
+        composite_score: 69,
+        fundamentals_layer_coverage: 4,
+        fundamentals_layer_coverage_label: '4/4 layers',
+        score_breakdown: { inputs_used: [{ layer: 'track_history' }] },
+        lanes: { win: { status: 'LEAN', narrative: 'Strong secondary profile.' } },
+      },
+      {
+        driver_name: 'Christopher Bell',
+        composite_score: 58,
+        fundamentals_layer_coverage: 4,
+        fundamentals_layer_coverage_label: '4/4 layers',
+        score_breakdown: { inputs_used: [{ layer: 'recent_form' }] },
+        lanes: { win: { status: 'WATCH', narrative: 'Needs pace upgrade.' } },
       },
     ],
     source: ceilingPath,
-    userFacingLines: ['- Denny Hamlin win lane ceiling'],
-    fieldBucket: { summary: 'field bucket summary' },
   }, null, 2)}\n`);
 
   try {
@@ -306,17 +393,185 @@ test('NASCAR packet renders the live research section and keeps price isolation'
       artifacts: [ceilingPath],
       workspaceResult: null,
       stateRoot: tmpRoot,
-      liveResearch: liveResearchFixture(),
+      liveResearch: liveResearchAllOkFixture(),
+      nowMs: Date.parse('2026-07-05T13:00:00.000Z'),
     });
 
     assert.match(packet.text, /--- Live Research \(Perplexity\) ---/);
     assert.match(packet.text, /evidence_ledger:/);
     assert.match(packet.text, /Missing layers:/);
     assert.match(packet.text, /- penalties_inspection_news/);
-    assert.doesNotMatch(packet.text, /score=|odds=|probability=|confidence=/i);
+    assert.match(packet.text, /Market Context - NOT IN SCORE/);
+    assert.doesNotMatch(packet.text, /yes_bid|yes_ask|last=|bid=|ask=|implied=/i);
 
     const validation = validateCpcCustomerPacket(packet.text);
     assert.equal(validation.valid, true, validation.errors.join('; '));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('race readiness fails closed on mismatched identity, stale timestamps, and contradictory freshness', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-live-bad-identity-'));
+  const date = '2026-07-05';
+  try {
+    writeRaceQualityState(tmpRoot, date);
+
+    const staleRegistryPath = join(tmpRoot, 'nascar', date, 'source_registry.json');
+    writeFileSync(staleRegistryPath, `${JSON.stringify({
+      schema_version: 'nascar_source_registry_v1',
+      checked_at_utc: '2026-07-01T00:00:00.000Z',
+      mode: 'fixtures-only',
+      notes: 'stale Daytona fixture manifest',
+      sources: {
+        nascar_official: {
+          source_id: 'nascar_official',
+          checked_at_utc: '2026-07-01T00:00:00.000Z',
+          race_name: 'Daytona 500',
+          track: 'Daytona International Speedway',
+        },
+      },
+    }, null, 2)}\n`);
+
+    const conflictingLiveResearch = liveResearchFixture();
+    conflictingLiveResearch.generated_utc = '2026-07-01T00:00:00.000Z';
+    conflictingLiveResearch.layers.weather_track_condition.notes = 'cache only stale-source weather note';
+
+    const quality = evaluateNascarRaceReadiness({
+      date,
+      event: nascarEvent({
+        title: 'Wrong 400 Winner',
+        venue: 'Wrong Speedway',
+        scheduled_start_utc: '2026-07-06T19:00:00.000Z',
+        product_metadata: {
+          competition: 'NASCAR Cup Series',
+          race_name: 'Wrong 400',
+          track: 'Wrong Speedway',
+          scheduled_start_utc: '2026-07-06T19:00:00.000Z',
+          date: '2026-07-06',
+        },
+      }),
+      ceiling: {
+        candidates: [
+          {
+            driver_name: 'Denny Hamlin',
+            composite_score: 78,
+            fundamentals_layer_coverage: 4,
+            score_breakdown: { inputs_used: [{ layer: 'practice_speed' }] },
+            lanes: { win: { status: 'EVIDENCE_LEAN', narrative: 'Top profile.' } },
+          },
+          {
+            driver_name: 'Kyle Larson',
+            composite_score: 69,
+            fundamentals_layer_coverage: 4,
+            score_breakdown: { inputs_used: [{ layer: 'track_history' }] },
+            lanes: { win: { status: 'WATCH', narrative: 'Strong profile.' } },
+          },
+          {
+            driver_name: 'Christopher Bell',
+            composite_score: 58,
+            fundamentals_layer_coverage: 4,
+            score_breakdown: { inputs_used: [{ layer: 'recent_form' }] },
+            lanes: { win: { status: 'WATCH', narrative: 'Live if pace upgrades.' } },
+          },
+        ],
+      },
+      winMarkets: [
+        { ticker: 'KXNASCARRACE-TEST26-HAML', driver_name: 'Denny Hamlin' },
+        { ticker: 'KXNASCARRACE-TEST26-LARS', driver_name: 'Kyle Larson' },
+        { ticker: 'KXNASCARRACE-TEST26-BELL', driver_name: 'Christopher Bell' },
+      ],
+      stateRoot: tmpRoot,
+      liveResearch: conflictingLiveResearch,
+      nowMs: Date.parse('2026-07-05T13:00:00.000Z'),
+    });
+
+    assert.equal(quality.ok, false);
+    assert.ok(quality.errors.some((error) => error.code === 'EVENT_TITLE_IDENTITY_MISMATCH'));
+    assert.ok(quality.errors.some((error) => error.code === 'EVENT_RACE_NAME_MISMATCH'));
+    assert.ok(quality.errors.some((error) => error.code === 'EVENT_TRACK_MISMATCH'));
+    assert.ok(quality.errors.some((error) => error.code === 'EVENT_START_MISMATCH'));
+    assert.ok(quality.errors.some((error) => error.code === 'EVENT_DATE_MISMATCH'));
+    assert.ok(quality.errors.some((error) => error.code === 'TIMESTAMP_STALE'));
+    assert.ok(quality.errors.some((error) => error.code === 'STALE_FIXTURE_MANIFEST_IDENTITY'));
+
+    const packet = buildRacePacket({
+      date,
+      event: nascarEvent({
+        title: 'Wrong 400 Winner',
+        venue: 'Wrong Speedway',
+        scheduled_start_utc: '2026-07-06T19:00:00.000Z',
+        product_metadata: {
+          competition: 'NASCAR Cup Series',
+          race_name: 'Wrong 400',
+          track: 'Wrong Speedway',
+          scheduled_start_utc: '2026-07-06T19:00:00.000Z',
+          date: '2026-07-06',
+        },
+      }),
+      sourcePath: '/tmp/nascar-event.json',
+      artifacts: [join(tmpRoot, 'ceiling_board.json')],
+      workspaceResult: null,
+      stateRoot: tmpRoot,
+      liveResearch: conflictingLiveResearch,
+      nowMs: Date.parse('2026-07-05T13:00:00.000Z'),
+    });
+
+    assert.match(packet.text, /BLOCKED_PACKET_INCOMPLETE/);
+    assert.match(packet.text, /EVENT_TITLE_IDENTITY_MISMATCH/);
+    assert.match(packet.text, /TIMESTAMP_STALE/);
+    assert.match(packet.text, /STALE_FIXTURE_MANIFEST_IDENTITY/);
+
+    const janitor = validatePacketText(packet.text, {
+      packetType: 'nascar-sunday',
+      filePath: `state/packets/${date}/nascar-sunday/x.txt`,
+    });
+    assert.equal(janitor.verdict, 'JANITOR_BLOCKED');
+    assert.ok(janitor.errors.some((error) => error.code === 'NASCAR_CONTRADICTORY_FRESHNESS_DISCLOSURE'));
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('race identity gate requires matchable product metadata, live ticker parity, and the supplied freshness limit', () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'cpc-nascar-quality-parameters-'));
+  const date = '2026-07-05';
+  try {
+    writeRaceQualityState(tmpRoot, date);
+    const missingMetadata = evaluateNascarEventIdentity({
+      date,
+      event: { ...nascarEvent(), product_metadata: undefined },
+      stateRoot: tmpRoot,
+      liveResearch: liveResearchFixture(),
+    });
+    assert.equal(missingMetadata.ok, false);
+    assert.ok(missingMetadata.errors.some((error) => error.code === 'EVENT_RACE_NAME_IDENTITY_MISSING'));
+
+    const tickerMismatch = evaluateNascarEventIdentity({
+      date,
+      event: nascarEvent(),
+      stateRoot: tmpRoot,
+      liveResearch: { ...liveResearchFixture(), event_ticker: 'KXNASCARRACE-OTHER26' },
+    });
+    assert.ok(tickerMismatch.errors.some((error) => error.code === 'LIVE_RESEARCH_EVENT_MISMATCH'));
+
+    const quality = evaluateNascarRaceReadiness({
+      date,
+      event: nascarEvent(),
+      ceiling: {
+        candidates: nascarEvent().markets.map((market, index) => ({
+          driver_name: market.yes_sub_title,
+          composite_score: 80 - index,
+          lanes: { win: { status: 'WATCH' } },
+        })),
+      },
+      winMarkets: nascarEvent().markets.map((market) => ({ driver_name: market.yes_sub_title, ticker: market.ticker })),
+      stateRoot: tmpRoot,
+      liveResearch: liveResearchFixture(),
+      nowMs: Date.parse('2026-07-05T13:00:00.000Z'),
+      maxSourceAgeMs: 1_000,
+    });
+    assert.ok(quality.errors.some((error) => error.code === 'TIMESTAMP_STALE'));
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true });
   }
