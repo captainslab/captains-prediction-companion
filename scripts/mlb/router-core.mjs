@@ -113,7 +113,10 @@ function detectCandidates(text) {
     if (hasOverUnder || hasNumber) addCandidate(candidates, 'pitcher_strikeouts', 'strikeout threshold');
   }
 
-  if (has(text, /\b(home run derby|total home runs|team home runs)\b/)) {
+  // Derby is an event family, not a home-run-hitter market. Use the bare
+  // event word too because real titles often omit the literal "home run derby"
+  // phrase (for example, "most homers in Round 1").
+  if (has(text, /\bderby\b|\b(home run derby|total home runs|team home runs)\b/)) {
     rejectSignals.push('unsupported home run market');
   } else if (has(text, /\b(home run|homer|hr)\b|hit a home run/)) {
     addCandidate(candidates, 'home_run_hitter', 'player home run wording');

@@ -137,10 +137,11 @@ export function buildLedgerItem({
   return item;
 }
 
-export function buildScopedLedger({ scope, date, items = [] } = {}) {
+export function buildScopedLedger({ scope, date, items = [], now = () => new Date().toISOString() } = {}) {
   validateScope(scope);
+  const generatedUtc = now();
   const normalizedItems = Object.freeze(items.map((item) => {
-    const built = buildLedgerItem(item);
+    const built = buildLedgerItem({ ...item, checked_utc: item?.checked_utc ?? generatedUtc });
     return item && typeof item === 'object' && item.removal_rule
       ? Object.freeze({ ...built, removal_rule: item.removal_rule })
       : built;
@@ -152,7 +153,7 @@ export function buildScopedLedger({ scope, date, items = [] } = {}) {
     schema_version: LEDGER_SCHEMA,
     scope,
     date,
-    generated_utc: new Date().toISOString(),
+    generated_utc: generatedUtc,
     items: normalizedItems,
     summary: Object.freeze({
       total: normalizedItems.length,
