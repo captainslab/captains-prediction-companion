@@ -178,10 +178,15 @@ test('BP, fatigue, distance, tie, and accounting assumptions are ledgered and di
     assert.equal(byType[type].status, 'ASSUMED');
     assert.equal(byType[type].source_quality, 'F');
   }
+  assert.equal(byType.derby_format.status, 'LOCKED');
+  assert.equal(byType.derby_format.source_quality, 'A');
   assert.equal(byType.bp_power_transform.value.contact_floor, DERBY_MODEL_ASSUMPTIONS.bp_contact_floor);
   assert.equal(byType.fatigue_curve.value.distance_decay_ft_per_round, DERBY_MODEL_ASSUMPTIONS.fatigue_distance_decay_ft_per_round);
   assert.match(packet.packetText, /BP-pitcher quality are assumptions, not measurements/);
   assert.match(packet.packetText, /FIXTURE MODE/);
+  assert.match(packet.packetText, /participant_input_sources: FIXTURE/);
+  assert.match(packet.packetText, /MLB\.com: "Changes coming to 2026 Home Run Derby"/);
+  assert.doesNotMatch(packet.packetText, /MLB\.com was unavailable/);
 });
 
 test('Derby simulator uses only the shared seeded Monte Carlo module and never Math.random', () => {
