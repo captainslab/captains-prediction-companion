@@ -77,6 +77,176 @@ test('validator accepts a well-formed minimal packet', () => {
   assert.equal(r.valid, true, `errors: ${r.errors.join('; ')}`);
 });
 
+test('validator rejects a quality-D Derby exact-output section without an experimental label', () => {
+  const text = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'total HRs distribution:',
+    'Research only. No trades.',
+  ].join('\n');
+  const r = validateCpcCustomerPacket(text);
+  assert.equal(r.valid, false);
+  assert.ok(r.errors.some((error) => /quality D.*tournament HR distribution/i.test(error)));
+});
+
+test('validator accepts a labeled quality-D Derby experimental winner marker', () => {
+  const text = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'winner probabilities — EXPERIMENTAL:',
+    '  - Alpha: probability=0.26',
+    '  - Bravo: probability=0.24',
+    '  - Charlie: probability=0.13',
+    'Research only. No trades.',
+  ].join('\n');
+  const r = validateCpcCustomerPacket(text);
+  assert.equal(r.valid, true, `errors: ${r.errors.join('; ')}`);
+});
+
+test('Derby labels are section-scoped and cannot launder renamed absolute rows', () => {
+  const text = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'winner probabilities — EXPERIMENTAL:',
+    '  - Alpha: probability=0.26',
+    '',
+    'invented tournament totals — EXPERIMENTAL:',
+    '26: probability=0.4137',
+    'Research only. No trades.',
+  ].join('\n');
+  const r = validateCpcCustomerPacket(text);
+  assert.equal(r.valid, false);
+  assert.ok(r.errors.some((error) => /raw exact probability row outside an eligible/i.test(error)));
+});
+
+test('quality-D winner exception requires EXPERIMENTAL, not UNCALIBRATED', () => {
+  const text = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'winner probabilities — UNCALIBRATED:',
+    '  - Alpha: probability=0.26',
+    'Research only. No trades.',
+  ].join('\n');
+  assert.equal(validateCpcCustomerPacket(text).valid, false);
+});
+
+test('validator rejects labeled quality-D B-only exact distributions', () => {
+  const text = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'total HRs distribution — UNCALIBRATED:',
+    'Research only. No trades.',
+  ].join('\n');
+  const r = validateCpcCustomerPacket(text);
+  assert.equal(r.valid, false);
+  assert.ok(r.errors.some((error) => /suppressed below threshold/i.test(error)));
+});
+
+test('validator rejects renamed raw quality-D exact rows', () => {
+  const text = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'TOURNAMENT TOTAL HOME RUNS',
+    '26 HR: probability=0.4137',
+    'Research only. No trades.',
+  ].join('\n');
+  const r = validateCpcCustomerPacket(text);
+  assert.equal(r.valid, false);
+  assert.ok(r.errors.some((error) => /raw exact/i.test(error)));
+});
+
+test('validator rejects quality-D exact point outputs and bare percent bins under renamed headings', () => {
+  const prefix = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+  ];
+  for (const leak of [
+    'Expected tournament total: 26 HR',
+    'Expected longest HR: 452 ft',
+    'Expected highest EV: 104 mph',
+    'TOURNAMENT OUTPUT\n26: 41.37%',
+    'PLAYER OUTPUT\nAlpha: 2 HR',
+    'PLAYER OUTPUT\nAlpha 2 HR',
+    'Chance of a 500+ ft HR: 0%',
+    '500-foot probability: effectively 0%',
+  ]) {
+    const text = [...prefix, leak, 'Research only. No trades.'].join('\n');
+    const r = validateCpcCustomerPacket(text);
+    assert.equal(r.valid, false, `${leak} must fail quality-D validation`);
+    assert.ok(r.errors.some((error) => /absolute|point|percent bin|500\+/i.test(error)));
+  }
+});
+
+test('validator rejects renamed quality-D winner percentages outside an EXPERIMENTAL winner section', () => {
+  for (const row of ['Alpha: 26.4%', 'Alpha — 26.4%', 'Alpha 26.4%']) {
+    const text = [
+      'CPC Packet: 2026 Home Run Derby',
+      'generated_utc: now',
+      'data_quality: D',
+      'Market Context — NOT IN SCORE',
+      'Monte Carlo sampling uncertainty: internal only',
+      'Model/assumption uncertainty: very low',
+      'PLAYER WIN CHANCES',
+      row,
+      'Research only. No trades.',
+    ].join('\n');
+    const r = validateCpcCustomerPacket(text);
+    assert.equal(r.valid, false, `${row} must require an EXPERIMENTAL winner section`);
+    assert.ok(r.errors.some((error) => /raw exact probability row outside an eligible/i.test(error)));
+  }
+});
+
+test('validator rejects BLOCKED-header spoofing and requires ready quality in packet text', () => {
+  const spoofed = [
+    'CPC Packet: 2026 Home Run Derby — BLOCKED',
+    'generated_utc: now',
+    'data_quality: D',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'total HRs distribution:',
+    'Research only. No trades.',
+  ].join('\n');
+  assert.equal(validateCpcCustomerPacket(spoofed).valid, false);
+  const missingQuality = [
+    'CPC Packet: 2026 Home Run Derby',
+    'generated_utc: now',
+    'Market Context — NOT IN SCORE',
+    'Monte Carlo sampling uncertainty: internal only',
+    'Model/assumption uncertainty: very low',
+    'Research only. No trades.',
+  ].join('\n');
+  assert.equal(validateCpcCustomerPacket(missingQuality, { data_quality: 'D' }).valid, false);
+});
+
 test('validator rejects ranked non-BLOCKED rows with score=MISSING', () => {
   const text = [
     '=== CPC Packet: Test ===', 'generated_utc: now', 'NOT IN SCORE',
