@@ -43,6 +43,7 @@ test('a hung discovery source is bounded and skipped without hanging; other sour
     env: {},
     discovery: {
       timeoutMs: 80, // tiny per-source budget for a fast test
+      partialGraceMs: 50,
       discoverMentionEvents: hangingScraper,
       // broad scan returns a fresh today event — proves survivors flow through
       fetchKalshiEvents: async () => ({ ok: true, events: [ev('KXHEARINGMENTION-26JUN11')] }),
@@ -97,6 +98,35 @@ test('an erroring discovery source is skipped (degraded) while others continue',
   assert.equal(result.discovery.sources.find((s) => s.label === 'alpha-intake').status, 'ok');
 });
 
+test('a falsy discovery rejection is recorded as an error and written to the artifact', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-falsy-error-'));
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    dryRun: true,
+    env: {},
+    discovery: {
+      timeoutMs: 500,
+      discoverMentionEvents: okScraper,
+      fetchKalshiEvents: async () => { throw null; },
+      collectAlphaMentionIntake: okAlpha,
+    },
+  });
+
+  const broad = result.discovery.sources.find((source) => source.label === 'kalshi-broad');
+  assert.equal(broad.status, 'error');
+  assert.equal(broad.events.length, 0);
+  assert.ok(typeof broad.error === 'string' && broad.error.length > 0);
+  assert.equal(result.discovery.degraded, true);
+
+  const statusPath = join(root, 'mentions', DATE, 'discovery-status.json');
+  const status = JSON.parse(readFileSync(statusPath, 'utf8'));
+  const record = status.sources.find((source) => source.source === 'kalshi-broad');
+  assert.equal(record.status, 'error');
+  assert.equal(record.error, broad.error);
+  assert.equal(status.degraded, true);
+});
+
 test('all-healthy discovery is not flagged degraded and writes no degraded artifact', async () => {
   const root = mkdtempSync(join(tmpdir(), 'mentions-watch-healthy-'));
   const result = await watch({
@@ -116,4 +146,44 @@ test('all-healthy discovery is not flagged degraded and writes no degraded artif
   assert.ok(result.discovery.sources.every((s) => s.status === 'ok'));
   assert.ok(!existsSync(join(root, 'mentions', DATE, 'discovery-status.json')));
   assert.ok(!existsSync(ledgerPath(root, DATE)), 'no-event healthy run stays quiet');
+});
+
+test('a timed-out source keeps events returned during the partial grace window', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'mentions-watch-partial-'));
+  const partialEvent = ev('KXHEARINGMENTION-26JUN11');
+  const delayedScraper = () => new Promise((resolve) => {
+    setTimeout(() => resolve({
+      events: [partialEvent],
+      sources: { scrape: { ok: true }, series: { ok: true } },
+    }), 60);
+  });
+
+  const result = await watch({
+    date: DATE,
+    stateRoot: root,
+    dryRun: true,
+    env: {},
+    discovery: {
+      timeoutMs: 20,
+      partialGraceMs: 100,
+      discoverMentionEvents: delayedScraper,
+      fetchKalshiEvents: okBroad,
+      collectAlphaMentionIntake: okAlpha,
+    },
+  });
+
+  assert.deepEqual(result.attempted.map((event) => event.event_ticker), [partialEvent.event_ticker]);
+  assert.equal(result.discovery.degraded, true);
+  const scraper = result.discovery.sources.find((source) => source.label === 'scraper-board');
+  assert.equal(scraper.status, 'partial');
+  assert.equal(scraper.events.length, 1);
+  assert.equal(scraper.events[0].event_ticker, partialEvent.event_ticker);
+  assert.match(scraper.error, /^partial: timed out after /);
+  assert.match(scraper.error, /returned 1 events/);
+
+  const statusPath = join(root, 'mentions', DATE, 'discovery-status.json');
+  const status = JSON.parse(readFileSync(statusPath, 'utf8'));
+  const record = status.sources.find((source) => source.source === 'scraper-board');
+  assert.equal(record.status, 'partial');
+  assert.equal(record.error, scraper.error);
 });
