@@ -110,6 +110,7 @@ state/goals/
 state/janitor/
 
 scratch/
+.cache/mlb-hr-statcast/
 
 # Local generated/preview state and per-machine tooling config (Discord-readiness cleanup)
 state/previews/

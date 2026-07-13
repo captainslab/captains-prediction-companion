@@ -30,6 +30,27 @@ import {
   buildYrfiProjection,
   buildKsProjection,
 } from './projection-contracts.mjs';
+import {
+  buildGameHrProjections,
+  loadRegularGameModel,
+} from '../hr-engine/regular-game-model.mjs';
+
+const BUNDLED_HR_MODEL_URL = new URL('../hr-engine/artifacts/regular-game-model-2025.json', import.meta.url);
+let bundledHrModelCache;
+
+function loadBundledHrModel() {
+  if (bundledHrModelCache !== undefined) return bundledHrModelCache;
+  if (!existsSync(BUNDLED_HR_MODEL_URL)) {
+    bundledHrModelCache = null;
+    return bundledHrModelCache;
+  }
+  try {
+    bundledHrModelCache = loadRegularGameModel(BUNDLED_HR_MODEL_URL);
+  } catch {
+    bundledHrModelCache = null;
+  }
+  return bundledHrModelCache;
+}
 
 // --- Documented model constants (transparent, not tuned to any market) -------
 export const MODEL = Object.freeze({
@@ -190,6 +211,11 @@ export function buildGameProjections({
   as_of,
   lineup_status = null,
   weather_status = null,
+  hr_model = undefined,
+  hr_batters = undefined,
+  hr_evidence = undefined,
+  hr_seed = 'cpc-hr-regular-game',
+  hr_simulations = 10_000,
 } = {}) {
   const game_id = String(record?.game_pk ?? record?.label ?? 'unknown');
   const stamp = as_of || `${record?.game_date || 'unknown-date'}T00:00:00Z`;
@@ -265,7 +291,39 @@ export function buildGameProjections({
   const ks_home = ksFor(hp, 'home');
   const ks_away = ksFor(ap, 'away');
 
-  return { score, yrfi, ks_home, ks_away, hr: null, means };
+  // HR is a separate fitted per-PA model. It receives only explicitly
+  // allowlisted baseball evidence and fails closed when confirmed batter-level
+  // lineup inputs are absent. Score/YRFI/K calculations above are unchanged.
+  const resolvedHrModel = hr_model === undefined ? loadBundledHrModel() : hr_model;
+  const batters = hr_batters ?? record?.hr_batters ?? record?.confirmed_batters ?? [];
+  const evidence = hr_evidence ?? record?.hr_evidence ?? record?.batter_hr_evidence ?? [];
+  const hr = resolvedHrModel
+    ? buildGameHrProjections({
+      model: resolvedHrModel,
+      batters,
+      evidence,
+      opposing_pitchers: { away: ap, home: hp },
+      park: record?.hr_park ?? {
+        id: record?.home_team_abbrev ?? record?.home_team ?? null,
+        roof: record?.roof ?? null,
+        altitude: record?.altitude ?? null,
+      },
+      weather: record?.hr_weather ?? record?.weather ?? null,
+      lineup_status,
+      seed: hr_seed,
+      simulations: hr_simulations,
+      as_of: stamp,
+    })
+    : {
+      schema_version: 'cpc_mlb_regular_game_hr_game_v1',
+      status: 'blocked',
+      model_status: 'MODEL_INSUFFICIENT',
+      blocked_reasons: ['MODEL_ARTIFACT_MISSING_OR_INVALID'],
+      outputs: [],
+      audit: { market_inputs_used: false, ordering: 'descending modeled any-HR probability, then MLB ID' },
+    };
+
+  return { score, yrfi, ks_home, ks_away, hr, means };
 }
 
 // --- Loader + matcher --------------------------------------------------------
@@ -274,7 +332,36 @@ export function loadStatsRecords(stateRoot, date) {
   if (!existsSync(p)) return [];
   try {
     const j = JSON.parse(readFileSync(p, 'utf8'));
-    return Array.isArray(j?.records) ? j.records : [];
+    const records = Array.isArray(j?.records) ? j.records : [];
+    const contextPath = join(stateRoot, 'mlb', date, 'discovery', 'context_adapter.json');
+    if (!existsSync(contextPath)) return records;
+    let contextPayload;
+    try {
+      contextPayload = JSON.parse(readFileSync(contextPath, 'utf8'));
+    } catch {
+      return records;
+    }
+    const contexts = Array.isArray(contextPayload?.records) ? contextPayload.records : [];
+    return records.map((record) => {
+      const context = contexts.find((candidate) => String(candidate?.game_pk ?? '') === String(record?.game_pk ?? ''))
+        ?? contexts.find((candidate) => candidate?.away_team === record?.away_team && candidate?.home_team === record?.home_team)
+        ?? null;
+      if (!context) return record;
+      const away = (context.away_batting_order ?? []).slice(0, 9).map((id, index) => ({
+        mlb_id: id, batter_id: id, lineup_slot: index + 1, side: 'away', team: record.away_team_abbrev ?? record.away_team,
+      }));
+      const home = (context.home_batting_order ?? []).slice(0, 9).map((id, index) => ({
+        mlb_id: id, batter_id: id, lineup_slot: index + 1, side: 'home', team: record.home_team_abbrev ?? record.home_team,
+      }));
+      const batters = [...away, ...home];
+      return {
+        ...record,
+        hr_batters: batters,
+        hr_evidence: batters,
+        hr_lineup_source: context.source_id ?? 'lineup_injury_bullpen',
+        lineup_status: String(context.lineup_status ?? '').startsWith('confirmed') ? 'confirmed' : 'unconfirmed',
+      };
+    });
   } catch { return []; }
 }
 

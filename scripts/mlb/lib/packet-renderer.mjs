@@ -15,6 +15,7 @@ import {
   describeTeamRuns,
   describeYrfi,
   describeKs,
+  describeHr,
 } from './projection-language.mjs';
 import {
   LINEUP_STATUS,
@@ -136,6 +137,7 @@ function renderProjectionFirstSection(game, projections, modelFreshness) {
   lines.push(describeYrfi(projections.yrfi));
   lines.push(describeKs(projections.ks_away, `${awayName} starter`));
   lines.push(describeKs(projections.ks_home, `${homeName} starter`));
+  lines.push(describeHr(projections.hr));
 
   return lines;
 }
@@ -481,6 +483,7 @@ export function renderPerGamePacket(game, options = {}) {
     gameKey: game.game_key,
     awayAbbrev: game.away,
     homeAbbrev: game.home,
+    hrProjection: projections?.hr ?? null,
   };
 }
 

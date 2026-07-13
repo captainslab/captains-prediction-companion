@@ -344,8 +344,8 @@ test('renderPerGamePacket: projection-first section is present, market-free, and
   assert.match(section, /Projected runs —/);
   assert.match(section, /Projected first-inning run/);
   assert.match(section, /Projected strikeouts/);
-  assert.doesNotMatch(section, /HR status|HR risk|home run/i);
-  assert.doesNotMatch(section, /BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(section, /Anytime-HR model/);
+  assert.match(section, /BLOCKED_MODEL_LAYER_MISSING: (?:MODEL_ARTIFACT_MISSING_OR_INVALID|LINEUP_BATTER_EVIDENCE_MISSING)/);
 
   for (const term of ['yes_ask', 'no_ask', 'open interest', 'volume', 'odds', 'bid', 'ask', 'Kalshi']) {
     assert.ok(!section.toLowerCase().includes(term.toLowerCase()), `projection section must not contain ${term}`);

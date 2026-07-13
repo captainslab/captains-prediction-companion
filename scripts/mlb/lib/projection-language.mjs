@@ -108,8 +108,20 @@ export function describeKs(proj, pitcherName = 'Starter') {
 
 // ---- Batter home run (HR risk) ---------------------------------------------
 export function describeHr(proj, batterName = 'Batter') {
+  if (Array.isArray(proj?.outputs)) {
+    const ready = proj.outputs.filter((row) => row?.status === 'ready' && row?.outputs);
+    if (!ready.length) return blockedLine('Anytime-HR model', proj);
+    const summaries = ready.slice(0, 5).map((row) => {
+      const name = row.player?.player_name ?? (row.player?.mlb_id ? `MLB ${row.player.mlb_id}` : 'Batter');
+      return `${name} ${pct(row.outputs.probability_at_least_one_hr, 1)} (per-PA ${pct(row.outputs.per_pa_probability, 2)}, expected PA ${Number(row.outputs.expected_pa).toFixed(2)})`;
+    });
+    const evidence = ready.every((row) => row.audit?.calibration_claim_supported)
+      ? 'held-out calibration supported'
+      : 'uncalibrated label retained';
+    return `Projected anytime-HR risk — ${summaries.join('; ')} (${evidence}; market-free model).`;
+  }
   if (proj.status === 'blocked') return blockedLine(`HR risk — ${batterName}`, proj);
-  const p = proj.outputs?.p_at_least_one_hr;
+  const p = proj.outputs?.p_at_least_one_hr ?? proj.outputs?.probability_at_least_one_hr;
   if (typeof p !== 'number') return `HR risk — ${batterName}: not modeled${statusTag(proj)}.`;
   return `Projected HR risk — ${batterName}: ${pct(p, 0)} to hit ≥ 1 home run (rare-event projection)${statusTag(proj)}.`;
 }

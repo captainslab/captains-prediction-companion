@@ -1053,6 +1053,17 @@ function modeledFamilyOverride(kind, projections) {
     const meanText = means.length ? `~${Math.max(...means).toFixed(1)} projected Ks (top starter)` : 'projected strikeout count';
     return mk(`modeled strikeout composite — ${meanText} from the BF×K% count model; board ladder display-only, NOT IN SCORE`);
   }
+  if (kind === 'hr') {
+    const h = projections.hr;
+    const ready = Array.isArray(h?.outputs)
+      ? h.outputs.filter((row) => row?.status === 'ready' && row?.outputs)
+      : [];
+    if (!ready.length) return null;
+    const top = ready[0];
+    const player = top.player?.player_name ?? (top.player?.mlb_id ? `MLB ${top.player.mlb_id}` : 'top batter');
+    const probability = pctText(top.outputs.probability_at_least_one_hr);
+    return mk(`modeled anytime-HR composite — ${player} ${probability ?? 'n/a'} for at least one HR from the fitted per-PA model; board ladder display-only, NOT IN SCORE`);
+  }
   return null;
 }
 
@@ -1138,11 +1149,11 @@ export function buildMarketFamilyCoverage(game, analysis = null) {
 
   // Promote families that carry a real modeled (non-market) composite from the
   // projection engine. Board analyzers stay display-only behind them. ML is
-  // intentionally left to its own decision_status path; HR is never promoted
-  // here (no per-PA rate input in this feed → stays honestly blocked).
+  // intentionally left to its own decision_status path. HR promotes only when
+  // the fitted model carries at least one confirmed, MLB-ID-matched batter.
   const projections = final.projections ?? null;
   if (projections) {
-    for (const kind of ['spread', 'total', 'yfri', 'ks']) {
+    for (const kind of ['spread', 'total', 'yfri', 'ks', 'hr']) {
       const override = modeledFamilyOverride(kind, projections);
       if (override) families[kind] = { ...families[kind], ...override };
     }

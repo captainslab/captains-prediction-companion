@@ -211,6 +211,12 @@ export function buildPacketMeta({
     game_keys: games.map((g) => g.game_key),
     char_count: charCount,
     has_picks: hasPicks,
+    hr_model: perGamePackets.map((packet) => ({
+      game_key: packet.gameKey,
+      status: packet.hrProjection?.model_status ?? 'MODEL_INSUFFICIENT',
+      ready_players: (packet.hrProjection?.outputs ?? []).filter((row) => row.status === 'ready').length,
+      blocked_reasons: packet.hrProjection?.blocked_reasons ?? [],
+    })),
     dry_run: dryRun,
     generated_utc: new Date().toISOString(),
   };
