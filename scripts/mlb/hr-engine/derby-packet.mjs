@@ -12,7 +12,7 @@ import {
   fixtureDerbyParticipants,
 } from './derby-simulator.mjs';
 
-const FORMAT_SOURCE = 'Wikipedia 2026 Home Run Derby article, reporting Harrigan/MLB.com (June 18, 2026); MLB.com was unavailable from this environment';
+const FORMAT_SOURCE = 'MLB.com: "Changes coming to 2026 Home Run Derby" (June 18, 2026) and "The 2026 Home Run Derby field is complete" (July 11, 2026)';
 
 function number(value) {
   return Number.isFinite(Number(value)) ? String(value) : 'null';
@@ -30,12 +30,19 @@ function renderFigureMap(title, values) {
   return lines;
 }
 
+function participantInputSources(projection) {
+  const sources = [...new Set(Object.values(projection?.participant_models ?? {})
+    .map((model) => String(model?.source_kind ?? '').trim())
+    .filter(Boolean))];
+  return sources.length ? sources.join('; ') : 'UNKNOWN';
+}
+
 function assumptionsItems(generatedUtc) {
   const common = { scope: 'FULL_DAY_PREVIEW', checked_utc: generatedUtc };
   return [
     {
-      ...common, type: 'derby_format', status: 'LOCKED', source_quality: 'B',
-      basis: '2026 format is reported in the supplied event source.', source: FORMAT_SOURCE,
+      ...common, type: 'derby_format', status: 'LOCKED', source_quality: 'A',
+      basis: '2026 format and complete field were directly observed in official MLB.com event coverage.', source: FORMAT_SOURCE,
       value: DERBY_RULES,
     },
     {
@@ -110,6 +117,7 @@ function renderReadyPacket(projection) {
     `simulations: ${projection.simulations}`,
     `data_quality: ${projection.model_data_quality}`,
     `sources: ${FORMAT_SOURCE}`,
+    `participant_input_sources: ${participantInputSources(projection)}`,
     '',
     'EVENT FORMAT',
     `  participants=${projection.format.participants} rounds=${projection.format.rounds} clock=NONE outs=NONE bonus_time=NONE`,
