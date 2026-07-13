@@ -4,6 +4,9 @@ import { assertNoPriceFields } from '../lib/projection-contracts.mjs';
 
 const WINDOWS = Object.freeze(['7d', '30d', 'season']);
 const DAY = 86400000;
+export const NON_BIP_TERMINAL_EVENTS = Object.freeze(new Set([
+  'strikeout', 'strikeout_double_play', 'walk', 'intent_walk', 'hit_by_pitch', 'catcher_interf',
+]));
 
 function number(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -47,12 +50,21 @@ function classifyWindow(rowDate, runDate, seasonStart) {
   return [age < 7 ? '7d' : null, age < 30 ? '30d' : null, 'season'].filter(Boolean);
 }
 
+function eventName(row) {
+  return String(row.events ?? row.event ?? '').trim().toLowerCase();
+}
+
+export function isTerminalPa(row) {
+  return Boolean(eventName(row));
+}
+
 function isHr(row) {
-  return String(row.events ?? row.event ?? '').trim().toLowerCase() === 'home_run';
+  return eventName(row) === 'home_run';
 }
 
 function isBip(row) {
-  return row.launch_speed != null || row.launch_angle != null || row.hit_distance_sc != null || row.hitDistanceSc != null || row.bb_type != null || isHr(row);
+  const event = eventName(row);
+  return Boolean(event) && !NON_BIP_TERMINAL_EVENTS.has(event);
 }
 
 function spray(row, stand) {
@@ -84,7 +96,8 @@ function emptyBucket() {
 }
 
 function addToBucket(bucket, row, stand) {
-  bucket.pa += 1;
+  const terminal = isTerminalPa(row);
+  if (terminal) bucket.pa += 1;
   const hr = isHr(row);
   const bip = isBip(row);
   if (bip) bucket.bip += 1;
@@ -108,7 +121,7 @@ function addToBucket(bucket, row, stand) {
 function addSplit(collection, key, row, stand) {
   if (!collection[key]) collection[key] = { pa: 0, bip: 0, hr: 0, ev: [], hard_hit: 0 };
   const split = collection[key];
-  split.pa += 1;
+  if (isTerminalPa(row)) split.pa += 1;
   if (isBip(row)) split.bip += 1;
   if (isHr(row)) split.hr += 1;
   const ev = number(row.launch_speed ?? row.launchSpeed);

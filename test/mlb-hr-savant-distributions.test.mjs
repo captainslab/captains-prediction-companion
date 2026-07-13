@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBaseballSavantDistributions, fixtureBaseballSavantDistributionEnvelope } from '../scripts/mlb/source-adapters/baseball-savant-distributions.mjs';
+import {
+  buildBaseballSavantDistributions,
+  fixtureBaseballSavantDistributionEnvelope,
+  isTerminalPa,
+} from '../scripts/mlb/source-adapters/baseball-savant-distributions.mjs';
 
 test('fixture distribution envelope is deterministic, compact, and multi-window', () => {
   const first = fixtureBaseballSavantDistributionEnvelope();
@@ -27,7 +31,9 @@ test('Savant rows produce HR/PA, HR/BIP, spray, launch-angle, and distance cover
   assert.equal(result.status, 'ok');
   const season = result.records[0].windows.season;
   assert.equal(season.hr, 1);
+  assert.equal(season.pa, 3);
   assert.equal(season.bip, 3);
+  assert.equal(season.hr_per_pa, 1 / 3);
   assert.equal(season.hr_per_bip, 1 / 3);
   assert.equal(result.records[0].distance_tail.count_ge_400ft, 1);
   assert.equal(result.records[0].spray_distribution.pull + result.records[0].spray_distribution.center + result.records[0].spray_distribution.oppo, 1);
@@ -46,6 +52,59 @@ test('scientific notation parses exactly, null launch angle is not pull-air, and
   assert.equal(record.windows.season.ev_mean, 105);
   assert.equal(record.windows.season.pull_air_rate, 0);
   assert.ok(record.pitch_family_splits.breaking);
+});
+
+test('pitch-level Savant grain counts only terminal rows as plate appearances', () => {
+  assert.equal(isTerminalPa({ events: '' }), false);
+  assert.equal(isTerminalPa({ events: '  ' }), false);
+  assert.equal(isTerminalPa({ events: 'home_run' }), true);
+  const result = buildBaseballSavantDistributions({
+    runDate: '2026-07-13',
+    rows: [
+      { batter: 12, game_pk: 1, at_bat_number: 1, game_date: '2026-07-12', events: '', launch_speed: 90, launch_angle: 10, pitch_type: 'FF' },
+      { batter: 12, game_pk: 1, at_bat_number: 1, game_date: '2026-07-12', events: '  ', launch_speed: 91, launch_angle: 12, pitch_type: 'FF' },
+      { batter: 12, game_pk: 1, at_bat_number: 1, game_date: '2026-07-12', events: 'home_run', launch_speed: 108, launch_angle: 28, pitch_type: 'FF' },
+    ],
+  });
+  const season = result.records[0].windows.season;
+  assert.equal(season.pa, 1);
+  assert.equal(season.bip, 1);
+  assert.equal(season.hr, 1);
+  assert.equal(season.hr_per_pa, 1);
+  assert.equal(season.hr_per_bip, 1);
+});
+
+test('strikeouts and walks are PAs but not BIP', () => {
+  const result = buildBaseballSavantDistributions({
+    runDate: '2026-07-13',
+    rows: [
+      { batter: 13, game_date: '2026-07-12', events: 'strikeout', pitch_type: 'SL' },
+      { batter: 13, game_date: '2026-07-11', events: 'walk', pitch_type: 'FF' },
+      { batter: 13, game_date: '2026-07-10', events: 'home_run', launch_speed: 108, launch_angle: 28, pitch_type: 'FF' },
+    ],
+  });
+  const season = result.records[0].windows.season;
+  assert.equal(season.pa, 3);
+  assert.equal(season.bip, 1);
+  assert.equal(season.hr, 1);
+  assert.equal(season.hr_per_pa, 1 / 3);
+  assert.equal(season.hr_per_bip, 1);
+});
+
+test('pitch-level league HR/PA rate remains in a plausible sanity band', () => {
+  const rows = [];
+  for (let pa = 0; pa < 20; pa += 1) {
+    rows.push(
+      { batter: 14, game_pk: 2, at_bat_number: pa, game_date: '2026-07-12', events: '', launch_speed: 88, launch_angle: 8, pitch_type: 'FF' },
+      { batter: 14, game_pk: 2, at_bat_number: pa, game_date: '2026-07-12', events: '', launch_speed: 92, launch_angle: 14, pitch_type: 'SL' },
+      { batter: 14, game_pk: 2, at_bat_number: pa, game_date: '2026-07-12', events: pa === 0 ? 'home_run' : pa === 18 ? 'strikeout' : pa === 19 ? 'walk' : 'field_out', launch_speed: pa === 0 ? 110 : 95, launch_angle: pa === 0 ? 30 : 10, pitch_type: 'FF' },
+    );
+  }
+  const result = buildBaseballSavantDistributions({ runDate: '2026-07-13', rows });
+  const season = result.records[0].windows.season;
+  assert.equal(season.pa, 20);
+  assert.equal(season.hr, 1);
+  assert.ok(season.hr_per_pa >= 0.01 && season.hr_per_pa <= 0.06);
 });
 
 test('rows before the run-date season floor contribute to no window and are counted as excluded', () => {
