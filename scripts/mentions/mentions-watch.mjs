@@ -220,24 +220,40 @@ function dedupeByTicker(events) {
 // hung socket wedges the whole cron past its hard script timeout. Each source
 // now runs under its own wall-clock deadline with an AbortSignal it threads to
 // fetch: when the budget elapses we abort the source (cancelling open sockets)
-// and skip it, while the surviving sources' results still flow through. A
-// degraded-status artifact records exactly what was skipped and why.
+// and give it a short grace window to return partial results, while the
+// surviving sources' results still flow through. A degraded-status artifact
+// records exactly what was skipped and why.
 
 export const DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS = 20 * 1000;
+export const PARTIAL_GRACE_MS = 3000;
 
 export function discoverySourceTimeoutMs(env = process.env) {
   const seconds = Number(env.MENTIONS_WATCH_DISCOVERY_TIMEOUT_SECONDS);
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_DISCOVERY_SOURCE_TIMEOUT_MS;
 }
 
+export function discoveryPartialGraceMs(env = process.env) {
+  const milliseconds = Number(env.MENTIONS_WATCH_PARTIAL_GRACE_MS);
+  return Number.isFinite(milliseconds) && milliseconds >= 0 ? milliseconds : PARTIAL_GRACE_MS;
+}
+
+function discoveryErrorText(error) {
+  const text = error?.message ? String(error.message) : String(error);
+  return text || 'empty discovery rejection';
+}
+
 // Run one discovery source against a deadline. The source receives an AbortSignal
 // it threads to fetch; on timeout we abort it (cancelling open sockets) and
-// resolve with a degraded marker instead of waiting. Errors are also degraded,
-// never fatal. Returns { label, status: 'ok'|'timeout'|'error', ms, events, error }.
-async function runDiscoverySource(label, fn, timeoutMs) {
+// give it a short grace window to return events collected before the abort.
+// Errors are also degraded, never fatal. Returns { label, status: 'ok'|'partial'|'timeout'|'error', ms, events, error }.
+async function runDiscoverySource(label, fn, timeoutMs, partialGraceMs = PARTIAL_GRACE_MS) {
   const controller = new AbortController();
   const started = Date.now();
   let timer = null;
+  let graceTimer = null;
+  const sourcePromise = Promise.resolve()
+    .then(() => fn(controller.signal))
+    .then((value) => ({ value }), (error) => ({ error }));
   const timeout = new Promise((res) => {
     timer = setTimeout(() => {
       controller.abort();
@@ -246,27 +262,43 @@ async function runDiscoverySource(label, fn, timeoutMs) {
   });
   console.log(`[mentions-watch] discovery source=${label} start (budget=${Math.round(timeoutMs / 1000)}s)`);
   try {
-    const outcome = await Promise.race([
-      Promise.resolve()
-        .then(() => fn(controller.signal))
-        .then((value) => ({ value }), (error) => ({ error })),
-      timeout,
-    ]);
+    const outcome = await Promise.race([sourcePromise, timeout]);
     const ms = Date.now() - started;
     if (outcome.__timedOut) {
-      console.error(`[mentions-watch] discovery source=${label} TIMEOUT after ${ms}ms — skipped (degraded)`);
-      return { label, status: 'timeout', ms, events: [], error: `timed out after ${Math.round(timeoutMs / 1000)}s` };
+      const graceTimeout = new Promise((res) => {
+        graceTimer = setTimeout(() => res({ __graceExpired: true }), partialGraceMs);
+      });
+      const afterAbort = await Promise.race([sourcePromise, graceTimeout]);
+      const graceMs = Date.now() - started;
+      if (!afterAbort.__graceExpired && !('error' in afterAbort)) {
+        const events = Array.isArray(afterAbort.value) ? afterAbort.value : [];
+        if (events.length > 0) {
+          const error = `partial: timed out after ${Math.round(timeoutMs / 1000)}s, returned ${events.length} events collected before abort`;
+          console.error(`[mentions-watch] discovery source=${label} PARTIAL after ${graceMs}ms — budget expired, kept ${events.length} events`);
+          return { label, status: 'partial', ms: graceMs, events, error };
+        }
+      }
+      if (!afterAbort.__graceExpired && 'error' in afterAbort) {
+        controller.abort();
+        const error = discoveryErrorText(afterAbort.error);
+        console.error(`[mentions-watch] discovery source=${label} ERROR after ${graceMs}ms — skipped (degraded): ${error}`);
+        return { label, status: 'error', ms: graceMs, events: [], error };
+      }
+      console.error(`[mentions-watch] discovery source=${label} TIMEOUT after ${graceMs}ms — skipped (degraded)`);
+      return { label, status: 'timeout', ms: graceMs, events: [], error: `timed out after ${Math.round(timeoutMs / 1000)}s` };
     }
-    if (outcome.error) {
+    if ('error' in outcome) {
       controller.abort();
-      console.error(`[mentions-watch] discovery source=${label} ERROR after ${ms}ms — skipped (degraded): ${outcome.error.message}`);
-      return { label, status: 'error', ms, events: [], error: outcome.error.message };
+      const error = discoveryErrorText(outcome.error);
+      console.error(`[mentions-watch] discovery source=${label} ERROR after ${ms}ms — skipped (degraded): ${error}`);
+      return { label, status: 'error', ms, events: [], error };
     }
     const events = Array.isArray(outcome.value) ? outcome.value : [];
     console.log(`[mentions-watch] discovery source=${label} ok in ${ms}ms (mention_events=${events.length})`);
     return { label, status: 'ok', ms, events, error: null };
   } finally {
     if (timer) clearTimeout(timer);
+    if (graceTimer) clearTimeout(graceTimer);
   }
 }
 
@@ -299,6 +331,7 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
   const fetchBroadImpl = discovery.fetchKalshiEvents ?? fetchKalshiEvents;
   const collectAlphaImpl = discovery.collectAlphaMentionIntake ?? collectAlphaMentionIntake;
   const timeoutMs = discovery.timeoutMs ?? discoverySourceTimeoutMs(env);
+  const partialGraceMs = discovery.partialGraceMs ?? discoveryPartialGraceMs(env);
 
   const candidates = [];
   const sources = [];
@@ -308,7 +341,7 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
     const disc = await discoverImpl({ pageFetcher: buildPageFetcherFromEnv(env), signal });
     console.log(`[mentions-watch] discovery sources: scrape=${JSON.stringify(disc?.sources?.scrape ?? {})} series=${JSON.stringify(disc?.sources?.series ?? {})}`);
     return filterMentionEvents(disc?.events ?? []).mentionEvents;
-  }, timeoutMs);
+  }, timeoutMs, partialGraceMs);
   sources.push(scraper);
   candidates.push(...scraper.events);
 
@@ -317,7 +350,7 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
   const broad = await runDiscoverySource('kalshi-broad', async (signal) => {
     const res = await fetchBroadImpl('broad', { signal });
     return filterMentionEvents(res?.events ?? []).mentionEvents;
-  }, timeoutMs);
+  }, timeoutMs, partialGraceMs);
   sources.push(broad);
   candidates.push(...broad.events);
 
@@ -331,7 +364,7 @@ async function discoverCandidates({ stateRoot, date, env, eventsFile, discovery 
       fetchImpl: (url, opts = {}) => fetch(url, { ...opts, signal }),
     });
     return res?.events ?? [];
-  }, timeoutMs);
+  }, timeoutMs, partialGraceMs);
   sources.push(alpha);
   candidates.push(...alpha.events);
 

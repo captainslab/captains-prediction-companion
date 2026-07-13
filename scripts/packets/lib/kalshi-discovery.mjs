@@ -17,6 +17,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
+export const DEFAULT_DISCOVERY_CONCURRENCY = 6;
+export const MAX_DISCOVERY_CONCURRENCY = 12;
 
 export const KALSHI_SOURCES = Object.freeze({
   mentions: {
@@ -200,6 +202,33 @@ export const MENTION_SERIES_PATTERNS = Object.freeze([
   /\bmention\b.*\bearnings\b/i,
 ]);
 
+export function resolveDiscoveryConcurrency(value, {
+  fallback = DEFAULT_DISCOVERY_CONCURRENCY,
+  onInvalid,
+} = {}) {
+  const parsedFallback = Number(fallback);
+  const safeFallback = Number.isFinite(parsedFallback) && parsedFallback >= 1
+    ? Math.min(MAX_DISCOVERY_CONCURRENCY, Math.floor(parsedFallback))
+    : DEFAULT_DISCOVERY_CONCURRENCY;
+  const warn = (used) => onInvalid?.({ provided: value, used });
+
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    warn(safeFallback);
+    return safeFallback;
+  }
+
+  const parsed = (typeof value === 'number' || typeof value === 'string') ? Number(value) : NaN;
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    warn(safeFallback);
+    return safeFallback;
+  }
+  if (parsed > MAX_DISCOVERY_CONCURRENCY) {
+    warn(MAX_DISCOVERY_CONCURRENCY);
+    return MAX_DISCOVERY_CONCURRENCY;
+  }
+  return Math.floor(parsed);
+}
+
 /**
  * Select mention series from a raw /series listing. Category-first, regex
  * augmented. Pure — no I/O. Returns the matching series records unchanged.
@@ -251,10 +280,36 @@ export async function fetchMentionEventsBySeries(options = {}) {
   // Step 2: Filter to mention-related series (category-first, regex-augmented).
   const mentionSeries = selectMentionSeries(allSeries);
 
-  // Step 3: Fetch events for each mention series (no status filter — events have empty status)
+  // Step 3: Fetch events for each mention series (no status filter — events have empty status).
+  // Series are independent, so keep pagination serial within each series while
+  // using a conservative worker pool across series. Results stay in indexed
+  // slots so concurrency cannot change the sequential output order.
   const maxEventPagesPerSeries = options.maxEventPagesPerSeries ?? 2;
-  for (const s of mentionSeries) {
-    if (options.signal?.aborted) break;
+  const warnConcurrency = ({ provided, used }) => {
+    console.warn(`[kalshi-discovery] invalid or excessive concurrency ${String(provided)}; using ${used}`);
+  };
+  const explicitConcurrency = options.concurrency;
+  const hasValidExplicitConcurrency = typeof explicitConcurrency === 'number'
+    && Number.isFinite(explicitConcurrency)
+    && explicitConcurrency >= 1;
+  let concurrency;
+  if (hasValidExplicitConcurrency) {
+    concurrency = resolveDiscoveryConcurrency(explicitConcurrency, { onInvalid: warnConcurrency });
+  } else {
+    const configuredConcurrency = process.env.KALSHI_DISCOVERY_CONCURRENCY;
+    concurrency = configuredConcurrency === undefined
+      ? DEFAULT_DISCOVERY_CONCURRENCY
+      : resolveDiscoveryConcurrency(configuredConcurrency, { onInvalid: warnConcurrency });
+    if (explicitConcurrency !== undefined) {
+      warnConcurrency({ provided: explicitConcurrency, used: concurrency });
+    }
+  }
+  const seriesEventSlots = new Array(mentionSeries.length);
+  let nextSeriesIndex = 0;
+
+  async function scanSeriesAtIndex(index) {
+    const s = mentionSeries[index];
+    const seriesEvents = [];
     let eCursor = '';
     let ePageCount = 0;
     while (ePageCount < maxEventPagesPerSeries) {
@@ -268,12 +323,31 @@ export async function fetchMentionEventsBySeries(options = {}) {
         // Enrich with series metadata for downstream filtering
         ev._discoveredVia = 'series_scan';
         ev._seriesTitle = s.title || '';
-        events.push(ev);
+        seriesEvents.push(ev);
       }
       eCursor = eRes.json.cursor || '';
       ePageCount++;
       if (!eCursor) break;
     }
+    return seriesEvents;
+  }
+
+  async function worker() {
+    while (!options.signal?.aborted) {
+      const index = nextSeriesIndex++;
+      if (index >= mentionSeries.length) break;
+      if (options.signal?.aborted) break;
+      seriesEventSlots[index] = await scanSeriesAtIndex(index);
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, mentionSeries.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  for (const seriesEvents of seriesEventSlots) {
+    if (seriesEvents) events.push(...seriesEvents);
   }
 
   return {

@@ -84,8 +84,8 @@ export function buildPmtAdvisoryContext({
 export function formatPmtAdvisoryContext(context) {
   if (!context) return [];
   const lines = [];
-  lines.push('PMT ADVISORY CONTEXT');
-  lines.push(`source: PMT Trump/mentions playbook @ ${context.source_commit} (advisory only)`);
+  lines.push('ADVISORY CONTEXT');
+  lines.push(`source: Trump/mentions playbook @ ${context.source_commit} (advisory only)`);
   lines.push(`route: ${context.route}${context.route_horizon ? ` (${context.route_horizon})` : ''}`);
   lines.push(`event: ${context.event_label}`);
   lines.push(`event format prior: ${context.event_format_prior}`);
