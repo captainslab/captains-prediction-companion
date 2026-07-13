@@ -33,6 +33,20 @@ test('home run hitter placeholder routes to home_run_hitter', () => {
   assertRouted('Will Placeholder Player hit a home run in Aces vs Bears?', 'home_run_hitter');
 });
 
+test('Derby event markets never fall through to home_run_hitter when title omits home run derby', () => {
+  const titles = [
+    'Will Kyle Schwarber hit the most homers in Round 1?',
+    'Will Bryce Harper hit 20+ HRs in the Derby?',
+    'Longest home run of the night?',
+  ];
+  for (const title of titles) {
+    const result = routeMlbMarket({ market_title: title, event_title: '2026 T-Mobile Derby' });
+    assert.equal(result.route_status, 'OUT_OF_SCOPE');
+    assert.equal(result.market_lane, null);
+    assert.equal(result.candidate_lanes.includes('home_run_hitter'), false);
+  }
+});
+
 test('pitcher strikeouts placeholder routes to pitcher_strikeouts', () => {
   assertRouted('Will Placeholder Pitcher record over 5.5 strikeouts?', 'pitcher_strikeouts');
 });

@@ -58,7 +58,7 @@ test('data quality rejects unknown input fields and invalid stale thresholds', (
 test('regular and Derby adapters retain the exact same shared profile object', () => {
   const shared = profile();
   const regular = buildRegularGameScenario({ power_profile: shared, expected_pa: 4, park: { id: 'P' }, weather: { status: 'complete' }, starter_handedness: 'R' });
-  const derby = buildDerbyScenario({ power_profile: shared, rounds: 3, timer_seconds: 180, swing_count: 40, fatigue: 0.1 });
+  const derby = buildDerbyScenario({ power_profile: shared, rounds: 3, swing_limits: { round_1: 20, round_2: 15, finals: 15 }, fatigue: 0.1 });
   assert.equal(regular.power_profile, shared);
   assert.equal(derby.power_profile, shared);
   assert.equal(regular.status, 'ready');
@@ -68,7 +68,7 @@ test('regular and Derby adapters retain the exact same shared profile object', (
 test('scenario adapters reject the other scenario input family', () => {
   const shared = profile();
   assert.throws(() => buildRegularGameScenario({ power_profile: shared, expected_pa: 4, park: {}, weather: {}, starter_handedness: 'R', rounds: 3 }));
-  assert.throws(() => buildDerbyScenario({ power_profile: shared, rounds: 3, timer_seconds: 180, swing_count: 40, expected_pa: 4 }));
+  assert.throws(() => buildDerbyScenario({ power_profile: shared, rounds: 3, swing_limits: { round_1: 20, round_2: 15, finals: 15 }, expected_pa: 4 }));
 });
 
 test('missing required inputs produce blocked envelopes without fabricated numbers', () => {
