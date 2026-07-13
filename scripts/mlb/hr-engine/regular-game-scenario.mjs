@@ -2,10 +2,12 @@
 import { assertNoPriceFields } from '../lib/projection-contracts.mjs';
 import { assertKnownFields } from './contracts.mjs';
 import { simulatePaOutcomes } from './monte-carlo.mjs';
+import { buildRegularGamePrediction } from './regular-game-model.mjs';
 
 const REGULAR_FIELDS = Object.freeze([
   'power_profile', 'expected_pa', 'park', 'weather', 'starter_handedness',
   'starter_hand', 'seed', 'simulations', 'lineup_status',
+  'model', 'player', 'candidates', 'pitcher', 'as_of',
 ]);
 
 function blocked(profile, reasons, inputs = {}) {
@@ -19,6 +21,20 @@ function blocked(profile, reasons, inputs = {}) {
 
 export function buildRegularGameScenario(input = {}) {
   assertKnownFields(input, REGULAR_FIELDS, 'regular-game scenario input');
+  if (input.model) {
+    return buildRegularGamePrediction({
+      model: input.model,
+      player: input.player,
+      candidates: input.candidates,
+      pitcher: input.pitcher,
+      park: input.park,
+      weather: input.weather,
+      lineup_status: input.lineup_status,
+      seed: input.seed,
+      simulations: input.simulations,
+      as_of: input.as_of,
+    });
+  }
   const { power_profile: profile, expected_pa, park, weather, starter_handedness, starter_hand, seed = 'cpc-hr-phase1', simulations = 400, lineup_status = 'confirmed' } = input;
   assertNoPriceFields({ profile, expected_pa, park, weather, starter_handedness, starter_hand, seed, simulations, lineup_status }, 'regular-game scenario input');
   const reasons = [];

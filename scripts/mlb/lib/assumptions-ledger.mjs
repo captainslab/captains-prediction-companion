@@ -252,6 +252,7 @@ export function buildHrWatchEntry({
   source_url = null,
   local_source_ref = null,
   projected_hr_prob = null,
+  checked_utc = null,
 } = {}) {
   if (!isNonEmptyString(player)) {
     throw new Error('HR watch entry requires a non-empty player');
@@ -271,6 +272,7 @@ export function buildHrWatchEntry({
     source,
     source_url,
     local_source_ref,
+    checked_utc,
     source_quality,
   });
   if (!item.supports_evidence) return null;

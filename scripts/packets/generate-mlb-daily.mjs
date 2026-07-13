@@ -41,6 +41,7 @@ import {
   describeTeamRuns,
   describeYrfi,
   describeKs,
+  describeHr,
 } from '../mlb/lib/projection-language.mjs';
 import {
   buildGameProjections,
@@ -222,6 +223,7 @@ function buildPacketAssumptionsLedger({
   scoring = null,
   gamePicks = [],
   statsRecord = null,
+  hrProjection = null,
   sourceRefs = {},
 } = {}) {
   const picks = safeArray(gamePicks.length ? gamePicks : scoring?.picks);
@@ -315,7 +317,22 @@ function buildPacketAssumptionsLedger({
   }
 
   const hrWatchEntries = buildHrWatchlist(
-    picks
+    [
+      ...(hrProjection?.outputs ?? [])
+        .filter((row) => row?.status === 'ready')
+        .map((row) => ({
+          scope,
+          player: row.player?.player_name ?? (row.player?.mlb_id ? `MLB ${row.player.mlb_id}` : null),
+          team: row.player?.team ?? null,
+          game: gameLabel,
+          status: lineupInput,
+          basis: `fitted regular-game HR/PA model; lineup slot ${row.player?.lineup_slot}; ${row.player?.identity_match}`,
+          source: statsSource ?? 'scripts/mlb/hr-engine/artifacts/regular-game-model-2025.json',
+          source_quality: sourceQualityForInputStatus(lineupInput),
+          local_source_ref: `${eventLabel ?? gameId ?? 'game'}:${row.player?.mlb_id ?? 'unknown'}`,
+          projected_hr_prob: row.outputs?.probability_at_least_one_hr ?? null,
+        })),
+      ...picks
       .filter((pick) => pick?.market_lane === 'home_run_hitter')
       .map((pick) => ({
         scope,
@@ -328,6 +345,7 @@ function buildPacketAssumptionsLedger({
         source_quality: sourceQualityForInputStatus(lineupInput),
         local_source_ref: pick?.market_ticker ?? eventLabel ?? gameId ?? null,
       })),
+    ],
     { scope },
   );
 
@@ -768,7 +786,7 @@ function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRe
  * Top Edge / Watchlist / Fades / Blocked + audit pointers). The full per-pick
  * inventory goes to a separate audit artifact, never the packet body.
  */
-export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null, scope = null, sourceRefs = {} }) {
+export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null, scope = null, sourceRefs = {}, hrProjections = [] }) {
   if (!scoring || !Array.isArray(scoring.picks) || !scoring.picks.length) return null;
   const resolvedScope = resolvePacketScope({
     explicit: scope,
@@ -807,7 +825,15 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     gamePicks: scoring.picks,
   });
   const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
-  const text = [header, inputStatusNote, neutralityNote, cleanedBody, packetFooter()].filter(Boolean).join('\n\n');
+  const readyHr = hrProjections.flatMap((projection) => projection?.outputs ?? [])
+    .filter((row) => row?.status === 'ready');
+  const hrSection = [
+    'Anytime-HR Model',
+    ...(readyHr.length
+      ? readyHr.slice(0, 12).map((row) => `  ${row.player?.player_name ?? `MLB ${row.player?.mlb_id}`}: ${(row.outputs.probability_at_least_one_hr * 100).toFixed(1)}% at least one HR; per-PA ${(row.outputs.per_pa_probability * 100).toFixed(2)}%; expected PA ${row.outputs.expected_pa.toFixed(2)}.`)
+      : ['  MODEL_INSUFFICIENT — no confirmed, uniquely matched batter evidence is attached to this slate.']),
+  ].join('\n');
+  const text = [header, inputStatusNote, neutralityNote, cleanedBody, hrSection, packetFooter()].filter(Boolean).join('\n\n');
 
   // Full per-pick inventory -> audit artifact only. Each line carries model and
   // market fields together for routing/audit; pricing here is NOT a score input.
@@ -817,7 +843,11 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     marketType: 'mlb',
     date,
     eventTicker: `MLB-SLATE-${date}`,
-    inventoryLines,
+    inventoryLines: [
+      ...inventoryLines,
+      ...hrProjections.flatMap((projection) => (projection?.outputs ?? []).map((row) =>
+        `HR_MODEL player=${row.player?.player_name ?? row.player?.mlb_id ?? 'UNKNOWN'} status=${row.model_status} any_hr=${row.outputs?.probability_at_least_one_hr ?? 'MODEL_INSUFFICIENT'} blocked=${row.blocked_reasons?.join('|') || 'none'}`)),
+    ],
     meta: { summary_counts: JSON.stringify(scoring.summaryCounts ?? {}), board_rows: boardRows.length, total_rows: allRows.length },
   });
   const assumptionsLedger = buildPacketAssumptionsLedger({
@@ -825,6 +855,9 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     date,
     scoring,
     gamePicks: scoring.picks,
+    hrProjection: {
+      outputs: hrProjections.flatMap((projection) => projection?.outputs ?? []),
+    },
     sourceRefs: {
       scoring: sourceRefs.scoring ?? scoring.source ?? null,
       event: sourceRefs.event ?? scoring.source ?? null,
@@ -957,7 +990,7 @@ export function extractGames(paths = []) {
 // outputs: with no model outputs available the contracts return blocked /
 // provisional, and the language layer states that honestly. This is the wire
 // that lets real model outputs flow the moment they exist.
-export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = null, leagueRPG = null } = {}) {
+export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = null, leagueRPG = null, projections = null } = {}) {
   const picks = Array.isArray(gamePicks) ? gamePicks : [];
   const as_of = `${date || 'unknown-date'}T00:00:00Z`;
   const FOOTER = 'Projection layer only — model outputs feed this read; no market signal does.';
@@ -987,7 +1020,7 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
 
   // ---- Real projections when a public-stats record matched this game ----
   if (statsRecord) {
-    const proj = buildGameProjections({ record: statsRecord, leagueRPG, as_of, lineup_status, weather_status });
+    const proj = projections ?? buildGameProjections({ record: statsRecord, leagueRPG, as_of, lineup_status, weather_status });
     const apName = statsRecord.away_pitcher?.name || `${away} starter`;
     const hpName = statsRecord.home_pitcher?.name || `${home} starter`;
     return [
@@ -1000,6 +1033,7 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
       describeYrfi(proj.yrfi),
       describeKs(proj.ks_away, apName),
       describeKs(proj.ks_home, hpName),
+      describeHr(proj.hr),
       FOOTER,
     ];
   }
@@ -1020,6 +1054,7 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
     describeTeamRuns(score, 'away', away),
     describeYrfi(yrfi),
     describeKs(ks),
+    describeHr({ status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'], outputs: [] }),
     FOOTER,
   ];
 }
@@ -1048,19 +1083,19 @@ export function buildKalshiGamePacket({
     perGame: true,
   });
   const lines = [];
+  const packetStatusSnapshot = derivePacketStatusSnapshot({ gamePicks, statsRecord });
+  const packetProjections = statsRecord
+    ? buildGameProjections({
+      record: statsRecord,
+      leagueRPG,
+      as_of: `${date || 'unknown-date'}T00:00:00Z`,
+      lineup_status: packetStatusSnapshot.lineup_status,
+      weather_status: packetStatusSnapshot.weather_status,
+    })
+    : null;
 
   if (hasComposite) {
     const read = classifyGamePacketRead(gamePicks, event, { hasModelProjection: Boolean(statsRecord) });
-    const statusSnapshot = derivePacketStatusSnapshot({ gamePicks, statsRecord });
-    const projections = statsRecord
-      ? buildGameProjections({
-        record: statsRecord,
-        leagueRPG,
-        as_of: `${date || 'unknown-date'}T00:00:00Z`,
-        lineup_status: statusSnapshot.lineup_status,
-        weather_status: statusSnapshot.weather_status,
-      })
-      : null;
     lines.push('TLDR');
     lines.push(`  Call: ${read.call}.`);
     lines.push(`  Why: ${read.reason}.`);
@@ -1072,7 +1107,7 @@ export function buildKalshiGamePacket({
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
     lines.push('Event Preview / Storyline');
-    for (const storyLine of buildGamePreviewStory({ event, statsRecord, read, projections })) {
+    for (const storyLine of buildGamePreviewStory({ event, statsRecord, read, projections: packetProjections })) {
       lines.push(`  ${storyLine}`);
     }
     lines.push('');
@@ -1097,7 +1132,7 @@ export function buildKalshiGamePacket({
   lines.push('');
   lines.push('Game Model Results');
   lines.push('');
-  for (const l of buildProjectionFirstBlock({ date, gamePicks, statsRecord, leagueRPG })) lines.push(l);
+  for (const l of buildProjectionFirstBlock({ date, gamePicks, statsRecord, leagueRPG, projections: packetProjections })) lines.push(l);
   lines.push('');
   lines.push(renderGamePacketSourceLedger({ sourceRefs, gamePicks, statsRecord }));
   lines.push('');
@@ -1112,6 +1147,10 @@ export function buildKalshiGamePacket({
   inventoryLines.push(`series_ticker: ${s.series}`);
   inventoryLines.push(`market_count: ${s.marketCount}`);
   inventoryLines.push(`close_time_utc: ${s.close}`);
+  inventoryLines.push(`hr_model_status: ${packetProjections?.hr?.model_status ?? 'MODEL_INSUFFICIENT'}`);
+  for (const row of packetProjections?.hr?.outputs ?? []) {
+    inventoryLines.push(`hr_model_player: ${row.player?.player_name ?? row.player?.mlb_id ?? 'UNKNOWN'} | status=${row.model_status} | any_hr=${row.outputs?.probability_at_least_one_hr ?? 'MODEL_INSUFFICIENT'}`);
+  }
   inventoryLines.push('');
   inventoryLines.push('markets:');
   for (const l of block.lines) inventoryLines.push(l);
@@ -1137,6 +1176,7 @@ export function buildKalshiGamePacket({
     gameId: statsRecord?.game_pk ?? s.ticker,
     gamePicks,
     statsRecord,
+    hrProjection: packetProjections?.hr ?? null,
     sourceRefs: {
       event: sourceRefs.event ?? sourcePath ?? null,
       scoring: sourceRefs.scoring ?? sourcePath ?? null,
@@ -1160,6 +1200,7 @@ export function buildKalshiGamePacket({
     missingStrikeCount: block.missingStrikeCount,
     missingMarkets: block.missingMarkets,
     assumptionsLedger,
+    hrProjection: packetProjections?.hr ?? null,
   };
 }
 
@@ -1235,6 +1276,13 @@ async function main() {
   // Public-stats projection inputs (price-free). Drives real model-layer reads.
   const statsRecords = loadStatsRecords(opts.stateRoot, opts.date);
   const leagueRPG = leagueRunsPerGame(statsRecords);
+  const slateHrProjections = statsRecords.map((record) => buildGameProjections({
+    record,
+    leagueRPG,
+    as_of: `${opts.date}T00:00:00Z`,
+    lineup_status: record?.lineup_status === 'confirmed' ? 'confirmed' : 'unconfirmed',
+    weather_status: record?.weather_status ?? null,
+  }).hr);
 
   const discovery = await fetchKalshiEvents('mlb');
   const dateFilter = filterByEventDate(opts.date, { windowDays: 0, allowUndated: false });
@@ -1280,6 +1328,7 @@ async function main() {
       sourceRefs: {
         scoring: scoring.source,
       },
+      hrProjections: slateHrProjections,
     });
     if (slate) {
       const invW = writeAudit(dir, inventoryName, slate.inventoryText, {
@@ -1296,6 +1345,8 @@ async function main() {
         inventory_artifact: invW.txtPath ?? `${inventoryName}.txt`,
         scoring_source: scoring.source,
         research_prime: primeMeta,
+        hr_model_ready_players: slateHrProjections.flatMap((projection) => projection?.outputs ?? []).filter((row) => row.status === 'ready').length,
+        hr_model_market_inputs_used: false,
       });
       items.push({ name: 'mlb-daily-board', ...w });
       const assumptionsPath = writeScopedLedger(opts.stateRoot, opts.date, slateScope, slate.assumptionsLedger);
@@ -1371,6 +1422,9 @@ async function main() {
         has_composite: Array.isArray(gamePicks) && gamePicks.length > 0,
         kalshi_discovery: kalshiSummary,
         research_prime: primeMeta,
+        hr_model_status: built.hrProjection?.model_status ?? 'MODEL_INSUFFICIENT',
+        hr_model_ready_players: (built.hrProjection?.outputs ?? []).filter((row) => row.status === 'ready').length,
+        hr_model_market_inputs_used: false,
       });
       items.push({ name: ticker, ...w });
       const assumptionsPath = writeScopedLedger(opts.stateRoot, opts.date, gameScope, built.assumptionsLedger, {

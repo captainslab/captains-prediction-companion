@@ -113,8 +113,10 @@ test('confirmed lineup yields real numeric projections for ML/total/team/YRFI/Ks
   assert.ok(distributionFloorMean(p.ks_away.outputs.distribution) > 4, 'projected Ks');
   assert.ok(p.ks_away.outputs.derived_probs.over_5_5 > 0 && p.ks_away.outputs.derived_probs.over_5_5 < 1);
 
-  // HR is intentionally removed from the packet path until the build is ready.
-  assert.equal(p.hr, null);
+  // HR is wired and fails closed until batter-level lineup evidence arrives.
+  assert.equal(p.hr.status, 'blocked');
+  assert.equal(p.hr.model_status, 'MODEL_INSUFFICIENT');
+  assert.ok(p.hr.blocked_reasons.length > 0);
 });
 
 test('unconfirmed lineup: ML/total/YRFI render provisionally, Ks/HR block', () => {
@@ -125,7 +127,8 @@ test('unconfirmed lineup: ML/total/YRFI render provisionally, Ks/HR block', () =
   assert.ok(typeof p.yrfi.outputs.yrfi_prob === 'number');
   // Ks blocked: opponent lineup unconfirmed.
   assert.equal(p.ks_away.status, 'blocked');
-  assert.equal(p.hr, null);
+  assert.equal(p.hr.status, 'blocked');
+  assert.equal(p.hr.model_status, 'MODEL_INSUFFICIENT');
 });
 
 test('missing team stats → no fabricated outputs (score blocked/empty, not invented)', () => {

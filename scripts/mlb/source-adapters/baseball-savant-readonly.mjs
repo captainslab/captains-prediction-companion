@@ -58,7 +58,7 @@ function shiftYmd(ymd, deltaDays) {
   return shifted.toISOString().slice(0, 10);
 }
 
-function buildStatcastCsvUrl(dayYmd) {
+export function buildStatcastCsvUrl(dayYmd) {
   const url = new URL(BASEBALL_SAVANT_STATCAST_CSV_URL);
   url.searchParams.set('all', 'true');
   url.searchParams.set('type', 'details');
@@ -116,7 +116,7 @@ function readMlbGamesFromDiscovery(filePath) {
   }
 }
 
-function parseCsv(text) {
+export function parseStatcastCsv(text) {
   const rows = [];
   const body = String(text ?? '').trim();
   if (!body) return { headers: [], rows: [] };
@@ -188,7 +188,7 @@ function truthyCsvValue(value) {
 }
 
 function csvDayRows(csvText, dayYmd) {
-  const { headers, rows } = parseCsv(csvText);
+  const { headers, rows } = parseStatcastCsv(csvText);
   const errorColumns = headers.filter((header) => /^(?:error|errors?)$/i.test(header) || /error/i.test(header));
   const rowErrors = rows
     .flatMap((row) => errorColumns.map((col) => String(row[col] ?? '').trim()))
