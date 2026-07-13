@@ -74,6 +74,26 @@ test('pitch-level Savant grain counts only terminal rows as plate appearances', 
   assert.equal(season.hr_per_bip, 1);
 });
 
+test('non-terminal foul contact is excluded from BBE rates and Savant zone 6 counts as a barrel', () => {
+  const result = buildBaseballSavantDistributions({
+    runDate: '2026-07-13',
+    rows: [
+      { batter: 15, game_date: '2026-07-12', events: '', description: 'foul', launch_speed: 120, launch_angle: 45, launch_speed_angle: '6', stand: 'L', pitch_type: 'FF' },
+      { batter: 15, game_date: '2026-07-12', events: 'field_out', launch_speed: 100, launch_angle: 20, launch_speed_angle: '6', hc_x: 150, stand: 'L', pitch_type: 'FF' },
+      { batter: 15, game_date: '2026-07-11', events: 'field_out', launch_speed: 90, launch_angle: 40, launch_speed_angle: '3', hc_x: 100, stand: 'L', pitch_type: 'SL' },
+    ],
+  });
+  const record = result.records[0];
+  const season = record.windows.season;
+  assert.equal(season.pa, 2);
+  assert.equal(season.bip, 2);
+  assert.equal(season.ev_distribution.max, 100);
+  assert.equal(record.rates.barrel_rate, 0.5);
+  assert.equal(record.rates.hard_hit_rate, 0.5);
+  assert.equal(record.rates.fly_ball_rate, 0.5);
+  assert.ok(record.rates.fly_ball_rate <= 1);
+});
+
 test('strikeouts and walks are PAs but not BIP', () => {
   const result = buildBaseballSavantDistributions({
     runDate: '2026-07-13',

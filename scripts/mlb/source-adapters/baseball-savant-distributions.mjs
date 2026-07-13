@@ -67,6 +67,13 @@ function isBip(row) {
   return Boolean(event) && !NON_BIP_TERMINAL_EVENTS.has(event);
 }
 
+function isBarrel(row) {
+  const explicit = String(row.barrel ?? row.is_barrel ?? row.isBarrel ?? '').trim().toLowerCase();
+  if (/^(1|true|t|yes|barrel)$/.test(explicit)) return true;
+  // Savant documents launch_speed_angle zone 6 as Barrel.
+  return number(row.launch_speed_angle ?? row.launchSpeedAngle) === 6;
+}
+
 function spray(row, stand) {
   const explicit = String(row.spray ?? row.hit_location ?? '').trim().toLowerCase();
   if (['pull', 'center', 'oppo'].includes(explicit)) return explicit;
@@ -102,6 +109,15 @@ function addToBucket(bucket, row, stand) {
   const bip = isBip(row);
   if (bip) bucket.bip += 1;
   if (hr) bucket.hr += 1;
+  if (terminal) {
+    const hand = String(row.stand ?? row.batter_hand ?? stand ?? '').toUpperCase();
+    if (hand) addSplit(bucket.hands, hand, row);
+    const family = pitchFamily(row);
+    if (family) addSplit(bucket.pitches, family, row);
+  }
+  // Pitch-level Savant rows can carry contact metrics on fouls. Statcast BBE
+  // distributions include only batted balls that produce a terminal result.
+  if (!bip) return;
   const ev = number(row.launch_speed ?? row.launchSpeed);
   const la = number(row.launch_angle ?? row.launchAngle);
   const distance = number(row.hit_distance_sc ?? row.hitDistanceSc);
@@ -109,21 +125,20 @@ function addToBucket(bucket, row, stand) {
   if (la != null) { bucket.launch_angles.push(la); if (la >= 8 && la <= 32) bucket.sweet_spot += 1; }
   if (distance != null) bucket.distances.push(distance);
   if (['fly_ball', 'flyball'].includes(String(row.bb_type ?? '').toLowerCase()) || (la != null && la >= 25)) bucket.fly_ball += 1;
-  if (String(row.barrel ?? row.is_barrel ?? row.isBarrel ?? '').toLowerCase().match(/^(1|true|t|yes|barrel)$/)) bucket.barrels += 1;
+  if (isBarrel(row)) bucket.barrels += 1;
   const sprayType = spray(row, stand);
   if (sprayType) { bucket.spray[sprayType] += 1; if (sprayType === 'pull' && la != null && la >= 25) bucket.pull_air += 1; }
-  const hand = String(row.stand ?? row.batter_hand ?? stand ?? '').toUpperCase();
-  if (hand) addSplit(bucket.hands, hand, row, stand);
-  const family = pitchFamily(row);
-  if (family) addSplit(bucket.pitches, family, row, stand);
 }
 
-function addSplit(collection, key, row, stand) {
+function addSplit(collection, key, row) {
+  if (!isTerminalPa(row)) return;
   if (!collection[key]) collection[key] = { pa: 0, bip: 0, hr: 0, ev: [], hard_hit: 0 };
   const split = collection[key];
-  if (isTerminalPa(row)) split.pa += 1;
-  if (isBip(row)) split.bip += 1;
+  split.pa += 1;
+  const bip = isBip(row);
+  if (bip) split.bip += 1;
   if (isHr(row)) split.hr += 1;
+  if (!bip) return;
   const ev = number(row.launch_speed ?? row.launchSpeed);
   if (ev != null) { split.ev.push(ev); if (ev >= 95) split.hard_hit += 1; }
 }
@@ -159,7 +174,7 @@ function summarizeWindow(bucket) {
     spray_distribution: {
       pull: ratio(bucket.spray.pull, sprayTotal), center: ratio(bucket.spray.center, sprayTotal), oppo: ratio(bucket.spray.oppo, sprayTotal),
     },
-    barrel_rate: ratio(bucket.barrels, bucket.pa), hard_hit_rate: ratio(bucket.hard_hit, bucket.ev.length),
+    barrel_rate: ratio(bucket.barrels, bucket.ev.length), hard_hit_rate: ratio(bucket.hard_hit, bucket.ev.length),
     sweet_spot_rate: ratio(bucket.sweet_spot, bucket.launch_angles.length), fly_ball_rate: ratio(bucket.fly_ball, bucket.bip), pull_air_rate: ratio(bucket.pull_air, bucket.bip),
   };
 }
