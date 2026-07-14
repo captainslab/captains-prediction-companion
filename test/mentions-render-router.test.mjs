@@ -339,7 +339,7 @@ test('fast read uses the rendered tier, not the summary, and research gaps sort 
   input.summary = { ...input.summary, best_posture: 'STRONG YES', source_backed_count: 0 };
   const text = renderMentionPacket(input, { generatedAtUtc: NOW });
   const fastRead = text.split('2. TOP YES CASE')[0];
-  assert.ok(fastRead.includes('best tier RESEARCH GAP'));
+  assert.ok(fastRead.includes('RESEARCH GAP'));
   assert.ok(!fastRead.includes('STRONG YES'), 'pre-cap summary never overrides the rendered tier');
 
   const gapInput = builtInput({ sourceBacked: true });

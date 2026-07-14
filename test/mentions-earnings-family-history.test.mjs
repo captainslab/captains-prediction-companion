@@ -58,6 +58,10 @@ function event() {
     series_ticker: 'KXEARNINGSMENTIONJPM',
     title: 'JPMorgan Chase & Co. earnings call',
     sub_title: 'What will JPMorgan mention on its earnings call?',
+    event_url: 'https://kalshi.com/events/KXEARNINGSMENTIONJPM-26AUG26',
+    event_time_utc: '2026-08-26T15:00:00Z',
+    settlement_source_link: 'https://www.jpmorganchase.com/ir/quarterly-earnings',
+    research_timestamp: '2026-08-01T00:00:00Z',
   };
 }
 
@@ -394,8 +398,8 @@ test('thin family cap recomputes posture, status, confidence, and analysis from 
   assert.equal(row.composite_score, 64);
   assert.equal(row.composite_posture, 'LEAN');
   assert.equal(row.edge_status, 'LEAN');
-  assert.equal(row.confidence, 64);
-  assert.match(row.analysis, /adjusted raw model score 85 to 64/);
+  assert.equal(row.confidence, 'medium');
+  assert.match(row.analysis, /CPC YES SCORE: 64\/100.*thin cross-company earnings family sample/i);
   const packet = buildKalshiEventPacket({
     date: '2026-08-01',
     event: { ...event(), markets: [composite.market ?? {
@@ -415,8 +419,8 @@ test('thin family cap recomputes posture, status, confidence, and analysis from 
     sourceUrl: '/tmp/earnings.json',
     earningsFamilyHistory: familyHistory({ word: { n: 3, hits: 3, misses: 0 } }),
   });
-  assert.match(packet.text, /#1 word — 64 — WEAK YES/);
-  assert.doesNotMatch(packet.text, /#1 word — 64 — STRONG YES/);
+  assert.match(packet.text, /#1 word — CPC YES SCORE: 64\/100 — WEAK YES/);
+  assert.doesNotMatch(packet.text, /#1 word — CPC YES SCORE: 64\/100 — STRONG YES/);
   assert.equal(packet.compositeSummary.best_score, 64);
   assert.equal(packet.compositeSummary.best_posture, 'LEAN');
 });
@@ -474,7 +478,7 @@ test('family n<2 remains a source gap and keeps the PR#53 cap in the rendered pa
   assert.match(built.text, /SOURCE GAPS/);
   assert.match(built.text, /no earnings family history with n>=2/);
   assert.match(built.text, /same-company settled history absent/);
-  assert.match(built.text, /#1 word — 64 — WEAK YES/);
+  assert.match(built.text, /#1 word — CPC YES SCORE: 64\/100 — WEAK YES/);
 });
 
 test('failed family scan renders lookup failure as unavailable, never no history', () => {
@@ -601,6 +605,8 @@ test('earnings pipeline lazily fetches family history once and renders the compo
       {
         ...earningsEvent,
         event_ticker: 'KXEARNINGSMENTIONJPM-26AUG27',
+        event_time_utc: '2026-08-27T15:00:00Z',
+        event_url: 'https://kalshi.com/events/KXEARNINGSMENTIONJPM-26AUG27',
         markets: [{ ...earningsEvent.markets[0], ticker: 'KXEARNINGSMENTIONJPM-26AUG27-TARIFFS' }],
       },
     ],

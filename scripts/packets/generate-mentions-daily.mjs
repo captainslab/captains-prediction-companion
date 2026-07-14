@@ -62,10 +62,8 @@ import {
   formatAlphaIntakeSummary,
 } from '../mentions/alpha-intake.mjs';
 import {
-  buildDecisionRow,
   buildInventoryArtifact,
   EDGE_STATUS,
-  CONFIDENCE,
 } from '../shared/decision-packet.mjs';
 import {
   runHermesChat,
@@ -121,6 +119,11 @@ import { buildSportsGameContext } from '../mentions/sports-game-context.mjs';
 import {
   buildPmtAdvisoryContext,
 } from '../mentions/pmt-advisory-context.mjs';
+import {
+  buildCanonicalMentionIdentity,
+  validateCanonicalMentionIdentity,
+  assertPriceBlind,
+} from '../mentions/event-integrity.mjs';
 
 const PACKET_TYPE = 'mentions-daily';
 // Normal cron path is today-only: window 0 keeps events whose derived date is
@@ -270,37 +273,6 @@ function firstLayerRecordMap(...carriers) {
   return {};
 }
 
-function dollarsToCents(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.round(n * 100) : null;
-}
-
-function numericOrNull(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function marketContextFromMarket(market = {}) {
-  const yesBid = dollarsToCents(market.yes_bid_dollars);
-  const yesAsk = dollarsToCents(market.yes_ask_dollars);
-  const noBid = dollarsToCents(market.no_bid_dollars);
-  const noAsk = dollarsToCents(market.no_ask_dollars);
-  const last = dollarsToCents(market.last_price_dollars);
-  const spread = yesBid !== null && yesAsk !== null ? yesAsk - yesBid : null;
-  return {
-    yes_bid_cents: yesBid,
-    yes_ask_cents: yesAsk,
-    no_bid_cents: noBid,
-    no_ask_cents: noAsk,
-    last_trade_price_cents: last,
-    spread_cents: spread,
-    volume: numericOrNull(market.volume_fp),
-    open_interest: numericOrNull(market.open_interest_fp),
-  };
-}
-
 function strikeWordFromMarket(market = {}) {
   const custom = market.custom_strike;
   if (typeof custom === 'string' && custom.trim()) return custom.trim();
@@ -423,7 +395,7 @@ function applyEarningsPostureHint(posture, hint) {
 function postureFromScore(score, result) {
   const scoreableLayersPresent = Array.isArray(result?.evidence_ledger)
     ? result.evidence_ledger.filter((layer) => layer?.present && layer.category !== 'event_proximity').length
-    : 0;
+    : Math.max(0, Number(result?._meta?.layers_present ?? 0) - (Number(result?._meta?.event_proximity_present ?? 0) || 0));
   if (scoreableLayersPresent === 0 || score === null) return 'NO_CLEAR_PICK';
   if (scoreableLayersPresent === 1) return score >= 65 ? 'LEAN' : 'WATCH';
   if (scoreableLayersPresent === 2) return score >= 70 ? 'EVIDENCE_LEAN' : score >= 55 ? 'LEAN' : 'WATCH';
@@ -723,6 +695,27 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   ) {
     layerRecords = { ...(layerRecords ?? {}), historical_tendency: earningsFamilyHistoryLayer };
   }
+  const canonicalHistory = settledHistory
+    ? settledHistory
+    : earningsFamilyEvidence
+      ? {
+        evidence_class: 'earnings_family_history',
+        status: earningsFamilyEvidence.tier === 'lookup_failed' ? 'failure' : earningsFamilyEvidence.tier === 'none' ? 'verified_zero' : 'present',
+        match_tier: earningsFamilyEvidence.tier,
+        sample_size: earningsFamilyEvidence.n ?? 0,
+        hits: earningsFamilyEvidence.hits ?? 0,
+        misses: earningsFamilyEvidence.misses ?? 0,
+        hit_rate: earningsFamilyEvidence.hit_rate ?? null,
+        route: route?.route ?? null,
+        entity: route?.entity ?? null,
+        horizon: route?.horizon ?? null,
+      }
+      : {
+        evidence_class: 'settled_history',
+        status: historyStoreStatus === 'read_error' ? 'failure' : historyStoreStatus === 'store_missing' ? 'unavailable' : 'verified_zero',
+        match_tier: 'none', sample_size: 0, hits: 0, misses: 0, hit_rate: null,
+        route: route?.route ?? null, entity: route?.entity ?? null, horizon: route?.horizon ?? null,
+      };
   let result;
   let researchScoreError = null;
   const researchInput = market ?? legacy ?? {};
@@ -742,7 +735,6 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
       profile: profileResolution.profile,
       layerDefs: profileConfig.layerDefs,
       layerRecords,
-      marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
       researchScore: researchScoreInput,
     });
   } catch (err) {
@@ -759,7 +751,6 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
       top_supporting_layers: [],
       missing_layers: [{ category: 'research_score', label: 'Research score', missing_note: researchScoreError }],
       evidence_ledger: [],
-      market_context: null,
       reasoning_summary: `NO_CLEAR_PICK — malformed research score blocked this strike: ${researchScoreError}`,
       _meta: { layers_present: 0, layers_total: profileConfig.layerDefs.length, research_quality: 'invalid' },
     };
@@ -805,11 +796,13 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
 
   return {
     market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
+    full_strike_text: market?.title ?? legacy?.target_phrase ?? targetMention,
     profile_basis: profileResolution.basis,
     research_route: route?.route ?? null,
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    route_event_format: route?.event_format ?? null,
     market_type: lexicalGate.lexical_result?.market_type ?? null,
     required_count: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) ? Number(lexicalGate.lexical_result.required_count) : null,
     repeat_requirement: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) && Number(lexicalGate.lexical_result.required_count) > 1
@@ -819,6 +812,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
       market ? targetMentionFromMarket(market) : (legacy?.target_phrase ?? legacy?.target_mention ?? '')
     ),
     settled_history: settledHistory,
+    canonical_history: canonicalHistory,
     history_match_tier: historyMatch?.match_tier ?? null,
     history_sample_size: historyMatch?.sample_size ?? null,
     history_hits: historyMatch?.hits ?? null,
@@ -893,7 +887,6 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     top_supporting_layers: [],
     missing_layers: [],
     source_notes: [],
-    market_context: null,
     evidence_ledger: [],
     reasoning_summary: `NO_CLEAR_PICK — lexical gate ${decision} (${blockReasons.join(', ') || 'rules unclear'}); market blocked before scoring.`,
     lexical_blocked: true,
@@ -912,6 +905,7 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     route_basis: route?.basis ?? null,
     route_entity: route?.entity ?? null,
     route_horizon: route?.horizon ?? null,
+    route_event_format: route?.event_format ?? null,
     market_type: lexicalGate.lexical_result?.market_type ?? null,
     required_count: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) ? Number(lexicalGate.lexical_result.required_count) : null,
     repeat_requirement: Number.isFinite(Number(lexicalGate.lexical_result?.required_count)) && Number(lexicalGate.lexical_result.required_count) > 1
@@ -1075,6 +1069,7 @@ export function computeEvidenceAvailability(composite) {
   const kalshiNativeN = nativeRaw == null ? null : Number(nativeRaw);
   const hasNative = Number.isFinite(kalshiNativeN) && kalshiNativeN >= 2;
   const sh = composite?.settled_history ?? null;
+  const canonical = composite?.canonical_history ?? null;
   const hasSettledHistory = sh?.usable === true;
   const storeStatus = composite?.history_store_status ?? null;
   const scanOk = composite?.kalshi_scan_ok === true;
@@ -1083,7 +1078,15 @@ export function computeEvidenceAvailability(composite) {
   const scanRan = scanOk && Number.isFinite(eventsScanned) && eventsScanned > 0;
 
   let settledStatus;
-  if (hasNative) {
+  if (canonical?.status === 'failure') {
+    settledStatus = 'error';
+  } else if (canonical?.status === 'unavailable') {
+    settledStatus = 'unavailable';
+  } else if (canonical?.status === 'verified_zero') {
+    settledStatus = 'none_for_series';
+  } else if (canonical?.status === 'present') {
+    settledStatus = Number(canonical.sample_size) >= 2 ? 'present' : 'unavailable';
+  } else if (hasNative) {
     settledStatus = 'present';
   } else if (hasSettledHistory) {
     settledStatus = 'present';
@@ -1139,9 +1142,9 @@ const NO_HISTORY_CONFIDENCE_CAP_REASON =
   'current-context-only evidence: no settled comparables and no transcript word-match; score capped below STRONG YES';
 
 /**
- * Convert one mention composite (model) + its market context into a shared
- * decision row. Market price lives only in the `market` half and never enters
- * the composite score.
+ * Convert one mention composite into a model-only decision row. Display-only
+ * quotes are attached later by render-mention-packet.mjs after this row is
+ * frozen and hashed.
  *
  * HARD RULE: when the composite has zero source-backed layers
  * (layers_present === 0) the row is BLOCKED_SOURCE_LAYER_MISSING — a research
@@ -1154,23 +1157,12 @@ export function mentionCompositeToDecisionRow(composite) {
   const meta = r._meta ?? {};
   const layersPresent = Number(meta.layers_present ?? 0);
   const layersTotal = Number(meta.layers_total ?? 0);
-  const mc = r.market_context ?? {};
   const lexical = composite?.lexical_gate?.lexical_result ?? null;
   const marketType = lexical?.market_type ?? null;
   const requiredCount = Number.isFinite(Number(lexical?.required_count)) ? Number(lexical.required_count) : null;
   const ladder = composite?.source_ladder ?? null;
   const qualificationStatus = composite?.source_ladder?.qualification_status ?? null;
   const qualificationPostureCap = composite?.source_ladder?.posture_cap ?? null;
-
-  // market half (cents from composite core; buildDecisionRow treats >1.5 as cents)
-  const market = {
-    yes_bid: mc.yes_bid_cents ?? null,
-    yes_ask: mc.yes_ask_cents ?? null,
-    last_price: mc.last_trade_price_cents ?? null,
-    volume: mc.volume ?? null,
-    open_interest: mc.open_interest ?? null,
-    price_units: 'cents',
-  };
 
   const missingCats = Array.isArray(r.missing_layers) ? r.missing_layers.map((l) => l.category) : [];
   const topLayers = Array.isArray(r.top_supporting_layers) ? r.top_supporting_layers.map((l) => l.category) : [];
@@ -1222,7 +1214,7 @@ export function mentionCompositeToDecisionRow(composite) {
       ? `research did not run or returned no usable evidence for this event (source_status=${composite?.source_status})`
       : `no usable evidence channels present`;
     blocker = `${reasonCode}: no usable evidence channels for "${target}" (${why})`;
-    analysis = `Market priced; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a rated view or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
+    analysis = `Contract exists; mention composite has ${layersPresent}/${layersTotal} evidence channels and no usable evidence beyond schedule context for "${target}". Not a rated view or a pass — research gap (${why}). Missing: ${missingCats.join(', ') || 'all evidence channels'}.`;
     trigger = {
       price: null,
         event: `run mentions research for "${target}" (transcripts > quotes > context), then re-score`,
@@ -1314,43 +1306,79 @@ export function mentionCompositeToDecisionRow(composite) {
     }
   }
 
-  const row = buildDecisionRow({
-    marketTicker: composite?.market_ticker ?? 'MISSING',
-    sideTarget: target,
-    marketType: `mention_${r.profile ?? 'unknown'}`,
-    settlementSummary: 'Exact-string mention settlement per Kalshi listing — verify wording before acting.',
-    composite: {
-      score: compositeScore,
-      posture: postureFinal,
-      layersPresent,
-      layersTotal,
-      topEvidenceLayers: topLayers,
-      missingLayers: missingCats,
-      // composite_score is conviction, NOT a probability -> no modelProbability.
-    },
-    market,
-    confidence: layersPresent >= Math.ceil(layersTotal * 0.5) && layersTotal > 0
-      ? CONFIDENCE.MEDIUM
-      : CONFIDENCE.LOW,
-    analysis,
-    trigger,
-    statusOverride,
+  // Final model-only row. This intentionally does not call the shared
+  // market/edge row builder: quote fields must not exist during decision-row
+  // construction. The score is the sole input to final posture, status,
+  // confidence, explanation, tier, and downstream ranking.
+  const finalScore = compositeScore === null || compositeScore === undefined
+    ? null
+    : Math.max(0, Math.min(100, Math.round(Number(compositeScore))));
+  if (finalScore !== null && !Number.isFinite(finalScore)) {
+    throw new Error(`mention model score is not finite for ${target}`);
+  }
+  if (!(sourceBlocked || noUsableSources || proximityOnly)) {
+    postureFinal = postureFromScore(finalScore, r);
+    if (ladder) postureFinal = applyQualificationCap(postureFinal, ladder).posture;
+    if (earningsHint && !suppressConviction) postureFinal = applyEarningsPostureHint(postureFinal, earningsHint).posture;
+    if (isStub && POSTURE_RANK[postureFinal] > POSTURE_RANK.WATCH) postureFinal = 'WATCH';
+  }
+  const finalStatus = blocker
+    ? EDGE_STATUS.BLOCKED
+    : (MENTION_POSTURE_TO_EDGE[postureFinal] ?? EDGE_STATUS.WATCH);
+  const ratio = layersTotal > 0 ? layersPresent / layersTotal : 0;
+  const finalConfidence = finalScore === null || finalStatus === EDGE_STATUS.BLOCKED
+    ? 'low'
+    : finalScore >= 80 && ratio >= 0.7
+      ? 'high'
+      : finalScore >= 55 && ratio >= 0.4
+        ? 'medium'
+        : 'low';
+  const scoreLabel = finalScore === null ? 'UNAVAILABLE' : `${finalScore}/100`;
+  const finalAnalysis = blocker
+    ? analysis
+    : confidenceCapReason
+      ? `CPC YES SCORE: ${scoreLabel} — final posture ${postureFinal}; ${confidenceCapReason}.`
+      : (proximityOnly ? analysis : `CPC YES SCORE: ${scoreLabel} — final posture ${postureFinal}; ${layersPresent}/${layersTotal} evidence channels present.`);
+  const row = {
+    market_ticker: composite?.market_ticker ?? 'MISSING',
+    side_target: target,
+    full_strike_text: composite?.full_strike_text ?? target,
+    settlement_summary: 'Exact-string mention settlement per Kalshi listing; verify the event rules and source before acting.',
+    composite_score: finalScore,
+    cpc_yes_score: finalScore,
+    composite_posture: postureFinal,
+    edge_status: finalStatus,
+    layers_present: `${presentCats.length}/${layersTotal}`,
+    present_layer_categories: presentCats,
+    layers_total: layersTotal,
+    missing_layers: missingCats,
+    top_evidence_layers: topLayers,
+    confidence: finalConfidence,
+    analysis: finalAnalysis,
+    trigger_event: trigger?.event ?? null,
     blocker,
-  });
-  return {
+    blocker_if_any: blocker,
+    model_probability: null,
+  };
+  assertPriceBlind(row, `mention decision row ${row.market_ticker}`);
+  const output = {
     ...row,
     pmt_advisory_context: composite?.pmt_advisory_context ?? null,
     proof_pct: composite?.proof_pct ?? null,
     handicap_pct: composite?.handicap_pct ?? null,
     kalshi_native_pct: composite?.kalshi_native_pct ?? null,
     kalshi_native_n: composite?.kalshi_native_n ?? null,
-    confidence: compositeScore ?? composite?.confidence ?? row.confidence ?? null,
-    reason: familyScoreAdjusted ? analysis : (composite?.reason ?? analysis),
+    confidence: finalConfidence,
+    reason: (familyScoreAdjusted || confidenceCapReason || proximityOnly || blocker)
+      ? finalAnalysis
+      : (composite?.reason ?? finalAnalysis),
     proof_reason: composite?.proof_reason ?? null,
     handicap_reason: composite?.handicap_reason ?? null,
     research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
     research_term_note: composite?.research_term_note ?? null,
     market_type: marketType,
+    research_route: composite?.research_route ?? null,
+    route_event_format: composite?.route_event_format ?? null,
     required_count: requiredCount,
     repeat_requirement: requiredCount && requiredCount > 1 ? `${requiredCount}+ times` : null,
     qualification_status: qualificationStatus,
@@ -1359,7 +1387,10 @@ export function mentionCompositeToDecisionRow(composite) {
     evidence_availability: evidenceAvail,
     confidence_cap_reason: confidenceCapReason,
     earnings_family_history: familyEvidence,
+    canonical_history: composite?.canonical_history ?? null,
   };
+  assertPriceBlind(output, `final mention decision row ${output.market_ticker}`);
+  return output;
 }
 
 /**
@@ -1500,10 +1531,11 @@ export function pickSettlementSourceLink(event, ticker) {
     .map((entry) => (typeof entry?.url === 'string' ? entry.url.trim() : ''))
     .find(Boolean);
   if (declared) return declared;
-  return event?.event_url ?? event?.url ?? `https://kalshi.com/events/${ticker}`;
+  const explicit = typeof event?.settlement_source_link === 'string' ? event.settlement_source_link.trim() : '';
+  return explicit || null;
 }
 
-export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null, presentation = null }) {
+export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null, presentation = null, marketQuotes = [], generatedUtc = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
   const rows = composites.map((c) => mentionCompositeToDecisionRow(c));
@@ -1516,9 +1548,17 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
   const prov = composites[0] ?? null;
   const provenanceLines = [];
   if (prov?.research_route) {
-    provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`);
+    provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''}`);
   }
   provenanceLines.push(...renderSettledHistoryProvenance(composites));
+  const canonicalHistoryLines = composites
+    .filter((c) => c?.canonical_history && !c?.settled_history)
+    .map((c) => {
+      const h = c.canonical_history;
+      const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker ?? 'unknown'));
+      return `canonical_history: ${label} class=${h.evidence_class} status=${h.status} tier=${h.match_tier ?? 'none'} n=${h.sample_size ?? 0} hits=${h.hits ?? 0} misses=${h.misses ?? 0}`;
+    });
+  provenanceLines.push(...[...new Set(canonicalHistoryLines)]);
   provenanceLines.push(...renderEarningsFamilyProvenance(composites));
   provenanceLines.push(...renderResearchCitationProvenance(composites));
   const earningsNote = renderEarningsAlphaProvenance(composites);
@@ -1535,16 +1575,39 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     pmtAdvisoryContext,
     presentation,
   });
+  if (presentation?.publication_blocked && synthesisInput.canonical_event) {
+    synthesisInput.event = {
+      ...synthesisInput.event,
+      canonical_event: synthesisInput.canonical_event,
+    };
+    synthesisInput.canonical_event = null;
+    if (synthesisInput.presentation) {
+      synthesisInput.presentation = { ...synthesisInput.presentation, canonical_event: null };
+    }
+  }
   const text = renderMentionPacket(synthesisInput, {
-    generatedAtUtc: new Date().toISOString(),
+    generatedAtUtc: generatedUtc ?? new Date().toISOString(),
+    marketQuotes,
+    marketSnapshotUtc: generatedUtc ?? new Date().toISOString(),
     analystTier: 'none',
   });
   const finalText = injectSourceHealthDisclosure(text, sourceHealthDisclosure);
-  validateRenderedPacket(finalText, synthesisInput);
+  const previewValidationInput = presentation?.publication_blocked
+    ? {
+      ...synthesisInput,
+      canonical_event: null,
+      presentation: synthesisInput.presentation
+        ? { ...synthesisInput.presentation, canonical_event: null }
+        : synthesisInput.presentation,
+    }
+    : synthesisInput;
+  validateRenderedPacket(finalText, previewValidationInput);
 
   // Raw per-contract inventory + market context -> audit artifact only.
+  const quoteByTicker = new Map((Array.isArray(marketQuotes) ? marketQuotes : [])
+    .map((quote) => [String(quote?.ticker ?? quote?.market_ticker ?? ''), quote]));
   const inventoryLines = rows.map((r, i) =>
-    `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | score=${r.composite_score} posture=${r.composite_posture} layers=${r.layers_present} implied=${r.implied_probability} ask=${r.market_yes_ask} bid=${r.market_yes_bid} vol=${r.volume} oi=${r.open_interest} conf=${r.confidence}`);
+    `#${i + 1} [${r.edge_status}] ${r.market_ticker} :: ${r.side_target} | score=${r.composite_score} posture=${r.composite_posture} layers=${r.layers_present} quote=${JSON.stringify(quoteByTicker.get(r.market_ticker) ?? null)} conf=${r.confidence}`);
   const inventoryText = buildInventoryArtifact({
     marketType: 'mentions',
     date,
@@ -1566,6 +1629,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     inventoryText,
     counts: { total: rows.length, blocked: blockedCount, scored: summary.scored_count },
     compositeSummary: summary,
+    marketQuotes,
   };
 }
 
@@ -1588,18 +1652,6 @@ function scoreToTier(score) {
   if (s >= 50) return 'WEAK YES';
   if (s >= 35) return 'WEAK NO';
   return 'STRONG NO';
-}
-
-function compactMarketContext(row) {
-  return {
-    implied_probability: row.implied_probability,
-    yes_bid_cents: row.market_yes_bid,
-    yes_ask_cents: row.market_yes_ask,
-    last_price_cents: row.last_price,
-    volume: row.volume,
-    open_interest: row.open_interest,
-    note: 'NOT IN SCORE',
-  };
 }
 
 /**
@@ -1644,7 +1696,8 @@ export function buildMentionsSynthesisInput({
     ?? null;
   // Compact each term to only what the model needs for the article.
   const terms = rows.map((row) => ({
-    full_strike_text: row.side_target,
+    market_ticker: row.market_ticker ?? null,
+    full_strike_text: row.full_strike_text ?? row.side_target,
     short_term: shortTerm(row.side_target, s.title),
     cpc_score: row.composite_score ?? null,
     p_yes_tier: scoreToTier(row.composite_score),
@@ -1675,14 +1728,9 @@ export function buildMentionsSynthesisInput({
     research_term_note: row.research_term_note ?? null,
     pmt_advisory_context: row.pmt_advisory_context ?? advisoryContext,
     evidence_availability: row.evidence_availability ?? null,
+    canonical_history: row.canonical_history ?? null,
     confidence_cap_reason: row.confidence_cap_reason ?? null,
     ...(row.earnings_family_history ? { earnings_family_history: row.earnings_family_history } : {}),
-    market_context: {
-      implied: row.implied_probability,
-      bid_cents: row.market_yes_bid,
-      ask_cents: row.market_yes_ask,
-      note: 'NOT IN SCORE',
-    },
   }));
   const nonBlocked = terms.filter((term) => term.bucket !== 'blocked/no-source');
   const allResearchGap = nonBlocked.length > 0 && nonBlocked.every((term) => term.research_state === 'research gap');
@@ -1694,9 +1742,10 @@ export function buildMentionsSynthesisInput({
       title: s.title,
       subtitle: s.sub_title,
       date_time: trustedPresentation?.event_time_iso ?? null,
-      settlement_source_link: pickSettlementSourceLink(event, s.ticker),
+      settlement_source_link: trustedPresentation?.canonical_event?.settlement_source ?? null,
       rules_primary: rules.primary,
     },
+    canonical_event: trustedPresentation?.canonical_event ?? null,
     presentation: trustedPresentation,
     synthesis_rules: {
       output_style: 'concise research article / Substack-style brief',
@@ -1723,9 +1772,12 @@ export function buildMentionsSynthesisInput({
     },
     deterministic_provenance_lines: Array.isArray(provenanceLines) ? provenanceLines : [],
     source_health_disclosure: sourceHealthDisclosure || null,
-    research_provenance: advisoryContext ? {
-      pmt_advisory_context: advisoryContext,
-    } : null,
+    research_provenance: {
+      research_route: rows.find((row) => row?.research_route)?.research_route ?? null,
+      event_format: rows.find((row) => row?.route_event_format)?.route_event_format ?? null,
+      canonical_history: rows.find((row) => row?.canonical_history)?.canonical_history ?? null,
+      ...(advisoryContext ? { pmt_advisory_context: advisoryContext } : {}),
+    },
     terms,
   };
 }
@@ -1809,14 +1861,18 @@ export async function composeMentionPacketDeterministic({
   env = process.env,
   chatRunner = runHermesChat,
   now = () => new Date().toISOString(),
+  marketQuotes = [],
 } = {}) {
   if (!input || typeof input !== 'object') throw new Error('mentions packet compose input missing');
+  const generated = now();
   const analystRun = await fetchAnalystFields({ input, summary: input.summary ?? {}, env, chatRunner });
   const redteamRun = await fetchRedteamFields({ input, env, chatRunner });
   const text = renderMentionPacket(input, {
     analyst: analystRun.analyst,
     redteam: redteamRun.redteam,
-    generatedAtUtc: now(),
+    generatedAtUtc: generated,
+    marketQuotes,
+    marketSnapshotUtc: generated,
     analystTier: analystRun.tier,
   });
   validateRenderedPacket(text, input);
@@ -2421,10 +2477,32 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, earningsFamilyHistory = null, sourceHealthDisclosure = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, earningsFamilyHistory = null, sourceHealthDisclosure = null, generatedUtc = null, researchTimestamp = null, marketQuotes = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
-  const presentation = resolveMentionPresentationMetadata({ date, event });
+  const canonicalEvent = buildCanonicalMentionIdentity({
+    date,
+    event,
+    generatedUtc: generatedUtc ?? new Date().toISOString(),
+    researchTimestamp: researchTimestamp ?? event?.research_timestamp ?? event?.researched_at_utc ?? null,
+  });
+  const canonicalValidation = validateCanonicalMentionIdentity(canonicalEvent);
+  const presentationBase = resolveMentionPresentationMetadata({ date, event });
+  const presentation = {
+    ...presentationBase,
+    canonical_event: canonicalEvent,
+    blocked: presentationBase.blocked,
+    blocker_code: presentationBase.blocker_code,
+    reason: presentationBase.blocked
+      ? presentationBase.reason
+      : presentationBase.reason,
+    source_gaps: canonicalValidation.source_gaps,
+    publication_blocked: !canonicalValidation.ok,
+    event_time_iso: canonicalEvent.event_time_central.iso ?? presentationBase.event_time_iso ?? null,
+    event_date: canonicalEvent.event_date ?? presentationBase.event_date ?? null,
+    event_time_source: canonicalEvent.event_time_central.source ?? presentationBase.event_time_source ?? null,
+    settlement_source: canonicalEvent.settlement_source,
+  };
 
   if (presentation.blocked) {
     const blocker = {
@@ -2441,6 +2519,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       event_date: presentation.event_date,
       event_time_source: presentation.event_time_source,
       conflicts: presentation.conflicts,
+      source_gaps: canonicalValidation.source_gaps,
       blocked_at_utc: new Date().toISOString(),
       delivered: false,
     };
@@ -2469,6 +2548,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
         blocked: marketInfo.marketCount,
         scored: 0,
       },
+      marketQuotes,
     };
   }
 
@@ -2578,6 +2658,8 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     inventoryPath,
     sourceHealthDisclosure,
     presentation,
+    marketQuotes: marketQuotes ?? marketInfo.rows.map(({ raw }) => raw),
+    generatedUtc: canonicalEvent.generated_utc,
   });
   if (slate) {
     if (researchProvenance) {
@@ -2597,7 +2679,18 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       missingMarkets: marketInfo.missingMarkets,
       compositeSummary,
       attachmentContract,
+      marketQuotes: slate.marketQuotes,
       counts: slate.counts,
+      publication_blocked: !canonicalValidation.ok,
+      publication_blocker: !canonicalValidation.ok ? {
+        event_ticker: s.ticker,
+        date,
+        stage: 'publication_gate',
+        blocker_code: BLOCKED_EVENT_METADATA_MISMATCH,
+        reason: canonicalValidation.source_gaps.join('; '),
+        source_gaps: canonicalValidation.source_gaps,
+        delivered: false,
+      } : null,
     };
   }
 
@@ -3006,18 +3099,39 @@ export async function writeKalshiEventPackets({
         );
       }
     }
-    const built = buildKalshiEventPacket({
-      date,
-      event: mergedEvent,
-      sourceUrl: sourcePath,
-      inventoryPath,
-      historyRecords,
-      historyStoreStatus: historyLoad.status,
-      earningsQuarters,
-      earningsContextSources,
-      earningsFamilyHistory,
-      sourceHealthDisclosure,
-    });
+    let built;
+    try {
+      built = buildKalshiEventPacket({
+        date,
+        event: mergedEvent,
+        sourceUrl: sourcePath,
+        inventoryPath,
+        historyRecords,
+        historyStoreStatus: historyLoad.status,
+        earningsQuarters,
+        earningsContextSources,
+        earningsFamilyHistory,
+        sourceHealthDisclosure,
+        generatedUtc: runStartedAtUtc ?? new Date().toISOString(),
+        researchTimestamp: mergedEvent?.research_timestamp ?? mergedEvent?.researched_at_utc ?? null,
+      });
+    } catch (err) {
+      const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+      mkdirSync(blockerDir, { recursive: true });
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      writeFileSync(blockerPath, JSON.stringify({
+        event_ticker: ticker,
+        date,
+        stage: 'publication_gate',
+        reason: 'PACKET_INTEGRITY_VALIDATION_FAILED',
+        error: err?.message ?? String(err),
+        blocked_at_utc: new Date().toISOString(),
+        delivered: false,
+      }, null, 2));
+      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: ${err?.message ?? String(err)} (blocker: ${blockerPath})`);
+      failedTickers.push(ticker);
+      continue;
+    }
     totalMarketCount += built.marketCount;
     if (built.missingMarkets) missingMarketEventCount += 1;
     missingStrikeTextCount += built.missingStrikeCount;
@@ -3045,6 +3159,29 @@ export async function writeKalshiEventPackets({
     // same isolation the model-synthesis blocker path uses. A normal board
     // (real WATCH/LEAN/PICK rows alongside the EDNQ blocked row) is unaffected.
     const counts = built.counts ?? null;
+    if (built.publication_blocked) {
+      const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
+      mkdirSync(blockerDir, { recursive: true });
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      writeFileSync(blockerPath, JSON.stringify({
+        ...(built.publication_blocker ?? {}),
+        event_ticker: ticker,
+        date,
+        stage: 'publication_gate',
+        delivered: false,
+      }, null, 2));
+      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: canonical publication gate failed (blocker: ${blockerPath})`);
+      failedTickers.push(ticker);
+      if (built.inventoryText) {
+        const invW = audit(dir, inventoryName, built.inventoryText, {
+          kind: 'raw_inventory_audit',
+          event_ticker: ticker,
+          fail_closed: true,
+        });
+        items.push({ name: inventoryName, ...invW });
+      }
+      continue;
+    }
     const allRowsBlocked = counts && counts.total > 0 && counts.blocked >= counts.total;
     if (allRowsBlocked) {
       const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
@@ -3094,7 +3231,10 @@ export async function writeKalshiEventPackets({
     let modelSynthesisInvocation = null;
     if (!dryRun) {
       try {
-        const synthesized = await synthesizeImpl({ input: built.synthesisInput });
+        const synthesized = await synthesizeImpl({
+          input: built.synthesisInput,
+          marketQuotes: built.marketQuotes ?? [],
+        });
         if (synthesized?.invocation?.renderer !== CUSTOMER_RENDERER_ID) {
           throw new Error('customer mentions packet compose did not return renderMentionPacket/v2 contract');
         }

@@ -194,9 +194,9 @@ test('renderSourceLadder emits SOURCE LADDER section + pricing exclusion line', 
   assert.match(txt, /qualification_status/);
 });
 
-// ─── Packet integration: market_context carries pricing, ladder excludes it ──
+// ─── Packet integration: the ladder and composite are price-blind ────────────
 
-test('buildMentionCompositeForMarket: ladder runs when source_ladder provided on market; pricing stays in market_context only', () => {
+test('buildMentionCompositeForMarket: ladder runs and pricing is excluded from the composite', () => {
   const market = {
     ticker: 'KXTEST-1',
     custom_strike: { Word: 'Tailwind' },
@@ -219,8 +219,8 @@ test('buildMentionCompositeForMarket: ladder runs when source_ladder provided on
   assert(out.source_ladder, 'source_ladder must be present on output');
   assert(out.source_ladder.used.includes('prior_transcript_word_match'));
   assert.equal(out.source_ladder.pricing_excluded, true);
-  // Pricing must live in market_context only
-  assert.equal(out.result.market_context.yes_bid_cents, 55);
+  // Quotes are attached only after model rows are finalized.
+  assert.equal(out.result.market_context, undefined);
   for (const cat of out.source_ladder.categories) {
     for (const f of ['yes_bid', 'yes_ask', 'volume', 'open_interest', 'yes_bid_cents', 'yes_ask_cents']) {
       assert(!(f in cat), `ladder category "${cat.category}" must not contain pricing field "${f}"`);

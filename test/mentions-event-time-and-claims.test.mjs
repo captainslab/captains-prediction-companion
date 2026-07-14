@@ -82,23 +82,18 @@ test('Netflix-style far-future sentinel expiration does not become the event tim
   assert.notEqual(presentation.event_date, '2026-12-31');
 });
 
-test('agreeing ceiling fields resolve to the shared event date (no regression)', () => {
+test('market ceiling fields never become an event start time', () => {
   const presentation = resolveMentionPresentationMetadata({ date: DATE, event: agreeingCeilingEvent() });
   assert.equal(presentation.blocked, false);
-  assert.equal(presentation.event_date, '2026-07-17');
-  assert.ok(String(presentation.event_time_iso).startsWith('2026-07-17'));
+  assert.equal(presentation.event_date, null);
+  assert.equal(presentation.event_time_iso, null);
 });
 
 test('rendered Netflix packet header shows UNCONFIRMED, never Dec 31', () => {
   const built = buildKalshiEventPacket({ date: DATE, event: netflixStyleEvent(), sourceUrl: '/tmp/src.json' });
-  assert.ok(!built.blocked, 'packet must not be blocked');
-  assert.ok(built.synthesisInput, 'synthesis input must be produced');
-  const text = renderMentionPacket(built.synthesisInput, { generatedAtUtc: '2026-07-02T21:47:00.000Z' });
-  assert.match(text, /event_time_central: UNCONFIRMED/);
-  assert.doesNotMatch(text, /Dec 31/);
-  assert.doesNotMatch(text, /2026-12-31/);
-  // settlement_sources URL is surfaced as the source link.
-  assert.match(text, /ir\.netflix\.net/);
+  assert.equal(built.publication_blocked, true, 'unconfirmed event start must block publication');
+  assert.match(built.publication_blocker.reason, /event start|event URL|research timestamp/i);
+  assert.ok(built.publication_blocker.source_gaps.some((gap) => /event start|event URL|research timestamp/i.test(gap)));
 });
 
 test('rendered Netflix packet never asserts an unsourced "not a Netflix title" claim', () => {

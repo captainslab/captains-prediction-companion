@@ -688,6 +688,12 @@ export function buildSettledHistoryArtifact({
         : 'no usable settled history; fail-safe (no conviction)');
 
   const artifact = {
+    evidence_class: 'settled_history',
+    status: usable ? 'present' : (match.sample_size > 0 ? 'unavailable' : 'verified_zero'),
+    route,
+    entity,
+    horizon,
+    series_ticker: seriesTicker,
     match_tier: match.match_tier,
     match_quality_penalty: match.match_quality_penalty,
     sample_size: match.sample_size,

@@ -117,7 +117,7 @@ test('throws if a layer record contains odds', () => {
   );
 });
 
-test('market_context pricing is stored separately and never enters score', () => {
+test('price firewall excludes market pricing from the composite result', () => {
   const layerRecords = {
     historical_tendency: { present: true, score: 80, source_basis: 'closed event calendar test' },
   };
@@ -132,10 +132,7 @@ test('market_context pricing is stored separately and never enters score', () =>
     marketContext,
   });
 
-  assert.equal(result.market_context.yes_bid_cents, 55);
-  assert.equal(result.market_context.yes_ask_cents, 61);
-  assert.equal(result.market_context.volume, 11442);
-  assert.match(result.market_context._note, /never scoring/i);
+  assert.equal(result.market_context, undefined);
 
   // Score is derived from layers only
   assert.equal(result.composite_score, 80);
@@ -368,7 +365,7 @@ test('Dell earnings: PowerEdge with 4 strong layers → PICK or EVIDENCE_LEAN', 
   assert(result.composite_score > 80, `composite_score ${result.composite_score} should be > 80`);
   assert(result.top_supporting_layers.length > 0);
   assert(result.missing_layers.length > 0);
-  assert.equal(result.market_context.yes_bid_cents, 57);
+  assert.equal(result.market_context, undefined);
   assert.equal(result._meta.pricing_excluded, true);
 });
 
@@ -721,8 +718,7 @@ test('Dell full 10/10 layers via composeMentionLedger with all three new layers 
 
   // Pricing excluded
   assert.equal(result._meta.pricing_excluded, true);
-  assert.equal(result.market_context.yes_bid_cents, 83);
-  assert.equal(result.market_context._note.toLowerCase().includes('never scoring'), true);
+  assert.equal(result.market_context, undefined);
 
   // Strong score given 10 layers of evidence
   assert(['PICK', 'EVIDENCE_LEAN'].includes(result.posture),

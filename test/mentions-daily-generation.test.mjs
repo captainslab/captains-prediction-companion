@@ -13,7 +13,16 @@ function writeJson(path, value) {
 }
 
 function makeEvent(ticker) {
-  return { event_ticker: ticker, title: `Will ${ticker} be mentioned?`, markets: [{ ticker: `${ticker}-A`, title: 'Yes' }] };
+  return {
+    event_ticker: ticker,
+    series_ticker: ticker.replace(/-[^-]+$/, ''),
+    title: `Will ${ticker} be mentioned?`,
+    event_url: `https://kalshi.com/events/${ticker}`,
+    event_time_utc: '2099-01-01T18:00:00Z',
+    settlement_source_link: 'https://example.com/official-event',
+    research_timestamp: '2098-12-31T18:00:00Z',
+    markets: [{ ticker: `${ticker}-A`, title: 'Yes' }],
+  };
 }
 
 function writeOnlyArtifacts(stateRoot, date, event) {
@@ -298,6 +307,10 @@ test('CLI --only dry-run uses local artifacts before live discovery and builds a
   mkdirSync(eventDir, { recursive: true });
   writeFileSync(join(eventDir, `${ticker}.json`), `${JSON.stringify({
     event_ticker: ticker,
+    event_url: `https://kalshi.com/events/${ticker}`,
+    event_time_utc: '2099-01-06T18:00:00Z',
+    settlement_source_link: 'https://example.com/local-official-event',
+    research_timestamp: '2099-01-06T12:00:00Z',
     title: 'What will Local Speaker say?',
     sub_title: 'Local fixture',
     series_ticker: 'KXLOCALMENTION',

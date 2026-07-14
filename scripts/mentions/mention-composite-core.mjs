@@ -4,9 +4,8 @@
 // Pure ESM. No I/O. No live network. No market pricing in scoring.
 //
 // Market pricing (bid/ask/volume/open interest/line movement) must NEVER enter
-// the composite score. It may only be stored separately via market_context for
-// post-hoc validation. Enforcement: any layer record containing a forbidden
-// pricing field throws before scoring begins.
+// the composite score. Quotes are attached only by the post-score renderer.
+// Enforcement: any layer record containing a forbidden pricing field throws.
 //
 // Coverage cap (mirrors MLB evidence-ledger):
 //   0 layers → NO_CLEAR_PICK
@@ -66,7 +65,7 @@ function assertNoPricingInLayer(key, rec, trail = []) {
         const where = trail.length ? `${trail.join('.')}.` : '';
         throw new Error(
           `Layer "${key}" contains forbidden pricing field "${where}${field}". ` +
-          `Market data must never enter scoring. Pass pricing via market_context only.`
+          `Market data must never enter scoring. Attach quotes only after model rows are frozen.`
         );
       }
     }
@@ -80,22 +79,6 @@ function isScoreableLayer(key) {
   return key !== 'event_proximity';
 }
 
-// Strip any pricing keys from the caller-supplied market_context to prevent
-// accidental re-promotion into scores downstream.
-function sanitizeMarketContext(ctx) {
-  if (!ctx || typeof ctx !== 'object') return null;
-  const safe = {};
-  const allowedKeys = [
-    'yes_bid_cents', 'yes_ask_cents', 'no_bid_cents', 'no_ask_cents',
-    'volume', 'open_interest', 'spread_cents', 'last_trade_price_cents',
-  ];
-  for (const k of allowedKeys) {
-    if (k in ctx) safe[k] = ctx[k];
-  }
-  safe._note = 'market context stored for validation only; never scoring';
-  return safe;
-}
-
 /**
  * composeMentionLedger
  *
@@ -105,8 +88,6 @@ function sanitizeMarketContext(ctx) {
  * @param {string}  opts.profile        - One of MENTION_PROFILES
  * @param {Array}   opts.layerDefs      - Array of {key, weight, label} from the profile config
  * @param {object}  opts.layerRecords   - Map of layerKey → {present, score, source_basis, source_path, detail, missing_note}
- * @param {object?} opts.marketContext  - Pricing snapshot (never scoring). Keys: yes_bid_cents, yes_ask_cents, volume, open_interest
- *
  * @returns {object} Composite result with evidence ledger and provenance
  */
 export function composeMentionLedger({
@@ -115,7 +96,6 @@ export function composeMentionLedger({
   profile,
   layerDefs,
   layerRecords,
-  marketContext = null,
   researchScore = null,
 } = {}) {
   if (!MENTION_PROFILES.includes(profile)) {
@@ -124,8 +104,6 @@ export function composeMentionLedger({
   if (!Array.isArray(layerDefs) || layerDefs.length === 0) {
     throw new Error('layerDefs must be a non-empty array of {key, weight, label}.');
   }
-
-  const safeMarketContext = sanitizeMarketContext(marketContext);
 
   let num = 0;
   let den = 0;
@@ -252,7 +230,6 @@ export function composeMentionLedger({
     top_supporting_layers: topSupportingLayers,
     missing_layers:        missingLayers,
     source_notes:          sourceNotes,
-    market_context:        safeMarketContext,
     evidence_ledger:       ledger,
     reasoning_summary,
     _meta: {

@@ -120,7 +120,7 @@ test('evaluated NO_MATCH blocks history even when matching records exist', () =>
     event: ev, market: ev.markets[0], candidateText: 'the adult spoke', historyRecords: obamaHistory,
   });
   assert.equal(out.lexical_gate.decision, 'NO_MATCH');
-  assert.equal(out.research_route, 'talk_show_media', 'route is resolvable; only suppression skips history');
+  assert.equal(out.research_route, 'interview_media', 'route is resolvable; only suppression skips history');
   assert.equal(out.settled_history, null, 'NO_MATCH must not run settled-history lookup');
   assert.equal(out.history_match_tier, null);
   assert.equal(out.history_hits, null);

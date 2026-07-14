@@ -119,8 +119,10 @@ test('mentions daily packet keeps market context display-only / NOT IN SCORE', (
   }).text;
 
   assert.match(text, /Market Context - NOT IN SCORE: display-only context; never a score input\./);
-  assert.doesNotMatch(text, /yes_bid|yes_ask|last=|implied=/);
-  assert.doesNotMatch(text, /Market Context - NOT IN SCORE[\s\S]*bid range/);
+  const modelBody = text.split('9. MODEL-MARKET SNAPSHOTS')[0];
+  assert.doesNotMatch(modelBody, /yes_bid|yes_ask|last=|implied=/);
+  assert.doesNotMatch(modelBody, /Market Context - NOT IN SCORE[\s\S]*bid range/);
+  assert.match(text, /9\. MODEL-MARKET SNAPSHOTS[\s\S]*yes_bid_cents=/);
 });
 
 test('mentions daily packet uses full strike text, not abbreviation-only labels', () => {

@@ -49,7 +49,7 @@ test('detects sports_announcer route', () => {
   assert.equal(res.profile_key, 'sports_announcer_mentions');
 });
 
-test('detects political_general route (Biden, no Trump)', () => {
+test('detects speech_event route (Biden, no Trump)', () => {
   const event = fixture({
     event_ticker: 'KXHBIDENMENTION-26JUN12',
     series_ticker: 'KXHBIDENMENTION',
@@ -57,7 +57,7 @@ test('detects political_general route (Biden, no Trump)', () => {
     markets: [{ title: 'Mentions "economy"', rules_primary: 'Resolves YES if Biden says economy at the rally.' }],
   });
   const res = resolveResearchRoute(event, { now: NOW });
-  assert.equal(res.route, 'political_general');
+  assert.equal(res.route, 'speech_event');
   assert.equal(res.profile_key, 'political_mentions');
   assert.equal(res.entity, null);
 });
@@ -229,6 +229,9 @@ test('ROUTE_TO_PROFILE maps exactly as specced and covers all routes', () => {
   assert.deepEqual(ROUTE_TO_PROFILE, {
     sports_announcer: 'sports_announcer_mentions',
     earnings_call: 'earnings_mentions',
+    news_broadcast: 'political_mentions',
+    speech_event: 'political_mentions',
+    interview_media: 'political_mentions',
     political_general: 'political_mentions',
     trump_event: 'political_mentions',
     trump_weekly: 'political_mentions',
@@ -242,7 +245,7 @@ test('ROUTE_TO_PROFILE maps exactly as specced and covers all routes', () => {
   for (const route of RESEARCH_ROUTES) {
     assert.ok(Object.hasOwn(ROUTE_TO_PROFILE, route), `missing mapping for ${route}`);
   }
-  assert.equal(RESEARCH_ROUTES.length, 11);
+  assert.equal(RESEARCH_ROUTES.length, 14);
 });
 
 test('resolver is deterministic for identical input', () => {
@@ -294,6 +297,6 @@ test('Trump as a strike term only (non-Trump speaker event) does NOT route to tr
     }],
   };
   const res = resolveResearchRoute(ev, { now: new Date('2026-06-12T12:00:00Z') });
-  assert.equal(res.route, 'political_general');
+  assert.equal(res.route, 'speech_event');
   assert.equal(res.entity, null);
 });

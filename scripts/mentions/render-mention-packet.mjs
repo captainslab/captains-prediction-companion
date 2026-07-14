@@ -14,8 +14,10 @@
 //   6 QUALIFICATION RISK
 //   7 SETTLEMENT NOTES
 //   8 FULL STRIKE INVENTORY
+//   9 MODEL-MARKET SNAPSHOTS
 //
-// Market price/liquidity is display-only context and never a score input.
+// Market quotes are display-only context attached after model rows are frozen
+// and hashed; they never enter research, history, scoring, or ranking.
 // All user-facing times are America/Chicago.
 
 import {
@@ -26,6 +28,11 @@ import {
   normalizeQualificationResult,
 } from './qualification-risk.mjs';
 import { sanitizeUnsupportedClaim } from './mentions-research-perplexity.mjs';
+import { attachMarketSnapshots } from './market-snapshot.mjs';
+import {
+  validateMentionPacketIntegrity,
+  validateCanonicalMentionIdentity,
+} from './event-integrity.mjs';
 
 export const SECTION_ORDER = Object.freeze([
   '1. FAST READ',
@@ -36,6 +43,7 @@ export const SECTION_ORDER = Object.freeze([
   '6. QUALIFICATION RESULT / EDNQ RISK',
   '7. SETTLEMENT NOTES',
   '8. FULL STRIKE INVENTORY',
+  '9. MODEL-MARKET SNAPSHOTS',
 ]);
 
 const CENTRAL_TZ = 'America/Chicago';
@@ -178,7 +186,7 @@ function pushWrapped(lines, label, value, width = 76, indent = '   ') {
 function sectionLabelHeader(rank, term, score, tier) {
   // "#N" rank prefix keeps per-strike cards visually distinct from the numbered
   // section headers (e.g. section "3. WEAK YES WATCHLIST" vs card "#3 Democrat").
-  return `#${rank} ${term} — ${score} — ${tier}`;
+  return `#${rank} ${term} — CPC YES SCORE: ${score === '--' ? 'UNAVAILABLE' : `${score}/100`} — ${tier}`;
 }
 
 function cpcCell(term) {
@@ -557,7 +565,9 @@ function renderQualificationRiskSection(lines, risk) {
 
 function renderInventoryLabel(term) {
   if (isQualificationRisk(term)) return null;
-  return maybe(term?._short ?? term?.short_term ?? shortTerm(term?.full_strike_text, ''));
+  // The inventory is the exact contract surface; card labels may be compact,
+  // but this section must never truncate or normalize the accepted strike.
+  return maybe(term?.full_strike_text ?? term?._short ?? term?.short_term ?? '');
 }
 
 // Best rendered tier from the customer board. Research gaps sort last.
@@ -635,7 +645,14 @@ function renderCardSection(lines, heading, terms, ranked, notes, { tierFilter = 
  * @param {string?} opts.generatedAtUtc fixed ISO timestamp (injected for determinism)
  * @param {string?} opts.analystTier 'none' | 'standard' | 'premium' (provenance line)
  */
-export function renderMentionPacket(input, { analyst = null, redteam = null, generatedAtUtc = null, analystTier = 'none' } = {}) {
+export function renderMentionPacket(input, {
+  analyst = null,
+  redteam = null,
+  generatedAtUtc = null,
+  analystTier = 'none',
+  marketQuotes = [],
+  marketSnapshotUtc = null,
+} = {}) {
   if (!input || typeof input !== 'object') throw new Error('renderMentionPacket: input missing');
   if (input?.presentation?.blocked) {
     const code = input.presentation.blocker_code ?? 'BLOCKED_EVENT_METADATA_MISMATCH';
@@ -644,7 +661,20 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   }
   const e = input.event ?? {};
   const summary = input.summary ?? {};
-  const ranked = rankTerms(Array.isArray(input.terms) ? input.terms : [], e.title);
+  const modelTerms = (Array.isArray(input.terms) ? input.terms : []).map((term) => ({
+    ...term,
+    composite_score: term?.cpc_score ?? null,
+  }));
+  const snapshotAttachment = attachMarketSnapshots({
+    modelRows: modelTerms.map((term) => ({
+      ...term,
+      market_ticker: term?.market_ticker ?? term?.marketTicker ?? term?.ticker ?? null,
+      cpc_score: term?.cpc_score ?? null,
+    })),
+    quotes: marketQuotes,
+    nowUtc: marketSnapshotUtc ?? generatedAtUtc,
+  });
+  const ranked = rankTerms(snapshotAttachment.rows, e.title);
   if (!ranked.length) throw new Error('renderMentionPacket: no terms to render');
   const a = analyst ?? {};
   const notes = collectNotes(ranked, a);
@@ -652,7 +682,9 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const contentTerms = ranked.filter((term) => !isQualificationRisk(term));
   const ednqRisk = classifyEdnqRisk({
     event: e,
-    researchRoute: input?.research_provenance?.research_route ?? null,
+    researchRoute: input?.research_provenance?.event_format
+      ?? input?.research_provenance?.research_route
+      ?? null,
     qualificationTerms,
     presentation: input?.presentation ?? null,
   });
@@ -662,14 +694,20 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
   const lines = [];
   lines.push(`=== Captain Mentions — CPC Packet: ${maybe(e.title)} ===`);
-  const presentedEventIso = input?.presentation?.event_time_iso ?? e.date_time ?? null;
+  const canonical = input?.canonical_event
+    ?? input?.presentation?.canonical_event
+    ?? input?.event?.canonical_event
+    ?? null;
+  const presentedEventIso = canonical?.event_time_central?.iso ?? input?.presentation?.event_time_iso ?? e.date_time ?? null;
+  lines.push(`kalshi_event_ticker: ${maybe(canonical?.kalshi_event_ticker ?? e.kalshi_event_ticker)}`);
+  lines.push(`kalshi_series_ticker: ${maybe(canonical?.kalshi_series_ticker ?? e.kalshi_series_ticker)}`);
+  lines.push(`kalshi_event_url: ${canonical?.kalshi_event_url ?? 'UNAVAILABLE'}`);
+  lines.push(`event_date: ${maybe(canonical?.event_date ?? input.date)}`);
   lines.push(`event_time_central: ${presentedEventIso ? formatCentral(presentedEventIso) : 'UNCONFIRMED'}`);
-  lines.push(`date: ${maybe(input.date)}`);
-  if (generatedAtUtc) {
-    lines.push(`generated_utc: ${formatGeneratedStamp(generatedAtUtc)}`);
-    lines.push(`generated_central: ${formatGeneratedCentralStamp(generatedAtUtc)}`);
-  }
-  lines.push(`settlement_source: ${maybe(e.settlement_source_link)}`);
+  lines.push(`generated_utc: ${canonical?.generated_utc ? formatGeneratedStamp(canonical.generated_utc) : 'UNAVAILABLE'}`);
+  lines.push(`generated_central: ${canonical?.generated_central ? formatGeneratedCentralStamp(canonical.generated_central) : 'UNAVAILABLE'}`);
+  lines.push(`research_timestamp: ${canonical?.research_timestamp ? formatGeneratedStamp(canonical.research_timestamp) : 'UNAVAILABLE'}`);
+  lines.push(`settlement_source: ${canonical?.settlement_source ?? e.settlement_source_link ?? 'UNAVAILABLE'}`);
   lines.push(`analyst_tier: ${analystTier}`);
   lines.push('Market Context - NOT IN SCORE: display-only context; never a score input.');
   lines.push('Content terms are words likely to be said; count terms are the exact token plus the required repeat count; EDNQ is a separate settlement path if the event or rules do not qualify.');
@@ -679,7 +717,10 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   const bestTier = postCapBestPosture(contentTerms);
   const researchedCount = contentTerms.filter(isResearchBacked).length;
   lines.push('1. FAST READ');
-  lines.push(safeCustomerText(a.fast_read, `${researchedCount}/${contentTerms.length} term(s) have a researched P(YES) read; best tier ${bestTier}. Research only — no trade.`));
+  const fastReadFallback = researchedCount === 0
+    ? `RESEARCH GAP — 0/${contentTerms.length} term(s) have research-backed P(YES); all remain research gaps. Research only — no trade.`
+    : `${researchedCount}/${contentTerms.length} term(s) have a researched P(YES) read; best tier ${bestTier}. Research only — no trade.`;
+  lines.push(safeCustomerText(a.fast_read, fastReadFallback));
   renderPmtAdvisoryBlock(lines, pmtAdvisoryContext);
   lines.push('');
 
@@ -762,6 +803,17 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   }
   lines.push('');
 
+  lines.push('9. MODEL-MARKET SNAPSHOTS');
+  lines.push('Post-score display-only snapshot. MODEL-MARKET GAP = CPC YES SCORE minus YES midpoint; it is not an edge and never enters any decision.');
+  lines.push(`model_rows_sha256: ${snapshotAttachment.model_hash_before}`);
+  lines.push(`model_hash_unchanged_after_quote_attachment: ${snapshotAttachment.hash_unchanged}`);
+  for (const term of ranked) {
+    const snapshot = term.market_snapshot ?? {};
+    const value = (v) => v === null || v === undefined ? 'UNAVAILABLE' : String(v);
+    lines.push(`- ${term.market_ticker ?? 'UNAVAILABLE'} | yes_bid_cents=${value(snapshot.yes_bid_cents)} | yes_ask_cents=${value(snapshot.yes_ask_cents)} | yes_midpoint_cents=${value(snapshot.yes_midpoint_cents)} | spread_cents=${value(snapshot.bid_ask_spread_cents)} | snapshot_utc=${value(snapshot.market_snapshot_utc)} | snapshot_central=${value(snapshot.market_snapshot_central)} | MODEL-MARKET GAP=${value(snapshot.model_market_gap_points)} | quote_status=${snapshot.quote_status ?? 'UNAVAILABLE'}`);
+  }
+  lines.push('');
+
   lines.push('---');
   lines.push(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`);
   lines.push('Research only. No trades. Price context is display-only and never a score input.');
@@ -770,6 +822,18 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
 
 // Render-time invariants, enforced by code (never a model).
 export function validateRenderedPacket(text, input) {
+  const identity = input?.canonical_event ?? input?.presentation?.canonical_event;
+  if (identity) {
+    const identityCheck = validateCanonicalMentionIdentity(identity);
+    if (!identityCheck.ok) throw new Error(`rendered packet identity gate failed: ${identityCheck.source_gaps.join('; ')}`);
+    const routeCheck = validateMentionPacketIntegrity({
+      identity,
+      packetText: text,
+      route: input?.research_provenance?.research_route ?? null,
+      allowedTerms: (input?.terms ?? []).map((term) => term?.full_strike_text),
+    });
+    if (!routeCheck.ok) throw new Error(`rendered packet isolation gate failed: ${routeCheck.source_gaps.join('; ')}`);
+  }
   let lastIdx = -1;
   for (const section of SECTION_ORDER) {
     const idx = text.indexOf(`\n${section}\n`) >= 0 ? text.indexOf(`\n${section}\n`) : text.indexOf(section);
@@ -780,6 +844,16 @@ export function validateRenderedPacket(text, input) {
   if (!/research only/i.test(text)) throw new Error('rendered packet omitted research-only footer');
   if (!text.includes(`renderer_contract: ${CUSTOMER_PACKET_CONTRACT_V2}`)) {
     throw new Error(`rendered packet omitted ${CUSTOMER_PACKET_CONTRACT_V2} contract marker`);
+  }
+  for (const term of (input?.terms ?? [])) {
+    const score = term?.cpc_score;
+    const researchGap = term?.bucket === 'blocked/no-source'
+      || term?.research_state === 'research gap'
+      || term?.evidence_status === 'research gap';
+    if (!researchGap && score !== null && score !== undefined && Number.isFinite(Number(score))) {
+      const marker = `CPC YES SCORE: ${Math.round(Number(score))}/100`;
+      if (!text.includes(marker)) throw new Error(`rendered packet omitted final score marker for ${term?.short_term ?? term?.full_strike_text}`);
+    }
   }
   const legacyPostureLine = text.split(/\r?\n/).find((line) => /\b(EVIDENCE_LEAN|LEAN|WATCH|NO_CLEAR_PICK)\b/i.test(line)) ?? null;
   if (legacyPostureLine) throw new Error(`rendered packet leaked legacy posture jargon: ${legacyPostureLine}`);
@@ -798,7 +872,7 @@ export function validateRenderedPacket(text, input) {
   const contentTerms = inputTerms.filter((term) => !isQualificationRisk(term));
   const qualificationTerms = inputTerms.filter(isQualificationRisk);
   for (const term of contentTerms) {
-    const label = String(term?.short_term ?? term?._short ?? shortTerm(term?.full_strike_text, input?.event?.title)).trim();
+    const label = String(term?.full_strike_text ?? term?.short_term ?? term?._short ?? '').trim();
     if (label && !text.includes(label)) throw new Error(`rendered packet omitted short strike text: ${label}`);
   }
   const inventoryBlock = text.split('8. FULL STRIKE INVENTORY')[1] ?? '';
