@@ -97,12 +97,14 @@ import {
   buildSettledHistoryArtifact,
 } from '../mentions/settled-history.mjs';
 import { buildMarketRulesSnapshot } from '../mentions/rules-analyst.mjs';
+import { FAMILY_PENALTY_STRONG, FAMILY_PENALTY_THIN, FAMILY_STRONG_MIN_N, earningsHistoryToLayerScore, familyStatsExcludingCompany, fetchEarningsFamilyHistory } from '../mentions/earnings-family-history.mjs';
 import {
   resolveEarningsFamily,
   loadEarningsHistory,
   buildEarningsQuarterLayer,
   earningsLayerToHistoricalTendency,
 } from '../mentions/earnings-quarter-history.mjs';
+
 import {
   buildEarningsContextDelta,
   postureAdjustmentHint,
@@ -418,6 +420,43 @@ function applyEarningsPostureHint(posture, hint) {
   return { posture: bumped, applied: bumped !== posture, reason: hint.reason };
 }
 
+function postureFromScore(score, result) {
+  const scoreableLayersPresent = Array.isArray(result?.evidence_ledger)
+    ? result.evidence_ledger.filter((layer) => layer?.present && layer.category !== 'event_proximity').length
+    : 0;
+  if (scoreableLayersPresent === 0 || score === null) return 'NO_CLEAR_PICK';
+  if (scoreableLayersPresent === 1) return score >= 65 ? 'LEAN' : 'WATCH';
+  if (scoreableLayersPresent === 2) return score >= 70 ? 'EVIDENCE_LEAN' : score >= 55 ? 'LEAN' : 'WATCH';
+  if (score >= 80) return 'PICK';
+  if (score >= 68) return 'EVIDENCE_LEAN';
+  if (score >= 55) return 'LEAN';
+  if (score >= 40) return 'WATCH';
+  return 'NO_CLEAR_PICK';
+}
+
+function recomputePostureAfterScoreAdjustment({ score, result, ladder, earningsHint, suppressConviction }) {
+  let posture = postureFromScore(score, result);
+  let postureCap = null;
+  if (ladder) {
+    const capRes = applyQualificationCap(posture, ladder);
+    posture = capRes.posture;
+    postureCap = capRes.capped ? capRes.cap_reason : null;
+  }
+  let earningsAdjustment = null;
+  if (earningsHint && !suppressConviction) {
+    const adjusted = applyEarningsPostureHint(posture, earningsHint);
+    earningsAdjustment = {
+      direction: earningsHint.direction,
+      applied: adjusted.applied,
+      from: posture,
+      to: adjusted.posture,
+      reason: adjusted.reason,
+    };
+    posture = adjusted.posture;
+  }
+  return { posture, postureCap, earningsAdjustment };
+}
+
 // Synchronous sports settled-history builder for use in map() where records
 // are already loaded. Mirrors buildSportsSettledHistory but avoids async.
 function buildSportsSettledHistorySync({ eventTicker, seriesTicker, eventTitle, term, route, entity, horizon, allRecords }) {
@@ -493,7 +532,7 @@ function buildSportsVenueTeamSync(sportRecords, term, teams, venue) {
   return { present: true, score, source_basis: `venue/team phrase relevance: ${hits}/${settled.length} YES for "${term}" with ${teams.join('/')}`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, historyStoreStatus = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, historyStoreStatus = null, earningsQuarterLayer = null, earningsContextDelta = null, earningsFamilyHistory = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -524,6 +563,8 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   }
 
   let layerRecords = firstLayerRecordMap(market, event, legacy);
+  let earningsFamilyEvidence = null;
+  let earningsFamilyHistoryLayer = null;
 
   // Phase 2 priority-one alpha (earnings_call only): last-four-quarter per-term
   // hit/miss history feeds historical_tendency BEFORE generic settled history
@@ -532,6 +573,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   let earningsLfq = null;
   let earningsDeltaEntry = null;
   let earningsHint = null;
+
   if (route?.route === 'earnings_call' && earningsQuarterLayer?.terms) {
     const termKey = findTermKeyCaseInsensitive(Object.keys(earningsQuarterLayer.terms), targetMention);
     if (termKey) {
@@ -543,6 +585,45 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
       }
     }
   }
+
+  if (route?.route === 'earnings_call' && earningsFamilyHistory) {
+    const nativeN = Number(market?.kalshi_native_n);
+    const sameCompanyN = Number(earningsTermStats?.sample_size ?? 0);
+    const familyWord = market?.yes_sub_title || market?.subtitle || targetMention;
+    const familyStatsLookup = familyStatsExcludingCompany(earningsFamilyHistory, familyWord, route?.entity);
+    const familyStats = familyStatsLookup.stats;
+    if (nativeN >= 2) {
+      // Exact-series evidence is already represented by the Kalshi-native path.
+      earningsFamilyEvidence = { tier: 'exact_series', n: nativeN, hits: null, misses: null, hit_rate: null, penalty: 0, scan_ok: earningsFamilyHistory.scan_ok !== false };
+    } else if (sameCompanyN >= 2) {
+      // Existing same-company quarter history outranks the cross-company pool.
+      earningsFamilyEvidence = {
+        tier: 'exact_series',
+        n: sameCompanyN,
+        hits: Number(earningsTermStats.hits ?? 0),
+        misses: Number(earningsTermStats.misses ?? 0),
+        hit_rate: Number(earningsTermStats.four_quarter_hit_rate ?? 0),
+        penalty: 0,
+        scan_ok: earningsFamilyHistory.scan_ok !== false,
+      };
+    } else if (earningsFamilyHistory.scan_ok === false) {
+      earningsFamilyEvidence = { tier: 'lookup_failed', n: 0, hits: 0, misses: 0, hit_rate: null, penalty: null, scan_ok: false, error: earningsFamilyHistory.error ?? null };
+    } else if (!familyStatsLookup.available) {
+      earningsFamilyEvidence = { tier: 'lookup_failed', n: 0, hits: 0, misses: 0, hit_rate: null, penalty: null, scan_ok: false, error: 'earnings family cache lacks per-company provenance' };
+    } else if (Number(familyStats?.n) >= 2) {
+      const n = Number(familyStats.n);
+      earningsFamilyEvidence = { tier: 'earnings_family', n, hits: Number(familyStats.hits ?? 0), misses: Number(familyStats.misses ?? 0), hit_rate: Number(familyStats.hits ?? 0) / n, penalty: n >= FAMILY_STRONG_MIN_N ? FAMILY_PENALTY_STRONG : FAMILY_PENALTY_THIN, scan_ok: true };
+    } else {
+      earningsFamilyEvidence = { tier: 'none', n: Number(familyStats?.n ?? 0), hits: Number(familyStats?.hits ?? 0), misses: Number(familyStats?.misses ?? 0), hit_rate: null, penalty: null, scan_ok: true };
+    }
+    // Never synthesize a layer from exact-series evidence's intentionally
+    // absent hits/misses. Defer the cross-company fallback until after the
+    // generic settled-history lookup so exact same-company history wins.
+    if (earningsFamilyEvidence.tier === 'earnings_family') {
+      earningsFamilyHistoryLayer = earningsHistoryToLayerScore({ ...earningsFamilyEvidence, sample_size: earningsFamilyEvidence.n });
+    }
+  }
+
   // Phase 2 priority-two alpha: prior-quarter vs current-quarter context delta
   // (declared sources/fixtures only) produces a deterministic posture hint.
   if (route?.route === 'earnings_call' && Array.isArray(earningsContextDelta?.terms)) {
@@ -618,6 +699,29 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     if (historyLayer.present && !(layerRecords?.historical_tendency?.present)) {
       layerRecords = { ...(layerRecords ?? {}), historical_tendency: historyLayer };
     }
+    if (
+      route.route === 'earnings_call'
+      && historyMatch?.match_tier === 'exact_horizon'
+      && Number(historyMatch.sample_size) >= 2
+    ) {
+      earningsFamilyEvidence = {
+        tier: 'exact_series',
+        n: historyMatch.sample_size,
+        hits: historyMatch.hits,
+        misses: historyMatch.misses,
+        hit_rate: historyMatch.hit_rate,
+        penalty: 0,
+        scan_ok: earningsFamilyHistory?.scan_ok !== false,
+      };
+      earningsFamilyHistoryLayer = null;
+    }
+  }
+  if (
+    earningsFamilyEvidence?.tier === 'earnings_family'
+    && earningsFamilyHistoryLayer?.present
+    && !(layerRecords?.historical_tendency?.present)
+  ) {
+    layerRecords = { ...(layerRecords ?? {}), historical_tendency: earningsFamilyHistoryLayer };
   }
   let result;
   let researchScoreError = null;
@@ -722,6 +826,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     history_hit_rate: historyMatch?.hit_rate ?? null,
     history_match_quality_penalty: historyMatch?.match_quality_penalty ?? null,
     history_source_tickers: historyMatch?.source_tickers ?? null,
+    earnings_family_history: earningsFamilyEvidence,
     last_four_quarter_hit_rate: earningsLfq,
     earnings_quarter_terms: earningsTermStats,
     earnings_quarter_sample_size: earningsTermStats?.sample_size ?? null,
@@ -884,16 +989,20 @@ function hasBeyondProximityEvidence(composite) {
 }
 
 function summarizeCompositeRun(composites) {
-  const best = bestComposite(composites);
   const contentComposites = composites.filter((c) => !c?.is_qualification_term);
+  const scoredRows = contentComposites
+    .map((composite) => ({ composite, row: mentionCompositeToDecisionRow(composite) }))
+    .filter(({ row }) => row?.composite_score !== null && row?.composite_score !== undefined)
+    .sort((a, b) => Number(b.row.composite_score) - Number(a.row.composite_score));
+  const best = scoredRows[0] ?? null;
   return {
     market_count: composites.length,
-    scored_count: contentComposites.filter(c => c?.result?.composite_score !== null).length,
+    scored_count: scoredRows.length,
     source_backed_count: contentComposites.filter(hasBeyondProximityEvidence).length,
     proximity_only_count: contentComposites.filter(isProximityOnlyComposite).length,
-    best_posture: best?.result?.posture ?? 'NO_CLEAR_PICK',
-    best_score: best?.result?.composite_score ?? null,
-    best_target: best?.result?.target_mention ?? null,
+    best_posture: best?.row?.composite_posture ?? 'NO_CLEAR_PICK',
+    best_score: best?.row?.composite_score ?? null,
+    best_target: best?.row?.side_target ?? null,
     pricing_excluded: true,
   };
 }
@@ -1049,6 +1158,7 @@ export function mentionCompositeToDecisionRow(composite) {
   const lexical = composite?.lexical_gate?.lexical_result ?? null;
   const marketType = lexical?.market_type ?? null;
   const requiredCount = Number.isFinite(Number(lexical?.required_count)) ? Number(lexical.required_count) : null;
+  const ladder = composite?.source_ladder ?? null;
   const qualificationStatus = composite?.source_ladder?.qualification_status ?? null;
   const qualificationPostureCap = composite?.source_ladder?.posture_cap ?? null;
 
@@ -1068,6 +1178,11 @@ export function mentionCompositeToDecisionRow(composite) {
     ? r.evidence_ledger.filter((l) => l.present).map((l) => l.category)
     : topLayers;
   const target = r.target_mention ?? composite?.market_ticker ?? 'MISSING';
+  const adjustmentInput = composite?.earnings_posture_adjustment ?? null;
+  const earningsHint = adjustmentInput
+    ? { direction: adjustmentInput.direction, reason: adjustmentInput.reason }
+    : null;
+  const suppressConviction = composite?.lexical_gate?.suppress_conviction === true;
 
   // No source-backed evidence at all -> BLOCKED on the missing source layers.
   const sourceBlocked = layersPresent === 0;
@@ -1149,8 +1264,42 @@ export function mentionCompositeToDecisionRow(composite) {
   // are left untouched (null stays null; the cap only bounds a real number).
   let compositeScore = r.composite_score ?? null;
   let confidenceCapReason = null;
+  let familyScoreAdjusted = false;
+  const familyEvidence = composite?.earnings_family_history ?? null;
+  const familyHasEvidence = familyEvidence?.tier === 'exact_series' || familyEvidence?.tier === 'earnings_family';
+  if (familyHasEvidence && compositeScore !== null && Number.isFinite(Number(compositeScore)) && familyEvidence.tier === 'earnings_family') {
+    const raw = Number(compositeScore);
+    const penalty = Number(familyEvidence.penalty);
+    compositeScore = Math.round(50 + (raw - 50) * (1 - penalty));
+    if (familyEvidence.n < FAMILY_STRONG_MIN_N) {
+      compositeScore = Math.min(NO_HISTORY_CONFIDENCE_CAP, compositeScore);
+      confidenceCapReason = 'thin cross-company earnings family sample: score capped below STRONG YES';
+    }
+    if (compositeScore !== raw) {
+      familyScoreAdjusted = true;
+      const recomputed = recomputePostureAfterScoreAdjustment({
+        score: compositeScore,
+        result: r,
+        ladder,
+        earningsHint,
+        suppressConviction,
+      });
+      postureFinal = recomputed.posture;
+      statusOverride = MENTION_POSTURE_TO_EDGE[postureFinal] ?? EDGE_STATUS.WATCH;
+      const capNote = familyEvidence.n < FAMILY_STRONG_MIN_N
+        ? `; ${confidenceCapReason}`
+        : '';
+      analysis = `research score=${compositeScore} [${postureFinal}] — cross-company earnings family penalty=${penalty.toFixed(2)} adjusted raw model score ${raw} to ${compositeScore}${capNote}.`;
+      trigger = {
+        price: null,
+        event: postureFinal === 'PICK' || postureFinal === 'EVIDENCE_LEAN'
+          ? 'confirm exact settlement wording + official event source, then enter on value'
+          : 'await stronger evidence (transcript/quote confirmation)',
+      };
+    }
+  }
   if (
-    !hasHistoricalEvidence
+    !hasHistoricalEvidence && !familyHasEvidence
     && compositeScore !== null
     && Number.isFinite(Number(compositeScore))
     && !(sourceBlocked || noUsableSources || proximityOnly)
@@ -1195,8 +1344,8 @@ export function mentionCompositeToDecisionRow(composite) {
     handicap_pct: composite?.handicap_pct ?? null,
     kalshi_native_pct: composite?.kalshi_native_pct ?? null,
     kalshi_native_n: composite?.kalshi_native_n ?? null,
-    confidence: composite?.confidence ?? row.confidence ?? null,
-    reason: composite?.reason ?? analysis,
+    confidence: compositeScore ?? composite?.confidence ?? row.confidence ?? null,
+    reason: familyScoreAdjusted ? analysis : (composite?.reason ?? analysis),
     proof_reason: composite?.proof_reason ?? null,
     handicap_reason: composite?.handicap_reason ?? null,
     research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
@@ -1209,6 +1358,7 @@ export function mentionCompositeToDecisionRow(composite) {
     is_qualification_term: strikeIsEdnq(r.target_mention),
     evidence_availability: evidenceAvail,
     confidence_cap_reason: confidenceCapReason,
+    earnings_family_history: familyEvidence,
   };
 }
 
@@ -1290,6 +1440,27 @@ function renderSettledHistoryProvenance(composites) {
   return lines;
 }
 
+function renderEarningsFamilyProvenance(composites) {
+  const rows = composites.filter((c) => c?.earnings_family_history);
+  if (!rows.length) return [];
+  const lines = ['earnings_family_history (outcomes only, cross-company fallback explicit):'];
+  for (const c of rows) {
+    const h = c.earnings_family_history;
+    const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker));
+    const rate = h.hit_rate == null ? 'n/a' : Number(h.hit_rate).toFixed(2);
+    if (h.tier === 'lookup_failed') {
+      lines.push(`  - ${label}: earnings family lookup FAILED (unavailable; not verified zero)`);
+    } else if (h.tier === 'earnings_family') {
+      lines.push(`  - ${label}: settled_history: tier=earnings_family n=${h.n} hits=${h.hits} misses=${h.misses} hit_rate=${rate} penalty=${Number(h.penalty).toFixed(2)} (cross-company earnings base rate; ${c.route_entity ?? 'company'} has no settled comparables of its own)`);
+    } else if (h.tier === 'none') {
+      lines.push(`  - ${label}: same-company history absent (n<2); no family history with n>=2`);
+    } else {
+      lines.push(`  - ${label}: settled_history: tier=exact_series n=${h.n} penalty=0 (same-company series)`);
+    }
+  }
+  return lines;
+}
+
 function renderResearchCitationProvenance(composites) {
   const ranked = composites
     .filter((c) => Array.isArray(c?.research_citations) && c.research_citations.length)
@@ -1348,6 +1519,7 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     provenanceLines.push(`research_route: ${prov.research_route}${prov.route_horizon ? ` (horizon=${prov.route_horizon})` : ''} | settled_history: tier=${prov.history_match_tier ?? 'none'} n=${prov.history_sample_size ?? 0} hits=${prov.history_hits ?? 0} misses=${prov.history_misses ?? 0} hit_rate=${prov.history_hit_rate == null ? 'n/a' : prov.history_hit_rate.toFixed(2)}`);
   }
   provenanceLines.push(...renderSettledHistoryProvenance(composites));
+  provenanceLines.push(...renderEarningsFamilyProvenance(composites));
   provenanceLines.push(...renderResearchCitationProvenance(composites));
   const earningsNote = renderEarningsAlphaProvenance(composites);
   if (earningsNote) provenanceLines.push(...earningsNote.split('\n'));
@@ -1504,6 +1676,7 @@ export function buildMentionsSynthesisInput({
     pmt_advisory_context: row.pmt_advisory_context ?? advisoryContext,
     evidence_availability: row.evidence_availability ?? null,
     confidence_cap_reason: row.confidence_cap_reason ?? null,
+    ...(row.earnings_family_history ? { earnings_family_history: row.earnings_family_history } : {}),
     market_context: {
       implied: row.implied_probability,
       bid_cents: row.market_yes_bid,
@@ -2248,7 +2421,7 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, earningsFamilyHistory = null, sourceHealthDisclosure = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
   const presentation = resolveMentionPresentationMetadata({ date, event });
@@ -2352,7 +2525,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     }
     return buildMentionCompositeForMarket({
       event, market: raw, historyRecords, historyStoreStatus,
-      earningsQuarterLayer, earningsContextDelta,
+      earningsQuarterLayer, earningsContextDelta, earningsFamilyHistory,
       sportsSettledResult: perMarketSportsHistory,
       sportsGameContextResult: perMarketGameCtx,
     });
@@ -2372,6 +2545,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     history_hit_rate: prov.history_hit_rate ?? null,
     history_match_quality_penalty: prov.history_match_quality_penalty ?? null,
     history_source_tickers: prov.history_source_tickers ?? null,
+    earnings_family_history: prov.earnings_family_history ?? null,
     last_four_quarter_hit_rate: earningsQuarterLayer?.last_four_quarter_hit_rate ?? null,
     earnings_quarters_considered: earningsQuarterLayer?.quarters_considered ?? null,
     earnings_context_delta: earningsContextDelta ? {
@@ -2771,6 +2945,7 @@ export async function writeKalshiEventPackets({
   allPrimeAttempts = [],
   synthesizeImpl = composeMentionPacketDeterministic,
   runStartedAtUtc = null,
+  fetchImpl = fetch,
 }) {
   let totalMarketCount = 0;
   let missingMarketEventCount = 0;
@@ -2789,6 +2964,8 @@ export async function writeKalshiEventPackets({
     date,
     packetType: PACKET_TYPE,
   }).disclosureLine;
+  let earningsFamilyHistory = null;
+  let earningsFamilyHistoryFetched = false;
   for (const ev of events) {
     const ticker = ev?.event_ticker;
     if (!ticker || seen.has(ticker)) continue;
@@ -2805,6 +2982,22 @@ export async function writeKalshiEventPackets({
     let earningsContextSources = null;
     const evRoute = resolveResearchRoute(routeEventLike({ event: mergedEvent }));
     if (evRoute?.route === 'earnings_call') {
+      if (!earningsFamilyHistoryFetched) {
+        earningsFamilyHistoryFetched = true;
+        try {
+          earningsFamilyHistory = await fetchEarningsFamilyHistory({ stateRoot, fetchImpl });
+        } catch (err) {
+          earningsFamilyHistory = {
+            scan_ok: false,
+            series_scanned: 0,
+            series_with_history: 0,
+            settled_markets: 0,
+            by_word: {},
+            updated_utc: new Date().toISOString(),
+            error: err?.message ?? String(err),
+          };
+        }
+      }
       const family = resolveEarningsFamily(mergedEvent);
       if (family?.ticker) {
         earningsQuarters = await loadEarningsHistory({ ticker: family.ticker, stateRoot });
@@ -2822,6 +3015,7 @@ export async function writeKalshiEventPackets({
       historyStoreStatus: historyLoad.status,
       earningsQuarters,
       earningsContextSources,
+      earningsFamilyHistory,
       sourceHealthDisclosure,
     });
     totalMarketCount += built.marketCount;

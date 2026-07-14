@@ -7,6 +7,8 @@
 // Route priority: earnings_call > sports_announcer > trump_* >
 // talk_show_media > entertainment_reality > political_general.
 
+import { resolveEarningsTicker } from './earnings-family-history.mjs';
+
 export const RESEARCH_ROUTES = Object.freeze([
   'sports_announcer',
   'earnings_call',
@@ -165,14 +167,23 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
   const snapshotFamily = activeRuleFamilyFromSnapshot(rulesSnapshot);
   if (snapshotFamily) {
     const horizon = snapshotFamily === 'topic_most_mentioned' ? null : 'event';
-    const entity = snapshotFamily === 'trump_event' ? 'trump' : null;
+    const entity = snapshotFamily === 'trump_event'
+      ? 'trump'
+      : snapshotFamily === 'earnings_call'
+        ? resolveEarningsTicker(event?.series_ticker, [event?.title, event?.sub_title].filter(Boolean).join(' '))
+        : null;
     return result(snapshotFamily, 'rules_snapshot', { entity, horizon, close_window_days: closeWindowDays(event, nowMs) });
   }
   const text = combinedText(event);
   const windowDays = closeWindowDays(event, nowMs);
 
   if (EARNINGS_RE.test(text)) {
-    return result('earnings_call', 'earnings_terms', { close_window_days: windowDays, horizon: 'event' });
+    const earningsTicker = resolveEarningsTicker(event?.series_ticker, [event?.title, event?.sub_title].filter(Boolean).join(' '));
+    return result('earnings_call', 'earnings_terms', {
+      entity: earningsTicker,
+      close_window_days: windowDays,
+      horizon: 'event',
+    });
   }
   // A Trump EVENT subject must not be captured by the sports branches: the
   // all-market text can carry sports-like strike terms (World Cup, Olympics,

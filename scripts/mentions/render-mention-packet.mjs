@@ -378,7 +378,15 @@ export function buildTrumpQualificationCheck(input = {}) {
 
 function cardEvidenceLabel(term, note = {}) {
   const provenance = note.provenance ?? term.research_term_note?.provenance ?? null;
-  const hasHistory = Boolean(provenance);
+  const familyTier = term?.earnings_family_history?.tier;
+  const hasFamilyHistory = familyTier === 'earnings_family' || familyTier === 'exact_series';
+  const hasHistory = Boolean(provenance) || hasFamilyHistory;
+  const familyHistoryLabel = familyTier === 'earnings_family'
+    ? 'cross-company earnings family history (no same-company history)'
+    : 'comparable history';
+  const familyHistoryOnlyLabel = familyTier === 'earnings_family'
+    ? 'cross-company earnings family history only (no same-company history)'
+    : 'comparable history only';
   const narrative = termNarrativeText(term, note);
   const coldCurrent = COLD_CURRENT_CONTEXT_RE.test(narrative);
   const hasCurrent = Boolean(narrative) && !coldCurrent;
@@ -387,10 +395,10 @@ function cardEvidenceLabel(term, note = {}) {
     || /\(\s*\d+\+\s*times\s*\)/i.test(short)
     || /\brepeat_requirement\b/i.test(String(term?.repeat_requirement ?? ''));
 
-  if (hasHistory && isCountTerm) return 'comparable history only; weak current context.';
-  if (hasHistory && coldCurrent) return 'comparable history only; weak current context.';
-  if (hasHistory && hasCurrent) return 'current-event context + comparable history.';
-  if (hasHistory) return 'comparable history only.';
+  if (hasHistory && isCountTerm) return `${familyHistoryOnlyLabel}; weak current context.`;
+  if (hasHistory && coldCurrent) return `${familyHistoryOnlyLabel}; weak current context.`;
+  if (hasHistory && hasCurrent) return `current-event context + ${familyHistoryLabel}.`;
+  if (hasHistory) return `${familyHistoryOnlyLabel}.`;
   if (hasCurrent) return 'current-event context.';
   return 'no direct current context.';
 }
@@ -464,6 +472,16 @@ function evidenceGapLine(term) {
   if (!ev) return null;
   const short = term?._short ?? term?.short_term ?? 'unknown';
   const parts = [];
+  const family = term?.earnings_family_history;
+  if (family?.tier === 'lookup_failed') {
+    parts.push(`earnings family lookup failed${family.error ? ` (${family.error})` : ''}; family history is unavailable, not verified zero`);
+  } else if (family?.tier === 'earnings_family') {
+    const hitRate = family.hit_rate == null ? 'n/a' : Number(family.hit_rate).toFixed(2);
+    const penalty = family.penalty == null ? 'n/a' : Number(family.penalty).toFixed(2);
+    parts.push(`same-company settled history absent (n<2); using cross-company earnings family fallback n=${family.n} hits=${family.hits} misses=${family.misses} hit_rate=${hitRate} penalty=${penalty}`);
+  } else if (family?.tier === 'none') {
+    parts.push('same-company settled history absent (n<2); no earnings family history with n>=2');
+  }
   const se = ev.settled_evidence;
   if (se && se.status !== 'present') {
     const why = se.status === 'none_for_series'

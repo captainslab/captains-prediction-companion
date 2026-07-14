@@ -112,7 +112,7 @@ function candidateWordsFromEvent(event) {
   return out;
 }
 
-const normWord = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const normWord = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // KALSHI-NATIVE FIRST (mandatory): pull the series' prior SETTLED events and
 // compute, per exact strike phrase, the native historical YES base rate. This is
