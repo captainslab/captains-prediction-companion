@@ -20,6 +20,10 @@ function proximityOnlyEvent(ticker = 'KXWCMENTION-26JUN12CANBIH') {
     title: `What will the announcers say? [${ticker}]`,
     sub_title: 'World Cup broadcast mentions',
     series_ticker: 'KXWCMENTION',
+    event_url: `https://kalshi.com/events/${ticker}`,
+    event_time_utc: '2026-06-12T18:00:00Z',
+    settlement_source_link: 'https://www.fifa.com/',
+    research_timestamp: '2026-06-12T17:00:00Z',
     markets: [
       {
         ticker: `${ticker}-GOAL`,

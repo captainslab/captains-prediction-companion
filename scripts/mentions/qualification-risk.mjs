@@ -20,33 +20,6 @@ const PRESENTATION_TIME_FIELDS = Object.freeze([
   'scheduled_time',
 ]);
 
-const FALLBACK_TIME_FIELDS = Object.freeze([
-  'close_time',
-  'expected_expiration_time',
-  'expiration_time',
-  'latest_expiration_time',
-  'occurrence_datetime',
-]);
-
-// Settlement-expiration fields more than this many days after the market's own
-// (ticker/packet) date are treated as far-future ceilings / sentinels — e.g. an
-// end-of-year "2026-12-31" expiration stamped on an open-ended "live" market —
-// and are never used as the event-start time shown in the header.
-const SENTINEL_HORIZON_DAYS = 45;
-
-function isoToEpochDay(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? null : Math.floor(d.getTime() / 86400000);
-}
-
-function isFarFutureSentinel(candidate, referenceDate) {
-  const refDay = isoToEpochDay(referenceDate);
-  const candDay = isoToEpochDay(toEtDate(candidate.iso));
-  if (refDay == null || candDay == null) return false;
-  return candDay - refDay > SENTINEL_HORIZON_DAYS;
-}
-
 const DIRECT_ROUTE_RE = /\b(trump_event|trump_weekly|trump_monthly)\b/i;
 const TRUMP_RE = /\btrump\b/i;
 const RISK_PATTERNS = Object.freeze([
@@ -124,10 +97,13 @@ function asText(value) {
 }
 
 function settlementSourceForEvent(event = {}) {
-  const explicit = asText(event?.settlement_source_link ?? event?.event_url ?? event?.url);
-  if (explicit) return explicit;
-  const eventTicker = asText(event?.event_ticker);
-  return eventTicker ? `https://kalshi.com/events/${eventTicker}` : '';
+  const declared = Array.isArray(event?.settlement_sources)
+    ? event.settlement_sources.map((entry) => asText(entry?.url)).filter(Boolean)
+    : [];
+  const explicit = asText(event?.settlement_source_link ?? event?.settlement_source);
+  const eventUrl = asText(event?.event_url ?? event?.url);
+  const source = declared[0] || explicit;
+  return source && source !== eventUrl ? source : '';
 }
 
 function eventTickerFromSettlementSource(url) {
@@ -157,33 +133,10 @@ function firstMarket(event) {
 
 function pickPresentationTime(event) {
   const candidates = [];
-  const markets = eventMarkets(event);
   for (const field of PRESENTATION_TIME_FIELDS) {
     const iso = isoCandidate(event?.[field]);
     if (iso) candidates.push({ field, iso, source: `event.${field}` });
   }
-  for (let i = 0; i < markets.length; i += 1) {
-    const m = markets[i];
-    for (const field of PRESENTATION_TIME_FIELDS) {
-      const iso = isoCandidate(m?.[field]);
-      if (iso) candidates.push({ field, iso, source: `markets[${i}].${field}` });
-    }
-  }
-
-  if (!candidates.length) {
-    for (const field of FALLBACK_TIME_FIELDS) {
-      const iso = isoCandidate(event?.[field]);
-      if (iso) candidates.push({ field, iso, source: `event.${field}`, fallback: true });
-    }
-    for (let i = 0; i < markets.length; i += 1) {
-      const m = markets[i];
-      for (const field of FALLBACK_TIME_FIELDS) {
-        const iso = isoCandidate(m?.[field]);
-        if (iso) candidates.push({ field, iso, source: `markets[${i}].${field}`, fallback: true });
-      }
-    }
-  }
-
   return candidates;
 }
 
@@ -201,7 +154,10 @@ export function detectEventMetadataMismatch({ date = null, event = {} } = {}) {
   const eventTicker = asText(event?.event_ticker);
   const tickerDate = extractDateFromTicker(eventTicker);
   const packetDate = asText(date) || null;
-  const expectedDate = packetDate || tickerDate || null;
+  // The run date is not the event start date: packets may be generated before
+  // a future event. Prefer the event-level ticker date and use packet date only
+  // when no event date can be derived at all.
+  const expectedDate = tickerDate || packetDate || null;
   const title = asText(event?.title);
   const settlementSource = settlementSourceForEvent(event);
   const conflicts = [];
@@ -249,36 +205,17 @@ export function resolveMentionPresentationMetadata({ date = null, event = {} } =
   const title = mismatch.title;
   const settlementSource = mismatch.settlement_source;
   const candidates = pickPresentationTime(event);
-  const explicit = candidates.filter((candidate) => !candidate.fallback);
-  const fallback = candidates.filter((candidate) => candidate.fallback);
 
   const conflicts = [...mismatch.conflicts];
   let selected = null;
 
-  if (explicit.length) {
-    selected = explicit[0];
-    for (const candidate of explicit.slice(1)) {
+  if (candidates.length) {
+    selected = candidates[0];
+    for (const candidate of candidates.slice(1)) {
       if (candidate.iso !== selected.iso) {
         pushConflict(conflicts, candidate.field, selected.iso, candidate.iso, candidate.source);
       }
     }
-  } else if (fallback.length) {
-    // Settlement-expiration fields (close_time / expiration_time /
-    // expected_expiration_time / occurrence_datetime) are ceilings, not the
-    // event-start date. Drop far-future sentinels (e.g. a Dec 31 expiration on
-    // an open-ended "live" market), then only trust the surviving ceilings when
-    // they AGREE on a single date (as they do for a fixed-time event). If every
-    // ceiling was a sentinel, or the survivors disagree, we have no trustworthy
-    // event start — mark it UNCONFIRMED rather than presenting an expiration
-    // ceiling as the event start. Ceilings never fail-close the packet.
-    const referenceDate = tickerDate || packetDate || null;
-    const nonSentinel = referenceDate
-      ? fallback.filter((candidate) => !isFarFutureSentinel(candidate, referenceDate))
-      : fallback.slice();
-    const distinctDates = new Set(
-      nonSentinel.map((candidate) => toEtDate(candidate.iso)).filter(Boolean),
-    );
-    selected = nonSentinel.length && distinctDates.size === 1 ? nonSentinel[0] : null;
   }
 
   const eventDate = selected ? toEtDate(selected.iso) : null;
@@ -286,13 +223,8 @@ export function resolveMentionPresentationMetadata({ date = null, event = {} } =
   const selectedSource = selected?.source ?? null;
 
   if (selected) {
-    // Only an explicit event-start timestamp may contradict the expected date.
-    // A settlement-expiration fallback is a display-only ceiling and must not block.
-    if (!selected.fallback && expectedDate && eventDate && expectedDate !== eventDate) {
+    if (expectedDate && eventDate && expectedDate !== eventDate) {
       pushConflict(conflicts, 'event_time', expectedDate, eventDate, selectedSource);
-    }
-    if (packetDate && tickerDate && packetDate !== tickerDate) {
-      pushConflict(conflicts, 'event_date', tickerDate, packetDate, 'event_ticker/date input');
     }
   }
 
@@ -376,6 +308,9 @@ function qualificationTermsSummary(qualificationTerms) {
 function ednqRouteFamily(route, directTrump) {
   const r = asText(route).toLowerCase();
   if (directTrump || r.startsWith('trump_')) return 'trump';
+  if (r === 'news_broadcast') return 'news';
+  if (r === 'speech_event') return 'speech';
+  if (r === 'interview_media') return 'interview';
   if (r === 'political_general' || r === 'debate_hearing' || r === 'fed_agency') return 'politics';
   if (r === 'earnings_call') return 'earnings';
   if (r === 'sports_announcer') return 'sports';
@@ -386,6 +321,27 @@ function ednqRouteFamily(route, directTrump) {
 }
 
 const EDNQ_FAMILY_WORDING = Object.freeze({
+  news: {
+    event_type: 'news-broadcast format',
+    no_format: 'No confirmed broadcast edition or source window is set yet.',
+    cancel: 'The event may fail to qualify if the covered newscast is preempted, replaced, rescheduled, or the term appears outside that edition.',
+    source: 'Source/window risk rises when the official broadcast video or matching transcript is delayed, partial, unavailable, or for a different edition.',
+    historical: 'EDNQ history for news-broadcast mention markets is edition-specific; do not assume a generic news base rate.',
+  },
+  speech: {
+    event_type: 'speech or remarks format',
+    no_format: 'No confirmed speech venue, speaker, or public source window is set yet.',
+    cancel: 'The event may fail to qualify if remarks are canceled, materially changed, private, or outside the covered speech.',
+    source: 'Source/window risk rises when the official video or transcript is delayed, partial, or for a different appearance.',
+    historical: 'EDNQ history for speeches is appearance-specific; do not transfer it across venues or speakers.',
+  },
+  interview: {
+    event_type: 'interview format',
+    no_format: 'No confirmed interview program, guest slot, or source window is set yet.',
+    cancel: 'The event may fail to qualify if the interview is canceled, replaced, or the wording appears outside the covered segment.',
+    source: 'Source/window risk rises when the program video or transcript is delayed, partial, unavailable, or for a different segment.',
+    historical: 'EDNQ history for interviews is program- and guest-specific; do not assume a generic interview base rate.',
+  },
   politics: {
     event_type: 'political event format',
     no_format: 'No strong event-format indicator confirms qualification yet.',

@@ -264,7 +264,7 @@ test('current-context-only evidence clamps score below 65 and sets confidence_ca
   const text = renderMentionPacket(buildMentionsSynthesisInput({
     date: '2026-07-14', event: earningsEvent(), rows: [row],
   }), { generatedAtUtc: '2026-07-14T12:00:00.000Z' });
-  assert.match(text, /historical proof was insufficient/i);
+  assert.match(text, /thin historical proof|current-context-only evidence/i);
   assert.doesNotMatch(text, /research_score=64 \[WATCH\]/i);
 });
 

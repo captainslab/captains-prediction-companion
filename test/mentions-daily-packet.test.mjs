@@ -11,6 +11,7 @@ import {
   buildFullStrikeInventoryAppendix,
   appendFullStrikeInventory,
   validateSynthesizedMentionPacket,
+  mergeResearchIntoEvent,
 } from '../scripts/packets/generate-mentions-daily.mjs';
 
 function strongEarningsEvent() {
@@ -119,8 +120,10 @@ test('mentions daily packet keeps market context display-only / NOT IN SCORE', (
   }).text;
 
   assert.match(text, /Market Context - NOT IN SCORE: display-only context; never a score input\./);
-  assert.doesNotMatch(text, /yes_bid|yes_ask|last=|implied=/);
-  assert.doesNotMatch(text, /Market Context - NOT IN SCORE[\s\S]*bid range/);
+  const modelBody = text.split('9. MODEL-MARKET SNAPSHOTS')[0];
+  assert.doesNotMatch(modelBody, /yes_bid|yes_ask|last=|implied=/);
+  assert.doesNotMatch(modelBody, /Market Context - NOT IN SCORE[\s\S]*bid range/);
+  assert.match(text, /9\. MODEL-MARKET SNAPSHOTS[\s\S]*yes_bid_cents=/);
 });
 
 test('mentions daily packet uses full strike text, not abbreviation-only labels', () => {
@@ -264,4 +267,61 @@ test('mentions packet generator preserves forbidden pricing field guard in layer
     }),
     /forbidden pricing field "yes_bid"/i,
   );
+});
+
+// --- Regression (PR #56): preserve full strike text in mention rows ---
+// For generic-titled Kalshi mention boards the strike lives in yes_sub_title /
+// custom_strike, not the (shared) title. The row's full_strike_text must retain
+// the strike token, or the FULL STRIKE INVENTORY collapses every contract to the
+// same ambiguous title.
+test('buildMentionCompositeForMarket keeps the strike token in full_strike_text (generic title)', () => {
+  const event = {
+    event_ticker: 'KXOBAMAMENTION-99JAN01',
+    series_ticker: 'KXOBAMAMENTION',
+    title: 'What will Barack Obama say during the Presidential Center event?',
+    markets: [],
+  };
+  const market = {
+    ticker: 'KXOBAMAMENTION-99JAN01-CHICAGO',
+    title: 'What will Barack Obama say during the Presidential Center event?',
+    yes_sub_title: 'Chicago',
+  };
+  const composite = buildMentionCompositeForMarket({ event, market });
+  // Must carry the distinguishing strike, not just the generic shared title.
+  assert.match(composite.full_strike_text, /Chicago/);
+  assert.notEqual(composite.full_strike_text, market.title);
+});
+
+// --- Regression (PR #56): propagate the research artifact timestamp ---
+// The real research writer emits `produced_at` (older artifacts: generated_utc),
+// not `research_timestamp`, and the canonical identity gate requires a research
+// timestamp. mergeResearchIntoEvent must copy it onto the event or otherwise
+// valid events are marked publication_blocked ("research timestamp unavailable").
+function usableResearchEntry(ticker, { produced_at = null, generated_utc = null } = {}) {
+  const entry = {
+    event_ticker: ticker,
+    markets: [{ market_ticker: `${ticker}-A`, layer_records: { event_proximity: { present: true } } }],
+  };
+  if (produced_at) entry.produced_at = produced_at;
+  if (generated_utc) entry.generated_utc = generated_utc;
+  return entry;
+}
+
+test('mergeResearchIntoEvent copies produced_at onto research_timestamp when the event lacks one', () => {
+  const event = { event_ticker: 'KXX-99JAN01', markets: [{ ticker: 'KXX-99JAN01-A', title: 'Yes' }] };
+  assert.equal(event.research_timestamp, undefined);
+  const merged = mergeResearchIntoEvent(event, usableResearchEntry('KXX-99JAN01', { produced_at: '2098-12-31T18:00:00Z' }));
+  assert.equal(merged.research_timestamp, '2098-12-31T18:00:00Z');
+});
+
+test('mergeResearchIntoEvent falls back to generated_utc for older artifacts', () => {
+  const event = { event_ticker: 'KXX-99JAN02', markets: [{ ticker: 'KXX-99JAN02-A', title: 'Yes' }] };
+  const merged = mergeResearchIntoEvent(event, usableResearchEntry('KXX-99JAN02', { generated_utc: '2098-11-30T12:00:00Z' }));
+  assert.equal(merged.research_timestamp, '2098-11-30T12:00:00Z');
+});
+
+test('mergeResearchIntoEvent does not overwrite an existing event research_timestamp', () => {
+  const event = { event_ticker: 'KXX-99JAN03', research_timestamp: '2099-01-01T00:00:00Z', markets: [{ ticker: 'KXX-99JAN03-A', title: 'Yes' }] };
+  const merged = mergeResearchIntoEvent(event, usableResearchEntry('KXX-99JAN03', { produced_at: '2098-12-31T18:00:00Z' }));
+  assert.equal(merged.research_timestamp, '2099-01-01T00:00:00Z');
 });

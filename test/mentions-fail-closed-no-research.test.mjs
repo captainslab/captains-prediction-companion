@@ -44,6 +44,10 @@ function noResearchEvent() {
     series_ticker: 'KXLATENIGHTMENTION',
     title: 'What will James Corden say during World Cup on Fox After Hours?',
     sub_title: 'James Corden',
+    event_url: 'https://kalshi.com/events/KXLATENIGHTMENTION-26JUN19',
+    event_time_utc: '2026-06-19T18:00:00Z',
+    settlement_source_link: 'https://www.fox.com/',
+    research_timestamp: '2026-06-18T20:00:00Z',
     markets: [
       {
         ticker: 'KXLATENIGHTMENTION-26JUN19-RECO',
@@ -84,6 +88,10 @@ function proximityOnlyUnknownStatusEvent() {
     series_ticker: 'KXUNK',
     title: 'What will the speaker say during the rally?',
     sub_title: 'speaker',
+    event_url: 'https://kalshi.com/events/KXUNK-26JUN19',
+    event_time_utc: '2026-06-19T18:00:00Z',
+    settlement_source_link: 'https://example.com/official-event',
+    research_timestamp: '2026-06-18T20:00:00Z',
     markets: [
       {
         ticker: 'KXUNK-26JUN19-TAR',
@@ -263,6 +271,10 @@ test('current-cycle research (produced shortly BEFORE the run start) renders, no
     series_ticker: 'KXFRESHMENTION',
     title: 'What will the speaker say during the rally?',
     sub_title: 'speaker',
+    event_url: 'https://kalshi.com/events/KXFRESHMENTION-26JUN19',
+    event_time_utc: '2026-06-19T18:00:00Z',
+    settlement_source_link: 'https://example.com/fresh-official-event',
+    research_timestamp: '2026-06-19T11:55:00Z',
     markets: [{
       ticker: 'KXFRESHMENTION-26JUN19-AFFORD',
       title: 'What will the speaker say? -- Affordability',

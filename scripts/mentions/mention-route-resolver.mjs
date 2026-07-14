@@ -4,8 +4,8 @@
 // research route + scoring profile. Uses only text/ticker/close-time fields —
 // never price fields — so the same event always resolves the same way.
 //
-// Route priority: earnings_call > sports_announcer > trump_* >
-// talk_show_media > entertainment_reality > political_general.
+// Route priority is event-subject-first. Strike/rules text is never allowed to
+// reclassify a news, hearing, speech, interview, or other event.
 
 import { resolveEarningsTicker } from './earnings-family-history.mjs';
 
@@ -21,6 +21,9 @@ export const RESEARCH_ROUTES = Object.freeze([
   'fed_agency',
   'debate_hearing',
   'topic_most_mentioned',
+  'news_broadcast',
+  'speech_event',
+  'interview_media',
 ]);
 
 export const ROUTE_TO_PROFILE = Object.freeze({
@@ -36,6 +39,9 @@ export const ROUTE_TO_PROFILE = Object.freeze({
   fed_agency:            'political_mentions',
   debate_hearing:        'political_mentions',
   topic_most_mentioned:  'political_mentions',
+  news_broadcast:       'political_mentions',
+  speech_event:         'political_mentions',
+  interview_media:      'political_mentions',
 });
 
 // Reserved policy hook for future Trump Truth Social history work. Not used
@@ -55,6 +61,9 @@ const EARNINGS_RE = /\b(earnings|earnings call|quarterly results|guidance|eps|re
 // announcer context. "game broadcast" and announcer-specific terms remain.
 const SPORTS_RE = /\b(announcer|commentator|commentary|pregame|postgame|espn|fox sports|tnt|cbs sports|nbc sports|game broadcast|play-by-play)\b/;
 const SPORTS_EVENT_RE = /\b(world cup|fifa|world series|super bowl|stanley cup|champions league|premier league|olympics?|grand prix|\bnba\b|\bnfl\b|\bmlb\b|\bnhl\b|\bmls\b|\bufc\b)\b/;
+const NEWS_BROADCAST_RE = /\b(world news tonight|nightly news|evening news|news broadcast|network news|newscast|abc news|cbs news|nbc news|news tonight)\b/;
+const SPEECH_RE = /\b(address|remarks|speech|rally|campaign speech|keynote)\b/;
+const INTERVIEW_RE = /\b(interview|one-on-one|q&a|question and answer)\b/;
 const TALK_SHOW_RE = /\b(talk show|late night|tonight show|podcast|interview|press briefing|snl|saturday night live|kimmel|fallon|colbert|rogan|the view|meet the press)\b/;
 const ENTERTAINMENT_RE = /\b(reality tv|reality show|bachelor|bachelorette|survivor|big brother|love island|award show|oscars|academy awards|grammys|emmys)\b/;
 const POLITICAL_RE = /\b(president|trump|biden|vance|senate|congress|governor|mayor|election|debate|speech|rally|hearing|white house|secretary|minister|campaign|candidate)\b/;
@@ -127,7 +136,7 @@ function closeWindowDays(event, nowMs) {
   return (latest - nowMs) / MS_PER_DAY;
 }
 
-function result(route, basis, { entity = null, horizon = null, close_window_days = null } = {}) {
+function result(route, basis, { entity = null, horizon = null, close_window_days = null, event_format = null } = {}) {
   return {
     route,
     profile_key: ROUTE_TO_PROFILE[route],
@@ -135,6 +144,7 @@ function result(route, basis, { entity = null, horizon = null, close_window_days
     entity,
     horizon,
     close_window_days,
+    event_format: event_format ?? route,
   };
 }
 
@@ -175,14 +185,30 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
     return result(snapshotFamily, 'rules_snapshot', { entity, horizon, close_window_days: closeWindowDays(event, nowMs) });
   }
   const text = combinedText(event);
+  const subjectText = lowerJoined([
+    event?.event_ticker, event?.series_ticker, event?.title, event?.sub_title,
+    event?.subtitle, event?.event_title,
+  ]);
   const windowDays = closeWindowDays(event, nowMs);
 
+  // Subject fields win before any strike/rules text is examined. This prevents
+  // a news story mentioning a sports tournament from becoming a sports route.
+  if (NEWS_BROADCAST_RE.test(subjectText)) {
+    return result('news_broadcast', 'news_broadcast_subject', {
+      close_window_days: windowDays, horizon: 'event', event_format: 'news_broadcast',
+    });
+  }
   if (EARNINGS_RE.test(text)) {
     const earningsTicker = resolveEarningsTicker(event?.series_ticker, [event?.title, event?.sub_title].filter(Boolean).join(' '));
     return result('earnings_call', 'earnings_terms', {
       entity: earningsTicker,
       close_window_days: windowDays,
       horizon: 'event',
+    });
+  }
+  if (INTERVIEW_RE.test(subjectText)) {
+    return result('interview_media', 'interview_subject', {
+      close_window_days: windowDays, horizon: 'event', event_format: 'interview',
     });
   }
   // A Trump EVENT subject must not be captured by the sports branches: the
@@ -194,10 +220,15 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
   const subjectIsTrump =
     TRUMP_RE.test(lowerJoined([event?.title, event?.sub_title, event?.subtitle, event?.event_title])) ||
     /trump/.test(lowerJoined([event?.event_ticker, event?.series_ticker]));
-  if (!subjectIsTrump && SPORTS_RE.test(text)) {
+  // Mirror the subjectIsTrump guard for speech subjects: a speech event (Biden
+  // campaign speech, etc.) whose STRIKE phrase carries a sports term ("World
+  // Cup") must not be captured by the strike-inclusive sports branches. It
+  // falls through to the speech_event subject check below. Subject-only signal.
+  const subjectIsSpeech = SPEECH_RE.test(subjectText);
+  if (!subjectIsTrump && !subjectIsSpeech && SPORTS_RE.test(text)) {
     return result('sports_announcer', 'broadcast_terms', { close_window_days: windowDays, horizon: 'event' });
   }
-  if (!subjectIsTrump && SPORTS_EVENT_RE.test(text)) {
+  if (!subjectIsTrump && !subjectIsSpeech && SPORTS_EVENT_RE.test(text)) {
     return result('sports_announcer', 'sports_event_terms', { close_window_days: windowDays, horizon: 'event' });
   }
   // Fed/FOMC/agency-testimony context routes before Trump so a Powell/FOMC
@@ -232,6 +263,12 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
       return result('trump_monthly', 'trump_monthly_close_window', { entity: 'trump', horizon: 'monthly', close_window_days: windowDays });
     }
     return result('trump_event', 'trump_event_default', { entity: 'trump', horizon: 'event', close_window_days: windowDays });
+  }
+
+  if (SPEECH_RE.test(subjectText)) {
+    return result('speech_event', 'speech_subject', {
+      close_window_days: windowDays, horizon: 'event', event_format: 'speech',
+    });
   }
 
   // Debate/hearing/witness/candidate — checked AFTER the Trump block so a

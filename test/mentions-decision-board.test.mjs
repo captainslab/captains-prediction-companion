@@ -58,22 +58,22 @@ function scoredComposite() {
   });
 }
 
-test('mention composite with zero source layers -> BLOCKED_SOURCE_LAYER_MISSING, market retained', () => {
+test('mention composite with zero source layers -> BLOCKED_SOURCE_LAYER_MISSING, no price fields', () => {
   const composites = mentionEvent().markets.map((m) =>
     buildMentionCompositeForMarket({ event: mentionEvent(), market: m }));
   for (const c of composites) {
     const row = mentionCompositeToDecisionRow(c);
     assert.equal(row.edge_status, 'BLOCKED');
     assert.match(row.blocker_if_any, /BLOCKED_SOURCE_LAYER_MISSING/);
-    // market price retained for edge detection
-    assert.ok(row.implied_probability !== null, 'implied prob retained');
-    assert.ok(row.market_yes_ask !== null, 'market ask retained');
+    assert.equal(row.implied_probability, undefined, 'market probability is not a model field');
+    assert.equal(row.market_yes_ask, undefined, 'market ask is not a model field');
     // explicit missing source layers + research trigger (not "source_ladder: MISSING")
     assert.ok(row.missing_layers.length > 0, 'missing source layers enumerated');
     assert.match(row.trigger_event, /mentions research/i);
     // composite score is NOT a probability; no fake fair/edge fabricated
     assert.equal(row.composite_score, null);
-    assert.equal(row.edge_cents_or_pp, null);
+    assert.equal(row.edge_cents_or_pp, undefined);
+    assert.equal(row.market_snapshot, undefined);
   }
 });
 
@@ -82,7 +82,7 @@ test('mention composite WITH source layers -> scored row, not blocked, market se
   assert.notEqual(row.edge_status, 'BLOCKED');
   assert.ok(row.composite_score !== null, 'composite score present when layers exist');
   // market price is in its own half and did NOT become the composite score
-  assert.notEqual(row.composite_score, row.implied_probability * 100);
+  assert.equal(row.implied_probability, undefined);
   assert.ok(Number(row.layers_present.split('/')[0]) > 0, 'source layers counted');
 });
 
@@ -107,8 +107,9 @@ test('mentions slate packet: v2 CPC board, compact customer text, raw inventory 
 
   // Composite score is shown as stacked cards; the board stays numeric and readable.
   assert.match(packet.text, /RESEARCH GAP/);
-  assert.match(packet.text, /5\. SOURCE GAPS[\s\S]*2 research gaps remain: Karen Bass, Nithya Raman\./);
-  assert.match(packet.text, /8\. FULL STRIKE INVENTORY[\s\S]*Will Karen Bass qualify for the runoff\?/);
+  assert.match(packet.text, /5\. SOURCE GAPS[\s\S]*2 research gaps remain: Will Karen Bass qualify for the runoff\?, Will Nithya Raman qualify for the runoff\./);
+  assert.match(packet.text, /8\. FULL STRIKE INVENTORY[\s\S]*Will Karen Bass qualify for the runoff\?[\s\S]*Will Nithya Raman qualify for the runoff\?/);
+  assert.match(packet.text, /9\. MODEL-MARKET SNAPSHOTS/);
 
   // raw contract inventory is audit-only
   assert.equal(looksLikeRawInventoryDump(packet.text), false);
@@ -129,8 +130,10 @@ test('market price never folds into mention composite score', () => {
   const r2 = mentionCompositeToDecisionRow(buildMentionCompositeForMarket({ event: ev2, market: ev2.markets[0] }));
   // composite_score identical (both null here — no layers) regardless of price
   assert.equal(r1.composite_score, r2.composite_score);
-  // but the market half DID change
-  assert.notEqual(r1.market_yes_ask, r2.market_yes_ask);
+  assert.equal(r1.market_yes_ask, undefined);
+  assert.equal(r2.market_yes_ask, undefined);
+  assert.equal(r1.market_snapshot, undefined);
+  assert.equal(r2.market_snapshot, undefined);
 });
 
 test('stub research quality caps LEAN posture to WATCH', () => {

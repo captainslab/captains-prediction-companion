@@ -98,14 +98,14 @@ test('route resolution happens before source/model extraction', async () => {
     runStepImpl: () => { throw new Error('no step may run before routes resolve'); },
   });
   assert.equal(res.attempted.length, 1);
-  assert.equal(res.attempted[0].research_route.route, 'political_general');
+  assert.equal(res.attempted[0].research_route.route, 'speech_event');
 });
 
-test('non-Trump political event routes to political_general -> political_mentions', () => {
+test('non-Trump speech event routes to speech_event -> political_mentions', () => {
   const ev = bidenEvent();
   const composite = buildMentionCompositeForMarket({ event: ev, market: ev.markets[0] });
-  assert.equal(composite.research_route, 'political_general');
-  assert.equal(composite.result.profile, ROUTE_TO_PROFILE.political_general);
+  assert.equal(composite.research_route, 'speech_event');
+  assert.equal(composite.result.profile, ROUTE_TO_PROFILE.speech_event);
 });
 
 test('settled history feeds historical_tendency without prices and shows provenance', async () => {
@@ -143,7 +143,7 @@ test('settled history feeds historical_tendency without prices and shows provena
   // Provenance appears in the deterministic slate text of the packet.
   const built = buildKalshiEventPacket({ date: '2026-06-12', event: ev, sourceUrl: 'x.json', historyRecords });
   assert.match(built.text, /research_route: trump_weekly/);
-  assert.match(built.text, /settled_history: tier=exact_horizon n=5 hits=4 misses=1 hit_rate=0\.80/);
+  assert.match(built.text, /Tariff: tier=exact_horizon n=5 hits=4 misses=1 hit_rate=0\.80/);
 });
 
 test('prices never enter scoring: composite identical with and without market prices, history on', async () => {
@@ -172,13 +172,13 @@ test('empty history falls back safely without fake conviction', () => {
   assert.equal(histRow.present, false);
 });
 
-test('renderer stays deterministic with 8-section order, provenance fields tolerated', () => {
+test('renderer stays deterministic with 9-section order, provenance fields tolerated', () => {
   const built = buildKalshiEventPacket({ date: '2026-06-12', event: trumpWeeklyEvent(), sourceUrl: 'x.json' });
   const text1 = renderMentionPacket(built.synthesisInput, { generatedAtUtc: '2026-06-12T12:00:00Z' });
   const text2 = renderMentionPacket(built.synthesisInput, { generatedAtUtc: '2026-06-12T12:00:00Z' });
   assert.equal(text1, text2);
   assert.equal(validateRenderedPacket(text1, built.synthesisInput), true);
-  assert.equal(SECTION_ORDER.length, 8);
+  assert.equal(SECTION_ORDER.length, 9);
   let lastIdx = -1;
   for (const section of SECTION_ORDER) {
     const idx = text1.indexOf(section);
@@ -255,9 +255,9 @@ test('non-dry-run watch: route in ledger before generation; sender runs after ge
   assert.deepEqual(res.succeeded, ['KXHBIDENMENTION-26JUN12']);
   assert.deepEqual(steps, ['generator:KXHBIDENMENTION-26JUN12', 'sender:KXHBIDENMENTION-26JUN12']);
   // Route was annotated at discovery — before any generate/send step ran.
-  assert.equal(res.attempted[0].research_route.route, 'political_general');
+  assert.equal(res.attempted[0].research_route.route, 'speech_event');
   const finalLedger = JSON.parse(
     readFileSync(join(stateRoot, 'mentions', '2026-06-12', 'seen-events.json'), 'utf8'));
-  assert.equal(finalLedger.events['KXHBIDENMENTION-26JUN12'].research_route, 'political_general');
+  assert.equal(finalLedger.events['KXHBIDENMENTION-26JUN12'].research_route, 'speech_event');
   assert.equal(finalLedger.events['KXHBIDENMENTION-26JUN12'].status, 'delivered');
 });
