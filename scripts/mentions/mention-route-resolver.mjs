@@ -220,10 +220,15 @@ function resolveResearchRouteWithSnapshot(event, { now, rulesSnapshot } = {}) {
   const subjectIsTrump =
     TRUMP_RE.test(lowerJoined([event?.title, event?.sub_title, event?.subtitle, event?.event_title])) ||
     /trump/.test(lowerJoined([event?.event_ticker, event?.series_ticker]));
-  if (!subjectIsTrump && SPORTS_RE.test(text)) {
+  // Mirror the subjectIsTrump guard for speech subjects: a speech event (Biden
+  // campaign speech, etc.) whose STRIKE phrase carries a sports term ("World
+  // Cup") must not be captured by the strike-inclusive sports branches. It
+  // falls through to the speech_event subject check below. Subject-only signal.
+  const subjectIsSpeech = SPEECH_RE.test(subjectText);
+  if (!subjectIsTrump && !subjectIsSpeech && SPORTS_RE.test(text)) {
     return result('sports_announcer', 'broadcast_terms', { close_window_days: windowDays, horizon: 'event' });
   }
-  if (!subjectIsTrump && SPORTS_EVENT_RE.test(text)) {
+  if (!subjectIsTrump && !subjectIsSpeech && SPORTS_EVENT_RE.test(text)) {
     return result('sports_announcer', 'sports_event_terms', { close_window_days: windowDays, horizon: 'event' });
   }
   // Fed/FOMC/agency-testimony context routes before Trump so a Powell/FOMC

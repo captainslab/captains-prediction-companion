@@ -796,7 +796,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
 
   return {
     market_ticker: market?.ticker ?? legacy?.ticker ?? legacy?.event_id ?? 'MISSING',
-    full_strike_text: market?.title ?? legacy?.target_phrase ?? targetMention,
+    full_strike_text: targetMention ?? legacy?.target_phrase ?? 'MISSING',
     profile_basis: profileResolution.basis,
     research_route: route?.route ?? null,
     route_basis: route?.basis ?? null,
@@ -2342,6 +2342,12 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
     return cloned;
   }
   const cloned = { ...event };
+  // Propagate the research artifact timestamp onto the event so the canonical
+  // identity gate (event-integrity.mjs) sees a research_timestamp. The normal
+  // research writer emits `produced_at` (collect-mentions-research.mjs); older
+  // artifacts may carry `generated_utc`. Without this, otherwise-valid events
+  // are marked publication_blocked ("research timestamp unavailable").
+  cloned.research_timestamp = cloned.research_timestamp ?? researchEntry?.produced_at ?? researchEntry?.generated_utc ?? null;
   const markets = Array.isArray(cloned.markets) ? cloned.markets.slice() : [];
   const marketMap = researchEntry._marketMap || new Map();
   const hasUsableResearch = researchEntryHasUsableSignal(researchEntry);
@@ -2658,7 +2664,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
     inventoryPath,
     sourceHealthDisclosure,
     presentation,
-    marketQuotes: marketQuotes ?? marketInfo.rows.map(({ raw }) => raw),
+    marketQuotes: marketQuotes ?? marketInfo.rows.map(({ raw }) => ({ ...raw, captured_at_utc: raw?.captured_at_utc ?? canonicalEvent.generated_utc })),
     generatedUtc: canonicalEvent.generated_utc,
   });
   if (slate) {

@@ -179,6 +179,38 @@ test('rendered before/after dry packets preserve identity, score labels, and iso
   }
 });
 
+test('default (unstamped) discovery quotes are stamped and render a VALID midpoint in the packet template', () => {
+  // Regression (PR #56): the normal writer path passes no explicit marketQuotes,
+  // so buildKalshiEventPacket falls back to raw discovery markets. Those carry
+  // yes_bid/yes_ask but NO capture timestamp, so validateQuoteSnapshot returned
+  // STALE_QUOTE and the snapshot section rendered blank. The fix stamps the rows
+  // with the packet time (display-only). Prove it reaches the rendered template.
+  const event = eventFixture({
+    ticker: 'KXQUOTESTAMP-26JUL14',
+    series: 'KXQUOTESTAMP',
+    title: 'What will the speaker say?',
+    settlementSource: 'https://example.com/official',
+    eventTime: '2026-07-14T18:00:00.000Z',
+    strike: 'budget',
+  });
+  // Raw Kalshi market: bid/ask in cents, no captured_at_utc / market_snapshot_utc.
+  event.markets[0].yes_bid = 41;
+  event.markets[0].yes_ask = 47;
+  const built = buildKalshiEventPacket({ date: '2026-07-14', event, sourceUrl: '/tmp/source.json', generatedUtc: NOW });
+  // Every default quote row is stamped with the packet time.
+  assert.ok(Array.isArray(built.marketQuotes) && built.marketQuotes.length >= 1);
+  for (const q of built.marketQuotes) {
+    assert.ok(q.captured_at_utc, 'default quote row must carry a capture timestamp');
+  }
+  // The stamped row validates fresh (STALE without the fix).
+  const first = built.marketQuotes[0];
+  const verdict = validateQuoteSnapshot(first, { ticker: first.ticker ?? first.market_ticker, nowUtc: NOW });
+  assert.equal(verdict.ok, true);
+  // Wired to the packet template: the rendered snapshot shows the midpoint, not STALE.
+  assert.match(built.text, /yes_midpoint_cents=44/);
+  assert.doesNotMatch(built.text, /quote_status=STALE_QUOTE/);
+});
+
 test('unconfirmed event start fails closed even when close/expiration metadata exists', () => {
   const incomplete = {
     ...news,

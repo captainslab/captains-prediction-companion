@@ -141,6 +141,23 @@ test('a Trump event with a sports-event strike term routes to trump, not sports'
   assert.equal(res.route, 'trump_event');
 });
 
+test('a non-Trump speech event with a sports strike term routes to speech_event, not sports', () => {
+  // Regression (PR #56): a Biden campaign-speech market whose STRIKE phrase is
+  // "World Cup" must not be captured by the strike-inclusive sports branches.
+  // Only subjectIsTrump was guarded before; speech subjects fell through to
+  // sports_announcer. subjectIsSpeech now guards the sports branches too.
+  const event = fixture({
+    event_ticker: 'KXHBIDENMENTION-26JUN22',
+    series_ticker: 'KXHBIDENMENTION',
+    title: 'What will Biden say during his campaign speech?',
+    markets: [{ title: 'Mentions "World Cup"', rules_primary: 'Resolves YES if Biden says World Cup during the speech.', close_time: isoDaysOut(10) }],
+  });
+  const res = resolveResearchRoute(event, { now: NOW });
+  assert.notEqual(res.route, 'sports_announcer');
+  assert.equal(res.route, 'speech_event');
+  assert.equal(res.profile_key, 'political_mentions');
+});
+
 test('detects talk_show_media route', () => {
   const event = fixture({
     event_ticker: 'KXSNLMENTION-26JUN13',
