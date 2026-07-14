@@ -39,6 +39,17 @@ export const EARNINGS_COMPANY_TICKERS = Object.freeze({
   coinbase: 'COIN',
   disney: 'DIS',
   boeing: 'BA',
+  jpmorgan: 'JPM',
+  'jpmorgan chase': 'JPM',
+  'jpmorgan chase & co.': 'JPM',
+  'jp morgan': 'JPM',
+  goldman: 'GS',
+  'goldman sachs': 'GS',
+  'wells fargo': 'WFC',
+  citi: 'C',
+  citigroup: 'C',
+  'bank of america': 'BAC',
+  'morgan stanley': 'MS',
 });
 
 const TICKER_TO_COMPANY = Object.freeze(Object.fromEntries(
