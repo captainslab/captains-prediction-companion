@@ -47,11 +47,16 @@ function priceFree(value) {
   const rows = value?.by_word && typeof value.by_word === 'object'
     ? (Array.isArray(value.by_word) ? value.by_word : Object.values(value.by_word))
     : value?.by_word;
-  assertNoForbiddenFields({ ...value, by_word: rows }, 'earnings family history');
+  const companyRows = value?.by_company_word && typeof value.by_company_word === 'object'
+    ? Object.values(value.by_company_word).flatMap((words) => Object.values(words ?? {}))
+    : value?.by_company_word;
+  assertNoForbiddenFields({ ...value, by_word: rows, by_company_word: companyRows }, 'earnings family history');
   const walk = (x, path = []) => {
     if (!x || typeof x !== 'object') return;
     for (const [k, v] of Object.entries(x)) {
-      const isWordMapKey = path.length === 1 && path[0] === 'by_word';
+      const isWordMapKey =
+        (path.length === 1 && ['by_word', 'by_company_word'].includes(path[0]))
+        || (path.length === 2 && path[0] === 'by_company_word');
       if (!isWordMapKey && FORBIDDEN.test(k)) throw new Error(`forbidden field persisted: ${k}`);
       walk(v, [...path, k]);
     }
@@ -98,7 +103,13 @@ export async function fetchEarningsFamilyHistory({
   try {
     const cached = JSON.parse(await fs.readFile(file, 'utf8'));
     const cachedAt = Date.parse(cached.updated_utc);
-    if (cached.scan_ok === true && Number.isFinite(cachedAt) && stamp - cachedAt < ttlMs) return priceFree(cached);
+    if (
+      cached.scan_ok === true
+      && cached.by_company_word
+      && typeof cached.by_company_word === 'object'
+      && Number.isFinite(cachedAt)
+      && stamp - cachedAt < ttlMs
+    ) return priceFree(cached);
   } catch { /* scan */ }
   const updated = new Date(stamp).toISOString();
   const requestBudget = {
@@ -114,27 +125,55 @@ export async function fetchEarningsFamilyHistory({
   try {
     const all = await pages(fetchImpl, '/series', { category: 'Mentions', limit: 200 }, 'series', { requestBudget, maxPages: pageLimit });
     const series = all.filter((s) => /^KXEARNINGSMENTION/.test(String(s?.ticker ?? s?.series_ticker)));
-    const byWord = {}; let withHistory = 0; let settled = 0;
+    const byWord = {};
+    const byCompanyWord = {};
+    let withHistory = 0;
+    let settled = 0;
     for (const s of series) {
       const ticker = String(s.ticker ?? s.series_ticker);
+      const companyTicker = resolveEarningsTicker(
+        ticker,
+        [s.title, s.sub_title, s.name].filter(Boolean).join(' '),
+      ) ?? ticker;
       const events = await pages(fetchImpl, '/events', { series_ticker: ticker, limit: 200, with_nested_markets: true }, 'events', { requestBudget, maxPages: pageLimit });
       let local = 0;
       for (const event of events) for (const market of Array.isArray(event?.markets) ? event.markets : []) {
         if (market?.result !== 'yes' && market?.result !== 'no') continue;
         const word = familyWordKey(market.yes_sub_title || market.subtitle); if (!word) continue;
         const row = byWord[word] ?? { word, n: 0, hits: 0, misses: 0 }; row.n += 1; if (market.result === 'yes') row.hits += 1; else row.misses += 1; byWord[word] = row; settled += 1; local += 1;
+        const companyRows = byCompanyWord[companyTicker] ?? {};
+        const companyRow = companyRows[word] ?? { word, n: 0, hits: 0, misses: 0 };
+        companyRow.n += 1;
+        if (market.result === 'yes') companyRow.hits += 1; else companyRow.misses += 1;
+        companyRows[word] = companyRow;
+        byCompanyWord[companyTicker] = companyRows;
       }
       if (local) withHistory += 1;
     }
-    const result = priceFree({ scan_ok: true, series_scanned: series.length, series_with_history: withHistory, settled_markets: settled, by_word: byWord, updated_utc: updated, error: null });
+    const result = priceFree({ scan_ok: true, series_scanned: series.length, series_with_history: withHistory, settled_markets: settled, by_word: byWord, by_company_word: byCompanyWord, updated_utc: updated, error: null });
     await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, `${JSON.stringify(result, null, 2)}\n`, 'utf8'); return result;
-  } catch (e) { return { scan_ok: false, series_scanned: 0, series_with_history: 0, settled_markets: 0, by_word: {}, updated_utc: updated, error: e?.message ?? String(e) }; }
+  } catch (e) { return { scan_ok: false, series_scanned: 0, series_with_history: 0, settled_markets: 0, by_word: {}, by_company_word: {}, updated_utc: updated, error: e?.message ?? String(e) }; }
 }
 
 const NAME_MAP = Object.freeze({ ...EARNINGS_COMPANY_TICKERS, jpm: 'JPM', jpmorgan: 'JPM', 'jpmorgan chase': 'JPM', 'jpmorgan chase & co.': 'JPM', 'jp morgan': 'JPM', goldman: 'GS', 'goldman sachs': 'GS', 'wells fargo': 'WFC', citi: 'C', citigroup: 'C', 'bank of america': 'BAC', 'morgan stanley': 'MS' });
 export function resolveEarningsTicker(seriesTicker, title = '') {
   const s = String(seriesTicker ?? '').trim().toUpperCase(); if (s.startsWith(PREFIX)) return s.slice(PREFIX.length) || null;
   const t = String(title ?? '').toLowerCase(); for (const name of Object.keys(NAME_MAP).sort((a, b) => b.length - a.length)) if (t.includes(name)) return NAME_MAP[name]; return NAME_MAP[t.replace(/[^a-z0-9]+/g, ' ').trim()] ?? null;
+}
+
+export function familyStatsExcludingCompany(history, word, companyTicker) {
+  const byCompanyWord = history?.by_company_word;
+  if (!byCompanyWord || typeof byCompanyWord !== 'object' || !companyTicker) {
+    return { available: false, stats: null };
+  }
+  const key = familyWordKey(word);
+  const aggregate = history?.by_word?.[key] ?? null;
+  if (!aggregate) return { available: true, stats: null };
+  const sameCompany = byCompanyWord?.[companyTicker]?.[key] ?? null;
+  const n = Math.max(0, Number(aggregate.n ?? 0) - Number(sameCompany?.n ?? 0));
+  const hits = Math.max(0, Number(aggregate.hits ?? 0) - Number(sameCompany?.hits ?? 0));
+  const misses = Math.max(0, Number(aggregate.misses ?? 0) - Number(sameCompany?.misses ?? 0));
+  return { available: true, stats: { word: key, n, hits, misses } };
 }
 
 // Compatibility helper for direct per-event callers; the family scan above is the source of truth.

@@ -61,8 +61,16 @@ function event() {
   };
 }
 
-function familyHistory(stats, scanOk = true) {
-  return { scan_ok: scanOk, error: scanOk ? null : 'HTTP 503', by_word: stats };
+function familyHistory(stats, scanOk = true, byCompanyWord = null) {
+  const crossCompany = Object.fromEntries(
+    Object.entries(stats).map(([word, row]) => ['GS', { [word]: { ...row, word } }]),
+  );
+  return {
+    scan_ok: scanOk,
+    error: scanOk ? null : 'HTTP 503',
+    by_word: stats,
+    by_company_word: byCompanyWord ?? crossCompany,
+  };
 }
 
 function evidenceLine(text) {
@@ -115,6 +123,7 @@ test('API scan pools settled family words, preserves misses, and writes a price-
   assert.equal(result.by_word.tariff.n, 14);
   assert.equal(result.by_word.tariff.hits, 7);
   assert.equal(result.by_word.tariff.misses, 7);
+  assert.equal(result.by_company_word.GS.tariff.n, 14);
   const saved = JSON.parse(await readFile(join(stateRoot, 'mentions', 'earnings-family-history.json'), 'utf8'));
   assert.equal(saved.by_word.tariff.word, 'tariff');
   assert.doesNotMatch(JSON.stringify(saved), /price|bid|ask|volume|open_interest|liquidity/i);
@@ -301,6 +310,51 @@ test('usable same-company quarter history outranks cross-company family fallback
   assert.match(historyLayer.source_basis, /earnings history 0\/2/);
 });
 
+test('exact same-company settled history outranks family fallback before family layer insertion', () => {
+  const currentEvent = event();
+  const currentMarket = {
+    ticker: 'KXEARNINGSMENTIONJPM-26AUG26-TARIFF',
+    yes_sub_title: 'tariff',
+    rules_primary: 'Resolves YES if JPMorgan mentions tariff.',
+    kalshi_native_n: 0,
+    blended_pct: 85,
+    research_quality: 'source_backed',
+    layer_records: {
+      event_proximity: { present: true, score: 80 },
+      direct_mention_pathway: { present: true, score: 80 },
+    },
+  };
+  const sameCompanyHistory = [
+    {
+      market_ticker: 'KXEARNINGSMENTIONJPM-26JUN01-TARIFF',
+      event_date: '2026-06-01',
+      series_ticker: 'KXEARNINGSMENTIONJPM',
+      route: 'earnings_call', entity: 'JPM', horizon: 'event',
+      strike_term: 'tariff', result: 'no', settlement_result: 'resolved_no',
+    },
+    {
+      market_ticker: 'KXEARNINGSMENTIONJPM-26MAR01-TARIFF',
+      event_date: '2026-03-01',
+      series_ticker: 'KXEARNINGSMENTIONJPM',
+      route: 'earnings_call', entity: 'JPM', horizon: 'event',
+      strike_term: 'tariff', result: 'no', settlement_result: 'resolved_no',
+    },
+  ];
+  const composite = buildMentionCompositeForMarket({
+    event: currentEvent,
+    market: currentMarket,
+    historyRecords: sameCompanyHistory,
+    earningsFamilyHistory: familyHistory({ tariff: { n: 6, hits: 6, misses: 0 } }),
+  });
+  const historyLayer = composite.result.evidence_ledger.find((row) => row.category === 'historical_tendency');
+  assert.equal(composite.earnings_family_history.tier, 'exact_series');
+  assert.equal(composite.earnings_family_history.hits, 0);
+  assert.equal(composite.earnings_family_history.misses, 2);
+  assert.equal(composite.earnings_family_history.penalty, 0);
+  assert.equal(historyLayer.value, 0);
+  assert.match(historyLayer.source_basis, /settled history 0\/2/);
+});
+
 test('thin family n=3 is penalized and capped; n=1 is no evidence and uses the PR#53 cap', () => {
   const base = (stats) => buildMentionCompositeForMarket({
     event: event(),
@@ -318,6 +372,88 @@ test('thin family n=3 is penalized and capped; n=1 is no evidence and uses the P
   const none = mentionCompositeToDecisionRow(base({ word: { n: 1, hits: 1, misses: 0 } }));
   assert.equal(none.earnings_family_history.tier, 'none');
   assert.ok(none.composite_score <= 64);
+});
+
+test('thin family cap recomputes posture, status, confidence, and analysis from capped score', () => {
+  const composite = buildMentionCompositeForMarket({
+    event: event(),
+    market: {
+      ticker: 'KXEARNINGSMENTIONJPM-26AUG26-WORD', yes_sub_title: 'word',
+      rules_primary: 'Resolves YES if JPMorgan mentions word.',
+      kalshi_native_n: 0, kalshi_scan_ok: true, blended_pct: 85, research_quality: 'source_backed',
+      layer_records: {
+        event_proximity: { present: true, score: 80 },
+        baseline_relevance: { present: true, score: 80 },
+        source_velocity: { present: true, score: 80 },
+        direct_mention_pathway: { present: true, score: 80 },
+      },
+    },
+    earningsFamilyHistory: familyHistory({ word: { n: 3, hits: 3, misses: 0 } }),
+  });
+  const row = mentionCompositeToDecisionRow(composite);
+  assert.equal(row.composite_score, 64);
+  assert.equal(row.composite_posture, 'LEAN');
+  assert.equal(row.edge_status, 'LEAN');
+  assert.equal(row.confidence, 64);
+  assert.match(row.analysis, /adjusted raw model score 85 to 64/);
+  const packet = buildKalshiEventPacket({
+    date: '2026-08-01',
+    event: { ...event(), markets: [composite.market ?? {
+      ticker: 'KXEARNINGSMENTIONJPM-26AUG26-WORD',
+      yes_sub_title: 'word',
+      rules_primary: 'Resolves YES if JPMorgan mentions word.',
+      kalshi_native_n: 0,
+      blended_pct: 85,
+      research_quality: 'source_backed',
+      layer_records: {
+        event_proximity: { present: true, score: 80 },
+        baseline_relevance: { present: true, score: 80 },
+        source_velocity: { present: true, score: 80 },
+        direct_mention_pathway: { present: true, score: 80 },
+      },
+    }] },
+    sourceUrl: '/tmp/earnings.json',
+    earningsFamilyHistory: familyHistory({ word: { n: 3, hits: 3, misses: 0 } }),
+  });
+  assert.match(packet.text, /#1 word — 64 — WEAK YES/);
+  assert.doesNotMatch(packet.text, /#1 word — 64 — STRONG YES/);
+  assert.equal(packet.compositeSummary.best_score, 64);
+  assert.equal(packet.compositeSummary.best_posture, 'LEAN');
+});
+
+test('family fallback excludes current company outcomes from the cross-company pool', async () => {
+  const stateRoot = await mkdtemp(join(tmpdir(), 'earnings-family-exclusion-'));
+  const fake = fakeFetch({
+    series: [
+      { ticker: 'KXEARNINGSMENTIONJPM' },
+      { ticker: 'KXEARNINGSMENTIONGS' },
+    ],
+    events: {
+      KXEARNINGSMENTIONJPM: [{ markets: [market('tariff', 'yes', 'KXEARNINGSMENTIONJPM'), market('tariff', 'no', 'KXEARNINGSMENTIONJPM')] }],
+      KXEARNINGSMENTIONGS: [{ markets: [market('tariff', 'yes', 'KXEARNINGSMENTIONGS'), market('tariff', 'yes', 'KXEARNINGSMENTIONGS')] }],
+    },
+  });
+  const history = await fetchEarningsFamilyHistory({ fetchImpl: fake.fetchImpl, stateRoot, now: '2026-08-01T00:00:00Z' });
+  const composite = buildMentionCompositeForMarket({
+    event: event(),
+    market: {
+      ticker: 'KXEARNINGSMENTIONJPM-26AUG26-TARIFF',
+      yes_sub_title: 'tariff',
+      rules_primary: 'Resolves YES if JPMorgan mentions tariff.',
+      kalshi_native_n: 0,
+      blended_pct: 85,
+      research_quality: 'source_backed',
+      layer_records: { event_proximity: { present: true, score: 80 }, direct_mention_pathway: { present: true, score: 80 } },
+    },
+    earningsFamilyHistory: history,
+  });
+  assert.equal(fake.calls.filter((url) => url.includes('/series')).length, 1);
+  assert.equal(history.by_word.tariff.n, 4);
+  assert.equal(history.by_company_word.JPM.tariff.n, 2);
+  assert.equal(composite.earnings_family_history.tier, 'earnings_family');
+  assert.equal(composite.earnings_family_history.n, 2);
+  assert.equal(composite.earnings_family_history.hits, 2);
+  assert.equal(composite.earnings_family_history.misses, 0);
 });
 
 test('family n<2 remains a source gap and keeps the PR#53 cap in the rendered packet', () => {
