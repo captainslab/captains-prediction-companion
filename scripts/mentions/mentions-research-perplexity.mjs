@@ -120,15 +120,26 @@ const normWord = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' '
 // Free, read-only, no auth. result (yes/no) is a settled OUTCOME, not price.
 async function kalshiNativePrior({ event, fetcher = defaultFetcher }) {
   const series = event.series_ticker;
-  const out = { series, by_word: new Map(), events_scanned: 0, settled_events: 0 };
+  const out = { series, by_word: new Map(), events_scanned: 0, settled_events: 0, scan_ok: true, scan_error: null };
   if (!series) return out;
   let cursor = '';
   let pages = 0;
   const settledEvents = [];
   while (pages < 5) {
     const url = `${KALSHI_API_BASE}/events?series_ticker=${encodeURIComponent(series)}&limit=200&with_nested_markets=true${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`;
-    const res = await fetcher(url);
-    if (!res.ok || !res.json) break;
+    let res;
+    try {
+      res = await fetcher(url);
+    } catch (err) {
+      out.scan_ok = false;
+      out.scan_error = err?.message ?? String(err);
+      break;
+    }
+    if (!res?.ok || !res?.json) {
+      out.scan_ok = false;
+      out.scan_error = `HTTP ${res?.status ?? 'unknown'}`;
+      break;
+    }
     const evs = Array.isArray(res.json.events) ? res.json.events : [];
     out.events_scanned += evs.length;
     for (const ev of evs) {
@@ -262,21 +273,43 @@ function detectRepeatRequirement(phrase) {
 
 function requiredCountSentence(requiredCount) {
   const count = Number(requiredCount);
-  if (!Number.isFinite(count) || count <= 1) return null;
+  if (!Number.isFinite(count) || count < 1) return null;
+  if (count === 1) return 'Requires 1 qualifying mention.';
   return `Requires ${count} or more qualifying mentions, not just one.`;
 }
 
-function describeSettlementFit(phrase, requiredCount = null) {
+function describeSettlementFit(phrase, requiredCount = null, acceptedForms = null) {
   const raw = String(phrase ?? '').trim();
   if (!raw) return null;
   const repeat = detectRepeatRequirement(raw);
   const base = raw.replace(/\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*$/i, '').trim();
   const slashParts = base.split('/').map((part) => part.trim()).filter(Boolean);
+
+  // Build the set of accepted tokens: start from the slash variants in the
+  // strike, then add any caller-supplied accepted_forms (plural/possessive/
+  // slash alternatives from the rules snapshot) that are not already listed.
+  // De-dupes case-insensitively so a strike "Afford / Affordable" with
+  // accepted_forms ["Afford","Affordable","Affords","Afford's"] yields
+  // ["Afford","Affordable","Affords","Afford's"] — never the full title.
+  const seen = new Set();
+  const tokens = [];
+  const pushToken = (t) => {
+    const s = String(t ?? '').trim();
+    if (!s || seen.has(s.toLowerCase())) return;
+    seen.add(s.toLowerCase());
+    tokens.push(s);
+  };
+  for (const part of slashParts) pushToken(part);
+  if (Array.isArray(acceptedForms)) {
+    for (const f of acceptedForms) pushToken(f);
+  }
+
   let fit;
-  if (slashParts.length >= 2) {
-    fit = `YES if either exact token "${slashParts[0]}" or "${slashParts[1]}" is said`;
+  if (tokens.length >= 2) {
+    const quoted = tokens.map((t) => `"${t}"`).join(' or ');
+    fit = `YES if either exact token ${quoted} is said`;
   } else {
-    fit = `YES only if the exact token "${base}" is said`;
+    fit = `YES only if the exact token "${tokens[0] ?? base}" is said`;
   }
   const countSentence = requiredCountSentence(requiredCount);
   if (countSentence) {
@@ -321,6 +354,7 @@ export function buildResearchTermNote({
   proofPct = null,
   handicapPct = null,
   requiredCount = null,
+  acceptedForms = null,
   citations = [],
 } = {}) {
   const citationList = Array.isArray(citations)
@@ -340,7 +374,7 @@ export function buildResearchTermNote({
 
   const note = {
     catalyst: trimWords(catalyst, 28),
-    settlement_fit: describeSettlementFit(phrase, requiredCount),
+    settlement_fit: describeSettlementFit(phrase, requiredCount, acceptedForms),
     trap_risk: null,
   };
   if (Array.isArray(citations) && citations.length) {
@@ -365,7 +399,7 @@ export function mergePasses(words, proof, hcap, prior) {
     // Kalshi-native prior FIRST: native historical YES rate for this exact word.
     const nat = prior?.by_word?.get(normWord(w.phrase)) || null;
     const kalshiPct = nat && nat.n > 0 ? Math.round((nat.yes / nat.n) * 100) : null;
-    const kalshiN = nat ? nat.n : 0;
+    const kalshiN = nat ? nat.n : null;
     const vals = [p?.likelihood_pct, h?.likelihood_pct].filter((v) => Number.isFinite(v));
     const pplxBlend = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
     // Blend: Kalshi-native prior anchors when it has real sample (n>=2);
@@ -394,6 +428,9 @@ export function mergePasses(words, proof, hcap, prior) {
       repeat_requirement: w.repeat_requirement ?? null,
       kalshi_native_pct: kalshiPct,   // checked FIRST (Kalshi calendar/native)
       kalshi_native_n: kalshiN,
+      kalshi_scan_ok: prior?.scan_ok === true,
+      kalshi_events_scanned: prior?.events_scanned ?? 0,
+      kalshi_scan_error: prior?.scan_error ?? null,
       proof_pct: Number.isFinite(p?.likelihood_pct) ? p.likelihood_pct : null,
       handicap_pct: Number.isFinite(h?.likelihood_pct) ? h.likelihood_pct : null,
       blended_pct: blended,
@@ -472,6 +509,8 @@ export async function runResearchForEvent({ event, date, stateRoot = 'state', mo
       series_ticker: prior.series,
       settled_comparable_events: prior.settled_events,
       events_scanned: prior.events_scanned,
+      scan_ok: prior.scan_ok,
+      scan_error: prior.scan_error,
     },
     priority_sources: {
       priority_allowlist: priorityDomains,

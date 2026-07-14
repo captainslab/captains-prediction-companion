@@ -90,11 +90,12 @@ import {
 import { resolveResearchRoute } from '../mentions/mention-route-resolver.mjs';
 import { gateMentionMarket } from '../mentions/lexical-gate.mjs';
 import {
-  loadHistory,
+  loadHistoryWithStatus,
   buildHistoryMatch,
   historyToLayerScore,
   buildSettledHistoryArtifact,
 } from '../mentions/settled-history.mjs';
+import { buildMarketRulesSnapshot } from '../mentions/rules-analyst.mjs';
 import {
   resolveEarningsFamily,
   loadEarningsHistory,
@@ -155,6 +156,7 @@ const NO_RESEARCH_SOURCE_STATUSES = Object.freeze(new Set([
   'NO_DECLARED_SOURCES',
   'SOURCE_FETCH_BLOCKED_BY_SITE',
   'SOURCE_FETCH_TIMEOUT',
+  'RESEARCH_SCORE_INVALID',
 ]));
 
 export function isNoResearchSourceStatus(status) {
@@ -490,7 +492,7 @@ function buildSportsVenueTeamSync(sportRecords, term, teams, venue) {
   return { present: true, score, source_basis: `venue/team phrase relevance: ${hits}/${settled.length} YES for "${term}" with ${teams.join('/')}`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
 }
 
-export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
+export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, historyStoreStatus = null, earningsQuarterLayer = null, earningsContextDelta = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
   const profileConfig = PROFILE_REGISTRY[profileResolution.profile];
@@ -616,15 +618,47 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
       layerRecords = { ...(layerRecords ?? {}), historical_tendency: historyLayer };
     }
   }
-  const result = composeMentionLedger({
-    event: eventNameForComposite(event ?? {}, legacy),
-    targetMention,
-    profile: profileResolution.profile,
-    layerDefs: profileConfig.layerDefs,
-    layerRecords,
-    marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
-    researchScore: Number.isFinite(Number(market?.blended_pct)) ? Number(market.blended_pct) : null,
-  });
+  let result;
+  let researchScoreError = null;
+  const researchInput = market ?? legacy ?? {};
+  const hasResearchProvenance = Number.isFinite(Number(researchInput?.proof_pct))
+    || Number.isFinite(Number(researchInput?.handicap_pct))
+    || ['live', 'source_backed'].includes(researchInput?.research_quality)
+    || (researchInput?.kalshi_scan_ok === true
+      && Number.isFinite(Number(researchInput?.kalshi_native_n))
+      && Number(researchInput.kalshi_native_n) >= 1);
+  const researchScoreInput = hasResearchProvenance && Number.isFinite(Number(researchInput?.blended_pct))
+    ? Number(researchInput.blended_pct)
+    : null;
+  try {
+    result = composeMentionLedger({
+      event: eventNameForComposite(event ?? {}, legacy),
+      targetMention,
+      profile: profileResolution.profile,
+      layerDefs: profileConfig.layerDefs,
+      layerRecords,
+      marketContext: market ? marketContextFromMarket(market) : (legacy?.market_context ?? legacy?.marketContext ?? null),
+      researchScore: researchScoreInput,
+    });
+  } catch (err) {
+    const message = err?.message ?? String(err);
+    if (!/researchScore override/i.test(message)) throw err;
+    researchScoreError = message;
+    result = {
+      event: eventNameForComposite(event ?? {}, legacy),
+      target_mention: targetMention,
+      profile: profileResolution.profile,
+      composite_score: null,
+      confidence: null,
+      posture: 'NO_CLEAR_PICK',
+      top_supporting_layers: [],
+      missing_layers: [{ category: 'research_score', label: 'Research score', missing_note: researchScoreError }],
+      evidence_ledger: [],
+      market_context: null,
+      reasoning_summary: `NO_CLEAR_PICK — malformed research score blocked this strike: ${researchScoreError}`,
+      _meta: { layers_present: 0, layers_total: profileConfig.layerDefs.length, research_quality: 'invalid' },
+    };
+  }
 
   // Lexical NO_MATCH suppression: an evaluated literal NO_MATCH means the target
   // did not literally occur in the evidence text, so downstream may NOT invent
@@ -708,6 +742,10 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     handicap_pct: market?.handicap_pct ?? null,
     kalshi_native_pct: market?.kalshi_native_pct ?? null,
     kalshi_native_n: market?.kalshi_native_n ?? null,
+    kalshi_scan_ok: market?.kalshi_scan_ok ?? null,
+    kalshi_events_scanned: market?.kalshi_events_scanned ?? null,
+    kalshi_scan_error: market?.kalshi_scan_error ?? null,
+    history_store_status: historyStoreStatus,
     confidence: market?.confidence ?? null,
     reason: market?.research_reason ?? null,
     proof_reason: market?.proof_reason ?? null,
@@ -718,7 +756,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
-    source_status: market?.source_status ?? legacy?.source_status ?? null,
+    source_status: researchScoreError ? 'RESEARCH_SCORE_INVALID' : (market?.source_status ?? legacy?.source_status ?? null),
     lexical_gate: lexicalGate,
     pmt_advisory_context: buildPmtAdvisoryContext({
       route: route?.route ?? null,
@@ -896,6 +934,101 @@ const MENTION_POSTURE_TO_EDGE = Object.freeze({
 });
 
 /**
+ * computeEvidenceAvailability — pure. Derives a per-strike evidence-availability
+ * record from a mention composite, WITHOUT inventing any evidence.
+ *
+ *   settled_evidence: { status, n, hits, misses }
+ *     present          — real comparables: kalshi_native_n >= 2, OR a
+ *                        settled_history artifact with a non-'none' tier
+ *                        (the price-free settled store produced usable hits).
+ *     none_for_series  — looked up successfully and the series genuinely has
+ *                        NO settled comparables (kalshi scan ran, n=0, and no
+ *                        settled_history artifact). This is real-world absence.
+ *     store_missing    — the settled-history store was never ingested on this
+ *                        worktree (no settled_history artifact AND no kalshi
+ *                        native scan ran / n is null/0). Declared honestly.
+ *     error            — lookup failed (not currently distinguishable upstream;
+ *                        reserved for future loadHistoryWithStatus wiring).
+ *
+ *   transcript_evidence: { status }
+ *     present          — prior_transcript_word_match has evidence-bearing
+ *                        status ('used', 'undercounted', or 'proxy').
+ *     missing          — otherwise (the earnings-research-collector stub
+ *                        returns 'missing' when fetchExternalResearchData is
+ *                        unimplemented; reported honestly, never fabricated).
+ *
+ * Pure on its inputs — reads only existing composite fields. Never touches the
+ * network or state/. Never reads a price field.
+ */
+export function computeEvidenceAvailability(composite) {
+  const nativeRaw = composite?.kalshi_native_n;
+  const kalshiNativeN = nativeRaw == null ? null : Number(nativeRaw);
+  const hasNative = Number.isFinite(kalshiNativeN) && kalshiNativeN >= 2;
+  const sh = composite?.settled_history ?? null;
+  const hasSettledHistory = sh?.usable === true;
+  const storeStatus = composite?.history_store_status ?? null;
+  const scanOk = composite?.kalshi_scan_ok === true;
+  const scanFailed = composite?.kalshi_scan_ok === false || Boolean(composite?.kalshi_scan_error);
+  const eventsScanned = Number(composite?.kalshi_events_scanned);
+  const scanRan = scanOk && Number.isFinite(eventsScanned) && eventsScanned > 0;
+
+  let settledStatus;
+  if (hasNative) {
+    settledStatus = 'present';
+  } else if (hasSettledHistory) {
+    settledStatus = 'present';
+  } else if (scanFailed) {
+    settledStatus = 'error';
+  } else if (scanRan && kalshiNativeN === 0) {
+    settledStatus = 'none_for_series';
+  } else if (storeStatus === 'read_error') {
+    settledStatus = 'error';
+  } else if (storeStatus === 'store_missing') {
+    settledStatus = 'store_missing';
+  } else {
+    settledStatus = 'unavailable';
+  }
+
+  const evidenceN = hasNative
+    ? kalshiNativeN
+    : hasSettledHistory
+      ? Number(sh.sample_size)
+      : (Number.isFinite(kalshiNativeN) ? kalshiNativeN : 0);
+  const cats = Array.isArray(composite?.source_ladder?.categories) ? composite.source_ladder.categories : [];
+  const transcriptCat = cats.find((c) => c?.category === 'prior_transcript_word_match');
+  const transcriptStatus = ['used', 'undercounted', 'proxy'].includes(transcriptCat?.status)
+    ? 'present'
+    : 'missing';
+
+  return {
+    settled_evidence: {
+      status: settledStatus,
+      store_status: storeStatus ?? 'unavailable',
+      kalshi_scan_status: scanFailed ? 'error' : scanRan ? 'ok' : 'unavailable',
+      n: evidenceN,
+      hits: sh?.hits ?? 0,
+      misses: sh?.misses ?? 0,
+    },
+    transcript_evidence: {
+      status: transcriptStatus,
+    },
+  };
+}
+
+// Score ceiling for a strike with NO historical evidence (no settled
+// comparables AND no transcript word-match). The customer tier is a pure
+// function of cpc_score (>=65 STRONG YES, render-mention-packet.mjs:53-60),
+// and the janitor FAILS a packet where score>=65 but tier != STRONG YES
+// (cpc-packet-janitor.mjs:729). Clamping the NUMERIC SCORE below 65 (not the
+// tier) makes the tier fall to WEAK YES consistently and keeps the janitor
+// happy — capping the tier alone would trip it. Max WEAK YES is the honest
+// ceiling for current-context-only evidence.
+const NO_HISTORY_CONFIDENCE_CAP = 64;
+const NO_HISTORY_CONFIDENCE_FLOOR = 35;
+const NO_HISTORY_CONFIDENCE_CAP_REASON =
+  'current-context-only evidence: no settled comparables and no transcript word-match; score capped below STRONG YES';
+
+/**
  * Convert one mention composite (model) + its market context into a shared
  * decision row. Market price lives only in the `market` half and never enters
  * the composite score.
@@ -998,13 +1131,46 @@ export function mentionCompositeToDecisionRow(composite) {
     };
   }
 
+  // Per-strike evidence availability — computed once here so both the cap
+  // below and the renderer (SOURCE GAPS) can read it. Pure on the composite.
+  const evidenceAvail = computeEvidenceAvailability(composite);
+  const hasHistoricalEvidence =
+    evidenceAvail.settled_evidence.status === 'present'
+    || evidenceAvail.transcript_evidence.status === 'present'
+    || presentCats.includes('historical_tendency');
+
+  // HARD confidence cap (Change D): a strike with NO historical evidence
+  // (no settled comparables AND no transcript word-match) is scoring on
+  // current-context only. Clamp the NUMERIC score below 65 so the customer
+  // tier — a pure function of cpc_score — falls to WEAK YES (max), never
+  // STRONG YES. The cap is on the score, not the tier, because the janitor
+  // fails score>=65 paired with a non-STRONG-YES tier. Blocked/null scores
+  // are left untouched (null stays null; the cap only bounds a real number).
+  let compositeScore = r.composite_score ?? null;
+  let confidenceCapReason = null;
+  if (
+    !hasHistoricalEvidence
+    && compositeScore !== null
+    && Number.isFinite(Number(compositeScore))
+    && !(sourceBlocked || noUsableSources || proximityOnly)
+  ) {
+    const raw = Number(compositeScore);
+    if (raw > NO_HISTORY_CONFIDENCE_CAP || raw < NO_HISTORY_CONFIDENCE_FLOOR) {
+      compositeScore = Math.max(NO_HISTORY_CONFIDENCE_FLOOR, Math.min(NO_HISTORY_CONFIDENCE_CAP, raw));
+      confidenceCapReason = NO_HISTORY_CONFIDENCE_CAP_REASON;
+      postureFinal = 'WATCH';
+      statusOverride = EDGE_STATUS.WATCH;
+      analysis = `research score=${compositeScore} — ${NO_HISTORY_CONFIDENCE_CAP_REASON}. Raw model score ${raw} was limited because the historical proof was insufficient.`;
+    }
+  }
+
   const row = buildDecisionRow({
     marketTicker: composite?.market_ticker ?? 'MISSING',
     sideTarget: target,
     marketType: `mention_${r.profile ?? 'unknown'}`,
     settlementSummary: 'Exact-string mention settlement per Kalshi listing — verify wording before acting.',
     composite: {
-      score: r.composite_score ?? null,
+      score: compositeScore,
       posture: postureFinal,
       layersPresent,
       layersTotal,
@@ -1029,7 +1195,7 @@ export function mentionCompositeToDecisionRow(composite) {
     kalshi_native_pct: composite?.kalshi_native_pct ?? null,
     kalshi_native_n: composite?.kalshi_native_n ?? null,
     confidence: composite?.confidence ?? row.confidence ?? null,
-    reason: composite?.reason ?? null,
+    reason: composite?.reason ?? analysis,
     proof_reason: composite?.proof_reason ?? null,
     handicap_reason: composite?.handicap_reason ?? null,
     research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
@@ -1040,6 +1206,8 @@ export function mentionCompositeToDecisionRow(composite) {
     qualification_status: qualificationStatus,
     qualification_posture_cap: qualificationPostureCap,
     is_qualification_term: strikeIsEdnq(r.target_mention),
+    evidence_availability: evidenceAvail,
+    confidence_cap_reason: confidenceCapReason,
   };
 }
 
@@ -1333,6 +1501,8 @@ export function buildMentionsSynthesisInput({
     research_citations: Array.isArray(row.research_citations) ? row.research_citations : [],
     research_term_note: row.research_term_note ?? null,
     pmt_advisory_context: row.pmt_advisory_context ?? advisoryContext,
+    evidence_availability: row.evidence_availability ?? null,
+    confidence_cap_reason: row.confidence_cap_reason ?? null,
     market_context: {
       implied: row.implied_probability,
       bid_cents: row.market_yes_bid,
@@ -1920,7 +2090,7 @@ export async function resolveOnlyMentionEvents({
   };
 }
 
-function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } = {}) {
+export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } = {}) {
   const keepOnlyEventProximity = (layerRecords = {}) => {
     if (!layerRecords || typeof layerRecords !== 'object') return {};
     return layerRecords.event_proximity ? { event_proximity: layerRecords.event_proximity } : {};
@@ -1992,6 +2162,15 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
     if (r.kalshi_native_n !== undefined) {
       merged.kalshi_native_n = r.kalshi_native_n;
     }
+    if (r.kalshi_scan_ok !== undefined) {
+      merged.kalshi_scan_ok = r.kalshi_scan_ok;
+    }
+    if (r.kalshi_events_scanned !== undefined) {
+      merged.kalshi_events_scanned = r.kalshi_events_scanned;
+    }
+    if (r.kalshi_scan_error !== undefined) {
+      merged.kalshi_scan_error = r.kalshi_scan_error;
+    }
     if (r.confidence) {
       merged.confidence = r.confidence;
     }
@@ -2025,14 +2204,35 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
     if (combinedCitations.length) {
       merged.research_citations = combinedCitations;
     }
+    // Settlement text must reference the bare strike token and its accepted
+    // alternative forms (slash variants + plural + possessive from the rules
+    // snapshot), NEVER the full market title. targetMentionFromMarket returns
+    // "<title> -- <strike>"; strikeWordFromMarket returns the bare token.
+    // Build accepted_forms from the rules snapshot so the settlement line can
+    // list the strike token and its alternatives (e.g. Afford / Affordable /
+    // Affords / Afford's) without interpolating the event title.
+    const strikeToken = strikeWordFromMarket(m);
+    let acceptedForms = null;
+    if (strikeToken) {
+      try {
+        const snap = buildMarketRulesSnapshot(event, m);
+        if (Array.isArray(snap?.accepted_forms) && snap.accepted_forms.length) {
+          acceptedForms = snap.accepted_forms;
+        }
+      } catch {
+        // rules snapshot is best-effort for settlement text; fall back to the
+        // slash variants embedded in the strike token itself.
+      }
+    }
     const researchNote = buildResearchTermNote({
-      phrase: targetMentionFromMarket(m),
+      phrase: strikeToken ?? targetMentionFromMarket(m),
       reason: r.reason ?? null,
       kalshiNativePct: r.kalshi_native_pct ?? null,
       kalshiNativeN: r.kalshi_native_n ?? null,
       proofPct: r.proof_pct ?? null,
       handicapPct: r.handicap_pct ?? null,
       requiredCount: r.required_count ?? null,
+      acceptedForms,
       speaker: speakerLabelForEvent(event),
       citations: combinedCitations,
     });
@@ -2045,7 +2245,7 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, sourceHealthDisclosure = null }) {
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
   const presentation = resolveMentionPresentationMetadata({ date, event });
@@ -2148,7 +2348,7 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
       perMarketGameCtx = buildSportsGameContext({ event, term });
     }
     return buildMentionCompositeForMarket({
-      event, market: raw, historyRecords,
+      event, market: raw, historyRecords, historyStoreStatus,
       earningsQuarterLayer, earningsContextDelta,
       sportsSettledResult: perMarketSportsHistory,
       sportsGameContextResult: perMarketGameCtx,
@@ -2577,8 +2777,10 @@ export async function writeKalshiEventPackets({
   const seen = new Set();
   const researchMap = loadResearchForDate(stateRoot, date, { runStartedAtUtc });
   // Settled-history records (price-free, outcomes only) load once per run and
-  // feed historical_tendency BEFORE any model extraction. Missing dir -> [].
-  const historyRecords = await loadHistory({ stateRoot });
+  // feed historical_tendency BEFORE any model extraction. Preserve loader
+  // status so a missing/corrupt store cannot masquerade as verified absence.
+  const historyLoad = await loadHistoryWithStatus({ stateRoot });
+  const historyRecords = historyLoad.records;
   const sourceHealthDisclosure = detectSourceHealthDisclosure({
     stateRoot,
     date,
@@ -2614,6 +2816,7 @@ export async function writeKalshiEventPackets({
       sourceUrl: sourcePath,
       inventoryPath,
       historyRecords,
+      historyStoreStatus: historyLoad.status,
       earningsQuarters,
       earningsContextSources,
       sourceHealthDisclosure,

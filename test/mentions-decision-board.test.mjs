@@ -173,7 +173,7 @@ test('stub research quality caps EVIDENCE_LEAN posture to WATCH', () => {
   assert.equal(row.composite_posture, 'WATCH', 'stub research must cap composite_posture from EVIDENCE_LEAN to WATCH');
 });
 
-test('source-backed research preserves EVIDENCE_LEAN posture', () => {
+test('source-backed research with real settled comparables preserves EVIDENCE_LEAN posture', () => {
   const composite = {
     result: {
       _meta: { layers_present: 7, layers_total: 10 },
@@ -187,6 +187,9 @@ test('source-backed research preserves EVIDENCE_LEAN posture', () => {
     },
     posture_final: 'EVIDENCE_LEAN',
     research_quality: 'source_backed',
+    kalshi_native_n: 14,
+    kalshi_scan_ok: true,
+    kalshi_events_scanned: 4,
   };
   const row = mentionCompositeToDecisionRow(composite);
   assert.equal(row.composite_posture, 'EVIDENCE_LEAN', 'source-backed research must preserve EVIDENCE_LEAN composite_posture');
