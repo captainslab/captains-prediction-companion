@@ -260,6 +260,27 @@ test('gate: object-form custom_strike resolves real accepted_forms (no "[object 
   assert.deepEqual(gate.lexical_result.matched_forms, ['fraud']);
 });
 
+test('gate: lexical matcher keeps plural and possessive forms while stripping only repeat qualifiers', () => {
+  const event = {
+    series_ticker: 'KXTRUMPMENTION',
+    title: 'What will Trump say during the press portion?',
+    markets: [{
+      ticker: 'KXTRUMPMENTION-OIL',
+      title: 'Will Trump say Oil?',
+      custom_strike: 'Oil (3+ times)',
+    }],
+  };
+  const snapshot = buildMarketRulesSnapshot(event, event.markets[0]);
+  assert.deepEqual(snapshot.accepted_forms, ["oil", "oil's", 'oils', "oils'"]);
+  const gate = gateMentionMarket({
+    event,
+    market: event.markets[0],
+    candidateText: "oil oils oil's oils'",
+  });
+  assert.equal(gate.lexical_result.matched_count, 4);
+  assert.deepEqual(gate.lexical_result.matched_forms, ["oil", "oil's", 'oils', "oils'"]);
+});
+
 test('gate: legacy carrier with a determinable strike is not fake-blocked', () => {
   const gate = gateMentionMarket({
     legacy: { ticker: 'KXTEST-SCORED', target_phrase: 'recession', event_context: 'White House press briefing' },

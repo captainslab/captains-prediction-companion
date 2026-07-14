@@ -282,15 +282,12 @@ function describeSettlementFit(phrase, requiredCount = null, acceptedForms = nul
   const raw = String(phrase ?? '').trim();
   if (!raw) return null;
   const repeat = detectRepeatRequirement(raw);
-  const base = raw.replace(/\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*$/i, '').trim();
+  const base = raw.replace(/\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*/gi, '').trim();
   const slashParts = base.split('/').map((part) => part.trim()).filter(Boolean);
 
-  // Build the set of accepted tokens: start from the slash variants in the
-  // strike, then add any caller-supplied accepted_forms (plural/possessive/
-  // slash alternatives from the rules snapshot) that are not already listed.
-  // De-dupes case-insensitively so a strike "Afford / Affordable" with
-  // accepted_forms ["Afford","Affordable","Affords","Afford's"] yields
-  // ["Afford","Affordable","Affords","Afford's"] — never the full title.
+  // acceptedForms is a customer-facing list: it contains genuine slash
+  // alternatives only. Plural and possessive forms remain in the lexical gate,
+  // but are communicated once below instead of dumped into this token list.
   const seen = new Set();
   const tokens = [];
   const pushToken = (t) => {
@@ -311,6 +308,7 @@ function describeSettlementFit(phrase, requiredCount = null, acceptedForms = nul
   } else {
     fit = `YES only if the exact token "${tokens[0] ?? base}" is said`;
   }
+  fit += ' (plural and possessive forms count)';
   const countSentence = requiredCountSentence(requiredCount);
   if (countSentence) {
     fit += `; ${countSentence}`;

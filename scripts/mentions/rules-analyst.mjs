@@ -358,10 +358,16 @@ function slashVariants(surface) {
   return raw.split('/').map((part) => part.trim()).filter(Boolean);
 }
 
+const REPEAT_QUALIFIER_RE = /\s*\(\s*(?:\d+|n)\+\s*times\s*\)\s*/gi;
+
+function stripRepeatQualifier(surface) {
+  return asText(surface).replace(REPEAT_QUALIFIER_RE, '').trim();
+}
+
 function buildAcceptedForms(surface) {
   const seen = new Set();
   const out = [];
-  for (const variant of slashVariants(surface)) {
+  for (const variant of slashVariants(stripRepeatQualifier(surface))) {
     uniquePush(out, seen, variant);
     uniquePush(out, seen, possessiveSurface(variant));
     if (!normalizeSurface(variant).endsWith('s')) {
@@ -371,6 +377,10 @@ function buildAcceptedForms(surface) {
     }
   }
   return out;
+}
+
+export function buildCustomerSettlementForms(surface) {
+  return slashVariants(stripRepeatQualifier(surface));
 }
 
 const BLOCKED_FORM_CATEGORIES = Object.freeze([

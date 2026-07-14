@@ -39,6 +39,7 @@ import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeD
 import { buildPerplexityEntityAttachmentContract } from '../shared/perplexity-attachment-contract.mjs';
 import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
 import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
+import { buildCustomerSettlementForms } from '../mentions/rules-analyst.mjs';
 import {
   PROFILE_KEY as POLITICAL_PROFILE,
   LAYER_DEFS as POLITICAL_LAYERS,
@@ -2205,19 +2206,21 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
       merged.research_citations = combinedCitations;
     }
     // Settlement text must reference the bare strike token and its accepted
-    // alternative forms (slash variants + plural + possessive from the rules
+    // alternative forms (genuine slash variants from the rules
     // snapshot), NEVER the full market title. targetMentionFromMarket returns
     // "<title> -- <strike>"; strikeWordFromMarket returns the bare token.
     // Build accepted_forms from the rules snapshot so the settlement line can
     // list the strike token and its alternatives (e.g. Afford / Affordable /
-    // Affords / Afford's) without interpolating the event title.
+    // Affordability) without interpolating the event title. Lexical inflections
+    // are described in prose, not enumerated here.
     const strikeToken = strikeWordFromMarket(m);
     let acceptedForms = null;
     if (strikeToken) {
       try {
         const snap = buildMarketRulesSnapshot(event, m);
-        if (Array.isArray(snap?.accepted_forms) && snap.accepted_forms.length) {
-          acceptedForms = snap.accepted_forms;
+        const customerForms = buildCustomerSettlementForms(strikeToken);
+        if (Array.isArray(snap?.accepted_forms) && snap.accepted_forms.length && customerForms.length) {
+          acceptedForms = customerForms;
         }
       } catch {
         // rules snapshot is best-effort for settlement text; fall back to the
