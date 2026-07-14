@@ -441,16 +441,75 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   }
 }
 
-function renderGapSummary(lines, gapTerms) {
-  if (!gapTerms.length) {
-    lines.push('- none');
-    return;
-  }
+function renderGapSummary(gapTerms) {
+  if (!gapTerms.length) return [];
   const names = gapTerms.map((term) => term._short).filter(Boolean);
   const sample = names.slice(0, 3).join(', ');
   const more = names.length > 3 ? `, +${names.length - 3} more` : '';
-  lines.push(`- ${names.length} research gap${names.length === 1 ? '' : 's'} remain: ${sample}${more}.`);
-  lines.push('  These strikes stay out of the YES/NO cards until research-backed evidence lands.');
+  return [
+    `- ${names.length} research gap${names.length === 1 ? '' : 's'} remain: ${sample}${more}.`,
+    '  These strikes stay out of the YES/NO cards until research-backed evidence lands.',
+  ];
+}
+
+// Explicit per-strike evidence-availability gaps. A term that scores on
+// current-context only (no settled comparables, no transcript word-match)
+// must produce an explicit SOURCE GAPS line naming WHICH source is missing
+// and WHY — so absence is visible, not silently flattened into "research-
+// backed". Reads the evidence_availability record plumbed from the decision
+// row (generate-mentions-daily.mjs: computeEvidenceAvailability). Never
+// emits a price-shaped field or value.
+function evidenceGapLine(term) {
+  const ev = term?.evidence_availability;
+  if (!ev) return null;
+  const short = term?._short ?? term?.short_term ?? 'unknown';
+  const parts = [];
+  const se = ev.settled_evidence;
+  if (se && se.status !== 'present') {
+    const why = se.status === 'none_for_series'
+      ? 'no settled comparables for this series'
+      : se.status === 'store_missing'
+        ? 'settled-history store not ingested'
+        : se.status === 'error'
+          ? 'settled-history lookup failed'
+          : se.status === 'unavailable'
+            ? 'settled-history lookup could not be completed'
+            : 'no settled comparables';
+    parts.push(`settled history: ${why} (n=${se.n ?? 0})`);
+  }
+  const te = ev.transcript_evidence;
+  if (te && te.status !== 'present') {
+    parts.push('transcript source not available');
+  }
+  if (!parts.length) return null;
+  return `- ${short}: ${parts.join('; ')}`;
+}
+
+function renderEvidenceAvailabilityGaps(terms) {
+  const gapLines = [];
+  for (const term of terms) {
+    if (isQualificationRisk(term)) continue;
+    const line = evidenceGapLine(term);
+    if (line) gapLines.push(line);
+  }
+  if (!gapLines.length) return [];
+  return [
+    'evidence availability gaps (declared absence, not fabricated):',
+    ...gapLines,
+  ];
+}
+
+// Surface a non-silent confidence cap so the customer can see WHY a score
+// was clamped. Reads confidence_cap_reason plumbed from the decision row.
+function renderConfidenceCapNotes(terms) {
+  const capped = terms.filter((t) => t?.confidence_cap_reason);
+  if (!capped.length) return [];
+  const lines = ['confidence cap (current-context-only evidence, score capped below STRONG YES):'];
+  for (const term of capped) {
+    const short = term?._short ?? term?.short_term ?? 'unknown';
+    lines.push(`- ${short}: ${term.confidence_cap_reason}`);
+  }
+  return lines;
 }
 
 function renderQualificationRiskSection(lines, risk) {
@@ -636,7 +695,14 @@ export function renderMentionPacket(input, { analyst = null, redteam = null, gen
   renderCardSection(lines, '4. WEAK NO / STRONG NO TRAPS', [...weakNo, ...strongNo], ranked, notes);
 
   lines.push('5. SOURCE GAPS');
-  renderGapSummary(lines, gapTerms.length ? gapTerms : contentTerms.filter((t) => !isResearchBacked(t)));
+  const researchGapLines = renderGapSummary(gapTerms.length ? gapTerms : contentTerms.filter((t) => !isResearchBacked(t)));
+  const evidenceGapLines = renderEvidenceAvailabilityGaps(contentTerms);
+  const confidenceCapLines = renderConfidenceCapNotes(contentTerms);
+  if (!researchGapLines.length && !evidenceGapLines.length && !confidenceCapLines.length) {
+    lines.push('- none');
+  } else {
+    lines.push(...researchGapLines, ...evidenceGapLines, ...confidenceCapLines);
+  }
   if (redteam?.narrative_risks?.length) {
     lines.push('red-team narrative flags (advisory only, never re-scores):');
     for (const risk of redteam.narrative_risks) {

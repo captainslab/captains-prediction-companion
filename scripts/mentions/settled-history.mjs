@@ -226,15 +226,31 @@ export async function ingestSettledMarkets({
 }
 
 /**
- * loadHistory — load all store files (or one series). Missing dir → [].
+ * loadHistoryWithStatus — status-carrying loader.
+ *
+ * Distinguishes a genuinely-empty/absent settled-history store from a lookup
+ * failure, so downstream callers can never flatten "store never ingested" into
+ * "zero comparables found" (a healthy empty result). Returns:
+ *   { status: 'ok' | 'store_missing' | 'read_error', records: [], errors: [] }
+ *
+ *   ok            — store dir readable; zero or more records loaded (records
+ *                   may be [] when the dir exists but holds no *.json files, or
+ *                   when files parse but carry no `records` array).
+ *   store_missing — ENOENT on the store dir (the settled-history store has
+ *                   never been ingested on this worktree).
+ *   read_error    — any other fs/parse failure (permissions, corrupt JSON, …);
+ *                   per-file failures are collected in `errors`.
  */
-export async function loadHistory({ stateRoot = 'state', seriesTicker = null } = {}) {
+export async function loadHistoryWithStatus({ stateRoot = 'state', seriesTicker = null } = {}) {
   const dir = historyStorePath(stateRoot);
   let files;
   try {
     files = await fs.readdir(dir);
-  } catch {
-    return [];
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return { status: 'store_missing', records: [], errors: [] };
+    }
+    return { status: 'read_error', records: [], errors: [err?.code ? `${err.code}: ${err.message}` : String(err?.message ?? err)] };
   }
   const safeSeries = seriesTicker ? String(seriesTicker).replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80) : null;
   const wanted = safeSeries
@@ -242,15 +258,30 @@ export async function loadHistory({ stateRoot = 'state', seriesTicker = null } =
     : files.filter((f) => f.endsWith('.json'));
 
   const out = [];
+  const errors = [];
   for (const f of wanted) {
     try {
       const parsed = JSON.parse(await fs.readFile(path.join(dir, f), 'utf8'));
       if (Array.isArray(parsed?.records)) out.push(...parsed.records);
-    } catch {
-      // skip unreadable store files
+    } catch (err) {
+      errors.push(`${f}: ${err?.code ? `${err.code} ` : ''}${err?.message ?? err}`);
     }
   }
-  return out;
+  // A per-file read/parse failure is a read_error of the whole lookup — we
+  // cannot truthfully claim `ok` when store files were unreadable, even if
+  // some records loaded. `store_missing` is reserved for the dir-level ENOENT.
+  const status = errors.length > 0 ? 'read_error' : 'ok';
+  return { status, records: out, errors };
+}
+
+/**
+ * loadHistory — back-compat delegate. Missing/unreadable store → []. Existing
+ * callers and tests keep working; use `loadHistoryWithStatus` when the
+ * distinction between "store absent" and "store empty" matters.
+ */
+export async function loadHistory({ stateRoot = 'state', seriesTicker = null } = {}) {
+  const { records } = await loadHistoryWithStatus({ stateRoot, seriesTicker });
+  return records;
 }
 
 const TIER_PENALTIES = Object.freeze({

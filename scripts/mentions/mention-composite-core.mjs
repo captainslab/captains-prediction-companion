@@ -186,6 +186,26 @@ export function composeMentionLedger({
   const overrideScore = researchScore !== null && researchScore !== undefined && Number.isFinite(Number(researchScore))
     ? Number(researchScore)
     : null;
+  // Guard the researchScore override channel. assertNoPricingInLayer only
+  // inspects layerRecords; the researchScore/blended_pct path bypasses the
+  // layer ledger entirely and can mint a composite_score from thin air. Reject
+  // any non-finite or price-shaped input here so a stray market price can
+  // never sneak in as an override "research" score.
+  if (researchScore !== null && researchScore !== undefined) {
+    const n = Number(researchScore);
+    if (!Number.isFinite(n)) {
+      throw new Error(
+        'researchScore override must be a finite number. ' +
+        'A price-shaped or non-numeric value must never enter scoring.'
+      );
+    }
+    if (n < 0 || n > 100) {
+      throw new Error(
+        `researchScore override ${n} is outside [0,100]. ` +
+        'A probability expressed as a fraction (0-1) or a raw price must never enter scoring.'
+      );
+    }
+  }
   const composite     = overrideScore !== null
     ? Math.round(clamp(overrideScore, 0, 100))
     : researchDen === 0
