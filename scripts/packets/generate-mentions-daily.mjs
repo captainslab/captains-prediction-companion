@@ -951,8 +951,8 @@ const MENTION_POSTURE_TO_EDGE = Object.freeze({
  *                        reserved for future loadHistoryWithStatus wiring).
  *
  *   transcript_evidence: { status }
- *     present          — prior_transcript_word_match status === 'used' on the
- *                        source ladder (verbatim transcript hits exist).
+ *     present          — prior_transcript_word_match has evidence-bearing
+ *                        status ('used', 'undercounted', or 'proxy').
  *     missing          — otherwise (the earnings-research-collector stub
  *                        returns 'missing' when fetchExternalResearchData is
  *                        unimplemented; reported honestly, never fabricated).
@@ -996,7 +996,9 @@ export function computeEvidenceAvailability(composite) {
       : (Number.isFinite(kalshiNativeN) ? kalshiNativeN : 0);
   const cats = Array.isArray(composite?.source_ladder?.categories) ? composite.source_ladder.categories : [];
   const transcriptCat = cats.find((c) => c?.category === 'prior_transcript_word_match');
-  const transcriptStatus = transcriptCat?.status === 'used' ? 'present' : 'missing';
+  const transcriptStatus = ['used', 'undercounted', 'proxy'].includes(transcriptCat?.status)
+    ? 'present'
+    : 'missing';
 
   return {
     settled_evidence: {
@@ -1158,7 +1160,7 @@ export function mentionCompositeToDecisionRow(composite) {
       confidenceCapReason = NO_HISTORY_CONFIDENCE_CAP_REASON;
       postureFinal = 'WATCH';
       statusOverride = EDGE_STATUS.WATCH;
-      analysis = `research_score=${compositeScore} [WATCH] — ${NO_HISTORY_CONFIDENCE_CAP_REASON}. Raw model score ${raw} was clamped for insufficient evidence.`;
+      analysis = `research score=${compositeScore} — ${NO_HISTORY_CONFIDENCE_CAP_REASON}. Raw model score ${raw} was limited because the historical proof was insufficient.`;
     }
   }
 
@@ -1193,7 +1195,7 @@ export function mentionCompositeToDecisionRow(composite) {
     kalshi_native_pct: composite?.kalshi_native_pct ?? null,
     kalshi_native_n: composite?.kalshi_native_n ?? null,
     confidence: composite?.confidence ?? row.confidence ?? null,
-    reason: composite?.reason ?? null,
+    reason: composite?.reason ?? analysis,
     proof_reason: composite?.proof_reason ?? null,
     handicap_reason: composite?.handicap_reason ?? null,
     research_citations: Array.isArray(composite?.research_citations) ? composite.research_citations : [],
@@ -2088,7 +2090,7 @@ export async function resolveOnlyMentionEvents({
   };
 }
 
-function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } = {}) {
+export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } = {}) {
   const keepOnlyEventProximity = (layerRecords = {}) => {
     if (!layerRecords || typeof layerRecords !== 'object') return {};
     return layerRecords.event_proximity ? { event_proximity: layerRecords.event_proximity } : {};
@@ -2159,6 +2161,15 @@ function mergeResearchIntoEvent(event, researchEntry, { staleResearch = false } 
     }
     if (r.kalshi_native_n !== undefined) {
       merged.kalshi_native_n = r.kalshi_native_n;
+    }
+    if (r.kalshi_scan_ok !== undefined) {
+      merged.kalshi_scan_ok = r.kalshi_scan_ok;
+    }
+    if (r.kalshi_events_scanned !== undefined) {
+      merged.kalshi_events_scanned = r.kalshi_events_scanned;
+    }
+    if (r.kalshi_scan_error !== undefined) {
+      merged.kalshi_scan_error = r.kalshi_scan_error;
     }
     if (r.confidence) {
       merged.confidence = r.confidence;

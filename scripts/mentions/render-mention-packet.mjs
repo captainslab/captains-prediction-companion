@@ -429,7 +429,7 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   const score = cpcCell(term);
   lines.push(sectionLabelHeader(rank, term._short, score, tier));
   lines.push('');
-  const whyText = sanitizeUnsupportedClaim(note.catalyst ?? term.catalyst ?? 'MISSING', {
+  const whyText = sanitizeUnsupportedClaim(note.catalyst ?? term.catalyst ?? term.research_reason ?? 'MISSING', {
     hasSourceSupport: termHasSourceRefs(term, note),
   });
   pushCardBlock(lines, 'Why:', whyText);

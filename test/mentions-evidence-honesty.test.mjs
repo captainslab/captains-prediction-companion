@@ -29,8 +29,10 @@ import {
   mentionCompositeToDecisionRow,
   buildMentionsSynthesisInput,
   computeEvidenceAvailability,
+  mergeResearchIntoEvent,
 } from '../scripts/packets/generate-mentions-daily.mjs';
 import { buildResearchTermNote } from '../scripts/mentions/mentions-research-perplexity.mjs';
+import { buildEventResearch } from '../scripts/mentions/collect-mentions-research.mjs';
 import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 
 // ---------------------------------------------------------------------------
@@ -259,6 +261,11 @@ test('current-context-only evidence clamps score below 65 and sets confidence_ca
   // The tier derived from the clamped score is WEAK YES (not STRONG YES).
   // scoreToTier: >=65 STRONG YES, >=50 WEAK YES.
   assert.ok(row.composite_score >= 50, `score should still be WEAK YES territory (>=50), got ${row.composite_score}`);
+  const text = renderMentionPacket(buildMentionsSynthesisInput({
+    date: '2026-07-14', event: earningsEvent(), rows: [row],
+  }), { generatedAtUtc: '2026-07-14T12:00:00.000Z' });
+  assert.match(text, /historical proof was insufficient/i);
+  assert.doesNotMatch(text, /research_score=64 \[WATCH\]/i);
 });
 
 test('source-backed labels without actual historical evidence do not bypass the cap', () => {
@@ -508,4 +515,74 @@ test('zero-evidence cap is symmetric and never ships STRONG NO', () => {
     assert.notEqual(row.composite_score, null);
     assert.ok(row.composite_score >= 35 && row.composite_score < 65, `raw ${raw} must stay in safe tier range`);
   }
+});
+
+test('undercounted and proxied transcript documents count as present evidence', () => {
+  for (const status of ['undercounted', 'proxy']) {
+    const composite = currentContextOnlyComposite({ score: 85, kalshiNativeN: 0 });
+    composite.source_ladder.categories[0].status = status;
+    assert.equal(computeEvidenceAvailability(composite).transcript_evidence.status, 'present', status);
+  }
+});
+
+test('generator research whitelist preserves scan provenance through to evidence availability', () => {
+  const event = earningsEvent();
+  const row = {
+    market_ticker: event.markets[0].ticker,
+    research_quality: 'source_backed',
+    blended_pct: 80,
+    kalshi_native_n: 0,
+    kalshi_scan_ok: true,
+    kalshi_events_scanned: 4,
+    kalshi_scan_error: null,
+    layer_records: { current_event_context: { present: true, score: 80 } },
+    source_ladder_inputs: { current_event_context: { status: 'used' } },
+  };
+  const merged = mergeResearchIntoEvent(event, {
+    source_status: 'SOURCE_FETCHED',
+    markets: [row],
+    _marketMap: new Map([[row.market_ticker, row]]),
+  });
+  const market = merged.markets[0];
+  assert.equal(market.kalshi_scan_ok, true);
+  assert.equal(market.kalshi_events_scanned, 4);
+  assert.equal(market.kalshi_scan_error, null);
+  const composite = currentContextOnlyComposite({ score: 85, kalshiNativeN: market.kalshi_native_n });
+  Object.assign(composite, {
+    kalshi_scan_ok: market.kalshi_scan_ok,
+    kalshi_events_scanned: market.kalshi_events_scanned,
+    kalshi_scan_error: market.kalshi_scan_error,
+  });
+  assert.equal(computeEvidenceAvailability(composite).settled_evidence.status, 'none_for_series');
+});
+
+test('collector carries Perplexity scan provenance onto each research market row', async () => {
+  const event = {
+    event_ticker: 'KXTEST-26JUL14',
+    title: 'What will the speaker say?',
+    markets: [{ ticker: 'KXTEST-26JUL14-TAILWIND', custom_strike: { Word: 'Tailwind' } }],
+  };
+  const research = await buildEventResearch(event, 'political_mentions', {
+    stateRoot: mkdtempSync(join(tmpdir(), 'scan-threading-')),
+    date: '2026-07-14',
+    env: {},
+    deps: {
+      hasPerplexityKey: () => true,
+      ensureSourcesManifest: () => ({ manifest: { status: 'NO_DECLARED_SOURCES' } }),
+      loadDeclaredSources: () => [],
+      runResearchForEvent: async () => ({ rows: [{
+        phrase: 'Tailwind',
+        kalshi_native_pct: null,
+        kalshi_native_n: 0,
+        kalshi_scan_ok: true,
+        kalshi_events_scanned: 4,
+        kalshi_scan_error: null,
+        direct_mention_pathway: { score: 80 },
+      }] }),
+    },
+  });
+  const market = research.markets[0];
+  assert.equal(market.kalshi_scan_ok, true);
+  assert.equal(market.kalshi_events_scanned, 4);
+  assert.equal(market.kalshi_scan_error, null);
 });
