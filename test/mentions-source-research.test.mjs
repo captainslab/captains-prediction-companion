@@ -129,6 +129,39 @@ test('buildResearchTermNote derives settlement fit from slash tokens and repeat 
   assert.match(note.settlement_fit, /Requires 3 or more qualifying mentions, not just one\./);
 });
 
+test('customer settlement fit renders clean strike alternatives and communicates inflections', () => {
+  const cases = [
+    { phrase: 'Iran (3+ times)', requiredCount: 3, tokenPattern: /exact token "Iran"/, forbidden: /\(3\+ times\)/ },
+    { phrase: 'Oil', tokenPattern: /exact token "Oil"/, forbidden: /"(?:oil's|oils')"/i },
+    { phrase: 'Thank You', tokenPattern: /exact token "Thank You"/, forbidden: /"(?:thank you's|thank yous|thank yous')"/i },
+    { phrase: 'Nuclear / Denuclearization', tokenPattern: /exact token "Nuclear" or "Denuclearization"/, forbidden: /full market title/i },
+  ];
+  for (const { phrase, requiredCount = 1, tokenPattern, forbidden } of cases) {
+    const note = buildResearchTermNote({
+      phrase,
+      reason: 'source-backed context',
+      proofPct: 50,
+      requiredCount,
+    });
+    assert.ok(note?.settlement_fit, `settlement fit should render for ${phrase}`);
+    assert.match(note.settlement_fit, tokenPattern);
+    assert.match(note.settlement_fit, /plural and possessive forms count/);
+    assert.doesNotMatch(note.settlement_fit, forbidden);
+  }
+});
+
+test('customer settlement fit enumerates all genuine slash alternatives', () => {
+  const note = buildResearchTermNote({
+    phrase: 'Afford / Affordable / Affordability',
+    reason: 'source-backed context',
+    proofPct: 50,
+  });
+  assert.match(note.settlement_fit, /"Afford"/);
+  assert.match(note.settlement_fit, /"Affordable"/);
+  assert.match(note.settlement_fit, /"Affordability"/);
+  assert.doesNotMatch(note.settlement_fit, /"(?:Affords|Afford's|Affordabilities|Affordable's)"/);
+});
+
 test('threshold research prompt carries required_count and repeat-count context', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pplx-threshold-'));
   const event = {
