@@ -154,7 +154,7 @@ export function sanitizeQuarterRecord(rawQuarter) {
   const record = {
     quarter: asText(q.quarter ?? q.fiscal_quarter) || null,
     event_ticker: asText(q.event_ticker) || null,
-    event_date: eventTime.status === 'CONFIRMED' ? eventTime.iso : null,
+    event_date: eventTime.status === 'EXACT' || eventTime.status === 'DATE_WINDOW' ? eventTime.iso : null,
     completed: q.completed !== false && Object.keys(outcomes).length > 0,
     outcomes,
   };
