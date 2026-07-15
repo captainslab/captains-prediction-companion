@@ -29,6 +29,7 @@ import {
   fetchKalshiEvents,
   filterByEventDate,
   persistEventArtifacts,
+  canonicalKalshiEventUrl,
   summarizeEvent,
   normalizeMarket,
   KALSHI_SOURCES,
@@ -2168,7 +2169,6 @@ function loadResearchForDate(stateRoot, date, { runStartedAtUtc = null } = {}) {
     if (!data || !data.event_ticker) continue;
     if (runStartedAtUtc && !researchArtifactIsFresh(data, runStartedAtUtc)) {
       map._staleTickers.add(data.event_ticker);
-      continue;
     }
     // Build a per-market-ticker lookup
     const marketMap = new Map();
@@ -2214,7 +2214,10 @@ function loadExactMentionEventsFromArtifacts({ date, tickers = [], stateRoots = 
     let found = null;
     for (const root of roots) {
       const eventPath = resolve(root, 'mentions', date, 'kalshi-events', `${ticker}.json`);
-      const event = readJsonIfExists(eventPath);
+      const rawEvent = readJsonIfExists(eventPath);
+      const event = rawEvent?.event_ticker
+        ? { ...rawEvent, event_url: rawEvent.event_url ?? canonicalKalshiEventUrl(rawEvent.event_ticker) }
+        : rawEvent;
       if (!event?.event_ticker) continue;
       const researchMap = loadResearchForDate(root, date, { runStartedAtUtc });
       const researchEntry = researchMap.get(ticker);
@@ -2334,8 +2337,15 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
   if (!researchEntry && !staleResearch) {
     return { ...event };
   }
+  const cloned = { ...event };
+  cloned.declared_source_url = cloned.declared_source_url
+    ?? researchEntry?.declared_source_url
+    ?? researchEntry?.declared_source_urls?.[0]
+    ?? null;
+  // Keep the research run timestamp even when its content is stale or lacks
+  // a usable signal. Research quality and research timing are separate facts.
+  cloned.research_timestamp = cloned.research_timestamp ?? researchEntry?.produced_at ?? researchEntry?.generated_utc ?? null;
   if (staleResearch || (researchEntry && !researchEntryHasUsableSignal(researchEntry))) {
-    const cloned = { ...event };
     cloned.source_status = 'NO_DECLARED_SOURCES';
     cloned.markets = (Array.isArray(cloned.markets) ? cloned.markets : []).map((m) => ({
       ...m,
@@ -2347,17 +2357,6 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
     }));
     return cloned;
   }
-  const cloned = { ...event };
-  cloned.declared_source_url = cloned.declared_source_url
-    ?? researchEntry?.declared_source_url
-    ?? researchEntry?.declared_source_urls?.[0]
-    ?? null;
-  // Propagate the research artifact timestamp onto the event so the canonical
-  // identity gate (event-integrity.mjs) sees a research_timestamp. The normal
-  // research writer emits `produced_at` (collect-mentions-research.mjs); older
-  // artifacts may carry `generated_utc`. Without this, otherwise-valid events
-  // are marked publication_blocked ("research timestamp unavailable").
-  cloned.research_timestamp = cloned.research_timestamp ?? researchEntry?.produced_at ?? researchEntry?.generated_utc ?? null;
   const markets = Array.isArray(cloned.markets) ? cloned.markets.slice() : [];
   const marketMap = researchEntry._marketMap || new Map();
   const hasUsableResearch = researchEntryHasUsableSignal(researchEntry);
