@@ -23,6 +23,7 @@ const PRESENTATION_TIME_FIELDS = Object.freeze([
 
 const DIRECT_ROUTE_RE = /\b(trump_event|trump_weekly|trump_monthly)\b/i;
 const TRUMP_RE = /\btrump\b/i;
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const RISK_PATTERNS = Object.freeze([
   {
     risk: 'blocked',
@@ -117,8 +118,10 @@ function lowerJoined(parts) {
 }
 
 function isoCandidate(value) {
-  if (!value) return null;
-  const d = new Date(value);
+  const raw = asText(value);
+  if (!raw) return null;
+  if (DATE_ONLY_RE.test(raw)) return `${raw}T00:00:00.000Z`;
+  const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
@@ -133,8 +136,15 @@ function firstMarket(event) {
 function pickPresentationTime(event) {
   const candidates = [];
   for (const field of PRESENTATION_TIME_FIELDS) {
-    const iso = isoCandidate(event?.[field]);
-    if (iso) candidates.push({ field, iso, source: `event.${field}` });
+    const raw = asText(event?.[field]);
+    const iso = isoCandidate(raw);
+    if (iso) candidates.push({
+      field,
+      iso,
+      calendar_date: DATE_ONLY_RE.test(raw) ? raw : null,
+      status: DATE_ONLY_RE.test(raw) ? 'DATE_WINDOW' : 'EXACT',
+      source: `event.${field}`,
+    });
   }
   return candidates;
 }
@@ -194,8 +204,7 @@ export function detectEventMetadataMismatch({ date = null, event = {} } = {}) {
  * Resolve the event presentation timestamp for the packet header.
  *
  * Trusted event-start / event-window fields win. Settlement-expiration fields
- * are only accepted when they agree with the packet date / ticker date.
- * Otherwise the packet must fail closed.
+ * are never accepted as event timing. Otherwise the packet must fail closed.
  */
 export function resolveMentionPresentationMetadata({ date = null, event = {} } = {}) {
   const mismatch = detectEventMetadataMismatch({ date, event });
@@ -217,7 +226,9 @@ export function resolveMentionPresentationMetadata({ date = null, event = {} } =
     }
   }
 
-  const eventDate = selected ? toEtDate(selected.iso) : null;
+  const eventDate = selected
+    ? (selected.calendar_date ?? toEtDate(selected.iso))
+    : null;
   const expectedDate = mismatch.expected_date || null;
   const selectedSource = selected?.source ?? null;
 
@@ -247,6 +258,7 @@ export function resolveMentionPresentationMetadata({ date = null, event = {} } =
       ticker_date: tickerDate,
       packet_date: packetDate,
       event_time_iso: selected?.iso ?? null,
+      event_time_status: selected?.status ?? 'UNCONFIRMED',
       event_date: eventDate,
       event_time_source: selectedSource,
       conflicts: blocker_conflicts,
@@ -262,10 +274,18 @@ export function resolveMentionPresentationMetadata({ date = null, event = {} } =
     ticker_date: tickerDate,
     packet_date: packetDate,
     event_time_iso: selected?.iso ?? null,
+    event_time_status: selected?.status ?? 'UNCONFIRMED',
     event_date: eventDate,
     event_time_source: selectedSource,
     conflicts: [],
   };
+}
+
+function presentationTimeLabel(presentation) {
+  if (presentation?.event_time_status === 'DATE_WINDOW') {
+    return `${presentation.event_date || 'date unavailable'} (DATE_WINDOW)`;
+  }
+  return presentation?.event_time_iso ?? null;
 }
 
 function lowerTextParts(event = {}) {
@@ -447,8 +467,8 @@ export function classifyEdnqRisk({
     const familyCheck = [];
     if (presentationBlocked) {
       familyCheck.push(`BLOCKED_EVENT_METADATA_MISMATCH: ${presentation.reason || 'cached timing conflicts with trusted metadata'}.`);
-    } else if (presentation?.event_time_iso) {
-      familyCheck.push(`Trusted event time: ${presentation.event_time_iso} (${presentation.event_date || 'date unavailable'}).`);
+    } else if (presentationTimeLabel(presentation)) {
+      familyCheck.push(`Trusted event time: ${presentationTimeLabel(presentation)}.`);
     } else {
       familyCheck.push('Trusted event time not yet confirmed; do not treat settlement expiration as the event start.');
     }
@@ -507,8 +527,8 @@ export function classifyEdnqRisk({
   const currentCheck = [];
   if (presentationBlocked) {
     currentCheck.push(`BLOCKED_EVENT_METADATA_MISMATCH: ${presentation.reason || 'cached timing conflicts with trusted metadata'}.`);
-  } else if (presentation?.event_time_iso) {
-    currentCheck.push(`Trusted event time: ${presentation.event_time_iso} (${presentation.event_date || 'date unavailable'}).`);
+  } else if (presentationTimeLabel(presentation)) {
+    currentCheck.push(`Trusted event time: ${presentationTimeLabel(presentation)}.`);
   } else {
     currentCheck.push('Trusted event time not yet confirmed; do not treat settlement expiration as the event start.');
   }

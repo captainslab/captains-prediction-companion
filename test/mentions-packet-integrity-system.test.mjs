@@ -129,8 +129,8 @@ test('route identity is isolated for sequential news and hearing events', () => 
   assert.equal(hearingIdentity.kalshi_event_ticker, hearing.event_ticker);
   assert.notEqual(newsIdentity.kalshi_event_url, hearingIdentity.kalshi_event_url);
   assert.notEqual(newsIdentity.settlement_source, hearingIdentity.settlement_source);
-  assert.equal(newsIdentity.event_time_central.status, 'CONFIRMED');
-  assert.equal(hearingIdentity.event_time_central.status, 'CONFIRMED');
+  assert.equal(newsIdentity.event_time_central.status, 'EXACT');
+  assert.equal(hearingIdentity.event_time_central.status, 'EXACT');
   assert.equal(validateCanonicalMentionIdentity(newsIdentity).ok, true);
   assert.equal(validateCanonicalMentionIdentity(hearingIdentity).ok, true);
 });

@@ -133,6 +133,24 @@ function extractSportsContext(event) {
   return { announcer, keywords };
 }
 
+const EVENT_START_FIELDS = Object.freeze([
+  'date_time', 'event_time', 'event_time_utc', 'event_window_start', 'start_time',
+  'start_time_utc', 'scheduled_start_time', 'scheduled_time',
+]);
+
+function confirmedDiscoveredEventTime(event = {}) {
+  for (const field of EVENT_START_FIELDS) {
+    if (event?.[field] != null && String(event[field]).trim()) return String(event[field]).trim();
+  }
+  const sourced = [
+    { value: event?.schedule?.event_date_utc, confirmed: event?.schedule?.confirmed === true },
+    { value: event?.earnings_schedule?.call_date_utc, confirmed: event?.earnings_schedule?.confirmed === true },
+    { value: event?.sports_discovery?.kickoff_utc, confirmed: event?.sports_discovery?.confirmed === true },
+    { value: event?.sports_discovery?.start_time_utc, confirmed: event?.sports_discovery?.confirmed === true },
+  ];
+  return sourced.find(({ value, confirmed }) => confirmed && value != null && String(value).trim())?.value ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Web search helper (uses child_process to call a search tool)
 // ---------------------------------------------------------------------------
@@ -177,7 +195,8 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
   let sourceStatus = SOURCE_STATUS.NO_DECLARED_SOURCES;
   let declaredSourceUrls = [];
   const presentation = resolveMentionPresentationMetadata({ date, event });
-  const eventStartUtc = presentation.blocked ? null : presentation.event_time_iso;
+  const discoveredEventTime = confirmedDiscoveredEventTime(event);
+  const eventStartUtc = presentation.blocked ? null : (presentation.event_time_iso ?? discoveredEventTime);
   const eventStartConfirmed = Boolean(eventStartUtc);
   if (date && allKeywords.length) {
     // Discovery step: ensure a bounded declared-source manifest exists for this
@@ -465,6 +484,7 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     declared_source_urls: declaredSourceUrls,
     declared_source_url: declaredSourceUrls[0] ?? null,
     source_research_stats: sourceResearch.stats,
+    ...(eventStartConfirmed ? { event_time: discoveredEventTime ?? eventStartUtc } : {}),
     markets: marketResearches,
   };
 }

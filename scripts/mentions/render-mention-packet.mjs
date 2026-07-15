@@ -32,6 +32,7 @@ import { attachMarketSnapshots } from './market-snapshot.mjs';
 import {
   validateMentionPacketIntegrity,
   validateCanonicalMentionIdentity,
+  formatCanonicalEventTime,
 } from './event-integrity.mjs';
 
 export const SECTION_ORDER = Object.freeze([
@@ -704,7 +705,9 @@ export function renderMentionPacket(input, {
   lines.push(`kalshi_event_url: ${canonical?.kalshi_event_url ?? 'UNAVAILABLE'}`);
   lines.push(`declared_source_url: ${canonical?.declared_source_url ?? e.declared_source_url ?? 'UNAVAILABLE'}`);
   lines.push(`event_date: ${maybe(canonical?.event_date ?? input.date)}`);
-  lines.push(`event_time_central: ${presentedEventIso ? formatCentral(presentedEventIso) : 'UNCONFIRMED'}`);
+  lines.push(`event_time_central: ${canonical ? formatCanonicalEventTime(canonical) : (presentedEventIso ? formatCentral(presentedEventIso) : 'UNCONFIRMED')}`);
+  lines.push(`event_time_central_status: ${canonical?.event_time_central?.status ?? 'UNCONFIRMED'}`);
+  lines.push(`event_time_central_source: ${canonical?.event_time_central?.source ?? 'UNAVAILABLE'}`);
   lines.push(`generated_utc: ${canonical?.generated_utc ? formatGeneratedStamp(canonical.generated_utc) : 'UNAVAILABLE'}`);
   lines.push(`generated_central: ${canonical?.generated_central ? formatGeneratedCentralStamp(canonical.generated_central) : 'UNAVAILABLE'}`);
   lines.push(`research_timestamp: ${canonical?.research_timestamp ? formatGeneratedStamp(canonical.research_timestamp) : 'UNAVAILABLE'}`);
@@ -825,12 +828,16 @@ export function renderMentionPacket(input, {
 export function validateRenderedPacket(text, input) {
   const identity = input?.canonical_event ?? input?.presentation?.canonical_event;
   if (identity) {
-    const identityCheck = validateCanonicalMentionIdentity(identity);
+    const route = input?.research_provenance?.research_route
+      ?? input?.research_provenance?.event_format
+      ?? identity.route
+      ?? null;
+    const identityCheck = validateCanonicalMentionIdentity(identity, route);
     if (!identityCheck.ok) throw new Error(`rendered packet identity gate failed: ${identityCheck.source_gaps.join('; ')}`);
     const routeCheck = validateMentionPacketIntegrity({
       identity,
       packetText: text,
-      route: input?.research_provenance?.research_route ?? null,
+      route,
       allowedTerms: (input?.terms ?? []).map((term) => term?.full_strike_text),
     });
     if (!routeCheck.ok) throw new Error(`rendered packet isolation gate failed: ${routeCheck.source_gaps.join('; ')}`);

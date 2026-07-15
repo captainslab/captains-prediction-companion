@@ -118,7 +118,7 @@ export function sanitizeSettledRecord(rawMarket, eventMeta = {}) {
   const record = {
     event_ticker:  e.event_ticker ?? m.event_ticker ?? null,
     market_ticker: m.ticker ?? m.market_ticker ?? null,
-    event_date:    eventTime.status === 'CONFIRMED' ? eventTime.iso : null,
+    event_date:    eventTime.status === 'EXACT' || eventTime.status === 'DATE_WINDOW' ? eventTime.iso : null,
     series_ticker: e.series_ticker ?? m.series_ticker ?? null,
     category:      e.category ?? m.category ?? null,
     strike_term:   m.yes_sub_title ?? m.subtitle ?? m.custom_strike ?? m.title ?? null,

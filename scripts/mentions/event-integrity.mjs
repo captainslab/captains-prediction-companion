@@ -3,6 +3,7 @@
 
 import { canonicalKalshiEventUrl, extractDateFromTicker } from '../packets/lib/kalshi-discovery.mjs';
 import { FAMILY_PRIORITY, classifyPriorityFamily } from './source-priority-registry.mjs';
+import { routeGroupOf } from './route-taxonomy.mjs';
 
 const EVENT_URL_RE = /\/events\/([A-Z0-9_-]+)\/?$/i;
 const EVENT_START_FIELDS = Object.freeze([
@@ -10,6 +11,9 @@ const EVENT_START_FIELDS = Object.freeze([
   'start_time_utc', 'scheduled_start_time', 'scheduled_time',
 ]);
 const PRICE_KEY_RE = /(?:^|_)(?:price|bid|ask|odds|volume|open_interest|liquidity|spread|last_trade)(?:$|_)/i;
+const EVENT_TIME_GAP = 'authoritative event start time unconfirmed';
+const COMPARATIVE_ROUTE_GROUP = 'comparative_count_or_ranking';
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function text(value) { return value == null ? '' : String(value).trim(); }
 
@@ -69,20 +73,54 @@ export function declaredSettlementSource(event = {}) {
 
 function eventTimeCandidates(event = {}) {
   return EVENT_START_FIELDS
-    .map((field) => ({ field, iso: iso(event[field]) }))
-    .filter((candidate) => candidate.iso);
+    .map((field) => {
+      const raw = text(event[field]);
+      if (!raw) return null;
+      if (DATE_ONLY_RE.test(raw)) {
+        return {
+          field,
+          iso: `${raw}T00:00:00.000Z`,
+          calendarDate: raw,
+          status: 'DATE_WINDOW',
+        };
+      }
+      const normalized = iso(raw);
+      return normalized
+        ? { field, iso: normalized, calendarDate: normalized.slice(0, 10), status: 'EXACT' }
+        : null;
+    })
+    .filter(Boolean);
 }
 
 export function canonicalEventTime(event = {}) {
   const candidates = eventTimeCandidates(event);
-  const distinct = [...new Set(candidates.map((candidate) => candidate.iso))];
-  if (distinct.length !== 1) {
+  const exact = candidates.filter((candidate) => candidate.status === 'EXACT');
+  const dateWindows = candidates.filter((candidate) => candidate.status === 'DATE_WINDOW');
+  const exactDistinct = [...new Set(exact.map((candidate) => candidate.iso))];
+  const dateDistinct = [...new Set(dateWindows.map((candidate) => candidate.calendarDate))];
+
+  const exactDateConflict = exactDistinct.length === 1
+    && dateDistinct.length === 1
+    && exact[0].calendarDate !== dateDistinct[0];
+  if (exactDistinct.length > 1 || dateDistinct.length > 1 || exactDateConflict) {
     return {
       status: 'UNCONFIRMED', iso: null, source: null,
       conflicts: candidates.length > 1 ? candidates : [],
     };
   }
-  return { status: 'CONFIRMED', iso: distinct[0], source: candidates[0].field, conflicts: [] };
+  if (exactDistinct.length === 1) {
+    return { status: 'EXACT', iso: exactDistinct[0], source: exact[0].field, conflicts: [] };
+  }
+  if (dateDistinct.length === 1) {
+    return {
+      status: 'DATE_WINDOW',
+      iso: dateWindows[0].iso,
+      calendar_date: dateWindows[0].calendarDate,
+      source: dateWindows[0].field,
+      conflicts: [],
+    };
+  }
+  return { status: 'UNCONFIRMED', iso: null, source: null, conflicts: [] };
 }
 
 function canonicalDate(event, packetDate, ticker) {
@@ -101,7 +139,7 @@ function canonicalDate(event, packetDate, ticker) {
 }
 
 export function buildCanonicalMentionIdentity({
-  date = null, event = {}, generatedUtc = null, researchTimestamp = null,
+  date = null, event = {}, route = null, generatedUtc = null, researchTimestamp = null,
 } = {}) {
   const eventTicker = text(event.event_ticker ?? event.ticker) || null;
   const seriesTicker = text(event.series_ticker ?? event.series) || null;
@@ -117,7 +155,7 @@ export function buildCanonicalMentionIdentity({
   if (!eventTicker) sourceGaps.push('kalshi event ticker unavailable');
   if (!seriesTicker) sourceGaps.push('kalshi series ticker unavailable');
   if (!eventUrl) sourceGaps.push('verified exact event URL unavailable (event-level /events/<event_ticker> required)');
-  if (eventTime.status !== 'CONFIRMED') sourceGaps.push('authoritative event start time unconfirmed');
+  if (eventTime.status === 'UNCONFIRMED') sourceGaps.push(EVENT_TIME_GAP);
   if (!settlementSource) sourceGaps.push('authoritative settlement source unavailable');
   if (dateResult.conflicts.length) sourceGaps.push(`event date conflict: ${dateResult.conflicts.join(', ')}`);
   return Object.freeze({
@@ -129,6 +167,8 @@ export function buildCanonicalMentionIdentity({
     event_date: dateResult.value,
     event_date_conflicts: Object.freeze(dateResult.conflicts),
     event_time_central: Object.freeze({ ...eventTime, timezone: 'America/Chicago' }),
+    route: route ?? null,
+    route_group: routeGroupOf(route),
     generated_utc: generated,
     generated_central: generated,
     research_timestamp: research,
@@ -136,12 +176,16 @@ export function buildCanonicalMentionIdentity({
   });
 }
 
-export function validateCanonicalMentionIdentity(identity = {}) {
-  const gaps = Array.isArray(identity.source_gaps) ? [...identity.source_gaps] : [];
+export function validateCanonicalMentionIdentity(identity = {}, route = null) {
+  const effectiveRoute = route ?? identity.route ?? null;
+  const comparative = routeGroupOf(effectiveRoute) === COMPARATIVE_ROUTE_GROUP;
+  const gaps = (Array.isArray(identity.source_gaps) ? [...identity.source_gaps] : [])
+    .filter((gap) => !(comparative && gap === EVENT_TIME_GAP));
   if (!text(identity.kalshi_event_ticker)) gaps.push('kalshi event ticker unavailable');
   if (!text(identity.kalshi_series_ticker)) gaps.push('kalshi series ticker unavailable');
   if (!identity.kalshi_event_url) gaps.push('verified exact event URL unavailable');
-  if (identity.event_time_central?.status !== 'CONFIRMED') gaps.push('authoritative event start time unconfirmed');
+  const eventTimeStatus = identity.event_time_central?.status;
+  if (!comparative && eventTimeStatus !== 'EXACT' && eventTimeStatus !== 'DATE_WINDOW') gaps.push(EVENT_TIME_GAP);
   if (!identity.settlement_source) gaps.push('authoritative settlement source unavailable');
   if (!identity.generated_utc) gaps.push('generated UTC timestamp unavailable');
   if (!identity.research_timestamp) gaps.push('research timestamp unavailable');
@@ -175,7 +219,7 @@ export function validateRouteTextIsolation({ route, text: packetText, allowedTer
 }
 
 export function validateMentionPacketIntegrity({ identity, packetText = '', route = null, allowedTerms = [] } = {}) {
-  const identityCheck = validateCanonicalMentionIdentity(identity);
+  const identityCheck = validateCanonicalMentionIdentity(identity, route);
   const routeCheck = validateRouteTextIsolation({ route, text: packetText, allowedTerms });
   return {
     ok: identityCheck.ok && routeCheck.ok,
@@ -184,9 +228,16 @@ export function validateMentionPacketIntegrity({ identity, packetText = '', rout
 }
 
 export function formatCanonicalEventTime(identity) {
-  if (identity?.event_time_central?.status !== 'CONFIRMED') return 'UNCONFIRMED';
+  const status = identity?.event_time_central?.status;
+  if (status === 'UNCONFIRMED') return 'UNCONFIRMED';
   const value = new Date(identity.event_time_central.iso);
   if (!Number.isFinite(value.getTime())) return 'UNCONFIRMED';
+  if (status === 'DATE_WINDOW') {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC', year: 'numeric', month: 'short', day: '2-digit',
+    }).format(value) + ' (DATE_WINDOW)';
+  }
+  if (status !== 'EXACT') return 'UNCONFIRMED';
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Chicago', year: 'numeric', month: 'short', day: '2-digit',
     hour: 'numeric', minute: '2-digit', timeZoneName: 'short',

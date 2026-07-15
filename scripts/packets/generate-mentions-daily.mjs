@@ -219,6 +219,46 @@ function routeEventLike({ event = null, market = null, legacy = null } = {}) {
   };
 }
 
+const EVENT_START_FIELDS = Object.freeze([
+  'date_time', 'event_time', 'event_time_utc', 'event_window_start', 'start_time',
+  'start_time_utc', 'scheduled_start_time', 'scheduled_time',
+]);
+
+function confirmedTimingCandidate(value, confirmed = true) {
+  if (!confirmed || value == null || String(value).trim() === '') return null;
+  return String(value).trim();
+}
+
+// Research/discovery may know the schedule without the Kalshi event object
+// carrying it yet. Project only confirmed, non-settlement timing onto the
+// existing event_time field. Expiration/close fields are intentionally absent.
+function attachConfirmedEventTiming(event, route, { researchEntry = null, earningsQuarters = null } = {}) {
+  const existing = EVENT_START_FIELDS.find((field) => event?.[field] != null && String(event[field]).trim() !== '');
+  if (existing) return { ...event };
+
+  const sources = [
+    { value: researchEntry?.event_time, confirmed: true },
+    { value: researchEntry?.event_time_utc, confirmed: true },
+    { value: event?.schedule?.event_date_utc, confirmed: event?.schedule?.confirmed === true },
+    { value: researchEntry?.schedule?.event_date_utc, confirmed: researchEntry?.schedule?.confirmed === true },
+    { value: event?.earnings_schedule?.call_date_utc, confirmed: event?.earnings_schedule?.confirmed === true },
+    { value: researchEntry?.earnings_schedule?.call_date_utc, confirmed: researchEntry?.earnings_schedule?.confirmed === true },
+    { value: event?.sports_discovery?.kickoff_utc, confirmed: event?.sports_discovery?.confirmed === true },
+    { value: event?.sports_discovery?.start_time_utc, confirmed: event?.sports_discovery?.confirmed === true },
+    { value: researchEntry?.sports_discovery?.kickoff_utc, confirmed: researchEntry?.sports_discovery?.confirmed === true },
+    { value: researchEntry?.sports_discovery?.start_time_utc, confirmed: researchEntry?.sports_discovery?.confirmed === true },
+  ];
+
+  if (route === 'earnings_call' && Array.isArray(earningsQuarters)) {
+    const matchingQuarter = earningsQuarters.find((quarter) => quarter?.event_ticker === event?.event_ticker);
+    sources.push({ value: matchingQuarter?.event_time, confirmed: true });
+    sources.push({ value: matchingQuarter?.event_date, confirmed: true });
+  }
+
+  const timing = sources.map(({ value, confirmed }) => confirmedTimingCandidate(value, confirmed)).find(Boolean);
+  return timing ? { ...event, event_time: timing } : { ...event };
+}
+
 function resolveMentionProfile({ event = null, market = null, legacy = null } = {}) {
   // Research route is resolved FIRST — before any source fetch or model
   // extraction — and is the single shared classification authority.
@@ -2338,6 +2378,12 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
     return { ...event };
   }
   const cloned = { ...event };
+  const routed = resolveResearchRoute(routeEventLike({ event: cloned }));
+  const timed = attachConfirmedEventTiming(cloned, routed?.route, { researchEntry });
+  if (!EVENT_START_FIELDS.some((field) => cloned?.[field] != null && String(cloned[field]).trim() !== '')
+      && timed.event_time != null) {
+    cloned.event_time = timed.event_time;
+  }
   cloned.declared_source_url = cloned.declared_source_url
     ?? researchEntry?.declared_source_url
     ?? researchEntry?.declared_source_urls?.[0]
@@ -2492,16 +2538,19 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
   return cloned;
 }
 
-export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, earningsFamilyHistory = null, sourceHealthDisclosure = null, generatedUtc = null, researchTimestamp = null, marketQuotes = null }) {
+export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath = null, historyRecords = null, historyStoreStatus = null, earningsQuarters = null, earningsContextSources = null, earningsFamilyHistory = null, sourceHealthDisclosure = null, generatedUtc = null, researchTimestamp = null, marketQuotes = null, researchEntry = null }) {
+  const eventRoute = resolveResearchRoute(routeEventLike({ event }));
+  event = attachConfirmedEventTiming(event, eventRoute?.route, { researchEntry, earningsQuarters });
   const s = summarizeEvent(event);
   const marketInfo = marketRows(event);
   const canonicalEvent = buildCanonicalMentionIdentity({
     date,
     event,
+    route: eventRoute?.route ?? null,
     generatedUtc: generatedUtc ?? new Date().toISOString(),
     researchTimestamp: researchTimestamp ?? event?.research_timestamp ?? event?.researched_at_utc ?? null,
   });
-  const canonicalValidation = validateCanonicalMentionIdentity(canonicalEvent);
+  const canonicalValidation = validateCanonicalMentionIdentity(canonicalEvent, eventRoute?.route ?? null);
   const presentationBase = resolveMentionPresentationMetadata({ date, event });
   const presentation = {
     ...presentationBase,
@@ -2572,7 +2621,6 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
   // never from crawling — then shared by every market composite.
   let earningsQuarterLayer = null;
   let earningsContextDelta = null;
-  const eventRoute = resolveResearchRoute(routeEventLike({ event }));
   if (eventRoute?.route === 'earnings_call') {
     const family = resolveEarningsFamily(event);
     // Use the bare strike term (yes_sub_title / custom strike word), not the
@@ -2704,6 +2752,9 @@ export function buildKalshiEventPacket({ date, event, sourceUrl, inventoryPath =
         blocker_code: BLOCKED_EVENT_METADATA_MISMATCH,
         reason: canonicalValidation.source_gaps.join('; '),
         source_gaps: canonicalValidation.source_gaps,
+        event_time_status: canonicalEvent.event_time_central.status,
+        event_time_iso: canonicalEvent.event_time_central.iso,
+        event_time_source: canonicalEvent.event_time_central.source,
         delivered: false,
       } : null,
     };
@@ -3129,6 +3180,7 @@ export async function writeKalshiEventPackets({
         sourceHealthDisclosure,
         generatedUtc: runStartedAtUtc ?? new Date().toISOString(),
         researchTimestamp: mergedEvent?.research_timestamp ?? mergedEvent?.researched_at_utc ?? null,
+        researchEntry,
       });
     } catch (err) {
       const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
