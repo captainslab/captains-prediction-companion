@@ -100,6 +100,14 @@ function asText(value) {
 function eventTickerFromSettlementSource(url) {
   const text = asText(url);
   if (!text) return null;
+  // Only Kalshi's own event URL shape carries a comparable ticker; a proof/IR
+  // settlement source (e.g. investors.example.com/events/...) is not a Kalshi
+  // event page and must never be pattern-matched as if it declared one.
+  try {
+    if (!new URL(text).hostname.toLowerCase().replace(/^www\./, '').endsWith('kalshi.com')) return null;
+  } catch {
+    return null;
+  }
   const match = text.match(/\/events\/([A-Z0-9_-]+)/i);
   return match?.[1]?.toUpperCase() ?? null;
 }
