@@ -14,6 +14,25 @@ Protect the clean baseline. Ship a tagged commit that passes the fresh-clone che
 
 All public-alpha changes (README, .env.example, package.json, setup/doctor/demo scripts, identity cleanup) are in the working tree but not committed. The single next step is committing and tagging the baseline before any new work.
 
+## LEAN INITIATIVE
+
+Standing directive across all repair and feature work until superseded. Applies to Codex and to Hermes `-z` sessions run in this repo (both auto-load this file):
+
+- Finish active loose ends before the broad cut.
+- Every interim repair must reduce or preserve complexity, never add permanent architecture debt.
+- Prefer fixing the earliest shared contract over patching a downstream symptom.
+- No new feature, wrapper, validator, fallback, renderer, or entrypoint unless strictly required by the task at hand.
+
+Pre-lean order (do not skip ahead of the current stage without explicit instruction):
+
+1. Mentions stable
+2. Discord complete
+3. Stable baseline recorded
+4. Broad lean architecture pass
+5. Live Ops afterward
+
+Mirrored in the checked-in `CLAUDE.md` (Claude Code's project instructions) so all three controllers apply the same discipline.
+
 ## Default Behavior
 
 1. Read repo state before acting. Never assume local state matches last session.

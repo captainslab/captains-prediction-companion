@@ -6,6 +6,7 @@
 // with cached / advisory timing.
 
 import { extractDateFromTicker, toEtDate } from '../packets/lib/kalshi-discovery.mjs';
+import { declaredSettlementSource } from './event-integrity.mjs';
 
 export const BLOCKED_EVENT_METADATA_MISMATCH = 'BLOCKED_EVENT_METADATA_MISMATCH';
 
@@ -96,16 +97,6 @@ function asText(value) {
   return value == null ? '' : String(value).trim();
 }
 
-function settlementSourceForEvent(event = {}) {
-  const declared = Array.isArray(event?.settlement_sources)
-    ? event.settlement_sources.map((entry) => asText(entry?.url)).filter(Boolean)
-    : [];
-  const explicit = asText(event?.settlement_source_link ?? event?.settlement_source);
-  const eventUrl = asText(event?.event_url ?? event?.url);
-  const source = declared[0] || explicit;
-  return source && source !== eventUrl ? source : '';
-}
-
 function eventTickerFromSettlementSource(url) {
   const text = asText(url);
   if (!text) return null;
@@ -159,7 +150,7 @@ export function detectEventMetadataMismatch({ date = null, event = {} } = {}) {
   // when no event date can be derived at all.
   const expectedDate = tickerDate || packetDate || null;
   const title = asText(event?.title);
-  const settlementSource = settlementSourceForEvent(event);
+  const settlementSource = declaredSettlementSource(event);
   const conflicts = [];
 
   const settlementTicker = eventTickerFromSettlementSource(settlementSource);

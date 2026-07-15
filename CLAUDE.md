@@ -133,3 +133,22 @@ These files and systems must never be modified by any agent or subagent:
 ## Price Isolation Invariant
 
 Market price, odds, bid, ask, volume, open interest, and price movement data must NEVER enter model input, scoring, posture, ranking, or upgrade/downgrade logic. Price data is allowed for display, logging, and Kalshi API interaction only.
+
+## LEAN INITIATIVE
+
+Standing directive across all repair and feature work until superseded:
+
+- Finish active loose ends before the broad cut.
+- Every interim repair must reduce or preserve complexity, never add permanent architecture debt.
+- Prefer fixing the earliest shared contract over patching a downstream symptom.
+- No new feature, wrapper, validator, fallback, renderer, or entrypoint unless strictly required by the task at hand.
+
+Pre-lean order (do not skip ahead of the current stage without explicit instruction):
+
+1. Mentions stable
+2. Discord complete
+3. Stable baseline recorded
+4. Broad lean architecture pass
+5. Live Ops afterward
+
+This rule is mirrored in `AGENTS.md` (read by both Codex and Hermes `-z` sessions in this repo) so all three controllers — Claude, Codex, Hermes — apply the same discipline.

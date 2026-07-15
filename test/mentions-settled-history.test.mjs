@@ -71,7 +71,7 @@ test('sanitizeSettledRecord strips pricing fields, keeps result/strike/date', ()
   }
   assert.equal(out.result, 'yes');
   assert.equal(out.strike_term, 'tariff');
-  assert.equal(out.event_date, '2026-06-10T23:00:00Z');
+  assert.equal(out.event_date, null, 'close_time is not an authoritative event start');
   assert.equal(out.market_ticker, 'KXTRUMPMENTION-26JUN10-TARIFF');
   assert.equal(out.series_ticker, 'KXTRUMPMENTION');
   assert.equal(out.route, 'political_mentions');

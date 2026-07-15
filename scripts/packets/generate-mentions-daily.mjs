@@ -515,13 +515,26 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     'MISSING'
   );
 
+  const lexicalGate = gateMentionMarket({ event, market, legacy, candidateText });
+  if (strikeIsEdnq(targetMention)) {
+    return blockedMentionComposite({
+      event,
+      market,
+      legacy,
+      targetMention,
+      profileResolution,
+      route,
+      lexicalGate,
+      qualificationBlocked: true,
+    });
+  }
+
   // ---- Lexical pre-evidence gate (HARD) --------------------------------------
   // The literal lexical engine decides whether this market is even valid before
   // ANY evidence layer is built or any composite/posture is produced. Hard
   // blocks (BLOCKED_RULES_UNCLEAR / OUT_OF_SCOPE_ROLLING) short-circuit here and
   // never reach scoring or rendering. An evaluated NO_MATCH suppresses
   // conviction downstream. MATCH / PENDING proceed to the layer build below.
-  const lexicalGate = gateMentionMarket({ event, market, legacy, candidateText });
   if (lexicalGate.hard_blocked) {
     return blockedMentionComposite({
       event,
@@ -872,11 +885,15 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
 // are built and composeMentionLedger is never called — the market can never
 // surface a soft verdict (WATCH/LEAN/etc.) or any score/confidence. The shape
 // mirrors the normal return so downstream rank/summary/render code is unchanged.
-function blockedMentionComposite({ event, market, legacy, targetMention, profileResolution, route, lexicalGate }) {
-  const decision = lexicalGate.lexical_result?.status === 'BLOCKED' ? lexicalGate.decision : 'BLOCK';
-  const blockReasons = Array.isArray(lexicalGate.lexical_result?.block_reasons)
-    ? lexicalGate.lexical_result.block_reasons
-    : [];
+function blockedMentionComposite({ event, market, legacy, targetMention, profileResolution, route, lexicalGate, qualificationBlocked = false }) {
+  const decision = qualificationBlocked
+    ? 'QUALIFICATION'
+    : (lexicalGate.lexical_result?.status === 'BLOCKED' ? lexicalGate.decision : 'BLOCK');
+  const blockReasons = qualificationBlocked
+    ? ['EDNQ qualification result excluded from composite scoring']
+    : Array.isArray(lexicalGate.lexical_result?.block_reasons)
+      ? lexicalGate.lexical_result.block_reasons
+      : [];
   const result = {
     event: eventNameForComposite(event ?? {}, legacy),
     target_mention: targetMention,
@@ -888,8 +905,8 @@ function blockedMentionComposite({ event, market, legacy, targetMention, profile
     missing_layers: [],
     source_notes: [],
     evidence_ledger: [],
-    reasoning_summary: `NO_CLEAR_PICK — lexical gate ${decision} (${blockReasons.join(', ') || 'rules unclear'}); market blocked before scoring.`,
-    lexical_blocked: true,
+    reasoning_summary: `NO_CLEAR_PICK — ${qualificationBlocked ? 'qualification' : 'lexical'} gate ${decision} (${blockReasons.join(', ') || 'rules unclear'}); market blocked before scoring.`,
+    lexical_blocked: !qualificationBlocked,
     _meta: {
       schema_version: 'mention_composite_v1',
       layers_present: 0,
@@ -1523,18 +1540,6 @@ function injectSourceHealthDisclosure(text, sourceHealthDisclosure) {
   return `${head}\n\n${disclosure}\n${tail}`;
 }
 
-// Prefer the contract's declared settlement_sources URL (e.g. the issuer IR page
-// that actually resolves the market) over the generic Kalshi event page.
-export function pickSettlementSourceLink(event, ticker) {
-  const sources = Array.isArray(event?.settlement_sources) ? event.settlement_sources : [];
-  const declared = sources
-    .map((entry) => (typeof entry?.url === 'string' ? entry.url.trim() : ''))
-    .find(Boolean);
-  if (declared) return declared;
-  const explicit = typeof event?.settlement_source_link === 'string' ? event.settlement_source_link.trim() : '';
-  return explicit || null;
-}
-
 export function buildMentionSlatePacket({ date, event, composites, sourcePath = null, inventoryPath = null, sourceHealthDisclosure = null, presentation = null, marketQuotes = [], generatedUtc = null }) {
   if (!Array.isArray(composites) || !composites.length) return null;
   const s = summarizeEvent(event);
@@ -1742,6 +1747,7 @@ export function buildMentionsSynthesisInput({
       title: s.title,
       subtitle: s.sub_title,
       date_time: trustedPresentation?.event_time_iso ?? null,
+      declared_source_url: s.declared_source_url,
       settlement_source_link: trustedPresentation?.canonical_event?.settlement_source ?? null,
       rules_primary: rules.primary,
     },
@@ -2342,6 +2348,10 @@ export function mergeResearchIntoEvent(event, researchEntry, { staleResearch = f
     return cloned;
   }
   const cloned = { ...event };
+  cloned.declared_source_url = cloned.declared_source_url
+    ?? researchEntry?.declared_source_url
+    ?? researchEntry?.declared_source_urls?.[0]
+    ?? null;
   // Propagate the research artifact timestamp onto the event so the canonical
   // identity gate (event-integrity.mjs) sees a research_timestamp. The normal
   // research writer emits `produced_at` (collect-mentions-research.mjs); older

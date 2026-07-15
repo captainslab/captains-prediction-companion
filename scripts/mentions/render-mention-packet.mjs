@@ -702,6 +702,7 @@ export function renderMentionPacket(input, {
   lines.push(`kalshi_event_ticker: ${maybe(canonical?.kalshi_event_ticker ?? e.kalshi_event_ticker)}`);
   lines.push(`kalshi_series_ticker: ${maybe(canonical?.kalshi_series_ticker ?? e.kalshi_series_ticker)}`);
   lines.push(`kalshi_event_url: ${canonical?.kalshi_event_url ?? 'UNAVAILABLE'}`);
+  lines.push(`declared_source_url: ${canonical?.declared_source_url ?? e.declared_source_url ?? 'UNAVAILABLE'}`);
   lines.push(`event_date: ${maybe(canonical?.event_date ?? input.date)}`);
   lines.push(`event_time_central: ${presentedEventIso ? formatCentral(presentedEventIso) : 'UNCONFIRMED'}`);
   lines.push(`generated_utc: ${canonical?.generated_utc ? formatGeneratedStamp(canonical.generated_utc) : 'UNAVAILABLE'}`);
