@@ -590,6 +590,7 @@ test('collector end-to-end: declared sources upgrade stub research to source_bac
   const event = {
     event_ticker: 'KXTEST-26JUN12',
     title: 'What will Hunter Biden say during the podcast?',
+    date_time: '2026-06-12T20:00:00Z',
     markets: [
       { ticker: 'KXTEST-26JUN12-CHIN', custom_strike: { Word: 'China / Chinese' }, close_time: '2026-06-12T22:00:00Z' },
       { ticker: 'KXTEST-26JUN12-EPST', custom_strike: { Word: 'Epstein' }, close_time: '2026-06-12T22:00:00Z' },

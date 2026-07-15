@@ -30,6 +30,7 @@ import {
   hasPerplexityKey,
 } from './mentions-research-perplexity.mjs';
 import { buildMarketRulesSnapshot } from './rules-analyst.mjs';
+import { resolveMentionPresentationMetadata } from './qualification-risk.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -175,6 +176,9 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
   let sourceResearch = { byTerm: {}, stats: null, quality: 'stub', notes: [] };
   let sourceStatus = SOURCE_STATUS.NO_DECLARED_SOURCES;
   let declaredSourceUrls = [];
+  const presentation = resolveMentionPresentationMetadata({ date, event });
+  const eventStartUtc = presentation.blocked ? null : presentation.event_time_iso;
+  const eventStartConfirmed = Boolean(eventStartUtc);
   if (date && allKeywords.length) {
     // Discovery step: ensure a bounded declared-source manifest exists for this
     // event BEFORE research runs. Idempotent — never clobbers a human-authored
@@ -312,8 +316,8 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
           company,
           keyword,
           earningsEvent: {
-            call_date_utc: market.close_time,
-            confirmed: true,
+            call_date_utc: eventStartUtc,
+            confirmed: eventStartConfirmed,
             fiscal_quarter: 'next',
             event_ticker: eventTicker,
             source_url: `https://kalshi.com/events/${eventTicker}`,
@@ -329,8 +333,8 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
           company,
           keyword,
           earningsEvent: {
-            call_date_utc: market.close_time,
-            confirmed: true,
+            call_date_utc: eventStartUtc,
+            confirmed: eventStartConfirmed,
             fiscal_quarter: 'next',
           },
         });
@@ -351,8 +355,8 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
         keyword,
         schedule: {
           event_type: 'speech',
-          event_date_utc: market.close_time,
-          confirmed: true,
+          event_date_utc: eventStartUtc,
+          confirmed: eventStartConfirmed,
         },
       });
 
@@ -375,10 +379,10 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
         announcer,
         keyword,
         broadcastEvent: {
-          game_date_utc: market.close_time,
+          game_date_utc: eventStartUtc,
           network: 'national broadcast',
           show_type: 'live',
-          confirmed: true,
+          confirmed: eventStartConfirmed,
         },
       });
 
@@ -459,6 +463,7 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     produced_by: 'collect-mentions-research.mjs',
     source_status: sourceStatus,
     declared_source_urls: declaredSourceUrls,
+    declared_source_url: declaredSourceUrls[0] ?? null,
     source_research_stats: sourceResearch.stats,
     markets: marketResearches,
   };
@@ -504,6 +509,9 @@ async function main() {
     const profile = inferProfile(event);
     const research = await buildEventResearch(event, profile, { stateRoot, date: opts.date });
     totalMarkets += research.markets.length;
+
+    event.declared_source_url = research.declared_source_url ?? event.declared_source_url ?? null;
+    writeFileSync(path, JSON.stringify(event, null, 2), 'utf8');
 
     const outPath = join(researchDir, `${event.event_ticker}.json`);
     writeFileSync(outPath, JSON.stringify(research, null, 2), 'utf8');

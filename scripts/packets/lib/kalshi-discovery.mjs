@@ -671,6 +671,7 @@ export function normalizeMarket(market = {}) {
     close_time: market.close_time ?? null,
     expected_expiration_time: market.expected_expiration_time ?? null,
     expiration_time: market.expiration_time ?? null,
+    declared_source_url: market.declared_source_url ?? market.declared_source_urls?.[0] ?? null,
     rules_primary: market.rules_primary ?? null,
     rules_secondary: market.rules_secondary ?? null,
     status: market.status ?? null,
@@ -745,7 +746,10 @@ export function persistEventArtifacts({ stateRoot, sport, date, events }) {
     if (!ticker) continue;
     const safe = ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80);
     const path = join(dir, `${safe}.json`);
-    writeFileSync(path, JSON.stringify(ev, null, 2), 'utf8');
+    writeFileSync(path, JSON.stringify({
+      ...ev,
+      declared_source_url: ev.declared_source_url ?? ev.declared_source_urls?.[0] ?? null,
+    }, null, 2), 'utf8');
     written.push({ event_ticker: ticker, path });
   }
   return { dir, written };
@@ -768,7 +772,15 @@ export function summarizeEvent(ev) {
     m0?.expected_expiration_time ||
     'MISSING';
   const marketCount = Array.isArray(ev?.markets) ? ev.markets.length : 0;
-  return { ticker, title, sub_title, series, close, marketCount };
+  return {
+    ticker,
+    title,
+    sub_title,
+    series,
+    close,
+    marketCount,
+    declared_source_url: ev?.declared_source_url ?? null,
+  };
 }
 
 /**

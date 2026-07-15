@@ -1,9 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { gatherMentionEvents, resolveOnlyMentionEvents, writeKalshiEventPackets } from '../scripts/packets/generate-mentions-daily.mjs';
+import {
+  buildKalshiEventPacket,
+  gatherMentionEvents,
+  mergeResearchIntoEvent,
+  resolveOnlyMentionEvents,
+  writeKalshiEventPackets,
+} from '../scripts/packets/generate-mentions-daily.mjs';
+import { persistEventArtifacts } from '../scripts/packets/lib/kalshi-discovery.mjs';
+import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 
 const REPO = resolve(import.meta.dirname, '..');
 
@@ -367,4 +375,132 @@ test('CLI --only dry-run uses local artifacts before live discovery and builds a
   assert.equal(builtItem?.attachmentContract?.entity_count, 1);
   assert.equal(builtItem?.attachmentContract?.attached_count, 0);
   assert.deepEqual(builtItem?.attachmentContract?.missing_entity_ids, [`${ticker}-TEST`]);
+});
+
+test('on-disk discovery artifacts round-trip through generation and rendering for earnings and World Cup announcer fixtures', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-contract-roundtrip-'));
+  const date = '2099-01-09';
+  const generatedAt = new Date().toISOString();
+  const earningsTicker = 'KXEARNINGSMENTIONNVDA-99JAN09';
+  const sportsTicker = 'KXWORLDCUPMENTION-99JAN09';
+  const fixtures = [
+    {
+      event_ticker: earningsTicker,
+      series_ticker: 'KXEARNINGSMENTIONNVDA',
+      title: 'What will NVIDIA say during their next earnings call?',
+      event_url: `https://kalshi.com/events/${earningsTicker}`,
+      event_time_utc: '2099-01-09T18:00:00Z',
+      close_time: '2099-01-10T18:00:00Z',
+      settlement_sources: [
+        { name: 'generic fallback', url: 'https://example.com/fallback' },
+        { name: 'SEC', url: 'https://www.sec.gov/Archives/edgar/data/1045810/fixture.htm' },
+      ],
+      declared_source_url: 'https://ir.nvidia.com/fixture',
+      research_timestamp: generatedAt,
+      markets: [
+        {
+          ticker: `${earningsTicker}-BLACK`,
+          event_ticker: earningsTicker,
+          title: 'What will NVIDIA say during their next earnings call?',
+          yes_sub_title: 'Blackwell',
+          custom_strike: { Word: 'Blackwell' },
+          close_time: '2099-01-10T18:00:00Z',
+          rules_primary: 'If NVIDIA says Blackwell during the earnings call, resolves Yes.',
+          mention_profile: 'earnings_mentions',
+        },
+        {
+          ticker: `${earningsTicker}-NQE`,
+          event_ticker: earningsTicker,
+          title: 'What will NVIDIA say during their next earnings call?',
+          yes_sub_title: 'Event does not qualify',
+          custom_strike: { Word: 'Event does not qualify' },
+          close_time: '2099-01-10T18:00:00Z',
+          rules_primary: 'If the earnings call does not occur, resolves Yes.',
+          mention_profile: 'earnings_mentions',
+        },
+      ],
+    },
+    {
+      event_ticker: sportsTicker,
+      series_ticker: 'KXWORLDCUPMENTION',
+      title: 'What will the soccer announcer say during the World Cup match?',
+      event_url: `https://kalshi.com/events/${sportsTicker}`,
+      close_time: '2099-01-10T20:00:00Z',
+      settlement_sources: [{ name: 'broadcast fallback', url: 'https://example.com/world-cup' }],
+      declared_source_url: null,
+      research_timestamp: generatedAt,
+      markets: [
+        {
+          ticker: `${sportsTicker}-GOAL`,
+          event_ticker: sportsTicker,
+          title: 'What will the soccer announcer say during the World Cup match?',
+          yes_sub_title: 'goal',
+          custom_strike: { Word: 'goal' },
+          close_time: '2099-01-10T20:00:00Z',
+          rules_primary: 'If the announcer says goal during the match, resolves Yes.',
+          mention_profile: 'sports_announcer_mentions',
+        },
+        {
+          ticker: `${sportsTicker}-NQE`,
+          event_ticker: sportsTicker,
+          title: 'What will the soccer announcer say during the World Cup match?',
+          yes_sub_title: 'Event does not qualify',
+          custom_strike: { Word: 'Event does not qualify' },
+          close_time: '2099-01-10T20:00:00Z',
+          rules_primary: 'If the match does not occur, resolves Yes.',
+          mention_profile: 'sports_announcer_mentions',
+        },
+      ],
+    },
+  ];
+
+  const persisted = persistEventArtifacts({ stateRoot, sport: 'mentions', date, events: fixtures });
+  assert.equal(persisted.written.length, 2);
+  for (const event of fixtures) {
+    writeJson(join(stateRoot, 'mentions', date, 'research', `${event.event_ticker}.json`), {
+      event_ticker: event.event_ticker,
+      produced_at: generatedAt,
+      declared_source_url: event.declared_source_url,
+      source_status: 'SOURCE_FETCHED',
+      markets: event.markets.map((market) => ({
+        market_ticker: market.ticker,
+        research_quality: 'source_backed',
+        layer_records: {
+          direct_mention_pathway: { present: true, score: 80, source_basis: 'fixture transcript' },
+        },
+      })),
+    });
+  }
+
+  const resolved = await resolveOnlyMentionEvents({
+    stateRoot,
+    date,
+    tickers: fixtures.map((event) => event.event_ticker),
+    runStartedAtUtc: generatedAt,
+  });
+  assert.equal(resolved.mode, 'fast-path');
+
+  const renderedByTicker = new Map();
+  for (const event of resolved.allEvents) {
+    const eventPath = join(stateRoot, 'mentions', date, 'kalshi-events', `${event.event_ticker}.json`);
+    const research = JSON.parse(readFileSync(join(stateRoot, 'mentions', date, 'research', `${event.event_ticker}.json`), 'utf8'));
+    const merged = mergeResearchIntoEvent(JSON.parse(readFileSync(eventPath, 'utf8')), research);
+    const built = buildKalshiEventPacket({ date, event: merged, sourceUrl: eventPath, generatedUtc: generatedAt });
+    const rendered = renderMentionPacket(built.synthesisInput, { generatedAtUtc: generatedAt });
+    renderedByTicker.set(event.event_ticker, { built, rendered });
+  }
+
+  const earnings = renderedByTicker.get(earningsTicker);
+  assert.match(earnings.rendered, /declared_source_url: https:\/\/ir\.nvidia\.com\/fixture/);
+  assert.match(earnings.rendered, /settlement_source: https:\/\/www\.sec\.gov\//);
+  assert.doesNotMatch(earnings.rendered, /settlement_source: https:\/\/example\.com\/fallback/);
+  assert.match(earnings.rendered, /event_time_central: Jan 09, 2099/);
+  assert.match(earnings.rendered, /Event does not qualify/);
+
+  const sports = renderedByTicker.get(sportsTicker);
+  assert.match(sports.rendered, /declared_source_url: UNAVAILABLE/);
+  assert.match(sports.rendered, /event_time_central: UNCONFIRMED/);
+  assert.equal(sports.built.synthesisInput.presentation.event_time_iso, null);
+  assert.match(sports.rendered, /Event does not qualify/);
+  assert.doesNotMatch(sports.rendered, /Event does not qualify[\s\S]{0,160}CPC YES SCORE:/);
 });

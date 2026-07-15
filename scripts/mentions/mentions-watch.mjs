@@ -81,6 +81,20 @@ function normalizeHeldEntries(ledger, maxRetryAttempts) {
   return held;
 }
 
+function declaredSourceUrlForEvent({ ev, stateRoot, date }) {
+  if (ev?.declared_source_url) return ev.declared_source_url;
+  const ticker = ev?.event_ticker;
+  if (!ticker) return null;
+  const manifestPath = resolve(stateRoot, 'mentions', date, 'sources', `${ticker}.json`);
+  if (!existsSync(manifestPath)) return null;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    return Array.isArray(manifest?.urls) && manifest.urls[0] ? manifest.urls[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildLedgerEntry({ ev, date, stateRoot, existingEntry, nowUtc }) {
   const ticker = ev.event_ticker;
   const packetStem = `${date}-${ticker}`;
@@ -88,6 +102,7 @@ function buildLedgerEntry({ ev, date, stateRoot, existingEntry, nowUtc }) {
     ...(existingEntry ?? {}),
     event_ticker: ticker,
     event_url: ev.event_url ?? ev.url ?? existingEntry?.event_url ?? null,
+    declared_source_url: declaredSourceUrlForEvent({ ev, stateRoot, date }) ?? existingEntry?.declared_source_url ?? null,
     event_date: deriveEventDate(ev) ?? existingEntry?.event_date ?? null,
     research_route: ev.research_route?.route ?? existingEntry?.research_route ?? null,
     first_seen_utc: existingEntry?.first_seen_utc ?? nowUtc,
@@ -526,6 +541,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
       ledger.events[ev.event_ticker] = {
         event_ticker: ev.event_ticker,
         event_url: ev.event_url ?? ev.url ?? null,
+        declared_source_url: declaredSourceUrlForEvent({ ev, stateRoot, date }),
         event_date: deriveEventDate(ev),
         first_seen_utc: nowUtc,
         status: 'mark-seen-only',
@@ -599,6 +615,15 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
     console.log(`[mentions-watch] ${date}: [${ticker}] generator command ${process.execPath} ${generatorArgs.join(' ')}`);
     try {
       runStepImpl(`generator:${ticker}`, process.execPath, generatorArgs);
+      const eventPath = resolve(stateRoot, 'mentions', date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
+      if (existsSync(eventPath)) {
+        try {
+          const persistedEvent = JSON.parse(readFileSync(eventPath, 'utf8'));
+          entry.declared_source_url = persistedEvent?.declared_source_url ?? entry.declared_source_url ?? null;
+        } catch {
+          // Keep the discovery-side value when the persisted artifact is unreadable.
+        }
+      }
       if (!existsSync(packetPath)) {
         throw new Error(`generator wrote no packet at ${packetPath} (packet blocked — see blocker artifact)`);
       }

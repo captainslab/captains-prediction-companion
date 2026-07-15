@@ -11,6 +11,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { canonicalEventTime } from './event-integrity.mjs';
 
 export const HISTORY_FORBIDDEN_FIELDS = Object.freeze([
   'price', 'yes_bid', 'yes_ask', 'no_bid', 'no_ask',
@@ -112,11 +113,12 @@ export function sanitizeSettledRecord(rawMarket, eventMeta = {}) {
 
   const m = rawMarket;
   const e = eventMeta ?? {};
+  const eventTime = canonicalEventTime({ ...m, ...e });
 
   const record = {
     event_ticker:  e.event_ticker ?? m.event_ticker ?? null,
     market_ticker: m.ticker ?? m.market_ticker ?? null,
-    event_date:    e.event_date ?? m.close_time ?? m.expiration_time ?? m.event_date ?? null,
+    event_date:    eventTime.status === 'CONFIRMED' ? eventTime.iso : null,
     series_ticker: e.series_ticker ?? m.series_ticker ?? null,
     category:      e.category ?? m.category ?? null,
     strike_term:   m.yes_sub_title ?? m.subtitle ?? m.custom_strike ?? m.title ?? null,

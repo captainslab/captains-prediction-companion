@@ -2,6 +2,7 @@
 // Pure, state-free, and deliberately independent of quote/market adapters.
 
 import { extractDateFromTicker } from '../packets/lib/kalshi-discovery.mjs';
+import { FAMILY_PRIORITY, classifyPriorityFamily } from './source-priority-registry.mjs';
 
 const EVENT_URL_RE = /\/events\/([A-Z0-9_-]+)\/?$/i;
 const EVENT_START_FIELDS = Object.freeze([
@@ -30,7 +31,21 @@ function exactEventUrl(value, ticker) {
   }
 }
 
-function declaredSettlementSource(event = {}) {
+function sourceHost(value) {
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function proofDomainMatches(value, domain) {
+  const host = sourceHost(value);
+  const normalized = String(domain ?? '').toLowerCase().replace(/^www\./, '').trim();
+  return Boolean(host && normalized && (host === normalized || host.endsWith(`.${normalized}`)));
+}
+
+export function declaredSettlementSource(event = {}) {
   const declared = Array.isArray(event.settlement_sources)
     ? event.settlement_sources
       .map((entry) => text(entry?.url))
@@ -38,7 +53,12 @@ function declaredSettlementSource(event = {}) {
     : [];
   const explicit = text(event.settlement_source_link ?? event.settlement_source);
   const eventUrl = exactEventUrl(event.event_url ?? event.url, event.event_ticker ?? event.ticker);
-  const candidate = declared[0] || explicit || null;
+  const family = classifyPriorityFamily(event);
+  const proofDomains = FAMILY_PRIORITY[family]?.proof ?? FAMILY_PRIORITY.generic.proof;
+  const candidate = declared.find((url) => proofDomains.some((domain) => proofDomainMatches(url, domain)))
+    ?? declared[0]
+    ?? explicit
+    ?? null;
   // The Kalshi event page identifies the contract; it is not the settlement
   // authority. Never silently reuse it as settlement_source.
   return candidate && candidate !== eventUrl ? candidate : null;
@@ -50,7 +70,7 @@ function eventTimeCandidates(event = {}) {
     .filter((candidate) => candidate.iso);
 }
 
-function canonicalEventTime(event = {}) {
+export function canonicalEventTime(event = {}) {
   const candidates = eventTimeCandidates(event);
   const distinct = [...new Set(candidates.map((candidate) => candidate.iso))];
   if (distinct.length !== 1) {
@@ -99,6 +119,7 @@ export function buildCanonicalMentionIdentity({
     kalshi_event_ticker: eventTicker,
     kalshi_series_ticker: seriesTicker,
     kalshi_event_url: eventUrl,
+    declared_source_url: text(event.declared_source_url) || null,
     settlement_source: settlementSource,
     event_date: dateResult.value,
     event_date_conflicts: Object.freeze(dateResult.conflicts),

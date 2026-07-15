@@ -17,6 +17,7 @@ import {
   HISTORY_FORBIDDEN_PATTERN,
   assertNoForbiddenFields,
 } from './settled-history.mjs';
+import { canonicalEventTime } from './event-integrity.mjs';
 
 export const MAX_QUARTERS = 4;
 
@@ -149,10 +150,11 @@ export function sanitizeQuarterRecord(rawQuarter) {
     if (result !== null) outcomes[term] = result; // 'no' (miss) is kept
   }
 
+  const eventTime = canonicalEventTime(q);
   const record = {
     quarter: asText(q.quarter ?? q.fiscal_quarter) || null,
     event_ticker: asText(q.event_ticker) || null,
-    event_date: asText(q.event_date ?? q.close_time) || null,
+    event_date: eventTime.status === 'CONFIRMED' ? eventTime.iso : null,
     completed: q.completed !== false && Object.keys(outcomes).length > 0,
     outcomes,
   };
