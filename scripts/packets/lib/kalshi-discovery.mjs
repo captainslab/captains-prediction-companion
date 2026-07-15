@@ -20,6 +20,11 @@ export const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 export const DEFAULT_DISCOVERY_CONCURRENCY = 6;
 export const MAX_DISCOVERY_CONCURRENCY = 12;
 
+export function canonicalKalshiEventUrl(ticker) {
+  const normalized = String(ticker ?? '').trim();
+  return normalized ? `https://kalshi.com/events/${normalized.toUpperCase()}` : null;
+}
+
 export const KALSHI_SOURCES = Object.freeze({
   mentions: {
     label: 'kalshi-calendar-mentions',
@@ -749,6 +754,7 @@ export function persistEventArtifacts({ stateRoot, sport, date, events }) {
     writeFileSync(path, JSON.stringify({
       ...ev,
       declared_source_url: ev.declared_source_url ?? ev.declared_source_urls?.[0] ?? null,
+      event_url: ev.event_url ?? canonicalKalshiEventUrl(ticker),
     }, null, 2), 'utf8');
     written.push({ event_ticker: ticker, path });
   }

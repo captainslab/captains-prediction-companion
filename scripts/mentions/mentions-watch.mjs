@@ -27,6 +27,7 @@ import {
   filterMentionEvents,
   filterByEventDate,
   deriveEventDate,
+  canonicalKalshiEventUrl,
 } from '../packets/lib/kalshi-discovery.mjs';
 import { collectAlphaMentionIntake } from './alpha-intake.mjs';
 import { resolveResearchRoute } from './mention-route-resolver.mjs';
@@ -101,7 +102,7 @@ function buildLedgerEntry({ ev, date, stateRoot, existingEntry, nowUtc }) {
   return {
     ...(existingEntry ?? {}),
     event_ticker: ticker,
-    event_url: ev.event_url ?? ev.url ?? existingEntry?.event_url ?? null,
+    event_url: ev.event_url ?? ev.url ?? canonicalKalshiEventUrl(ticker) ?? existingEntry?.event_url ?? null,
     declared_source_url: declaredSourceUrlForEvent({ ev, stateRoot, date }) ?? existingEntry?.declared_source_url ?? null,
     event_date: deriveEventDate(ev) ?? existingEntry?.event_date ?? null,
     research_route: ev.research_route?.route ?? existingEntry?.research_route ?? null,
@@ -540,7 +541,7 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
     for (const ev of fresh) {
       ledger.events[ev.event_ticker] = {
         event_ticker: ev.event_ticker,
-        event_url: ev.event_url ?? ev.url ?? null,
+        event_url: ev.event_url ?? ev.url ?? canonicalKalshiEventUrl(ev.event_ticker) ?? null,
         declared_source_url: declaredSourceUrlForEvent({ ev, stateRoot, date }),
         event_date: deriveEventDate(ev),
         first_seen_utc: nowUtc,
@@ -619,6 +620,10 @@ async function watchLocked({ date, stateRoot, dryRun, markSeenOnly, eventsFile, 
       if (existsSync(eventPath)) {
         try {
           const persistedEvent = JSON.parse(readFileSync(eventPath, 'utf8'));
+          entry.event_url = persistedEvent?.event_url
+            ?? canonicalKalshiEventUrl(persistedEvent?.event_ticker ?? ticker)
+            ?? entry.event_url
+            ?? null;
           entry.declared_source_url = persistedEvent?.declared_source_url ?? entry.declared_source_url ?? null;
         } catch {
           // Keep the discovery-side value when the persisted artifact is unreadable.

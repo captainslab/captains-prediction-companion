@@ -11,6 +11,7 @@ import {
   writeKalshiEventPackets,
 } from '../scripts/packets/generate-mentions-daily.mjs';
 import { persistEventArtifacts } from '../scripts/packets/lib/kalshi-discovery.mjs';
+import { buildCanonicalMentionIdentity } from '../scripts/mentions/event-integrity.mjs';
 import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
 
 const REPO = resolve(import.meta.dirname, '..');
@@ -503,4 +504,52 @@ test('on-disk discovery artifacts round-trip through generation and rendering fo
   assert.equal(sports.built.synthesisInput.presentation.event_time_iso, null);
   assert.match(sports.rendered, /Event does not qualify/);
   assert.doesNotMatch(sports.rendered, /Event does not qualify[\s\S]{0,160}CPC YES SCORE:/);
+});
+
+test('real-shaped Kalshi event artifacts canonicalize event URLs and retain stale research timestamps', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-canonical-boundary-'));
+  const date = '2099-01-15';
+  const ticker = 'KXEARNINGSMENTIONPGR-99JAN15';
+  const canonicalUrl = `https://kalshi.com/events/${ticker}`;
+  const rawEvent = {
+    event_ticker: ticker,
+    title: 'What will P&G say during its next earnings call?',
+    sub_title: 'P&G earnings mention',
+    series_ticker: 'KXEARNINGSMENTIONPGR',
+    settlement_sources: [{ name: 'P&G investor relations', url: 'https://us.pg.com/annual-report/' }],
+    event_time_utc: '2099-01-15T18:00:00Z',
+    markets: [{ ticker: `${ticker}-INFLATION`, title: 'inflation' }],
+  };
+
+  const persisted = persistEventArtifacts({ stateRoot, sport: 'mentions', date, events: [rawEvent] });
+  const eventPath = persisted.written[0].path;
+  const persistedEvent = JSON.parse(readFileSync(eventPath, 'utf8'));
+  assert.equal(persistedEvent.event_url, canonicalUrl);
+
+  // Recreate a pre-fix cache artifact: the loader must backfill at read time.
+  delete persistedEvent.event_url;
+  writeJson(eventPath, persistedEvent);
+  const resolved = await resolveOnlyMentionEvents({
+    stateRoot,
+    date,
+    tickers: [ticker],
+  });
+  assert.equal(resolved.allEvents[0].event_url, canonicalUrl);
+  const identity = buildCanonicalMentionIdentity({
+    date,
+    event: resolved.allEvents[0],
+    generatedUtc: '2099-01-15T19:00:00Z',
+    researchTimestamp: '2099-01-15T17:00:00Z',
+  });
+  assert.equal(identity.kalshi_event_url, canonicalUrl);
+  assert.notEqual(identity.kalshi_event_url, identity.settlement_source);
+
+  const producedAt = '2099-01-15T17:30:00Z';
+  const staleMerged = mergeResearchIntoEvent(rawEvent, {
+    produced_at: producedAt,
+    declared_source_url: 'https://us.pg.com/annual-report/',
+    markets: [{ market_ticker: `${ticker}-INFLATION` }],
+  }, { staleResearch: true });
+  assert.equal(staleMerged.research_timestamp, producedAt);
+  assert.equal(staleMerged.declared_source_url, 'https://us.pg.com/annual-report/');
 });

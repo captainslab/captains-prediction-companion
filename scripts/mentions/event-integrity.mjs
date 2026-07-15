@@ -1,7 +1,7 @@
 // Event-local identity and publication-integrity helpers for Captain Mentions.
 // Pure, state-free, and deliberately independent of quote/market adapters.
 
-import { extractDateFromTicker } from '../packets/lib/kalshi-discovery.mjs';
+import { canonicalKalshiEventUrl, extractDateFromTicker } from '../packets/lib/kalshi-discovery.mjs';
 import { FAMILY_PRIORITY, classifyPriorityFamily } from './source-priority-registry.mjs';
 
 const EVENT_URL_RE = /\/events\/([A-Z0-9_-]+)\/?$/i;
@@ -52,7 +52,10 @@ export function declaredSettlementSource(event = {}) {
       .filter(Boolean)
     : [];
   const explicit = text(event.settlement_source_link ?? event.settlement_source);
-  const eventUrl = exactEventUrl(event.event_url ?? event.url, event.event_ticker ?? event.ticker);
+  const eventTicker = event.event_ticker ?? event.ticker;
+  const explicitEventUrl = event.event_url ?? event.url;
+  const eventUrl = exactEventUrl(explicitEventUrl, eventTicker)
+    ?? (!explicitEventUrl && eventTicker ? canonicalKalshiEventUrl(eventTicker) : null);
   const family = classifyPriorityFamily(event);
   const proofDomains = FAMILY_PRIORITY[family]?.proof ?? FAMILY_PRIORITY.generic.proof;
   const candidate = declared.find((url) => proofDomains.some((domain) => proofDomainMatches(url, domain)))
@@ -102,7 +105,9 @@ export function buildCanonicalMentionIdentity({
 } = {}) {
   const eventTicker = text(event.event_ticker ?? event.ticker) || null;
   const seriesTicker = text(event.series_ticker ?? event.series) || null;
-  const eventUrl = exactEventUrl(event.event_url ?? event.url, eventTicker);
+  const explicitEventUrl = event.event_url ?? event.url;
+  const eventUrl = exactEventUrl(explicitEventUrl, eventTicker)
+    ?? (!explicitEventUrl && eventTicker ? canonicalKalshiEventUrl(eventTicker) : null);
   const eventTime = canonicalEventTime(event);
   const dateResult = canonicalDate(event, date, eventTicker);
   const generated = iso(generatedUtc) || new Date().toISOString();
