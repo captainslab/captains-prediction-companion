@@ -35,6 +35,7 @@ import {
   KALSHI_SOURCES,
   filterMentionEvents,
   fetchMentionEventsBySeries,
+  extractDateFromTicker,
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeDecisionStatus } from '../shared/decision-process.mjs';
 import { buildPerplexityEntityAttachmentContract } from '../shared/perplexity-attachment-contract.mjs';
@@ -229,10 +230,42 @@ function confirmedTimingCandidate(value, confirmed = true) {
   return String(value).trim();
 }
 
+const STATED_MONTHS = Object.freeze({
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+});
+const STATED_MONTH_DATE_RE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/i;
+const STATED_ISO_DATE_RE = /\b(\d{4})-(\d{2})-(\d{2})\b/;
+
+// Confirmed calendar DATE (never an instant) stated in the event's own Kalshi
+// metadata: an explicit human-readable date in sub_title/title, accepted ONLY
+// when it agrees with the event ticker's own date suffix. Two independent
+// Kalshi-native signals must corroborate; otherwise null (fail closed). This
+// never reads close/expiration/occurrence/settlement fields — it is a calendar
+// date, not a start instant, so it feeds the timing contract as DATE_WINDOW.
+export function kalshiStatedEventDate(event = {}) {
+  const tickerDate = extractDateFromTicker(event?.event_ticker ?? event?.ticker);
+  if (!tickerDate) return null;
+  const text = [event?.sub_title, event?.title].map(asText).filter(Boolean).join(' ');
+  if (!text) return null;
+  let stated = null;
+  const monthMatch = text.match(STATED_MONTH_DATE_RE);
+  if (monthMatch) {
+    const mm = STATED_MONTHS[monthMatch[1].toLowerCase().slice(0, 3)];
+    const day = Number(monthMatch[2]);
+    if (mm && day >= 1 && day <= 31) stated = `${monthMatch[3]}-${mm}-${String(day).padStart(2, '0')}`;
+  }
+  if (!stated) {
+    const isoMatch = text.match(STATED_ISO_DATE_RE);
+    if (isoMatch) stated = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  return stated && stated === tickerDate ? tickerDate : null;
+}
+
 // Research/discovery may know the schedule without the Kalshi event object
 // carrying it yet. Project only confirmed, non-settlement timing onto the
 // existing event_time field. Expiration/close fields are intentionally absent.
-function attachConfirmedEventTiming(event, route, { researchEntry = null, earningsQuarters = null } = {}) {
+export function attachConfirmedEventTiming(event, route, { researchEntry = null, earningsQuarters = null } = {}) {
   const existing = EVENT_START_FIELDS.find((field) => event?.[field] != null && String(event[field]).trim() !== '');
   if (existing) return { ...event };
 
@@ -255,7 +288,11 @@ function attachConfirmedEventTiming(event, route, { researchEntry = null, earnin
     sources.push({ value: matchingQuarter?.event_date, confirmed: true });
   }
 
-  const timing = sources.map(({ value, confirmed }) => confirmedTimingCandidate(value, confirmed)).find(Boolean);
+  // Confirmed research/schedule/earnings timing (may be an EXACT instant) wins.
+  // When none exists, fall back to the event's own Kalshi-stated calendar date
+  // (date-only -> DATE_WINDOW). Never an invented instant, never expiration.
+  const timing = sources.map(({ value, confirmed }) => confirmedTimingCandidate(value, confirmed)).find(Boolean)
+    ?? kalshiStatedEventDate(event);
   return timing ? { ...event, event_time: timing } : { ...event };
 }
 

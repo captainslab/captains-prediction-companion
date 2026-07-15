@@ -63,12 +63,26 @@ function priceFree(value) {
   };
   walk(value); return value;
 }
-async function json(fetchImpl, url) {
-  let res; try { res = await fetchImpl(url); } catch (e) { throw new Error(`earnings family history fetch failed: ${e?.message ?? String(e)}`); }
-  if (!res?.ok) throw new Error(`earnings family history fetch failed: HTTP ${res?.status ?? 'unknown'}`);
-  return res.json();
+export const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Kalshi rate-limits unauthenticated bursts with HTTP 429. Back off and retry a
+// bounded number of times so a full family scan does not fail closed on the
+// first throttled page. sleepImpl is injectable so tests stay instant.
+async function json(fetchImpl, url, { maxRetries = 4, backoffMs = 800, sleepImpl = defaultSleep } = {}) {
+  let attempt = 0;
+  for (;;) {
+    let res;
+    try { res = await fetchImpl(url); } catch (e) { throw new Error(`earnings family history fetch failed: ${e?.message ?? String(e)}`); }
+    if (res?.ok) return res.json();
+    if (res?.status === 429 && attempt < maxRetries) {
+      attempt += 1;
+      await sleepImpl(backoffMs * attempt);
+      continue;
+    }
+    throw new Error(`earnings family history fetch failed: HTTP ${res?.status ?? 'unknown'}`);
+  }
 }
-async function pages(fetchImpl, endpoint, params, key, { requestBudget, maxPages }) {
+async function pages(fetchImpl, endpoint, params, key, { requestBudget, maxPages, spacingMs = 0, maxRetries, backoffMs, sleepImpl = defaultSleep }) {
   const out = [];
   let cursor = '';
   let pageCount = 0;
@@ -84,7 +98,9 @@ async function pages(fetchImpl, endpoint, params, key, { requestBudget, maxPages
     if (cursor) u.searchParams.set('cursor', cursor);
     requestBudget.remaining -= 1;
     pageCount += 1;
-    const body = await json(fetchImpl, u.toString());
+    // Polite inter-request spacing keeps the burst under Kalshi's rate limit.
+    if (spacingMs > 0) await sleepImpl(spacingMs);
+    const body = await json(fetchImpl, u.toString(), { maxRetries, backoffMs, sleepImpl });
     if (Array.isArray(body?.[key])) out.push(...body[key]);
     cursor = body?.cursor ? String(body.cursor) : '';
     if (!cursor) return out;
@@ -98,7 +114,12 @@ export async function fetchEarningsFamilyHistory({
   now = Date.now,
   maxPages = FAMILY_HISTORY_MAX_PAGES,
   maxRequests = FAMILY_HISTORY_MAX_REQUESTS,
+  spacingMs = 300,
+  maxRetries = 4,
+  backoffMs = 800,
+  sleepImpl = defaultSleep,
 } = {}) {
+  const throttle = { spacingMs, maxRetries, backoffMs, sleepImpl };
   const stamp = nowMs(now); const file = earningsFamilyHistoryPath(stateRoot);
   try {
     const cached = JSON.parse(await fs.readFile(file, 'utf8'));
@@ -123,7 +144,7 @@ export async function fetchEarningsFamilyHistory({
     Number.isInteger(maxPages) && maxPages > 0 ? maxPages : FAMILY_HISTORY_MAX_PAGES,
   );
   try {
-    const all = await pages(fetchImpl, '/series', { category: 'Mentions', limit: 200 }, 'series', { requestBudget, maxPages: pageLimit });
+    const all = await pages(fetchImpl, '/series', { category: 'Mentions', limit: 200 }, 'series', { requestBudget, maxPages: pageLimit, ...throttle });
     const series = all.filter((s) => /^KXEARNINGSMENTION/.test(String(s?.ticker ?? s?.series_ticker)));
     const byWord = {};
     const byCompanyWord = {};
@@ -135,7 +156,7 @@ export async function fetchEarningsFamilyHistory({
         ticker,
         [s.title, s.sub_title, s.name].filter(Boolean).join(' '),
       ) ?? ticker;
-      const events = await pages(fetchImpl, '/events', { series_ticker: ticker, limit: 200, with_nested_markets: true }, 'events', { requestBudget, maxPages: pageLimit });
+      const events = await pages(fetchImpl, '/events', { series_ticker: ticker, limit: 200, with_nested_markets: true }, 'events', { requestBudget, maxPages: pageLimit, ...throttle });
       let local = 0;
       for (const event of events) for (const market of Array.isArray(event?.markets) ? event.markets : []) {
         if (market?.result !== 'yes' && market?.result !== 'no') continue;
