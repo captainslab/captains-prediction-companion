@@ -89,11 +89,21 @@ test('market ceiling fields never become an event start time', () => {
   assert.equal(presentation.event_time_iso, null);
 });
 
-test('rendered Netflix packet header shows UNCONFIRMED, never Dec 31', () => {
+test('rendered Netflix packet header shows the sub_title-derived DATE_WINDOW, never Dec 31', () => {
+  // Ticker/series/settlement-source are all present on this fixture — the
+  // ambiguous expiration sentinels (close/expiration/occurrence, which never
+  // become event start timing) don't matter here because the event's own
+  // sub_title ("On Jul 2, 2026") independently confirms a DATE_WINDOW. Even
+  // where that weren't true, a pure timing/provenance gap (no identity risk)
+  // must not block an otherwise-valid packet. Either way the header must
+  // never fabricate the Dec 31 expiration sentinel as the event start.
   const built = buildKalshiEventPacket({ date: DATE, event: netflixStyleEvent(), sourceUrl: '/tmp/src.json' });
-  assert.equal(built.publication_blocked, true, 'unconfirmed event start must block publication');
-  assert.match(built.publication_blocker.reason, /event start|event URL|research timestamp/i);
-  assert.ok(built.publication_blocker.source_gaps.some((gap) => /event start|event URL|research timestamp/i.test(gap)));
+  assert.equal(built.publication_blocked, false);
+  assert.equal(built.synthesisInput.canonical_event.event_time_central.status, 'DATE_WINDOW');
+  assert.equal(built.synthesisInput.canonical_event.event_time_central.iso, '2026-07-02T00:00:00.000Z');
+  const rendered = renderMentionPacket(built.synthesisInput, { generatedAtUtc: `${DATE}T00:00:00.000Z` });
+  assert.match(rendered, /event_time_central: Jul 02, 2026 \(DATE_WINDOW\)/);
+  assert.doesNotMatch(rendered, /Dec 31/);
 });
 
 test('rendered Netflix packet never asserts an unsourced "not a Netflix title" claim', () => {

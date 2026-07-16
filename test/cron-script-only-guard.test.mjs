@@ -245,8 +245,17 @@ test('sender fails closed when janitor blocks the only candidate packet', () => 
     force: false,
   });
 
+  // This fixture is a genuinely blocked send: no idempotency ledger and no
+  // source-health artifacts were provided, which remain hard blocks (a
+  // packet can't safely be sent when duplicate-send state is unknown). The
+  // packet's own honest zero-research-evidence disclosure (NO_USABLE_SOURCE_
+  // EVIDENCE) is now a soft degrade — it shows up as a warning, not a block,
+  // since an honest research gap must render/deliver, not be suppressed.
   assert.equal(result.verdict, 'JANITOR_BLOCKED');
-  assert.ok(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
+  assert.ok(result.errors.some((err) => err.code === 'IDEMPOTENCY_LEDGER_MISSING'));
+  assert.ok(result.errors.some((err) => err.code === 'FETCH_SOURCE_MISSING'));
+  assert.equal(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'), false);
+  assert.ok(result.warnings.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
 });
 
 test('sender skips already-delivered packets via the ledger in dry-run too', () => {

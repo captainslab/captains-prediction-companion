@@ -582,6 +582,19 @@ function buildSportsVenueTeamSync(sportRecords, term, teams, venue) {
   return { present: true, score, source_basis: `venue/team phrase relevance: ${hits}/${settled.length} YES for "${term}" with ${teams.join('/')}`, source_path: null, detail: `rate=${rate.toFixed(4)}`, missing_note: null };
 }
 
+// Exact-series history via the Kalshi-native scan intentionally leaves
+// hits/misses null (the scan reports a percentage, not per-strike counts).
+// Reconstruct real hits/misses from that percentage for display so the
+// rendered history line matches the number that actually drove the score,
+// instead of coercing an intentionally-absent value to a literal 0.
+function reconstructHitsFromNativePct(pct, n) {
+  const p = Number(pct);
+  const total = Number(n);
+  if (!Number.isFinite(p) || !Number.isFinite(total) || total <= 0) return null;
+  const hits = Math.max(0, Math.min(total, Math.round((p / 100) * total)));
+  return { hits, misses: total - hits };
+}
+
 export function buildMentionCompositeForMarket({ event = null, market = null, legacy = null, historyRecords = null, historyStoreStatus = null, earningsQuarterLayer = null, earningsContextDelta = null, earningsFamilyHistory = null, sportsSettledResult = null, sportsGameContextResult = null, candidateText = null } = {}) {
   const profileResolution = resolveMentionProfile({ event, market, legacy });
   const route = profileResolution.route ?? null;
@@ -786,6 +799,9 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   ) {
     layerRecords = { ...(layerRecords ?? {}), historical_tendency: earningsFamilyHistoryLayer };
   }
+  const nativeReconstructedHistory = earningsFamilyEvidence?.tier === 'exact_series' && earningsFamilyEvidence.hits === null
+    ? reconstructHitsFromNativePct(market?.kalshi_native_pct, earningsFamilyEvidence.n)
+    : null;
   const canonicalHistory = settledHistory
     ? settledHistory
     : earningsFamilyEvidence
@@ -794,9 +810,13 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
         status: earningsFamilyEvidence.tier === 'lookup_failed' ? 'failure' : earningsFamilyEvidence.tier === 'none' ? 'verified_zero' : 'present',
         match_tier: earningsFamilyEvidence.tier,
         sample_size: earningsFamilyEvidence.n ?? 0,
-        hits: earningsFamilyEvidence.hits ?? 0,
-        misses: earningsFamilyEvidence.misses ?? 0,
-        hit_rate: earningsFamilyEvidence.hit_rate ?? null,
+        // hits/misses are intentionally null for exact_series-via-native-scan
+        // (the scan reports a percentage, not per-strike counts). Reconstruct
+        // from that percentage rather than coercing to a fabricated 0; if
+        // reconstruction is impossible, stay null (never fake a verified zero).
+        hits: nativeReconstructedHistory ? nativeReconstructedHistory.hits : earningsFamilyEvidence.hits,
+        misses: nativeReconstructedHistory ? nativeReconstructedHistory.misses : earningsFamilyEvidence.misses,
+        hit_rate: earningsFamilyEvidence.hit_rate ?? (nativeReconstructedHistory ? nativeReconstructedHistory.hits / Math.max(1, Number(earningsFamilyEvidence.n) || 1) : null),
         route: route?.route ?? null,
         entity: route?.entity ?? null,
         horizon: route?.horizon ?? null,
@@ -819,6 +839,16 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   const researchScoreInput = hasResearchProvenance && Number.isFinite(Number(researchInput?.blended_pct))
     ? Number(researchInput.blended_pct)
     : null;
+  // "Cited" means real, verifiable current-event evidence — either an actual
+  // Perplexity citation (research_quality only reaches 'source_backed' when a
+  // real citation exists, see collect-mentions-research.mjs) or a real settled
+  // Kalshi native scan (verifiable market data, not opinion). Anything else is
+  // an uncited estimate and must not be allowed to move a score that already
+  // has real layer evidence behind it.
+  const researchScoreCited = researchInput?.research_quality === 'source_backed'
+    || (researchInput?.kalshi_scan_ok === true
+      && Number.isFinite(Number(researchInput?.kalshi_native_n))
+      && Number(researchInput.kalshi_native_n) >= 1);
   try {
     result = composeMentionLedger({
       event: eventNameForComposite(event ?? {}, legacy),
@@ -827,6 +857,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
       layerDefs: profileConfig.layerDefs,
       layerRecords,
       researchScore: researchScoreInput,
+      researchScoreCited,
     });
   } catch (err) {
     const message = err?.message ?? String(err);
@@ -1288,8 +1319,12 @@ export function mentionCompositeToDecisionRow(composite) {
   const noUsableSources = !hasBeyondProximityEvidence && noResearchPerformed;
   let postureFinal = composite?.posture_final ?? r.posture ?? 'NO_CLEAR_PICK';
 
-  // Stub cap: never allow LEAN/EVIDENCE_LEAN/PICK from stub-only research
-  const isStub = (meta.research_quality === 'stub' || composite?.research_quality === 'stub');
+  // Stub cap: never allow LEAN/EVIDENCE_LEAN/PICK from stub-only or uncited
+  // research. 'no_source' covers both "sources consulted, found nothing" and
+  // (post-honesty-fix) "Perplexity produced a finding but no real citation
+  // backs it" — an uncited estimate must not carry a customer row any further
+  // than a stub does.
+  const isStub = ['stub', 'no_source'].includes(meta.research_quality) || ['stub', 'no_source'].includes(composite?.research_quality);
   if (isStub && POSTURE_RANK[postureFinal] > POSTURE_RANK.WATCH) {
     postureFinal = 'WATCH';
   }
@@ -1639,7 +1674,11 @@ export function buildMentionSlatePacket({ date, event, composites, sourcePath = 
     .map((c) => {
       const h = c.canonical_history;
       const label = shortTerm(String(c.result?.target_mention ?? c.market_ticker ?? 'unknown'));
-      return `canonical_history: ${label} class=${h.evidence_class} status=${h.status} tier=${h.match_tier ?? 'none'} n=${h.sample_size ?? 0} hits=${h.hits ?? 0} misses=${h.misses ?? 0}`;
+      // hits/misses can be genuinely null (reconstruction from the native-scan
+      // percentage was impossible) — never render that as a fabricated 0.
+      const hitsDisplay = h.hits === null || h.hits === undefined ? 'n/a' : h.hits;
+      const missesDisplay = h.misses === null || h.misses === undefined ? 'n/a' : h.misses;
+      return `canonical_history: ${label} class=${h.evidence_class} status=${h.status} tier=${h.match_tier ?? 'none'} n=${h.sample_size ?? 0} hits=${hitsDisplay} misses=${missesDisplay}`;
     });
   provenanceLines.push(...[...new Set(canonicalHistoryLines)]);
   provenanceLines.push(...renderEarningsFamilyProvenance(composites));
@@ -3286,11 +3325,17 @@ export async function writeKalshiEventPackets({
       }
       continue;
     }
+    // A zero-evidence board (every row honestly shows a research gap) is not
+    // an identity risk, malformed output, a duplicate, or a price leak — per
+    // product rule it degrades the packet, it does not suppress it. Record
+    // it for observability, then continue to the normal render+write path
+    // below: the renderer already produces an honest, fully-structured
+    // "RESEARCH GAP — 0/N" packet for exactly this case.
     const allRowsBlocked = counts && counts.total > 0 && counts.blocked >= counts.total;
     if (allRowsBlocked) {
       const blockerDir = resolve(stateRoot, 'mentions', date, 'blockers');
       mkdirSync(blockerDir, { recursive: true });
-      const blockerPath = resolve(blockerDir, `${date}-${ticker}.json`);
+      const blockerPath = resolve(blockerDir, `${date}-${ticker}.degraded.json`);
       const evSourceStatus = mergedEvent?.markets?.find?.((m) => m?.source_status)?.source_status
         ?? researchEntry?.source_status ?? null;
       writeFileSync(blockerPath, JSON.stringify({
@@ -3301,23 +3346,10 @@ export async function writeKalshiEventPackets({
         source_status: evSourceStatus,
         rows_total: counts.total,
         rows_blocked: counts.blocked,
-        error: `no usable source-backed evidence for any market on ${ticker} (source_status=${evSourceStatus}); customer packet failed closed`,
-        blocked_at_utc: new Date().toISOString(),
-        delivered: false,
+        note: `no usable source-backed evidence for any market on ${ticker} (source_status=${evSourceStatus}); rendering DEGRADED instead of suppressing`,
+        degraded_at_utc: new Date().toISOString(),
       }, null, 2));
-      console.error(`[${PACKET_TYPE}] BLOCKED ${ticker}: no usable source evidence on any row (source_status=${evSourceStatus}); fail-closed, no customer .txt (blocker: ${blockerPath})`);
-      failedTickers.push(ticker);
-      // Inventory audit may still be written below for traceability; do not
-      // write a customer packet for this event.
-      if (built.inventoryText) {
-        const invW = audit(dir, inventoryName, built.inventoryText, {
-          kind: 'raw_inventory_audit',
-          event_ticker: ticker,
-          fail_closed: true,
-        });
-        items.push({ name: inventoryName, ...invW });
-      }
-      continue;
+      console.error(`[${PACKET_TYPE}] DEGRADED ${ticker}: no usable source evidence on any row (source_status=${evSourceStatus}); rendering honest research-gap packet instead of suppressing`);
     }
 
     // Raw per-contract inventory -> audit artifact only (never the packet body).

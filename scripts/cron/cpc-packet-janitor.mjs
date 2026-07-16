@@ -61,7 +61,13 @@ const WRAPPER_RE = /^\s*(Cronjob Response:|Hermes cron response:|Command output:
 const BAD_SCAFFOLD_RE =
   /\b(scaffold|placeholder|todo:|insert evidence|rewrite this|model-written final packet|final customer text draft)\b/i;
 const MENTIONS_LEGACY_RE =
-  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|RESEARCH GAPS|PICK\s*:\s*|EVIDENCE_LEAN\s*:|LEAN\b|WATCH\b|NO_CLEAR_PICK\b|source layer(?:s)?\b|event_proximity\b|proximity-only\b|stub\b|scaffold\b|composite score\b|source-backed composite\b)\b/i;
+  /\b(Most likely mention terms|TLDR BOARD|TOP EDGE CANDIDATES|CPC COMPOSITE BOARD|TOP WATCH TERMS|RANKED BOARD|TOP RESEARCHED TERMS|PICK\s*:\s*|EVIDENCE_LEAN\s*:|LEAN\b|WATCH\b|NO_CLEAR_PICK\b|source layer(?:s)?\b|event_proximity\b|proximity-only\b|stub\b|scaffold\b|composite score\b|source-backed composite\b)\b/i;
+// "RESEARCH GAPS" was the retired section heading (superseded by "SOURCE
+// GAPS"). Anchored to a standalone header line, not a bare substring — the
+// current renderer's own honest FAST READ prose ("...all remain research
+// gaps.") legitimately contains this phrase and must not trip a legacy-format
+// leak on that account.
+const MENTIONS_LEGACY_HEADER_RE = /^\s*RESEARCH GAPS\s*$/im;
 const SOURCE_STALE_MS = 36 * 60 * 60 * 1000;
 
 function nowIso() {
@@ -522,7 +528,10 @@ function validateSourceHealth(context, errors, warnings) {
 
 function hasModelScaffoldLeak(text, packetType) {
   if (BAD_SCAFFOLD_RE.test(text)) return true;
-  if (/mention/i.test(packetType ?? '') && MENTIONS_LEGACY_RE.test(text)) return true;
+  if (/mention/i.test(packetType ?? '')) {
+    if (MENTIONS_LEGACY_RE.test(text)) return true;
+    if (MENTIONS_LEGACY_HEADER_RE.test(text)) return true;
+  }
   return false;
 }
 
@@ -836,11 +845,15 @@ export function validatePacketText(text, context = {}) {
 
   const noSourceEvidence = noUsableSourceEvidenceFinding(text, packetType);
   if (noSourceEvidence) {
-    // Hard send-time gate: a mentions packet with zero source-backed terms is a
-    // research gap, never a deliverable customer packet. A cache-only / stale
-    // disclosure does NOT clear this — disclosing stale cache cannot manufacture
-    // research that was never performed.
-    errors.push(noSourceEvidence);
+    // Soft send-time gate: a mentions packet with zero source-backed terms is
+    // an honest research gap, not an invalid packet — the renderer already
+    // disclosed it plainly (this finding only fires on that disclosure text,
+    // meaning identity/malformed-output/render checks below all already
+    // passed). Per product rule, missing research depth degrades the packet
+    // (JANITOR_WARNING — still delivered) rather than suppressing it; only
+    // identity mismatch, malformed output, duplicate delivery, and price
+    // leakage (checked separately below) remain hard blocks.
+    warnings.push(noSourceEvidence);
   }
 
   const alphaPending = mlbAlphaPendingFinding(text, packetType);

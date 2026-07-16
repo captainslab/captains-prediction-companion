@@ -285,6 +285,12 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
   // that the packet renders as Catalyst/Settlement Fit. Layers alone drop these.
   let pplxRowsByTerm = {};
   let pplxRan = false;
+  // Citations are event/pass-level (not per-term) in the underlying Perplexity
+  // artifact. Thread them through so downstream honesty checks (source_backed
+  // labeling, research_citations rendering) can see real citations instead of
+  // always reading an empty array from a schema that never carried them.
+  let proofCitations = [];
+  let handicappingCitations = [];
   const hasKey = (deps.hasPerplexityKey ?? hasPerplexityKey)(env);
   if (date && allKeywords.length && hasKey) {
     try {
@@ -300,6 +306,8 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
       for (const row of research.rows ?? []) {
         if (row && typeof row.phrase === 'string') pplxRowsByTerm[row.phrase] = row;
       }
+      proofCitations = Array.isArray(research.artifact?.proof_pass?.citations) ? research.artifact.proof_pass.citations : [];
+      handicappingCitations = Array.isArray(research.artifact?.handicapping_pass?.citations) ? research.artifact.handicapping_pass.citations : [];
       pplxRan = true;
       if (pplxLayers.usableTerms > 0) {
         sourceStatus = SOURCE_STATUS.SOURCE_FETCHED;
@@ -428,12 +436,28 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
 
     // Merge Perplexity per-phrase evidence (fills missing layers only; never
     // overwrites adapter/declared-source evidence; pricing excluded by
-    // construction). A term with usable Perplexity layers is source_backed;
-    // a term Perplexity ran on but found nothing for is a verified gap.
+    // construction). A term with usable Perplexity layers is only labeled
+    // source_backed when the event's research actually produced a real
+    // citation (proof or handicapping pass) — an uncited model-opinion
+    // finding must never wear the source_backed label (it would otherwise
+    // both look like real evidence to a reader AND, upstream, be allowed to
+    // move the composite score against real settled history). Citations are
+    // event-level, not per-term, so "any citation this run" is the honest
+    // bar: it still correctly excludes the fully-uncited case this bug was
+    // about (handicapping-only, no domain-restricted pass hit at all).
     const pplxForTerm = pplxLayers.byTerm[keyword];
+    const hasRealCitation = proofCitations.length > 0 || handicappingCitations.length > 0;
     if (pplxForTerm && Object.keys(pplxForTerm).length) {
       layerRecords = mergeExtractedLayers(layerRecords, pplxForTerm);
-      researchQuality = 'source_backed';
+      // Never downgrade evidence that already earned source_backed from a
+      // real fetched declared-source document (the `extracted` merge above,
+      // or the earnings adapter's own citation-validated path) just because
+      // Perplexity separately ran with no citations for this event.
+      if (hasRealCitation) {
+        researchQuality = 'source_backed';
+      } else if (researchQuality !== 'source_backed') {
+        researchQuality = 'no_source';
+      }
     } else if (pplxRan && researchQuality === 'stub') {
       researchQuality = 'no_source';
     }
@@ -484,6 +508,12 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     declared_source_urls: declaredSourceUrls,
     declared_source_url: declaredSourceUrls[0] ?? null,
     source_research_stats: sourceResearch.stats,
+    // Real citations from the Perplexity passes (event-level, not per-term).
+    // generate-mentions-daily.mjs reads researchEntry.proof_pass/handicapping_pass
+    // citations from this artifact — without these, research_citations was
+    // always empty regardless of what Perplexity actually found.
+    proof_pass: { citations: proofCitations },
+    handicapping_pass: { citations: handicappingCitations },
     ...(eventStartConfirmed ? { event_time: discoveredEventTime ?? eventStartUtc } : {}),
     markets: marketResearches,
   };

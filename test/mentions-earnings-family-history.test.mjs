@@ -192,7 +192,15 @@ test('exact series wins without penalty; family n=14 uses 0.30 and keeps 7 misse
   assert.equal(composite.earnings_family_history.penalty, 0);
   const exact = mentionCompositeToDecisionRow(composite);
   assert.equal(exact.composite_score, composite.result.composite_score);
-  assert.equal(exact.composite_score, 85);
+  // researchScore (blended_pct=85, cited via research_quality=source_backed)
+  // no longer fully replaces real layer evidence — it blends with the
+  // present direct_mention_pathway layer (score=80): round((80+85)/2)=83.
+  // A cited override may still move the score, but it can't just steamroll
+  // credible evidence that disagrees with it.
+  assert.equal(exact.composite_score, 83);
+  assert.equal(composite.result._meta.override_score, 85);
+  assert.equal(composite.result._meta.layer_composite, 80);
+  assert.equal(composite.result._meta.override_cited, true);
   const exactHistoryLayer = composite.result.evidence_ledger.find((row) => row.category === 'historical_tendency');
   assert.equal(exactHistoryLayer.present, false, 'exact-series null hits must not become score 0');
   assert.ok(exact.composite_score > 64);
@@ -214,8 +222,19 @@ test('exact series wins without penalty; family n=14 uses 0.30 and keeps 7 misse
   assert.equal(familyComposite.earnings_family_history.misses, 7);
   assert.equal(familyComposite.earnings_family_history.hit_rate, 0.5);
   assert.ok(row.composite_score < familyComposite.result.composite_score);
-  assert.equal(row.composite_score, 75, 'round 74.5 to 75');
-  assert.ok(row.composite_score >= 65, 'strong family sample can remain STRONG YES');
+  // A 50% hit-rate, penalized (thin/cross-company) family layer now properly
+  // blends with the cited researchScore override instead of being steamrolled
+  // by it: layer_composite=55 (weighted avg of direct_mention_pathway=80 and
+  // the penalized historical_tendency=round(50*0.7)=35), blended with
+  // override=85 -> raw composite=round((55+85)/2)=70, then the earnings_family
+  // cross-company shrinkage applies: 50+(70-50)*(1-0.30)=64.
+  assert.equal(familyComposite.result._meta.layer_composite, 55);
+  assert.equal(familyComposite.result.composite_score, 70);
+  assert.equal(row.composite_score, 64);
+  // A mediocre 50% hit-rate cross-company sample should NOT reach STRONG YES
+  // just because an opinion override says 85 — that was the old bug
+  // (history contradicts score). WATCH-tier here is the honest outcome.
+  assert.ok(row.composite_score < 65, 'mediocre penalized family sample must not reach STRONG YES from the override alone');
   const rendered = buildKalshiEventPacket({
     date: '2026-08-01',
     event: { ...event(), markets: [

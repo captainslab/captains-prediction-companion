@@ -179,17 +179,30 @@ export function buildCanonicalMentionIdentity({
 export function validateCanonicalMentionIdentity(identity = {}, route = null) {
   const effectiveRoute = route ?? identity.route ?? null;
   const comparative = routeGroupOf(effectiveRoute) === COMPARATIVE_ROUTE_GROUP;
-  const gaps = (Array.isArray(identity.source_gaps) ? [...identity.source_gaps] : [])
-    .filter((gap) => !(comparative && gap === EVENT_TIME_GAP));
-  if (!text(identity.kalshi_event_ticker)) gaps.push('kalshi event ticker unavailable');
-  if (!text(identity.kalshi_series_ticker)) gaps.push('kalshi series ticker unavailable');
-  if (!identity.kalshi_event_url) gaps.push('verified exact event URL unavailable');
+  // Identity-critical gaps: any of these could mean the wrong contract gets
+  // scored/settled (wrong ticker, unverifiable event, no settlement source),
+  // so they remain a hard publication stop.
+  const identityGaps = (Array.isArray(identity.source_gaps) ? [...identity.source_gaps] : [])
+    .filter((gap) => gap !== EVENT_TIME_GAP && gap !== 'generated UTC timestamp unavailable' && gap !== 'research timestamp unavailable');
+  if (!text(identity.kalshi_event_ticker)) identityGaps.push('kalshi event ticker unavailable');
+  if (!text(identity.kalshi_series_ticker)) identityGaps.push('kalshi series ticker unavailable');
+  if (!identity.kalshi_event_url) identityGaps.push('verified exact event URL unavailable');
+  if (!identity.settlement_source) identityGaps.push('authoritative settlement source unavailable');
+  // Provenance/freshness gaps: event-time precision, generation timestamp,
+  // and research timestamp all describe WHEN something happened, never WHICH
+  // contract is being scored. None of them risk scoring the wrong contract,
+  // so per product rule they degrade an already-valid, already-rendered
+  // packet instead of suppressing it — they still surface in source_gaps so
+  // the packet can disclose/degrade on them.
   const eventTimeStatus = identity.event_time_central?.status;
-  if (!comparative && eventTimeStatus !== 'EXACT' && eventTimeStatus !== 'DATE_WINDOW') gaps.push(EVENT_TIME_GAP);
-  if (!identity.settlement_source) gaps.push('authoritative settlement source unavailable');
-  if (!identity.generated_utc) gaps.push('generated UTC timestamp unavailable');
-  if (!identity.research_timestamp) gaps.push('research timestamp unavailable');
-  return { ok: gaps.length === 0, source_gaps: [...new Set(gaps)] };
+  const provenanceGaps = [];
+  if (!comparative && eventTimeStatus !== 'EXACT' && eventTimeStatus !== 'DATE_WINDOW') provenanceGaps.push(EVENT_TIME_GAP);
+  if (!identity.generated_utc) provenanceGaps.push('generated UTC timestamp unavailable');
+  if (!identity.research_timestamp) provenanceGaps.push('research timestamp unavailable');
+  return {
+    ok: identityGaps.length === 0,
+    source_gaps: [...new Set([...identityGaps, ...provenanceGaps])],
+  };
 }
 
 export function assertPriceBlind(value, path = 'value') {
