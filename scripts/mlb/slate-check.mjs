@@ -14,6 +14,7 @@ import {
   ctClockFromUtc,
 } from './lib/series-discovery.mjs';
 import { fetchMlbScheduleReadonly } from './source-adapters/mlb-official-readonly.mjs';
+import { buildEventScheduleContract } from '../shared/event-schedule-contract.mjs';
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', prelockMinutes: 55, clusterWithin: 0 };
@@ -103,28 +104,42 @@ export function buildPerGameWindows(games, officialRecords, prelockMinutes = 55)
     const eventStartUtc = official?.start_time_utc ?? null;
     if (!eventStartUtc || !Number.isFinite(Date.parse(eventStartUtc))) return null;
     const dueUtc = new Date(Date.parse(eventStartUtc) - prelockMinutes * 60_000).toISOString();
+    const schedule = buildEventScheduleContract({
+      eventFamily: 'mlb',
+      eventTicker: game.game_key,
+      eventKey: game.game_key,
+      eventStartUtc,
+      authority: 'official_mlb_schedule',
+      sourceUrl: 'https://statsapi.mlb.com/api/v1/schedule',
+      retrievedAtUtc: official.checked_at_utc ?? null,
+      status: 'pending',
+      idempotencyKey: `mlb:${official.game_pk ?? game.game_key}:${dueUtc}`,
+      rawStartField: eventStartUtc,
+      prepareOffsetMinutes: 60,
+      reportOffsetMinutes: prelockMinutes,
+      sourceStatus: 'fresh',
+      metadata: {
+        game_pk: official.game_pk ?? null,
+        game_keys: [game.game_key],
+        lead_first_pitch_utc: eventStartUtc,
+        lead_first_pitch_ct: game.start_ct,
+      },
+    });
     return {
       cluster_id: `G${String(index + 1).padStart(2, '0')}`,
       game_pk: official.game_pk ?? null,
       game_key: game.game_key,
-      lead_first_pitch_utc: eventStartUtc,
-      lead_first_pitch_ct: game.start_ct,
-      event_start_authority: 'official_mlb_schedule',
-      event_start_source_url: 'https://statsapi.mlb.com/api/v1/schedule',
-      event_start_retrieved_utc: official.checked_at_utc ?? null,
-      event_start_raw: eventStartUtc,
-      event_start_freshness: 'fresh',
-      prepare_at_utc: new Date(Date.parse(eventStartUtc) - 60 * 60_000).toISOString(),
-      report_at_utc: dueUtc,
+      ...schedule,
+      event_start_authority: schedule.authority,
+      event_start_source_url: schedule.source_url,
+      event_start_retrieved_utc: schedule.retrieved_at_utc,
+      event_start_raw: schedule.raw_start_field,
+      event_start_freshness: schedule.source_status,
       report_at_ct: null,
-      retry_at_utc: [
-        new Date(Date.parse(dueUtc) + 5 * 60_000).toISOString(),
-        new Date(Date.parse(dueUtc) + 10 * 60_000).toISOString(),
-      ],
+      retry_at_utc: [new Date(Date.parse(dueUtc) + 5 * 60_000).toISOString(), new Date(Date.parse(dueUtc) + 10 * 60_000).toISOString()],
       retry_index: 0,
-      game_keys: [game.game_key],
-      idempotency_key: `mlb:${official.game_pk ?? game.game_key}:${dueUtc}`,
-      status: 'pending',
+      lead_first_pitch_utc: schedule.event_start_utc,
+      lead_first_pitch_ct: game.start_ct,
     };
   }).filter(Boolean);
 }
