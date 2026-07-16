@@ -33,6 +33,8 @@ function parseArgs(argv) {
     else if (a === '--state-root') opts.stateRoot = argv[++i];
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--no-send') opts.noSend = true;
+    else if (a === '--game-pk') opts.gamePk = argv[++i];
+    else if (a === '--no-plan-window') opts.noPlanWindow = true;
     else if (a === '--allow-pending-lineups') opts.allowPendingLineups = true;
     else if (a === '--help' || a === '-h') { opts.help = true; }
     else { throw new Error(`Unknown argument: ${a}`); }
@@ -373,7 +375,7 @@ function buildResearchInput({ game, stats, weather, context }) {
   };
 }
 
-export function loadDynamicCompositeSlate({ date, stateRoot = 'state', allowPendingLineups = false } = {}) {
+export function loadDynamicCompositeSlate({ date, stateRoot = 'state', allowPendingLineups = false, gamePk = null } = {}) {
   const discoveryDir = resolve(stateRoot, 'mlb', date, 'discovery');
   const mlb = readJsonIfExists(resolve(discoveryDir, 'mlb_official_adapter.json'));
   const stats = readJsonIfExists(resolve(discoveryDir, 'stats_adapter.json'));
@@ -388,7 +390,10 @@ export function loadDynamicCompositeSlate({ date, stateRoot = 'state', allowPend
   for (const rec of safeArray(sportsbook?.records)) {
     if (rec.over_under != null) sbOuByTeams.set(`${rec.away_team}|${rec.home_team}`, rec.over_under);
   }
-  const games = safeArray(mlb?.records).length > 0 ? safeArray(mlb.records) : safeArray(stats?.records);
+  const allGames = safeArray(mlb?.records).length > 0 ? safeArray(mlb.records) : safeArray(stats?.records);
+  const games = gamePk == null
+    ? allGames
+    : allGames.filter((game) => String(game.game_pk) === String(gamePk));
   const inputs = [];
   const watchDetails = [];
 
@@ -440,11 +445,11 @@ function atomicWrite(filePath, content) {
   renameSync(tmp, filePath);
 }
 
-function addRefreshWindow(planPath, artifactPath, compactPath, articlePath = null) {
+function addRefreshWindow(planPath, artifactPath, compactPath, articlePath = null, gamePk = null) {
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
   const windowId = `composite-refresh-${Date.now()}`;
   const window = {
-    cluster_id: 'composite-refresh',
+    cluster_id: gamePk == null ? 'composite-refresh' : `game-${gamePk}`,
     idempotency_key: windowId,
     report_at_utc: new Date().toISOString(),
     status: 'rendered',
@@ -455,8 +460,7 @@ function addRefreshWindow(planPath, artifactPath, compactPath, articlePath = nul
     source: 'late-slate-composite-refresh',
   };
   if (!Array.isArray(plan.report_windows)) plan.report_windows = [];
-  // Remove any previous composite-refresh windows to avoid duplicates
-  plan.report_windows = plan.report_windows.filter(w => w.cluster_id !== 'composite-refresh');
+  plan.report_windows = plan.report_windows.filter(w => w.cluster_id !== window.cluster_id);
   plan.report_windows.push(window);
   atomicWrite(planPath, JSON.stringify(plan, null, 2));
   return windowId;
@@ -473,6 +477,7 @@ async function main() {
     date: opts.date,
     stateRoot: opts.stateRoot,
     allowPendingLineups: opts.allowPendingLineups,
+    gamePk: opts.gamePk,
   });
 
   console.log(`${prefix} date=${opts.date} games_evaluated=${slate.inputs.length} watch_games=${slate.watchGames.length} stats_records=${slate.counts.stats_records}`);
@@ -494,9 +499,10 @@ async function main() {
   const text = renderCompactRefresh({ date: opts.date, results, watchGames: slate.watchGames });
   const articleText = renderArticleRefresh({ date: opts.date, results, watchGames: slate.watchGames });
 
-  const outPath    = resolve(stateDir, 'composite-refresh-verbose.txt');
-  const compactPath = resolve(stateDir, 'composite-refresh-compact.txt');
-  const articlePath = resolve(stateDir, 'composite-refresh-article.txt');
+  const stem = opts.gamePk == null ? 'composite-refresh' : `composite-refresh-${opts.gamePk}`;
+  const outPath    = resolve(stateDir, `${stem}-verbose.txt`);
+  const compactPath = resolve(stateDir, `${stem}-compact.txt`);
+  const articlePath = resolve(stateDir, `${stem}-article.txt`);
 
   if (!opts.dryRun) {
     writeFileSync(outPath, text, 'utf8');
@@ -507,8 +513,10 @@ async function main() {
 
     const planPath = resolve(stateDir, 'slate-run-plan.json');
     if (existsSync(planPath)) {
-      const windowId = addRefreshWindow(planPath, outPath, compactPath, articlePath);
-      console.log(`${prefix} report_window_added id=${windowId}`);
+      if (!opts.noPlanWindow) {
+        const windowId = addRefreshWindow(planPath, outPath, compactPath, articlePath, opts.gamePk);
+        console.log(`${prefix} report_window_added id=${windowId}`);
+      }
     } else {
       console.log(`${prefix} no slate-run-plan.json — skipping window registration`);
     }

@@ -225,7 +225,7 @@ export function mapProjectionStatusToInput({ lineup_status, weather_status } = {
 export function buildInputStatusNote({ scope, lineupInput = null, starterInput = null, weatherInput = null } = {}) {
   validateScope(scope);
   if (scope === 'FULL_DAY_PREVIEW') {
-    return 'FULL_DAY_PREVIEW uses projected lineups, probable starters, preliminary weather, and current injury/news; locked lineups arrive in the slate and game packets; unconfirmed players are removed or downgraded before final game packets.';
+    return 'FULL_DAY_PREVIEW uses the official schedule, probable starters, available weather, current injury/news, and the model inputs captured at generation time.';
   }
   const lineup = lineupLabel(lineupInput);
   const starter = starterLabel(starterInput);

@@ -391,7 +391,7 @@ export function loadMlbScoring(stateRoot, date) {
  * classifications without a model-backed fair_value stay model-insufficient;
  * market-derived edge is display-only and cannot promote the row.
  */
-export function mlbPickToDecisionRow(pick = {}) {
+export function mlbPickToDecisionRow(pick = {}, { suppressLineupLanguage = false } = {}) {
   const cls = String(pick.classification ?? 'PASS').toUpperCase();
   const modelBacked = hasModelBackedScoringSignal(pick);
   const classificationNeedsModel = ['CLEAR_PICK', 'PRE_LINEUP_PICK', 'LEAN'].includes(cls);
@@ -431,12 +431,14 @@ export function mlbPickToDecisionRow(pick = {}) {
   }
   if (pick.dk_line != null) analysisBits.push(`book line ${pick.dk_line}`);
   if (cls === 'CORRELATED_ALTERNATE') analysisBits.push('reference-only: primary pick selected elsewhere in correlation group');
-  if (lineupPending) analysisBits.push('pre-lineup: do not enter until lineup confirmed');
+  if (lineupPending && !suppressLineupLanguage) analysisBits.push('pre-lineup: do not enter until lineup confirmed');
   const analysis = analysisBits.length ? analysisBits.join('; ') : `classification ${cls}`;
 
   const trigger = {
     price: pick.target_entry ?? null,
-    event: lineupPending ? 'lineup confirmation' : (pick.target_entry != null ? 'price reaches target entry' : 'MISSING'),
+    event: !suppressLineupLanguage && lineupPending
+      ? 'lineup confirmation'
+      : (pick.target_entry != null ? 'price reaches target entry' : 'MISSING'),
   };
 
   return buildDecisionRow({
@@ -795,15 +797,18 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
   });
   // Skip pure reference rows from the headline board so we don't pad sections,
   // but keep them in the inventory artifact.
-  const allRows = scoring.picks.map((p) => mlbPickToDecisionRow(p));
+  const suppressLineupLanguage = resolvedScope === 'FULL_DAY_PREVIEW';
+  const allRows = scoring.picks.map((p) => mlbPickToDecisionRow(p, { suppressLineupLanguage }));
   const boardRows = allRows.filter((r) => r.market_type !== 'correlated_alternate');
 
   const lineupPending = scoring.picks.filter((p) =>
     Array.isArray(p.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m)))).length;
 
-  const tldrNote = lineupPending
-    ? `Pre-lineup slate: ${lineupPending} pick(s) await confirmed lineups — confidence is downgraded, not the board.`
-    : 'Lineups confirmed where available.';
+  const tldrNote = suppressLineupLanguage
+    ? 'Morning slate baseline: scheduled games, starters, weather, research, and current model outputs.'
+    : (lineupPending
+      ? `Pre-lineup slate: ${lineupPending} pick(s) await confirmed lineups — confidence is downgraded, not the board.`
+      : 'Lineups confirmed where available.');
 
   const body = renderSectionedPacket(boardRows, {
     tldrNote,
@@ -831,7 +836,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     'Anytime-HR Model',
     ...(readyHr.length
       ? readyHr.slice(0, 12).map((row) => `  ${row.player?.player_name ?? `MLB ${row.player?.mlb_id}`}: ${(row.outputs.probability_at_least_one_hr * 100).toFixed(1)}% at least one HR; per-PA ${(row.outputs.per_pa_probability * 100).toFixed(2)}%; expected PA ${row.outputs.expected_pa.toFixed(2)}.`)
-      : ['  MODEL_INSUFFICIENT — no confirmed, uniquely matched batter evidence is attached to this slate.']),
+      : ['  MODEL_INSUFFICIENT — batter-level evidence is unavailable for this slate.']),
   ].join('\n');
   const text = [header, inputStatusNote, neutralityNote, cleanedBody, hrSection, packetFooter()].filter(Boolean).join('\n\n');
 
@@ -1314,7 +1319,7 @@ async function main() {
   const scoring = loadMlbScoring(opts.stateRoot, opts.date);
   if (scoring) {
     const slateScope = resolvePacketScope({
-      explicit: opts.scope,
+      explicit: opts.scope ?? 'FULL_DAY_PREVIEW',
       hasScoring: true,
       perGame: false,
     });
@@ -1366,76 +1371,10 @@ async function main() {
       research_prime: primeMeta,
     });
     items.push({ name: 'mlb-daily-MISSING', ...w });
-  } else {
-    const gameScope = resolvePacketScope({
-      explicit: opts.scope,
-      hasScoring: Boolean(scoring),
-      perGame: true,
-    });
-    for (const ev of kalshiEvents) {
-      const ticker = ev?.event_ticker;
-      if (!ticker) continue;
-      const sourcePath = resolve(opts.stateRoot, 'mlb', opts.date, 'kalshi-events', `${ticker.replace(/[^A-Z0-9_-]/gi, '_').slice(0, 80)}.json`);
-      const gamePicks = scoring ? scoring.picks.filter((p) => p.event_ticker === ticker) : null;
-      const statsRecord = matchStatsRecord(statsRecords, {
-        eventTicker: ticker,
-        awayName: ev?.away_team ?? '',
-        homeName: ev?.home_team ?? '',
-      });
-      const built = buildKalshiGamePacket({
-        date: opts.date,
-        event: ev,
-        stateRoot: opts.stateRoot,
-        artifacts,
-        primeAttempts,
-        kalshiSummary,
-        sourcePath,
-        gamePicks,
-        statsRecord,
-        leagueRPG,
-        scope: gameScope,
-        sourceRefs: {
-          event: sourcePath,
-          stats: statsSourceRef,
-          weather: weatherSourceRef,
-          context: contextSourceRef,
-          official: officialSourceRef,
-        },
-      });
-      totalMarketCount += built.marketCount;
-      if (built.missingMarkets) missingMarketEventCount += 1;
-      missingStrikeTextCount += built.missingStrikeCount;
-      if (built.inventoryText) {
-        const invW = writeAudit(dir, `${opts.date}-${ticker}.inventory`, built.inventoryText, {
-          kind: 'raw_inventory_audit',
-          event_ticker: ticker,
-          market_count: built.marketCount,
-        });
-        items.push({ name: `${ticker}.inventory`, ...invW });
-      }
-      const w = writeAudit(dir, `${opts.date}-${ticker}`, built.text, {
-        event_ticker: ticker,
-        market_count: built.marketCount,
-        missing_markets: built.missingMarkets,
-        missing_strike_text_count: built.missingStrikeCount,
-        artifact_count: artifacts.length,
-        has_composite: Array.isArray(gamePicks) && gamePicks.length > 0,
-        kalshi_discovery: kalshiSummary,
-        research_prime: primeMeta,
-        hr_model_status: built.hrProjection?.model_status ?? 'MODEL_INSUFFICIENT',
-        hr_model_ready_players: (built.hrProjection?.outputs ?? []).filter((row) => row.status === 'ready').length,
-        hr_model_market_inputs_used: false,
-      });
-      items.push({ name: ticker, ...w });
-      const assumptionsPath = writeScopedLedger(opts.stateRoot, opts.date, gameScope, built.assumptionsLedger, {
-        gameId: statsRecord?.game_pk ?? ticker,
-      });
-      items.push({ name: `${ticker}.assumptions`, txtPath: assumptionsPath, chunkCount: 1 });
-    }
   }
 
   let exitCode = 0;
-  if (kalshiEvents.length > 0 && totalMarketCount === 0) {
+  if (!scoring && kalshiEvents.length > 0 && totalMarketCount === 0) {
     console.error(`[${PACKET_TYPE}] FAIL: ${kalshiEvents.length} events but zero markets total.`);
     exitCode = 2;
   }

@@ -6,7 +6,7 @@
 //
 // Quiet mode: routine logs go to a local log file; only hard errors go to stderr.
 
-import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -24,7 +24,7 @@ function log(msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { date: null, stateRoot: 'state', graceMinutes: 60 };
+  const opts = { date: null, stateRoot: 'state', graceMinutes: 5 };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--date') opts.date = argv[++i];
@@ -35,6 +35,39 @@ function parseArgs(argv) {
   }
   if (!opts.date) opts.date = new Date().toISOString().slice(0, 10);
   return opts;
+}
+
+export function selectDueWindows(plan, { nowMs = Date.now(), graceMinutes = 5 } = {}) {
+  return (plan?.report_windows || []).filter((w) => {
+    if (w.status === 'sent' || w.status === 'rendered' || w.status === 'blocked' || w.status === 'processing') return false;
+    const candidate = w.status === 'retry_pending'
+      ? w.retry_at_utc?.[w.retry_index ?? 0]
+      : w.report_at_utc;
+    const t = Date.parse(candidate);
+    return Number.isFinite(t) && t <= nowMs && (nowMs - t) <= graceMinutes * 60_000;
+  });
+}
+
+function readRecords(stateRoot, date, filename) {
+  const path = resolve(stateRoot, 'mlb', date, 'discovery', filename);
+  if (!existsSync(path)) return [];
+  try { return JSON.parse(readFileSync(path, 'utf8')).records ?? []; } catch { return []; }
+}
+
+function requiredInputsReady(stateRoot, date, gamePk) {
+  const stats = readRecords(stateRoot, date, 'stats_adapter.json').find((r) => String(r.game_pk) === String(gamePk));
+  const context = readRecords(stateRoot, date, 'context_adapter.json').find((r) => String(r.game_pk) === String(gamePk));
+  const missing = [];
+  if (!stats) missing.push('stats_adapter');
+  if (!context) missing.push('context_adapter');
+  if (context && context.lineup_status !== 'confirmed_or_boxscore_available') missing.push('confirmed_lineup');
+  return { ok: missing.length === 0, missing };
+}
+
+function writePlanAtomic(planPath, plan) {
+  const tmp = `${planPath}.tmp`;
+  writeFileSync(tmp, JSON.stringify(plan, null, 2));
+  renameSync(tmp, planPath);
 }
 
 async function main() {
@@ -50,59 +83,84 @@ async function main() {
   }
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
   const now = Date.now();
-  const due = (plan.report_windows || []).filter((w) => {
-    if (w.status === 'sent') return false;
-    const t = Date.parse(w.report_at_utc);
-    const isInitialDue = Number.isFinite(t) && t <= now && (now - t) <= opts.graceMinutes * 60_000;
-    if (w.status !== 'rendered' && isInitialDue) return true;
-    // One-shot final retry if lineups were still pending at first render.
-    if (w.status === 'rendered' && !w.final_retry_done) {
-      const r = Date.parse(w.final_retry_at_utc);
-      if (Number.isFinite(r) && r <= now && (now - r) <= opts.graceMinutes * 60_000) {
-        const pendingLineups = w.lineup_status === 'pending' || (w.clear_lean_count ?? 0) === 0;
-        return pendingLineups;
-      }
-    }
-    return false;
-  });
+  const due = selectDueWindows(plan, { nowMs: now, graceMinutes: opts.graceMinutes });
   if (!due.length) {
     log(`no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
     return;
   }
 
-  // Composite-only dispatch: fire one composite refresh for all due windows.
-  // pre-lock-report.mjs (legacy board-only path) is intentionally bypassed here.
-  const clusterIds = due.map((w) => w.cluster_id).join(', ');
-  log(`firing composite refresh for ${due.length} due window(s): ${clusterIds}`);
-  const r = spawnSync('node', [
-    'scripts/mlb/late-slate-composite-refresh.mjs',
-    '--date', opts.date,
-    '--state-root', opts.stateRoot,
-    '--no-send',  // _send-due.mjs cron handles Telegram delivery
-  ], { stdio: 'inherit' });
-  if (r.status !== 0) {
-    console.error(`[mlb-run-due] composite refresh exited status=${r.status}`);
-  }
-
-  // Mark each triggered cluster window as rendered with a non-deliverable source
-  // so it is not re-fired during the grace window by the next poll iteration.
-  try {
-    const { writeFileSync } = await import('node:fs');
-    const cur = JSON.parse(readFileSync(planPath, 'utf8'));
-    for (const fired of due) {
-      for (const x of cur.report_windows || []) {
-        if (x.cluster_id === fired.cluster_id && x.status !== 'sent') {
-          x.status = 'rendered';
-          x.last_rendered_utc = new Date().toISOString();
-          x.source = 'composite-refresh-trigger';
-          if (fired.status === 'rendered') x.final_retry_done = true;
-        }
-      }
+  for (const fired of due) {
+    if (fired.game_pk == null) {
+      log(`blocked ${fired.cluster_id} — official game_pk missing`);
+      continue;
     }
-    writeFileSync(planPath, JSON.stringify(cur, null, 2));
-    log(`marked ${due.length} window(s) as rendered`);
-  } catch (e) {
-    console.error(`[mlb-run-due] failed to mark windows rendered: ${e.message}`);
+    const readiness = requiredInputsReady(opts.stateRoot, opts.date, fired.game_pk);
+    if (!readiness.ok) {
+      const cur = JSON.parse(readFileSync(planPath, 'utf8'));
+      const target = (cur.report_windows || []).find((w) => w.idempotency_key === fired.idempotency_key);
+      if (target) {
+        const nextRetry = (target.retry_index ?? 0) + 1;
+        target.last_input_check_utc = new Date().toISOString();
+        target.missing_inputs = readiness.missing;
+        if (nextRetry < (target.retry_at_utc || []).length) {
+          target.status = 'retry_pending';
+          target.retry_index = nextRetry;
+          log(`deferred game_pk=${fired.game_pk} missing=${readiness.missing.join(',')} retry=${nextRetry}`);
+        } else {
+          target.status = 'blocked';
+          target.blocked_reason = 'required_game_inputs_unavailable';
+          log(`blocked game_pk=${fired.game_pk} missing=${readiness.missing.join(',')}`);
+        }
+        writePlanAtomic(planPath, cur);
+      }
+      continue;
+    }
+    const claimed = JSON.parse(readFileSync(planPath, 'utf8'));
+    const claim = (claimed.report_windows || []).find((w) => w.idempotency_key === fired.idempotency_key);
+    if (!claim || claim.status !== 'pending' && claim.status !== 'retry_pending') continue;
+    claim.status = 'processing';
+    claim.claimed_at_utc = new Date().toISOString();
+    writePlanAtomic(planPath, claimed);
+    log(`firing game packet game_pk=${fired.game_pk} window=${fired.cluster_id}`);
+    const r = spawnSync('node', [
+      'scripts/mlb/late-slate-composite-refresh.mjs',
+      '--date', opts.date,
+      '--state-root', opts.stateRoot,
+      '--game-pk', String(fired.game_pk),
+      '--no-send',
+      '--no-plan-window',
+    ], { stdio: 'inherit' });
+    if (r.status !== 0) {
+      console.error(`[mlb-run-due] game_pk=${fired.game_pk} exited status=${r.status}`);
+      const failed = JSON.parse(readFileSync(planPath, 'utf8'));
+      const target = (failed.report_windows || []).find((w) => w.idempotency_key === fired.idempotency_key);
+      if (target) {
+        const nextRetry = (target.retry_index ?? 0) + 1;
+        if (nextRetry < (target.retry_at_utc || []).length) {
+          target.status = 'retry_pending';
+          target.retry_index = nextRetry;
+        } else {
+          target.status = 'blocked';
+          target.blocked_reason = 'game_packet_generation_failed';
+        }
+        writePlanAtomic(planPath, failed);
+      }
+      continue;
+    }
+    const stateDir = resolve(opts.stateRoot, 'mlb', opts.date);
+    const stem = `composite-refresh-${fired.game_pk}`;
+    const cur = JSON.parse(readFileSync(planPath, 'utf8'));
+    const target = (cur.report_windows || []).find((w) => w.idempotency_key === fired.idempotency_key);
+    if (target) {
+      target.status = 'rendered';
+      target.last_rendered_utc = new Date().toISOString();
+      target.last_artifact = resolve(stateDir, `${stem}-verbose.txt`);
+      target.compact_artifact = resolve(stateDir, `${stem}-compact.txt`);
+      target.article_artifact = resolve(stateDir, `${stem}-article.txt`);
+      target.source = 'composite-refresh-trigger';
+    }
+    writePlanAtomic(planPath, cur);
+    log(`marked game_pk=${fired.game_pk} rendered`);
   }
 }
 

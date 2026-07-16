@@ -32,7 +32,8 @@ test('full-day note differs from the game note', () => {
   });
 
   assert.notEqual(fullDay, game);
-  assert.match(fullDay, /projected lineups/);
+  assert.match(fullDay, /official schedule, probable starters, available weather/);
+  assert.doesNotMatch(fullDay, /waiting|pending|locked lineups|lineups arrive/i);
   assert.match(game, /Lineup LOCKED/);
   assert.match(game, /Starter PROBABLE/);
   assert.match(game, /Weather UPDATED/);

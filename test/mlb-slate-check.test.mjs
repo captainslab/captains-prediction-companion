@@ -10,7 +10,8 @@ import {
   clusterWindows,
   ctClockFromUtc,
 } from '../scripts/mlb/lib/series-discovery.mjs';
-import { summarizeMarketCoverage } from '../scripts/mlb/slate-check.mjs';
+import { summarizeMarketCoverage, buildPerGameWindows } from '../scripts/mlb/slate-check.mjs';
+import { selectDueWindows } from '../scripts/mlb/run-due-windows.mjs';
 import { renderGameSection } from '../scripts/mlb/lib/report-render.mjs';
 
 test('MLB_SERIES covers all six required series', () => {
@@ -88,6 +89,45 @@ test('clusterWindows groups games within 10 minutes and computes report_at', () 
   assert.deepEqual(c[1].game_keys, ['C']);
   assert.equal(c[0].report_at_utc, '2026-05-20T17:05:00.000Z');
   assert.equal(c[1].report_at_utc, '2026-05-20T22:40:00.000Z');
+});
+
+test('buildPerGameWindows uses official starts and creates T-60/T-55 windows independently', () => {
+  const games = [
+    { game_key: 'A', away_full: 'New York Mets', home_full: 'Philadelphia Phillies', start_ct: '18:10 CT' },
+    { game_key: 'B', away_full: 'Atlanta Braves', home_full: 'Boston Red Sox', start_ct: '19:10 CT' },
+  ];
+  const official = [
+    { game_pk: 823440, away_team: 'New York Mets', home_team: 'Philadelphia Phillies', start_time_utc: '2026-07-16T23:10:00Z', checked_at_utc: '2026-07-16T14:00:00Z' },
+    { game_pk: 823441, away_team: 'Atlanta Braves', home_team: 'Boston Red Sox', start_time_utc: '2026-07-17T00:10:00Z', checked_at_utc: '2026-07-16T14:00:00Z' },
+  ];
+  const windows = buildPerGameWindows(games, official, 55);
+  assert.deepEqual(windows.map((w) => [w.game_pk, w.prepare_at_utc, w.report_at_utc]), [
+    [823440, '2026-07-16T22:10:00.000Z', '2026-07-16T22:15:00.000Z'],
+    [823441, '2026-07-16T23:10:00.000Z', '2026-07-16T23:15:00.000Z'],
+  ]);
+  assert.deepEqual(windows.map((w) => w.game_keys), [['A'], ['B']]);
+  assert.ok(windows.every((w) => w.event_start_authority === 'official_mlb_schedule'));
+});
+
+test('selectDueWindows chooses exactly one due game and leaves later games pending', () => {
+  const plan = { report_windows: [
+    { cluster_id: 'G01', game_pk: 823440, report_at_utc: '2026-07-16T22:15:00Z', status: 'pending', idempotency_key: 'a' },
+    { cluster_id: 'G02', game_pk: 823441, report_at_utc: '2026-07-16T23:15:00Z', status: 'pending', idempotency_key: 'b' },
+  ] };
+  const due = selectDueWindows(plan, { nowMs: Date.parse('2026-07-16T22:16:00Z'), graceMinutes: 5 });
+  assert.deepEqual(due.map((w) => w.game_pk), [823440]);
+  assert.equal(plan.report_windows[1].status, 'pending');
+  assert.equal(selectDueWindows({ report_windows: [{ ...plan.report_windows[0], status: 'rendered' }] }, { nowMs: Date.parse('2026-07-16T22:16:00Z') }).length, 0);
+});
+
+test('selectDueWindows honors T-50/T-45 retry slots only for retry-pending games', () => {
+  const plan = { report_windows: [{
+    cluster_id: 'G01', game_pk: 823440, report_at_utc: '2026-07-16T22:15:00Z',
+    retry_at_utc: ['2026-07-16T22:20:00Z', '2026-07-16T22:25:00Z'], retry_index: 0,
+    status: 'retry_pending', idempotency_key: 'retry',
+  }] };
+  assert.equal(selectDueWindows(plan, { nowMs: Date.parse('2026-07-16T22:20:00Z'), graceMinutes: 5 }).length, 1);
+  assert.equal(selectDueWindows(plan, { nowMs: Date.parse('2026-07-16T22:19:00Z'), graceMinutes: 5 }).length, 0);
 });
 
 test('summarizeMarketCoverage flags MISSING / UNQUOTED / OK', () => {
