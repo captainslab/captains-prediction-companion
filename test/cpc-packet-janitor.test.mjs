@@ -125,11 +125,12 @@ test('accepts a valid new-style mentions packet', () => {
   assert.equal(result.errors.length, 0);
 });
 
-test('blocks a no-research mentions packet with hard fail-closed evidence gate', () => {
+test('degrades (not blocks) a no-research mentions packet — honest zero-evidence still ships', () => {
   const text = newStyleMentionPacket({ researchBacked: false });
   const result = validatePacketText(text, { packetType: 'mentions-daily' });
-  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_BLOCKED);
-  assert.ok(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
+  assert.equal(result.verdict, DELIVERY_VERDICTS.JANITOR_WARNING);
+  assert.equal(result.errors.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'), false);
+  assert.ok(result.warnings.some((err) => err.code === 'NO_USABLE_SOURCE_EVIDENCE'));
 });
 
 test('allows market-neutral disclaimers in scoring sections', () => {

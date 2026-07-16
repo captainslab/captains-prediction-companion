@@ -8,7 +8,9 @@
 //      downstream proximity-only / fail-closed coverage gate is preserved.
 //   3. Planned-but-unwired layers that are absent never affect P(YES), tier, or
 //      coverage count.
-//   4. The research P(YES) override drives the composite and ranks correctly.
+//   4. An uncited research P(YES) estimate cannot move a score that already
+//      has real layer evidence behind it; a cited one blends with (never
+//      fully replaces) that evidence.
 //   5. Price/liquidity fields in any layer (even nested) hard-throw before any
 //      scoring — price isolation can never leak into score/rank/tier.
 
@@ -98,15 +100,41 @@ test('an absent planned-but-unwired layer never affects score, tier, or coverage
   assert.equal(baseline._meta.layers_present, 1, 'absent unwired layer must not inflate coverage count');
 });
 
-test('research P(YES) override drives the composite and outranks the layer average', () => {
+test('an uncited research P(YES) estimate cannot move a score with real layer evidence', () => {
   const layerOnly = compose({ historical_tendency: realLayer(40) });
-  const withResearch = compose({ historical_tendency: realLayer(40) }, { researchScore: 80 });
+  const withUncitedResearch = compose({ historical_tendency: realLayer(40) }, { researchScore: 80 });
   assert.equal(layerOnly.composite_score, 40);
-  assert.equal(withResearch.composite_score, 80, 'research P(YES) override is authoritative');
-  assert.ok(
-    withResearch.composite_score > layerOnly.composite_score,
-    'a research-backed term ranks above an un-researched layer-average term',
+  // researchScoreCited defaults to false: an uncited opinion must not
+  // override or even blend with credible layer evidence — "overrides
+  // require stronger cited current evidence".
+  assert.equal(withUncitedResearch.composite_score, 40, 'uncited override is ignored, not authoritative');
+  assert.equal(withUncitedResearch._meta.override_applied, false);
+});
+
+test('a cited research P(YES) estimate blends with (never fully replaces) real layer evidence', () => {
+  const layerOnly = compose({ historical_tendency: realLayer(40) });
+  const withCitedResearch = compose(
+    { historical_tendency: realLayer(40) },
+    { researchScore: 80, researchScoreCited: true },
   );
+  assert.equal(layerOnly.composite_score, 40);
+  // round((40+80)/2) = 60 — moves toward the cited estimate, but the real
+  // layer evidence still pulls it down from the override's raw 80.
+  assert.equal(withCitedResearch.composite_score, 60, 'cited override blends with layer evidence');
+  assert.equal(withCitedResearch._meta.override_applied, true);
+  assert.ok(
+    withCitedResearch.composite_score > layerOnly.composite_score,
+    'a cited research-backed term can still rank above a layer-only term',
+  );
+});
+
+test('research P(YES) override is authoritative when no layer evidence exists at all', () => {
+  // With nothing to contradict, the override is the only signal — this is
+  // what lets Perplexity fill genuinely thin/absent evidence.
+  const noEvidence = compose({});
+  const withResearchOnly = compose({}, { researchScore: 80 });
+  assert.equal(noEvidence.composite_score, null);
+  assert.equal(withResearchOnly.composite_score, 80);
 });
 
 test('price/liquidity fields in any layer hard-throw before scoring (price isolation)', () => {

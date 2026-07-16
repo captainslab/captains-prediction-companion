@@ -159,13 +159,21 @@ test('earnings history timing, sports absence, and comparative allowance survive
   const sportsBuilt = buildKalshiEventPacket({
     date: '2026-08-26', event: sports, sourceUrl: '/tmp/sports.json', generatedUtc: GENERATED,
   });
-  assert.equal(sportsBuilt.publication_blocked, true);
-  assert.equal(sportsBuilt.publication_blocker.source_gaps.includes('authoritative event start time unconfirmed'), true);
-  assert.equal(sportsBuilt.publication_blocker.event_time_status, 'UNCONFIRMED');
-  assert.equal(sportsBuilt.publication_blocker.event_time_source, null);
+  // UNCONFIRMED event-time precision alone is a timing gap, not an identity
+  // risk (ticker/series/URL/settlement source are all present on this
+  // fixture) — it must degrade, not suppress. It still surfaces in
+  // source_gaps for disclosure.
+  assert.equal(sportsBuilt.publication_blocked, false);
+  assert.equal(sportsBuilt.publication_blocker, null);
+  assert.equal(sportsBuilt.synthesisInput.canonical_event.event_time_central.status, 'UNCONFIRMED');
+  const sportsRendered = renderMentionPacket(sportsBuilt.synthesisInput, { generatedAtUtc: GENERATED });
+  validateRenderedPacket(sportsRendered, sportsBuilt.synthesisInput);
+  assert.match(sportsRendered, /event_time_central: UNCONFIRMED/);
+  assert.match(sportsRendered, /event_time_central_status: UNCONFIRMED/);
   const sportsIdentity = identityFor('sports_announcer', sports);
   assert.equal(sportsIdentity.event_time_central.status, 'UNCONFIRMED');
-  assert.equal(validateCanonicalMentionIdentity(sportsIdentity, 'sports_announcer').ok, false);
+  assert.equal(sportsIdentity.source_gaps.includes('authoritative event start time unconfirmed'), true);
+  assert.equal(validateCanonicalMentionIdentity(sportsIdentity, 'sports_announcer').ok, true);
 
   const comparative = eventFixture({
     ticker: 'KXTOPIC-26AUG26',

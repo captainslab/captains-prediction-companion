@@ -10,8 +10,11 @@
 // These tests pin the fix end to end:
 //   1. a market carrying a no-research source_status (NO_DECLARED_SOURCES) AND
 //      only proximity evidence is BLOCKED (NO_USABLE_SOURCES), not WATCH.
-//   2. an event whose entire board is blocked writes a SOURCE_RESEARCH blocker
-//      and produces NO customer .txt (fail closed), but still an audit artifact.
+//   2. an event whose entire board is blocked writes a SOURCE_RESEARCH
+//      observability artifact and STILL renders a customer .txt — honestly
+//      degraded (every row a disclosed research gap), not suppressed. Zero
+//      evidence is not an identity/malformed/duplicate/price-leak risk, so
+//      per product rule it degrades rather than fails closed.
 //   3. proximity-only WITHOUT a no-research status stays a capped WATCH (the
 //      existing low-source contract is preserved; we only fail closed when we
 //      KNOW no research ran).
@@ -165,8 +168,13 @@ test('all-blocked event packet reports counts.blocked === counts.total (event-le
   assert.equal(built.counts.total, built.counts.blocked, 'every row blocked when no research ran');
 });
 
-test('writeKalshiEventPackets fails closed: blocker artifact written, NO customer .txt', async () => {
-  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-failclosed-'));
+test('writeKalshiEventPackets degrades (does not suppress): observability artifact written, customer .txt still rendered', async () => {
+  // A zero-evidence board is not an identity risk, malformed output, a
+  // duplicate, or a price leak — per product rule it must render an honest,
+  // fully-degraded customer packet rather than being suppressed. It still
+  // records a `.degraded.json` artifact for operational observability, and
+  // must NOT land in failedTickers (it was delivered, just degraded).
+  const stateRoot = mkdtempSync(join(tmpdir(), 'mentions-degraded-'));
   const date = '2026-06-19';
   const dir = join(stateRoot, 'packets', date, 'mentions-daily');
   mkdirSync(dir, { recursive: true });
@@ -187,13 +195,13 @@ test('writeKalshiEventPackets fails closed: blocker artifact written, NO custome
     dryRun: true, // no model synthesis, no send
   });
 
-  assert.ok(result.failedTickers.includes('KXLATENIGHTMENTION-26JUN19'), 'event lands in failedTickers');
-  // Blocker artifact exists.
-  const blockerPath = join(stateRoot, 'mentions', date, 'blockers', `${date}-KXLATENIGHTMENTION-26JUN19.json`);
-  assert.ok(existsSync(blockerPath), 'source-research blocker artifact written');
-  // No customer packet .txt (only inventory audit allowed).
+  assert.equal(result.failedTickers.includes('KXLATENIGHTMENTION-26JUN19'), false, 'a degraded-but-delivered event must not land in failedTickers');
+  // Observability artifact exists (distinct filename from a genuine blocker).
+  const degradedPath = join(stateRoot, 'mentions', date, 'blockers', `${date}-KXLATENIGHTMENTION-26JUN19.degraded.json`);
+  assert.ok(existsSync(degradedPath), 'source-research degraded-observability artifact written');
+  // The customer packet .txt IS rendered — honestly degraded, not suppressed.
   const customerTxts = written.filter((n) => !n.includes('.inventory'));
-  assert.equal(customerTxts.length, 0, 'no customer packet .txt for a research-free event');
+  assert.equal(customerTxts.length, 1, 'a customer packet .txt is still rendered for a research-free event');
 });
 
 test('stale research is treated as absent and fails closed instead of rendering', async () => {

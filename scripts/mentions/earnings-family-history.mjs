@@ -201,5 +201,5 @@ export function familyStatsExcludingCompany(history, word, companyTicker) {
 export function earningsHistoryToLayerScore(history) {
   const n = Number(history?.n ?? history?.sample_size ?? 0); const hits = Number(history?.hits ?? 0); const tier = history?.tier ?? history?.match_tier ?? 'none';
   if (history?.scan_ok === false || n < 2 || !Number.isFinite(hits / n)) return { present: false, score: null, source_basis: history?.scan_ok === false ? 'earnings family history lookup failed' : 'no usable earnings family history', source_path: null, detail: history?.error ?? history?.scan_error ?? null, missing_note: 'no usable settled earnings history' };
-  const penalty = Number(history?.penalty ?? history?.neutral_pull_penalty ?? 0); return { present: true, score: Math.round((hits / n) * 100), source_basis: `earnings history ${hits}/${n} hits, tier=${tier}`, source_path: null, detail: `penalty=${penalty}`, missing_note: null };
+  const penalty = Number(history?.penalty ?? history?.neutral_pull_penalty ?? 0); return { present: true, score: Math.round((hits / n) * 100 * (1 - penalty)), source_basis: `earnings history ${hits}/${n} hits, tier=${tier}`, source_path: null, detail: `penalty=${penalty}`, missing_note: null };
 }

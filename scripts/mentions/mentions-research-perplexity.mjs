@@ -176,23 +176,58 @@ function extractJsonArray(text) {
   try { return JSON.parse(text.slice(start, end + 1)); } catch { return null; }
 }
 
-async function perplexity({ key, model, messages, domains, maxTokens = 1200 }) {
+// Timeout + bounded retry mirror the working pattern already proven for the
+// sports Perplexity client (src/sports/perplexityClient.js). Previously a
+// single 429/timeout/network blip on either pass threw straight out of
+// runResearchForEvent and collect-mentions-research.mjs discarded BOTH passes
+// for the whole event with no retry — the main mechanism behind "Perplexity
+// does not fill thin evidence."
+const PPLX_TIMEOUT_MS = 55000;
+const PPLX_MAX_RETRIES = 2;
+const PPLX_RETRY_DELAY_MS = 1200;
+const defaultPplxSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function perplexity({ key, model, messages, domains, maxTokens = 1200, timeoutMs = PPLX_TIMEOUT_MS, maxRetries = PPLX_MAX_RETRIES, retryDelayMs = PPLX_RETRY_DELAY_MS, sleepImpl = defaultPplxSleep }) {
   const body = { model, messages, max_tokens: maxTokens, temperature: 0.2 };
   if (Array.isArray(domains) && domains.length) body.search_domain_filter = domains;
-  const res = await fetch(PPLX_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(`Perplexity HTTP ${res.status}: ${json?.error?.message || 'unknown'}`);
+
+  let lastError = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    if (attempt > 0) await sleepImpl(retryDelayMs * attempt);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    // Only 429/5xx are transient enough to retry; anything else (bad key,
+    // malformed request) will not succeed on a second attempt. A throw from
+    // inside this same try would just be caught by its own catch below and
+    // fall through to the next loop iteration, so use an explicit flag
+    // instead of relying on throw/catch for control flow.
+    let retryable = true;
+    try {
+      const res = await fetch(PPLX_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        lastError = new Error(`Perplexity HTTP ${res.status}: ${json?.error?.message || 'unknown'}`);
+        retryable = res.status === 429 || res.status >= 500;
+      } else {
+        return {
+          content: json?.choices?.[0]?.message?.content ?? '',
+          citations: Array.isArray(json?.citations) ? json.citations : [],
+          cost: json?.usage?.cost?.total_cost ?? null,
+        };
+      }
+    } catch (err) {
+      lastError = err?.name === 'AbortError' ? new Error(`Perplexity request timed out after ${timeoutMs}ms`) : err;
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!retryable) break;
   }
-  return {
-    content: json?.choices?.[0]?.message?.content ?? '',
-    citations: Array.isArray(json?.citations) ? json.citations : [],
-    cost: json?.usage?.cost?.total_cost ?? null,
-  };
+  throw lastError ?? new Error('Perplexity request failed for an unknown reason');
 }
 
 function buildPrompt({ event, words, pass }) {

@@ -211,7 +211,7 @@ test('default (unstamped) discovery quotes are stamped and render a VALID midpoi
   assert.doesNotMatch(built.text, /quote_status=STALE_QUOTE/);
 });
 
-test('unconfirmed event start fails closed even when close/expiration metadata exists', () => {
+test('unconfirmed event start degrades (does not suppress) when close/expiration metadata exists but identity is intact', () => {
   const incomplete = {
     ...news,
     event_time: undefined,
@@ -219,11 +219,25 @@ test('unconfirmed event start fails closed even when close/expiration metadata e
     expected_expiration_time: '2026-07-15T01:00:00.000Z',
   };
   const identity = canonicalFor('2026-07-14', incomplete);
+  // close/expiration metadata never becomes event start timing (covered by
+  // the dedicated test in mentions-event-time-provenance.test.mjs) — this
+  // event genuinely has an UNCONFIRMED start time.
   assert.equal(identity.event_time_central.status, 'UNCONFIRMED');
-  assert.equal(validateCanonicalMentionIdentity(identity).ok, false);
-  const built = buildKalshiEventPacket({ date: '2026-07-14', event: incomplete, sourceUrl: '/tmp/source.json' });
-  assert.equal(built.publication_blocked, true);
-  assert.match(built.publication_blocker.source_gaps.join('; '), /event start time unconfirmed/i);
+  // Ticker/series/URL/settlement source are all still present on this
+  // fixture — a pure timing-precision gap must not fail identity/publication.
+  // It still surfaces in source_gaps for degraded-evidence disclosure.
+  assert.equal(validateCanonicalMentionIdentity(identity).ok, true);
+  assert.ok(identity.source_gaps.some((g) => /event start time unconfirmed/i.test(g)));
+  // Pass the same researchTimestamp canonicalFor() supplies so this call
+  // isolates the one variable under test (event-time confirmation) instead
+  // of also tripping the unrelated "research timestamp unavailable" gap.
+  const built = buildKalshiEventPacket({
+    date: '2026-07-14', event: incomplete, sourceUrl: '/tmp/source.json',
+    researchTimestamp: '2026-07-14T17:55:00.000Z',
+  });
+  assert.equal(built.publication_blocked, false);
+  assert.equal(built.publication_blocker, null);
+  assert.equal(built.synthesisInput.canonical_event.event_time_central.status, 'UNCONFIRMED');
 });
 
 test('price sweep changes only display snapshots and never model rows or hashes', () => {

@@ -97,6 +97,7 @@ export function composeMentionLedger({
   layerDefs,
   layerRecords,
   researchScore = null,
+  researchScoreCited = false,
 } = {}) {
   if (!MENTION_PROFILES.includes(profile)) {
     throw new Error(`Unknown mention profile: "${profile}". Must be one of: ${MENTION_PROFILES.join(', ')}`);
@@ -184,11 +185,35 @@ export function composeMentionLedger({
       );
     }
   }
-  const composite     = overrideScore !== null
-    ? Math.round(clamp(overrideScore, 0, 100))
-    : researchDen === 0
-      ? null
-      : Math.round(clamp(researchNum / researchDen, 0, 100));
+  // layerComposite is the pure weighted-layer score (identical to the legacy
+  // no-override composite). A researchScore override must never simply
+  // replace credible layer evidence — that let opinion-driven research
+  // silently contradict real settled history (e.g. a 0/6 history layer
+  // overridden to a LEAN-tier 66). Instead:
+  //  - no layers present: the override is the only signal — use it as-is
+  //    (this is what lets Perplexity fill genuinely thin/absent evidence).
+  //  - layers present + override uncited: an uncited opinion cannot move a
+  //    score that already has real evidence behind it ("overrides require
+  //    stronger cited current evidence").
+  //  - layers present + override cited: blend evenly. This is monotonic in
+  //    layerComposite, so stronger history can only pull the blend up and
+  //    weaker/0 history can only pull it down — never inverted — while still
+  //    letting a genuinely cited, stronger current-event finding move the
+  //    score.
+  const layerComposite = researchDen === 0 ? null : clamp(researchNum / researchDen, 0, 100);
+  let composite;
+  let overrideApplied = false;
+  if (overrideScore === null) {
+    composite = layerComposite === null ? null : Math.round(layerComposite);
+  } else if (layerComposite === null) {
+    composite = Math.round(clamp(overrideScore, 0, 100));
+    overrideApplied = true;
+  } else if (researchScoreCited) {
+    composite = Math.round(clamp((layerComposite + overrideScore) / 2, 0, 100));
+    overrideApplied = true;
+  } else {
+    composite = Math.round(layerComposite);
+  }
   const layersPresent = ledger.filter(r => r.present).length;
   // Posture/tier must be driven ONLY by scoreable evidence layers. event_proximity
   // is an event-level gate/context scaffold (isScoreableLayer === false): it is
@@ -238,6 +263,12 @@ export function composeMentionLedger({
       layers_total:     layerDefs.length,
       pricing_excluded: true,
       research_score:   composite,
+      // Exposes the two independent contributions that fed the composite
+      // above, and whether/why the override actually moved the score.
+      layer_composite:      layerComposite === null ? null : Math.round(layerComposite),
+      override_score:       overrideScore,
+      override_cited:       overrideScore !== null ? Boolean(researchScoreCited) : null,
+      override_applied:     overrideApplied,
     },
   };
 }
