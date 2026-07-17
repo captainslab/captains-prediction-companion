@@ -17,6 +17,7 @@ import { summarizeMarketCoverage, buildPerGameWindows, mergeOfficialGames } from
 import { selectDueWindows } from '../scripts/mlb/run-due-windows.mjs';
 import { buildMorningSlatePlan, isMorningSummaryEligible, renderMorningSummary } from '../scripts/mlb/morning-slate-summary.mjs';
 import { renderGameSection } from '../scripts/mlb/lib/report-render.mjs';
+import { MLB_TEAM_BY_ABBREV } from '../scripts/packets/lib/mlb-teams.mjs';
 
 test('MLB_SERIES covers all six required series', () => {
   assert.deepEqual(
@@ -89,21 +90,32 @@ test('joinGames merges series by game key', () => {
 });
 
 test('mergeOfficialGames matches both doubleheader legs and drops an unresolvable ghost', () => {
+  assert.equal(MLB_TEAM_BY_ABBREV.ZZZ, undefined);
+  assert.equal(MLB_TEAM_BY_ABBREV.QQQ, undefined);
   const discovered = joinGames({
     ml: { events: [
       { event_ticker: 'KXMLBGAME-26JUL171910TBBOSG2', markets: [] },
       { event_ticker: 'KXMLBGAME-26JUL171335TBBOSG1', markets: [] },
+      { event_ticker: 'KXMLBGAME-26JUL171910TBBOSXX', markets: [] },
     ] },
   });
-  discovered.push({ game_key: '26JUL171999????', away: null, home: null, away_full: null, home_full: null, start_utc: null, series: {} });
   const official = [
     { game_pk: 824766, away_team: 'Tampa Bay Rays', home_team: 'Boston Red Sox', start_time_utc: '2026-07-17T17:35:00Z' },
     { game_pk: 824737, away_team: 'Tampa Bay Rays', home_team: 'Boston Red Sox', start_time_utc: '2026-07-17T23:10:00Z' },
   ];
+  const malformed = discovered.find((game) => game.game_key.endsWith('TBBOSXX'));
+  assert.ok(malformed);
+  assert.equal(malformed.away, null);
+  assert.equal(malformed.home, null);
+  assert.equal(malformed.away_full, null);
+  assert.equal(malformed.home_full, null);
   const merged = mergeOfficialGames(discovered, official);
   assert.equal(merged.length, 2);
   assert.deepEqual(merged.map((game) => game.game_key), ['26JUL171335TBBOSG1', '26JUL171910TBBOSG2']);
   assert.ok(merged.every((game) => game.away === 'TB' && game.home === 'BOS'));
+  assert.equal(merged.dropped_unresolved_games.length, 1);
+  assert.equal(merged.dropped_unresolved_games[0].game_key, '26JUL171910TBBOSXX');
+  assert.equal(merged.dropped_unresolved_games[0].event_tickers.ml, 'KXMLBGAME-26JUL171910TBBOSXX');
 });
 
 test('clusterWindows groups games within 10 minutes and computes report_at', () => {

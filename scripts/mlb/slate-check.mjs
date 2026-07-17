@@ -78,6 +78,7 @@ function isPostponedOrCanceled(record) {
 
 export function mergeOfficialGames(discoveredGames, officialRecords) {
   const games = [];
+  const droppedUnresolvedGames = [];
   const used = new Set();
   for (const game of discoveredGames) {
     const official = closestOfficialRecord(game, officialRecords, used);
@@ -88,6 +89,17 @@ export function mergeOfficialGames(discoveredGames, officialRecords) {
     }
     const hasTeamIdentity = (game.away && game.home) || (game.away_full && game.home_full);
     if (hasTeamIdentity) games.push(game);
+    else droppedUnresolvedGames.push({
+      game_key: game.game_key ?? null,
+      event_tickers: Object.fromEntries(Object.entries(game.series ?? {})
+        .map(([seriesId, event]) => [seriesId, event?.event_ticker ?? null])
+        .filter(([, eventTicker]) => eventTicker)),
+      away: game.away ?? null,
+      home: game.home ?? null,
+      away_full: game.away_full ?? null,
+      home_full: game.home_full ?? null,
+      start_utc: game.start_utc ?? null,
+    });
   }
   for (const record of officialRecords || []) {
     if (used.has(record)) continue;
@@ -104,7 +116,9 @@ export function mergeOfficialGames(discoveredGames, officialRecords) {
     });
     used.add(record);
   }
-  return games.sort((a, b) => String(a.start_utc ?? '').localeCompare(String(b.start_utc ?? '')));
+  const sortedGames = games.sort((a, b) => String(a.start_utc ?? '').localeCompare(String(b.start_utc ?? '')));
+  sortedGames.dropped_unresolved_games = droppedUnresolvedGames;
+  return sortedGames;
 }
 
 export function buildPerGameWindows(games, officialRecords, prelockMinutes = 55) {
@@ -142,6 +156,10 @@ export function buildPerGameWindows(games, officialRecords, prelockMinutes = 55)
 export async function buildSlatePlan({ date, prelockMinutes = 55, clusterWithin = 0, officialRecords = [] }) {
   const series = await discoverAllSeries(date);
   const games = mergeOfficialGames(joinGames(series), officialRecords);
+  const droppedUnresolvedGames = games.dropped_unresolved_games ?? [];
+  if (droppedUnresolvedGames.length > 0) {
+    console.warn(`[mlb-slate-check] WARN dropped_unresolved_games=${JSON.stringify(droppedUnresolvedGames)}`);
+  }
   const reportWindows = buildPerGameWindows(games, officialRecords, prelockMinutes);
   const coverage = {};
   for (const g of games) coverage[g.game_key] = summarizeMarketCoverage(g);
@@ -172,6 +190,7 @@ export async function buildSlatePlan({ date, prelockMinutes = 55, clusterWithin 
       ])),
     })),
     report_windows: reportWindows,
+    dropped_unresolved_games: droppedUnresolvedGames,
     notes: [
       'Slate check is observation-only. It does not force picks.',
       'Individual game packets run 55 minutes before each official first pitch.',
