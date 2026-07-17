@@ -1,4 +1,7 @@
 // Unit tests for MLB slate-check primitives. No network.
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -12,7 +15,7 @@ import {
 } from '../scripts/mlb/lib/series-discovery.mjs';
 import { summarizeMarketCoverage, buildPerGameWindows } from '../scripts/mlb/slate-check.mjs';
 import { selectDueWindows } from '../scripts/mlb/run-due-windows.mjs';
-import { isMorningSummaryEligible } from '../scripts/mlb/morning-slate-summary.mjs';
+import { buildMorningSlatePlan, isMorningSummaryEligible } from '../scripts/mlb/morning-slate-summary.mjs';
 import { renderGameSection } from '../scripts/mlb/lib/report-render.mjs';
 
 test('MLB_SERIES covers all six required series', () => {
@@ -210,6 +213,80 @@ test('morning summary is single-run eligible until its sent marker exists', () =
   assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: null }), true);
   assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: '2026-07-17T12:00:00Z' }), false);
   assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: '2026-07-17T12:00:00Z' }, { force: true }), true);
+});
+
+test('morning plan path fetches official records and passes them into the plan builder', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'cpc-morning-'));
+  const officialRecord = {
+    game_pk: 823440,
+    game_date: '2026-07-17',
+    start_time_utc: '2026-07-17T23:10:00Z',
+    away_team: 'New York Mets',
+    home_team: 'Philadelphia Phillies',
+    mlb_status: 'Preview',
+  };
+  let received;
+  const plan = await buildMorningSlatePlan({
+    date: '2026-07-17',
+    stateRoot,
+    fetchImpl: async () => ({
+      ok: true,
+      async json() { return { dates: [{ games: [
+        {
+          gamePk: officialRecord.game_pk,
+          officialDate: officialRecord.game_date,
+          gameDate: officialRecord.start_time_utc,
+          teams: {
+            away: { team: { name: officialRecord.away_team } },
+            home: { team: { name: officialRecord.home_team } },
+          },
+          status: { detailedState: officialRecord.mlb_status },
+        },
+      ] }] }; },
+    }),
+    now: '2026-07-17T14:00:00Z',
+    buildPlan: async ({ officialRecords }) => {
+      received = officialRecords;
+      return {
+        date: '2026-07-17',
+        game_count: officialRecords.length,
+        report_windows: buildPerGameWindows([
+          {
+            game_key: '26JUL171810NYMPHI',
+            away_full: officialRecord.away_team,
+            home_full: officialRecord.home_team,
+          },
+        ], officialRecords, 60),
+      };
+    },
+  });
+
+  assert.equal(plan.report_windows.length, 1);
+  assert.equal(received[0].game_pk, officialRecord.game_pk);
+  assert.equal(received[0].checked_at_utc, '2026-07-17T14:00:00.000Z');
+  const saved = JSON.parse(readFileSync(join(stateRoot, 'mlb', '2026-07-17', 'discovery', 'mlb_official_adapter.json'), 'utf8'));
+  assert.equal(saved.records.length, 1);
+});
+
+test('morning plan path fails closed when official records are unavailable', async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'cpc-morning-empty-'));
+  let buildCalled = false;
+  await assert.rejects(
+    buildMorningSlatePlan({
+      date: '2026-07-17',
+      stateRoot,
+      fetchImpl: async () => ({
+        ok: true,
+        async json() { return { dates: [] }; },
+      }),
+      buildPlan: async () => {
+        buildCalled = true;
+        return { report_windows: [{ unexpected: true }] };
+      },
+    }),
+    /official MLB schedule unavailable: degraded/,
+  );
+  assert.equal(buildCalled, false, 'no report windows are built after the official gate fails');
 });
 
 test('summarizeMarketCoverage flags MISSING / UNQUOTED / OK', () => {

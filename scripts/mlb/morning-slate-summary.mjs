@@ -7,10 +7,11 @@
 // No trades. No picks. Pricing is NOT used for scoring; this summary lists
 // game times and planned report windows only.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildSlatePlan, writePlan } from './slate-check.mjs';
+import { fetchMlbScheduleReadonly } from './source-adapters/mlb-official-readonly.mjs';
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', force: false, noSend: false };
@@ -72,6 +73,36 @@ export function isMorningSummaryEligible(plan, { force = false } = {}) {
   return force || !plan?.morning_summary_sent_utc;
 }
 
+export async function buildMorningSlatePlan({
+  date,
+  stateRoot = 'state',
+  prelockMinutes = 60,
+  clusterWithin = 10,
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+  buildPlan = buildSlatePlan,
+} = {}) {
+  const discoveryDir = resolve(stateRoot, 'mlb', date, 'discovery');
+  const official = await fetchMlbScheduleReadonly({
+    runDate: date,
+    outputDir: discoveryDir,
+    fixturesOnly: false,
+    fetchImpl,
+    now,
+  });
+  if (official.status !== 'ok' || !Array.isArray(official.records) || !official.records.length) {
+    throw new Error(`official MLB schedule unavailable: ${official.errors?.join('; ') || official.status}`);
+  }
+  mkdirSync(discoveryDir, { recursive: true });
+  writeFileSync(resolve(discoveryDir, 'mlb_official_adapter.json'), JSON.stringify(official, null, 2), 'utf8');
+  return buildPlan({
+    date,
+    prelockMinutes,
+    clusterWithin,
+    officialRecords: official.records.map((record) => ({ ...record, checked_at_utc: official.checked_at_utc })),
+  });
+}
+
 async function tgSendMessage(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
@@ -102,7 +133,12 @@ async function main() {
     try { existing = JSON.parse(readFileSync(planPath, 'utf8')); } catch { existing = null; }
   }
 
-  const fresh = await buildSlatePlan({ date: opts.date, prelockMinutes: 60, clusterWithin: 10 });
+  const fresh = await buildMorningSlatePlan({
+    date: opts.date,
+    stateRoot: opts.stateRoot,
+    prelockMinutes: 60,
+    clusterWithin: 10,
+  });
 
   // Merge: keep existing delivery records on matching cluster_ids so we never resend.
   if (existing && Array.isArray(existing.report_windows)) {
