@@ -31,6 +31,7 @@ import {
 } from './mentions-research-perplexity.mjs';
 import { buildMarketRulesSnapshot } from './rules-analyst.mjs';
 import { resolveMentionPresentationMetadata } from './qualification-risk.mjs';
+import { getEventStartTime } from './event-start-time.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -196,7 +197,25 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
   let declaredSourceUrls = [];
   const presentation = resolveMentionPresentationMetadata({ date, event });
   const discoveredEventTime = confirmedDiscoveredEventTime(event);
-  const eventStartUtc = presentation.blocked ? null : (presentation.event_time_iso ?? discoveredEventTime);
+  let renderedEventStart = null;
+  if (!discoveredEventTime && eventTicker) {
+    try {
+      const lookup = deps.getEventStartTime ?? getEventStartTime;
+      // The injected client is the test seam; production uses the configured
+      // Firecrawl client from event-start-time.mjs. Missing credentials remain
+      // fail-closed and do not invent a timestamp.
+      if (deps.firecrawl || process.env.FIRECRAWL_API_KEY || deps.getEventStartTime) {
+        renderedEventStart = await lookup(eventTicker, { firecrawl: deps.firecrawl ?? null });
+      }
+    } catch (err) {
+      console.error(`[collect-mentions-research] ${eventTicker}: event-start lookup failed closed: ${err.message}`);
+    }
+  }
+  const renderedEventStartUtc = renderedEventStart?.startTimeUtc ?? renderedEventStart?.event_start_utc ?? null;
+  const renderedEventSourceUrl = renderedEventStart?.sourceUrl ?? renderedEventStart?.source_url ?? null;
+  const eventStartUtc = presentation.blocked
+    ? null
+    : (presentation.event_time_iso ?? discoveredEventTime ?? renderedEventStartUtc);
   const eventStartConfirmed = Boolean(eventStartUtc);
   if (date && allKeywords.length) {
     // Discovery step: ensure a bounded declared-source manifest exists for this
@@ -506,7 +525,10 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     produced_by: 'collect-mentions-research.mjs',
     source_status: sourceStatus,
     declared_source_urls: declaredSourceUrls,
-    declared_source_url: declaredSourceUrls[0] ?? null,
+    // A successful event-page timing scrape is also the provenance URL for
+    // the event metadata. Keep it separate from declared official research
+    // sources so Kalshi's event page is never fetched as source evidence.
+    declared_source_url: renderedEventSourceUrl ?? declaredSourceUrls[0] ?? null,
     source_research_stats: sourceResearch.stats,
     // Real citations from the Perplexity passes (event-level, not per-term).
     // generate-mentions-daily.mjs reads researchEntry.proof_pass/handicapping_pass
@@ -514,7 +536,10 @@ async function buildEventResearch(event, profile, { stateRoot = resolve('state')
     // always empty regardless of what Perplexity actually found.
     proof_pass: { citations: proofCitations },
     handicapping_pass: { citations: handicappingCitations },
-    ...(eventStartConfirmed ? { event_time: discoveredEventTime ?? eventStartUtc } : {}),
+    ...(eventStartConfirmed ? {
+      event_time: discoveredEventTime ?? renderedEventStartUtc ?? eventStartUtc,
+      event_time_utc: eventStartUtc,
+    } : {}),
     markets: marketResearches,
   };
 }
