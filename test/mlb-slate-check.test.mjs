@@ -12,6 +12,7 @@ import {
 } from '../scripts/mlb/lib/series-discovery.mjs';
 import { summarizeMarketCoverage, buildPerGameWindows } from '../scripts/mlb/slate-check.mjs';
 import { selectDueWindows } from '../scripts/mlb/run-due-windows.mjs';
+import { isMorningSummaryEligible } from '../scripts/mlb/morning-slate-summary.mjs';
 import { renderGameSection } from '../scripts/mlb/lib/report-render.mjs';
 
 test('MLB_SERIES covers all six required series', () => {
@@ -107,6 +108,67 @@ test('buildPerGameWindows uses official starts and creates T-60/T-55 windows ind
   ]);
   assert.deepEqual(windows.map((w) => w.game_keys), [['A'], ['B']]);
   assert.ok(windows.every((w) => w.event_start_authority === 'official_mlb_schedule'));
+  assert.deepEqual(windows.map((w) => ({
+    status: w.status,
+    retry_at_utc: w.retry_at_utc,
+    retry_index: w.retry_index,
+    idempotency_key: w.idempotency_key,
+  })), [
+    {
+      status: 'pending',
+      retry_at_utc: ['2026-07-16T22:20:00.000Z', '2026-07-16T22:25:00.000Z'],
+      retry_index: 0,
+      idempotency_key: 'mlb:823440:2026-07-16T22:15:00.000Z',
+    },
+    {
+      status: 'pending',
+      retry_at_utc: ['2026-07-16T23:20:00.000Z', '2026-07-16T23:25:00.000Z'],
+      retry_index: 0,
+      idempotency_key: 'mlb:823441:2026-07-16T23:15:00.000Z',
+    },
+  ]);
+});
+
+test('buildPerGameWindows returns no windows for an empty slate', () => {
+  assert.deepEqual(buildPerGameWindows([], []), []);
+});
+
+test('buildPerGameWindows filters postponed/canceled games and missing official starts', () => {
+  const games = [
+    { game_key: 'POSTPONED', away_full: 'New York Mets', home_full: 'Philadelphia Phillies', start_utc: '2026-07-16T23:10:00Z' },
+    { game_key: 'CANCELED', away_full: 'Atlanta Braves', home_full: 'Boston Red Sox', start_utc: '2026-07-17T00:10:00Z' },
+    { game_key: 'MISSING', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals', start_utc: '2026-07-17T01:10:00Z' },
+  ];
+  const official = [
+    { game_pk: 1, away_team: 'New York Mets', home_team: 'Philadelphia Phillies', start_time_utc: '2026-07-16T23:10:00Z', mlb_status: 'Postponed' },
+    { game_pk: 2, away_team: 'Atlanta Braves', home_team: 'Boston Red Sox', start_time_utc: '2026-07-17T00:10:00Z', mlb_status: 'Canceled' },
+    { game_pk: 3, away_team: 'Chicago Cubs', home_team: 'St. Louis Cardinals', start_time_utc: null, mlb_status: 'Preview' },
+  ];
+  assert.deepEqual(buildPerGameWindows(games, official), []);
+});
+
+test('buildPerGameWindows uses official UTC across the Central midnight boundary', () => {
+  const windows = buildPerGameWindows([
+    { game_key: 'LATE', away_full: 'Chicago Cubs', home_full: 'St. Louis Cardinals' },
+  ], [{
+    game_pk: 823442,
+    away_team: 'Chicago Cubs',
+    home_team: 'St. Louis Cardinals',
+    start_time_utc: '2026-07-17T00:10:00Z',
+    mlb_status: 'Preview',
+  }]);
+  assert.equal(windows[0].lead_first_pitch_utc, '2026-07-17T00:10:00.000Z');
+  assert.equal(windows[0].lead_first_pitch_ct, '2026-07-16 19:10 CT');
+  assert.equal(windows[0].report_at_utc, '2026-07-16T23:15:00.000Z');
+});
+
+test('duplicate slate-check window builds are stable and do not duplicate idempotency keys', () => {
+  const games = [{ game_key: 'A', away_full: 'New York Mets', home_full: 'Philadelphia Phillies' }];
+  const official = [{ game_pk: 823440, away_team: 'New York Mets', home_team: 'Philadelphia Phillies', start_time_utc: '2026-07-16T23:10:00Z' }];
+  const first = buildPerGameWindows(games, official);
+  const second = buildPerGameWindows(games, official);
+  assert.deepEqual(second, first);
+  assert.equal(new Set(first.map((w) => w.idempotency_key)).size, first.length);
 });
 
 test('selectDueWindows chooses exactly one due game and leaves later games pending', () => {
@@ -128,6 +190,26 @@ test('selectDueWindows honors T-50/T-45 retry slots only for retry-pending games
   }] };
   assert.equal(selectDueWindows(plan, { nowMs: Date.parse('2026-07-16T22:20:00Z'), graceMinutes: 5 }).length, 1);
   assert.equal(selectDueWindows(plan, { nowMs: Date.parse('2026-07-16T22:19:00Z'), graceMinutes: 5 }).length, 0);
+});
+
+test('per-game report window is eligible only at report time within the runner grace window', () => {
+  const [window] = buildPerGameWindows([
+    { game_key: 'A', away_full: 'New York Mets', home_full: 'Philadelphia Phillies' },
+  ], [{
+    game_pk: 823440,
+    away_team: 'New York Mets',
+    home_team: 'Philadelphia Phillies',
+    start_time_utc: '2026-07-16T23:10:00Z',
+  }]);
+  const reportMs = Date.parse(window.report_at_utc);
+  assert.equal(selectDueWindows({ report_windows: [window] }, { nowMs: reportMs - 1 }).length, 0);
+  assert.equal(selectDueWindows({ report_windows: [window] }, { nowMs: reportMs + 1 }).length, 1);
+});
+
+test('morning summary is single-run eligible until its sent marker exists', () => {
+  assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: null }), true);
+  assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: '2026-07-17T12:00:00Z' }), false);
+  assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: '2026-07-17T12:00:00Z' }, { force: true }), true);
 });
 
 test('summarizeMarketCoverage flags MISSING / UNQUOTED / OK', () => {

@@ -68,6 +68,10 @@ export function renderMorningSummary(plan) {
   return lines.join('\n');
 }
 
+export function isMorningSummaryEligible(plan, { force = false } = {}) {
+  return force || !plan?.morning_summary_sent_utc;
+}
+
 async function tgSendMessage(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_HOME_CHANNEL;
@@ -151,7 +155,7 @@ async function main() {
     console.log('[mlb-morning] --no-send set, skipping Telegram');
     return;
   }
-  if (fresh.morning_summary_sent_utc && !opts.force) {
+  if (!isMorningSummaryEligible(fresh, { force: opts.force })) {
     console.log(`[mlb-morning] morning summary already sent ${fresh.morning_summary_sent_utc}, skip (use --force to resend)`);
     return;
   }

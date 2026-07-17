@@ -14,7 +14,7 @@ import {
   ctClockFromUtc,
 } from './lib/series-discovery.mjs';
 import { fetchMlbScheduleReadonly } from './source-adapters/mlb-official-readonly.mjs';
-import { buildEventScheduleContract } from '../shared/event-schedule-contract.mjs';
+import { buildReportWindow } from '../shared/event-schedule-contract.mjs';
 
 function parseArgs(argv) {
   const opts = { date: null, stateRoot: 'state', prelockMinutes: 55, clusterWithin: 0 };
@@ -71,6 +71,11 @@ function closestOfficialRecord(game, officialRecords, used = new Set()) {
   })[0];
 }
 
+function isPostponedOrCanceled(record) {
+  const status = String(record?.mlb_status ?? record?.status ?? '').trim().toLowerCase();
+  return /\b(postponed|canceled|cancelled)\b/.test(status);
+}
+
 export function mergeOfficialGames(discoveredGames, officialRecords) {
   const games = [...discoveredGames];
   const used = new Set();
@@ -98,48 +103,32 @@ export function mergeOfficialGames(discoveredGames, officialRecords) {
 
 export function buildPerGameWindows(games, officialRecords, prelockMinutes = 55) {
   const used = new Set();
-  return games.map((game, index) => {
+  let clusterIndex = 0;
+  return games.map((game) => {
     const official = closestOfficialRecord(game, officialRecords, used);
     if (official) used.add(official);
     const eventStartUtc = official?.start_time_utc ?? null;
-    if (!eventStartUtc || !Number.isFinite(Date.parse(eventStartUtc))) return null;
+    if (!official || isPostponedOrCanceled(official) || !eventStartUtc || !Number.isFinite(Date.parse(eventStartUtc))) return null;
     const dueUtc = new Date(Date.parse(eventStartUtc) - prelockMinutes * 60_000).toISOString();
-    const schedule = buildEventScheduleContract({
+    clusterIndex += 1;
+    const reportWindow = buildReportWindow({
       eventFamily: 'mlb',
-      eventTicker: game.game_key,
       eventKey: game.game_key,
-      eventStartUtc,
-      authority: 'official_mlb_schedule',
-      sourceUrl: 'https://statsapi.mlb.com/api/v1/schedule',
-      retrievedAtUtc: official.checked_at_utc ?? null,
-      status: 'pending',
-      idempotencyKey: `mlb:${official.game_pk ?? game.game_key}:${dueUtc}`,
-      rawStartField: eventStartUtc,
-      prepareOffsetMinutes: 60,
-      reportOffsetMinutes: prelockMinutes,
-      sourceStatus: 'fresh',
-      metadata: {
-        game_pk: official.game_pk ?? null,
-        game_keys: [game.game_key],
-        lead_first_pitch_utc: eventStartUtc,
-        lead_first_pitch_ct: game.start_ct,
-      },
+      clusterId: `G${String(clusterIndex).padStart(2, '0')}`,
+      reportAtUtc: dueUtc,
+      eventStartAuthority: 'official_mlb_schedule',
+      eventStartSourceUrl: 'https://statsapi.mlb.com/api/v1/schedule',
+      eventStartRetrievedUtc: official.checked_at_utc ?? null,
+      eventStartRaw: eventStartUtc,
+      prelockMinutes,
+      retryOffsetsMinutes: [5, 10],
+      idempotencyKeyParts: ['mlb', official.game_pk ?? game.game_key, dueUtc],
     });
     return {
-      cluster_id: `G${String(index + 1).padStart(2, '0')}`,
+      ...reportWindow,
       game_pk: official.game_pk ?? null,
       game_key: game.game_key,
-      ...schedule,
-      event_start_authority: schedule.authority,
-      event_start_source_url: schedule.source_url,
-      event_start_retrieved_utc: schedule.retrieved_at_utc,
-      event_start_raw: schedule.raw_start_field,
-      event_start_freshness: schedule.source_status,
-      report_at_ct: null,
-      retry_at_utc: [new Date(Date.parse(dueUtc) + 5 * 60_000).toISOString(), new Date(Date.parse(dueUtc) + 10 * 60_000).toISOString()],
-      retry_index: 0,
-      lead_first_pitch_utc: schedule.event_start_utc,
-      lead_first_pitch_ct: game.start_ct,
+      lead_first_pitch_ct: game.start_ct ?? ctClockFromUtc(eventStartUtc),
     };
   }).filter(Boolean);
 }
