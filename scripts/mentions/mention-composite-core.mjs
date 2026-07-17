@@ -12,6 +12,17 @@
 //   event_proximity only → NO_CLEAR_PICK (gate only, never a score input)
 //   otherwise the score comes from research-backed layers or an explicit
 //   blended research probability.
+//
+// Canonical term-probability path (SCORING_VERSION term_pd_ph_pe_v1):
+// composeMentionLedgerFromTermRecord() is the single authoritative score path.
+// It consumes one buildTermProbabilityRecord() output (Pd x Ph x Pe, blended
+// with the settled-history prior) and is the only function that may set
+// composite_score/posture on a term going forward. mapLayerRecordsToTermEvidence()
+// deterministically maps the existing research layer records (already real,
+// route-agnostic evidence with source_basis/source_path) into Pd/Ph/Pe
+// evidence items so no duplicate final-score logic runs in parallel.
+
+import { buildTermProbabilityRecord, SCORING_VERSION } from './term-probability-model.mjs';
 
 export const MENTION_PROFILES = Object.freeze([
   'political_mentions',
@@ -290,4 +301,269 @@ export function computeMentionComposite(input = {}) {
     }
   }
   return composeMentionLedger(input);
+}
+
+// ─── Canonical Pd x Ph x Pe term-probability path ──────────────────────────
+//
+// Deterministic classification of every layer key across the three route
+// profiles into the component it feeds. This is the ONE mapping rule from
+// real research fields to Pd/Ph/Pe (goal requirement: every numeric input
+// must have a deterministic mapping rule and provenance):
+//
+//   pd (door — event/topic reaches this keyword):
+//     baseline_relevance, source_velocity, news_cycle_pressure,
+//     opponent_topic_relevance, storyline_relevance, injury_milestone_trigger,
+//     current_game_context, game_context_trigger, analyst_qa_pathway,
+//     evidence_quality
+//   ph (phrase — exact qualifying language used):
+//     direct_mention_pathway, prepared_remarks_likelihood, sec_filing_language,
+//     sport_phrase_frequency, venue_team_phrase_relevance, sport_phrase_likelihood
+//   pe (eligibility — settlement-qualifying risk, as a passProbability rule):
+//     suppression_signal, mention_type_likelihood
+//   historical (feeds the settled-history prior directly, not Pd/Ph/Pe):
+//     historical_tendency, settled_mentions_history
+//   ignored (gate-only scaffold, never a score input — matches isScoreableLayer):
+//     event_proximity
+export const LAYER_COMPONENT_MAP = Object.freeze({
+  baseline_relevance:          'pd',
+  source_velocity:             'pd',
+  news_cycle_pressure:         'pd',
+  opponent_topic_relevance:    'pd',
+  storyline_relevance:         'pd',
+  injury_milestone_trigger:    'pd',
+  current_game_context:        'pd',
+  game_context_trigger:        'pd',
+  analyst_qa_pathway:          'pd',
+  evidence_quality:            'pd',
+  direct_mention_pathway:      'ph',
+  prepared_remarks_likelihood: 'ph',
+  sec_filing_language:         'ph',
+  sport_phrase_frequency:      'ph',
+  venue_team_phrase_relevance: 'ph',
+  sport_phrase_likelihood:     'ph',
+  suppression_signal:          'pe',
+  mention_type_likelihood:     'pe',
+  historical_tendency:         'historical',
+  settled_mentions_history:    'historical',
+  event_proximity:             'ignored',
+});
+
+function layerIsCited(rec) {
+  const hasSourcePath = typeof rec?.source_path === 'string' && rec.source_path.trim().length > 0;
+  const hasSourceBasis = typeof rec?.source_basis === 'string' && rec.source_basis.trim().length > 0;
+  return hasSourcePath || hasSourceBasis;
+}
+
+/**
+ * Deterministically maps existing layerRecords (real research evidence —
+ * {present, score 0-100, source_basis, source_path, detail}) into Pd/Ph/Pe
+ * evidence for buildTermProbabilityRecord(). Every item carries provenance
+ * (kind = layer key, source_url = source_path when available) and is only
+ * "cited" — and thus scoreable — when the layer carries a real source_basis
+ * or source_path; a present-but-unsourced layer has zero effect on Pd/Ph/Pe,
+ * matching the "uncited research has zero effect" requirement.
+ */
+export function mapLayerRecordsToTermEvidence(layerRecords = {}, layerDefs = []) {
+  const pdEvidence = [];
+  const phEvidence = [];
+  const peRules = [];
+  for (const def of layerDefs) {
+    const key = def.key;
+    const component = LAYER_COMPONENT_MAP[key];
+    if (!component || component === 'ignored' || component === 'historical') continue;
+    const rec = layerRecords?.[key];
+    if (!rec || rec.present !== true || !Number.isFinite(Number(rec.score))) continue;
+    const value = clamp(Number(rec.score) / 100, 0, 1);
+    const cited = layerIsCited(rec);
+    const source_url = typeof rec.source_path === 'string' && rec.source_path.trim() ? rec.source_path : null;
+    if (component === 'pd') {
+      pdEvidence.push({ kind: key, value, cited, source_url });
+    } else if (component === 'ph') {
+      phEvidence.push({ kind: key, value, cited, source_url });
+    } else if (component === 'pe') {
+      // Uncited suppression/eligibility signals default to fully eligible
+      // (1) rather than guessing at settlement risk from an unsourced score.
+      peRules.push({ factor: key, passProbability: cited ? value : 1, source_url });
+    }
+  }
+  return {
+    pdEvidence: { evidenceItems: pdEvidence },
+    phEvidence: { evidenceItems: phEvidence },
+    peRules: { rules: peRules },
+  };
+}
+
+// Maps the generator's canonicalHistory artifact (settled_history /
+// earnings_family_history evidence_class; status: present|verified_zero|
+// failure|unavailable) into resolveHistoricalPrior()'s status vocabulary
+// (observed|verified_zero|lookup_failed|missing). This is the ONLY path a
+// historical prior reaches the term-probability model — never a raw score.
+export function historicalInputFromCanonicalHistory(canonicalHistory = null) {
+  if (!canonicalHistory || typeof canonicalHistory !== 'object') {
+    return { status: 'missing' };
+  }
+  const { status, hits, samples, sample_size } = canonicalHistory;
+  const n = Number.isFinite(Number(sample_size)) ? Number(sample_size) : Number(samples ?? 0);
+  if (status === 'present') {
+    // hits is intentionally null when a match exists but the hit count could
+    // not be honestly reconstructed (e.g. exact_series via a Kalshi native
+    // percentage with no way to back out an integer count) — that is a
+    // lookup gap, not a verified zero. Defaulting it to 0 would fabricate an
+    // observation that never happened.
+    if (hits === null || hits === undefined || !Number.isFinite(Number(hits))) return { status: 'lookup_failed' };
+    return { status: 'observed', successes: Number(hits), samples: n };
+  }
+  if (status === 'verified_zero') {
+    return { status: 'verified_zero', successes: 0, samples: n };
+  }
+  if (status === 'failure') {
+    return { status: 'lookup_failed' };
+  }
+  return { status: 'missing' };
+}
+
+/**
+ * composeMentionLedgerFromTermRecord — the single authoritative score path.
+ *
+ * Builds one canonical buildTermProbabilityRecord() (Pd x Ph x Pe blended
+ * with the settled-history prior) from the real layerRecords + canonical
+ * history artifact already produced upstream, and drives the same envelope
+ * shape composeMentionLedger returns (ranking/score/Why/Evidence/Source Gaps
+ * all read from this one object) plus `canonical_term_record` with full
+ * provenance. No other function may set composite_score/posture downstream
+ * of this call — legacy composeMentionLedger/researchScore override blending
+ * stays available only for back-compat tests, never for production scoring.
+ */
+export function composeMentionLedgerFromTermRecord({
+  event,
+  targetMention,
+  profile,
+  layerDefs,
+  layerRecords,
+  canonicalHistory = null,
+  acceptedForms = null,
+  requiredCount = 1,
+  researchEvidence = null,
+} = {}) {
+  if (!MENTION_PROFILES.includes(profile)) {
+    throw new Error(`Unknown mention profile: "${profile}". Must be one of: ${MENTION_PROFILES.join(', ')}`);
+  }
+  if (!Array.isArray(layerDefs) || layerDefs.length === 0) {
+    throw new Error('layerDefs must be a non-empty array of {key, weight, label}.');
+  }
+  for (const def of layerDefs) {
+    assertNoPricingInLayer(def.key, layerRecords?.[def.key] ?? null);
+  }
+
+  const { pdEvidence, phEvidence, peRules } = mapLayerRecordsToTermEvidence(layerRecords, layerDefs);
+  // A live-research finding (e.g. a source-backed Perplexity read on this
+  // strike) is holistic current-event context, not a specific accepted-form
+  // match, so it feeds Pd (door) evidence rather than Ph (phrase). Only a
+  // real citation (researchEvidence.cited === true) can move Pd — matches
+  // "uncited research has zero effect".
+  if (researchEvidence && Number.isFinite(Number(researchEvidence.value))) {
+    pdEvidence.evidenceItems.push({
+      kind: researchEvidence.kind ?? 'source_backed_research',
+      value: clamp(Number(researchEvidence.value), 0, 1),
+      cited: Boolean(researchEvidence.cited),
+      source_url: researchEvidence.source_url ?? null,
+    });
+  }
+  const historical = historicalInputFromCanonicalHistory(canonicalHistory);
+
+  const termRecord = buildTermProbabilityRecord({
+    displayLabel: targetMention,
+    acceptedForms: acceptedForms ?? [targetMention].filter(Boolean),
+    requiredCount,
+    pdEvidence,
+    phEvidence,
+    peRules,
+    historical,
+  });
+
+  const ledger = [];
+  const sourceNotes = [];
+  for (const def of layerDefs) {
+    const rec = layerRecords?.[def.key] ?? null;
+    const rawScore = rec?.score ?? null;
+    const numScore = rawScore !== null ? Number(rawScore) : null;
+    const present = rec?.present === true && numScore !== null && Number.isFinite(numScore);
+    const score = present ? Math.round(clamp(numScore, 0, 100)) : null;
+    if (present && rec.source_basis) sourceNotes.push(`[${def.key}] ${rec.source_basis}`);
+    ledger.push({
+      category:      def.key,
+      label:         def.label,
+      raw_weight:    def.weight,
+      value:         score,
+      grade:         gradeLabel(score),
+      component:     LAYER_COMPONENT_MAP[def.key] ?? null,
+      source_basis:  rec?.source_basis ?? null,
+      source_path:   rec?.source_path ?? null,
+      detail:        rec?.detail ?? null,
+      present,
+      missing_note:  present ? null : (rec?.missing_note ?? `no ${def.key} data supplied`),
+    });
+  }
+
+  const scoreableLayersPresent = ledger.filter(r => r.present && LAYER_COMPONENT_MAP[r.category] && LAYER_COMPONENT_MAP[r.category] !== 'ignored').length;
+  // Zero scoreable layers AND no cited/uncited research override means there is
+  // literally no current-event evidence — the historical-prior fallback inside
+  // buildTermProbabilityRecord (e.g. a neutral ~0.5 prior on a verified-zero
+  // history with 0 samples) must never surface as a fabricated composite_score
+  // here. This mirrors the legacy composeMentionLedger contract: 0 layers with
+  // no override -> composite_score stays null -> BLOCKED_SOURCE_LAYER_MISSING.
+  const hasResearchEvidenceItem = Boolean(researchEvidence && Number.isFinite(Number(researchEvidence.value)));
+  const composite = (scoreableLayersPresent === 0 && !hasResearchEvidenceItem) ? null : termRecord.score;
+  const posture = scoreToPosture(composite, scoreableLayersPresent);
+
+  const topSupportingLayers = ledger
+    .filter(r => r.present && (r.component === 'pd' || r.component === 'ph'))
+    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+    .slice(0, 3)
+    .map(({ category, label, value }) => ({ category, label, value }));
+
+  const missingLayers = ledger
+    .filter(r => !r.present)
+    .map(({ category, label, missing_note }) => ({ category, label, missing_note }));
+
+  const missingTxt = missingLayers.map(r => r.category).join(', ') || 'none';
+  const reasoning_summary = composite === null
+    ? `NO_CLEAR_PICK — no usable Pd/Ph/Pe evidence or history (missing: ${missingTxt}).`
+    : `score=${composite} [${posture}] — pd=${termRecord.pd.value ?? 'n/a'} x ph=${termRecord.ph.value ?? 'n/a'} x pe=${termRecord.pe.value ?? 'n/a'} `
+      + `(modeled=${termRecord.modeled_probability ?? 'n/a'}), historical_prior=${termRecord.historical_prior ?? 'n/a'} `
+      + `(weight=${termRecord.historical_weight ?? 'n/a'}). Missing: ${missingTxt}.`;
+
+  return {
+    event,
+    target_mention:        targetMention,
+    profile,
+    // raw_model_score / raw_model_probability are the unambiguous "before any
+    // downstream customer policy" score — the gated canonical_term_record
+    // output (null only when there is no valid model result to gate: zero
+    // scoreable evidence, or the lexical NO_MATCH suppression applied by
+    // buildMentionCompositeForMarket, which also nulls these two fields to
+    // keep them true aliases of composite_score/confidence). Downstream
+    // customer-facing adjustments (earnings-family penalty, confidence caps —
+    // see mentionCompositeToDecisionRow in generate-mentions-daily.mjs) start
+    // from this value and must never mutate it.
+    raw_model_score:        composite,
+    raw_model_probability:  composite === null ? null : termRecord.final_probability,
+    composite_score:       composite,
+    confidence:            composite,
+    posture,
+    top_supporting_layers: topSupportingLayers,
+    missing_layers:        missingLayers,
+    source_notes:          sourceNotes,
+    evidence_ledger:       ledger,
+    reasoning_summary,
+    canonical_term_record: termRecord,
+    _meta: {
+      schema_version:   'mention_composite_v2_term',
+      scoring_version:  SCORING_VERSION,
+      layers_present:   ledger.filter(r => r.present).length,
+      layers_total:     layerDefs.length,
+      pricing_excluded: true,
+      research_score:   composite,
+    },
+  };
 }

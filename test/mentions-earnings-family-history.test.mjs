@@ -192,18 +192,20 @@ test('exact series wins without penalty; family n=14 uses 0.30 and keeps 7 misse
   assert.equal(composite.earnings_family_history.penalty, 0);
   const exact = mentionCompositeToDecisionRow(composite);
   assert.equal(exact.composite_score, composite.result.composite_score);
-  // researchScore (blended_pct=85, cited via research_quality=source_backed)
-  // no longer fully replaces real layer evidence — it blends with the
-  // present direct_mention_pathway layer (score=80): round((80+85)/2)=83.
-  // A cited override may still move the score, but it can't just steamroll
-  // credible evidence that disagrees with it.
-  assert.equal(exact.composite_score, 83);
-  assert.equal(composite.result._meta.override_score, 85);
-  assert.equal(composite.result._meta.layer_composite, 80);
-  assert.equal(composite.result._meta.override_cited, true);
+  // Canonical Pd x Ph x Pe model (term_pd_ph_pe_v1): direct_mention_pathway
+  // carries no source_basis/source_path in this fixture, so it is uncited and
+  // contributes zero Ph evidence (only cited evidence moves Pd/Ph). The
+  // exact-series match itself has no reconstructable hit count (no
+  // kalshi_native_pct to back one out of), so the historical prior is
+  // honestly "lookup_failed" rather than a fabricated observation. With no
+  // usable Ph and no usable history, the composite is null, not a steamrolled
+  // opinion score — this is the model refusing to invent a number from an
+  // uncited layer plus an unreconstructable match.
+  assert.equal(exact.composite_score, null);
   const exactHistoryLayer = composite.result.evidence_ledger.find((row) => row.category === 'historical_tendency');
   assert.equal(exactHistoryLayer.present, false, 'exact-series null hits must not become score 0');
-  assert.ok(exact.composite_score > 64);
+  assert.equal(composite.result.canonical_term_record.historical_status, 'lookup_failed');
+  assert.equal(composite.result.canonical_term_record.pd.value, 0.85, 'cited research override still feeds Pd');
   assert.equal(exact.confidence_cap_reason, null);
 
   const familyComposite = buildMentionCompositeForMarket({
@@ -221,19 +223,13 @@ test('exact series wins without penalty; family n=14 uses 0.30 and keeps 7 misse
   assert.equal(familyComposite.earnings_family_history.hits, 7);
   assert.equal(familyComposite.earnings_family_history.misses, 7);
   assert.equal(familyComposite.earnings_family_history.hit_rate, 0.5);
-  assert.ok(row.composite_score < familyComposite.result.composite_score);
-  // A 50% hit-rate, penalized (thin/cross-company) family layer now properly
-  // blends with the cited researchScore override instead of being steamrolled
-  // by it: layer_composite=55 (weighted avg of direct_mention_pathway=80 and
-  // the penalized historical_tendency=round(50*0.7)=35), blended with
-  // override=85 -> raw composite=round((55+85)/2)=70, then the earnings_family
-  // cross-company shrinkage applies: 50+(70-50)*(1-0.30)=64.
-  assert.equal(familyComposite.result._meta.layer_composite, 55);
-  assert.equal(familyComposite.result.composite_score, 70);
-  assert.equal(row.composite_score, 64);
-  // A mediocre 50% hit-rate cross-company sample should NOT reach STRONG YES
-  // just because an opinion override says 85 — that was the old bug
-  // (history contradicts score). WATCH-tier here is the honest outcome.
+  // A 50% hit-rate cross-company family sample is the Bayesian historical
+  // prior here (7 hits / 14 samples, smoothed toward neutral -> 0.50), and
+  // the thin-cap penalty (0.30) leaves a raw score already at the midpoint
+  // unchanged: 50 + (50-50)*(1-0.30) = 50. WATCH-tier here is the honest
+  // outcome — a mediocre 50% hit-rate sample must never read as STRONG YES.
+  assert.equal(familyComposite.result.composite_score, 50);
+  assert.equal(row.composite_score, 50);
   assert.ok(row.composite_score < 65, 'mediocre penalized family sample must not reach STRONG YES from the override alone');
   const rendered = buildKalshiEventPacket({
     date: '2026-08-01',
@@ -414,11 +410,11 @@ test('thin family cap recomputes posture, status, confidence, and analysis from 
     earningsFamilyHistory: familyHistory({ word: { n: 3, hits: 3, misses: 0 } }),
   });
   const row = mentionCompositeToDecisionRow(composite);
-  assert.equal(row.composite_score, 64);
+  assert.equal(row.composite_score, 61);
   assert.equal(row.composite_posture, 'LEAN');
   assert.equal(row.edge_status, 'LEAN');
   assert.equal(row.confidence, 'medium');
-  assert.match(row.analysis, /CPC YES SCORE: 64\/100.*thin cross-company earnings family sample/i);
+  assert.match(row.analysis, /CPC YES SCORE: 61\/100.*thin cross-company earnings family sample/i);
   const packet = buildKalshiEventPacket({
     date: '2026-08-01',
     event: { ...event(), markets: [composite.market ?? {
@@ -438,9 +434,9 @@ test('thin family cap recomputes posture, status, confidence, and analysis from 
     sourceUrl: '/tmp/earnings.json',
     earningsFamilyHistory: familyHistory({ word: { n: 3, hits: 3, misses: 0 } }),
   });
-  assert.match(packet.text, /#1 word — CPC YES SCORE: 64\/100 — WEAK YES/);
-  assert.doesNotMatch(packet.text, /#1 word — CPC YES SCORE: 64\/100 — STRONG YES/);
-  assert.equal(packet.compositeSummary.best_score, 64);
+  assert.match(packet.text, /#1 word — CPC YES SCORE: 61\/100 — WEAK YES/);
+  assert.doesNotMatch(packet.text, /#1 word — CPC YES SCORE: 61\/100 — STRONG YES/);
+  assert.equal(packet.compositeSummary.best_score, 61);
   assert.equal(packet.compositeSummary.best_posture, 'LEAN');
 });
 
@@ -497,7 +493,11 @@ test('family n<2 remains a source gap and keeps the PR#53 cap in the rendered pa
   assert.match(built.text, /SOURCE GAPS/);
   assert.match(built.text, /no earnings family history with n>=2/);
   assert.match(built.text, /same-company settled history absent/);
-  assert.match(built.text, /#1 word — CPC YES SCORE: 64\/100 — WEAK YES/);
+  // n<2 family history is treated as no usable comparable (PR#53 cap), so the
+  // canonical historical prior sees a verified_zero over a 1-sample window:
+  // (0 + 4*0.5) / (1+4) = 0.40 -> score 40. Honest WEAK NO, not a fabricated
+  // WEAK YES from the uncited layer/override alone.
+  assert.match(built.text, /#1 word — CPC YES SCORE: 40\/100 — WEAK NO/);
 });
 
 test('failed family scan renders lookup failure as unavailable, never no history', () => {
@@ -515,11 +515,18 @@ test('failed family scan renders lookup failure as unavailable, never no history
     sourceUrl: '/tmp/earnings.json',
     earningsFamilyHistory: familyHistory({}, false),
   });
-  const evidence = evidenceLine(built.text);
-  assert.doesNotMatch(evidence, /comparable history|cross-company earnings family history/i);
+  // A failed family scan gives a canonical historical_status of 'lookup_failed'
+  // (unavailable), not 'verified_zero' or an actual observation. Combined with
+  // an uncited direct_mention_pathway layer (no Ph evidence) and no usable
+  // history, the canonical model has nothing to score from and this term
+  // correctly renders as a research gap rather than a fabricated card — the
+  // core honesty fix this rebuild exists for (never invent a score from an
+  // override alone when the real evidence channels are absent/failed).
+  assert.doesNotMatch(built.text, /comparable history|cross-company earnings family history/i);
   assert.match(built.text, /unavailable/i);
   assert.match(built.text, /lookup failed/i);
   assert.doesNotMatch(built.text, /no history/i);
+  assert.match(built.text, /RESEARCH GAP/);
 });
 
 test('non-earnings route stays unchanged and does not fetch family history', async () => {

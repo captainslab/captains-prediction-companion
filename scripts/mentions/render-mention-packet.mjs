@@ -456,6 +456,61 @@ function renderTermCard(lines, term, index, note = {}, { tierOverride = null } =
   if (provenance) {
     pushCardBlock(lines, 'Provenance:', provenance);
   }
+  renderCanonicalTermModelBlock(lines, term.canonical_term_record);
+  renderScoreAdjustmentBlock(lines, term);
+}
+
+// Additive, opt-in render of the canonical Pd x Ph x Pe term-probability
+// record (term-probability-model.mjs) when a decision row carries one. Rows
+// without canonical_term_record render exactly as before — this never
+// changes existing packet output, only adds a block when the new model is
+// actually the source of the row (not yet true in production; see
+// mention-composite-core.mjs composeMentionLedgerFromTermRecord).
+function renderCanonicalTermModelBlock(lines, rec) {
+  if (!rec || typeof rec !== 'object') return;
+  const fmtPct = (v) => (v === null || v === undefined ? 'missing' : `${Math.round(v * 100)}%`);
+  const histLabel = rec.historical_status === 'verified_zero'
+    ? `verified zero (${fmtPct(rec.historical_prior)}, smoothed)`
+    : rec.historical_status === 'observed'
+      ? fmtPct(rec.historical_prior)
+      : rec.historical_status === 'lookup_failed'
+        ? 'lookup failed'
+        : 'unavailable';
+  const modelText = `Historical prior: ${histLabel}. `
+    + `Pd: ${fmtPct(rec.pd?.value)} (${rec.pd?.evidence?.[0]?.kind ?? 'no evidence'}). `
+    + `Ph: ${fmtPct(rec.ph?.value)} (${rec.ph?.evidence?.[0]?.kind ?? 'no evidence'}). `
+    + `Pe: ${fmtPct(rec.pe?.value)}. `
+    + `Final: ${fmtPct(rec.final_probability)} [${rec.scoring_version}].`;
+  pushCardBlock(lines, 'Model:', modelText);
+  const citations = [...(rec.pd?.citations ?? []), ...(rec.ph?.citations ?? [])].filter(Boolean);
+  if (citations.length) {
+    pushCardBlock(lines, 'Model citations:', citations.join(', '));
+  }
+}
+
+// Renders the raw-model -> adjustment -> final-customer-score trail only when
+// a downstream customer policy adjustment (earnings-family penalty,
+// confidence cap) actually ran. Routes with zero adjustments render exactly
+// as before — raw_model_score already equals the CPC YES SCORE in the card
+// header, so repeating it here would be noise. This is the one place a
+// reader can see the full reconciliation: raw_model_score + adjustments ==
+// the CPC YES SCORE in this card's header.
+function renderScoreAdjustmentBlock(lines, term) {
+  const adjustments = Array.isArray(term?.customer_adjustments) ? term.customer_adjustments : [];
+  if (!adjustments.length) return;
+  const rawScore = term.raw_model_score === null || term.raw_model_score === undefined ? 'n/a' : `${term.raw_model_score}/100`;
+  const finalScore = term.cpc_score === null || term.cpc_score === undefined ? 'UNAVAILABLE' : `${term.cpc_score}/100`;
+  const adjustmentText = adjustments.map((a) => {
+    const bounds = a.penalty !== undefined && a.penalty !== null
+      ? ` (penalty=${a.penalty})`
+      : a.cap !== undefined && a.cap !== null
+        ? ` (cap=${a.cap}${a.floor !== undefined && a.floor !== null ? `, floor=${a.floor}` : ''})`
+        : '';
+    return `${a.type}: ${a.input_score}->${a.output_score}${bounds} — ${a.reason}`;
+  }).join(' | ');
+  pushCardBlock(lines, 'Raw model score:', `${rawScore} (pre-adjustment).`);
+  pushCardBlock(lines, 'Adjustments:', adjustmentText);
+  pushCardBlock(lines, 'Final CPC YES SCORE:', `${finalScore} (raw model score + adjustments above).`);
 }
 
 function renderGapSummary(gapTerms) {

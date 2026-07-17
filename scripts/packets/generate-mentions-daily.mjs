@@ -39,7 +39,7 @@ import {
 } from './lib/kalshi-discovery.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess, describeDecisionStatus } from '../shared/decision-process.mjs';
 import { buildPerplexityEntityAttachmentContract } from '../shared/perplexity-attachment-contract.mjs';
-import { composeMentionLedger } from '../mentions/mention-composite-core.mjs';
+import { composeMentionLedgerFromTermRecord } from '../mentions/mention-composite-core.mjs';
 import { buildResearchTermNote } from '../mentions/mentions-research-perplexity.mjs';
 import { buildCustomerSettlementForms } from '../mentions/rules-analyst.mjs';
 import {
@@ -828,7 +828,6 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
         route: route?.route ?? null, entity: route?.entity ?? null, horizon: route?.horizon ?? null,
       };
   let result;
-  let researchScoreError = null;
   const researchInput = market ?? legacy ?? {};
   const hasResearchProvenance = Number.isFinite(Number(researchInput?.proof_pct))
     || Number.isFinite(Number(researchInput?.handicap_pct))
@@ -849,34 +848,31 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     || (researchInput?.kalshi_scan_ok === true
       && Number.isFinite(Number(researchInput?.kalshi_native_n))
       && Number(researchInput.kalshi_native_n) >= 1);
-  try {
-    result = composeMentionLedger({
-      event: eventNameForComposite(event ?? {}, legacy),
-      targetMention,
-      profile: profileResolution.profile,
-      layerDefs: profileConfig.layerDefs,
-      layerRecords,
-      researchScore: researchScoreInput,
-      researchScoreCited,
-    });
-  } catch (err) {
-    const message = err?.message ?? String(err);
-    if (!/researchScore override/i.test(message)) throw err;
-    researchScoreError = message;
-    result = {
-      event: eventNameForComposite(event ?? {}, legacy),
-      target_mention: targetMention,
-      profile: profileResolution.profile,
-      composite_score: null,
-      confidence: null,
-      posture: 'NO_CLEAR_PICK',
-      top_supporting_layers: [],
-      missing_layers: [{ category: 'research_score', label: 'Research score', missing_note: researchScoreError }],
-      evidence_ledger: [],
-      reasoning_summary: `NO_CLEAR_PICK — malformed research score blocked this strike: ${researchScoreError}`,
-      _meta: { layers_present: 0, layers_total: profileConfig.layerDefs.length, research_quality: 'invalid' },
-    };
-  }
+  // composeMentionLedgerFromTermRecord (canonical Pd x Ph x Pe path,
+  // mention-composite-core.mjs) is the single authoritative production score
+  // path. researchScoreInput/researchScoreCited (the old override-blend
+  // inputs) now feed the canonical record as Pd (door) evidence via
+  // researchEvidence — see mapLayerRecordsToTermEvidence's comment in
+  // mention-composite-core.mjs for why a live-research finding is Pd, not Ph.
+  const acceptedFormsForTerm = Array.isArray(lexicalGate.lexical_result?.matched_forms) && lexicalGate.lexical_result.matched_forms.length
+    ? lexicalGate.lexical_result.matched_forms
+    : [targetMention].filter(Boolean);
+  const requiredCountForTerm = Number.isFinite(Number(lexicalGate.lexical_result?.required_count))
+    ? Number(lexicalGate.lexical_result.required_count)
+    : 1;
+  result = composeMentionLedgerFromTermRecord({
+    event: eventNameForComposite(event ?? {}, legacy),
+    targetMention,
+    profile: profileResolution.profile,
+    layerDefs: profileConfig.layerDefs,
+    layerRecords,
+    canonicalHistory,
+    acceptedForms: acceptedFormsForTerm,
+    requiredCount: requiredCountForTerm,
+    researchEvidence: researchScoreInput !== null
+      ? { value: researchScoreInput / 100, cited: researchScoreCited, kind: 'source_backed_research' }
+      : null,
+  });
 
   // Lexical NO_MATCH suppression: an evaluated literal NO_MATCH means the target
   // did not literally occur in the evidence text, so downstream may NOT invent
@@ -885,6 +881,8 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
   if (lexicalGate.suppress_conviction) {
     result.posture = 'NO_CLEAR_PICK';
     result.composite_score = null;
+    result.raw_model_score = null;
+    result.raw_model_probability = null;
     result.confidence = null;
     result.reasoning_summary = `NO_CLEAR_PICK — lexical NO_MATCH: "${targetMention}" not literally present in evaluated evidence.`;
   }
@@ -978,7 +976,7 @@ export function buildMentionCompositeForMarket({ event = null, market = null, le
     posture_final: postureFinal,
     posture_cap_reason: postureCap,
     research_quality: market?.research_quality ?? legacy?.research_quality ?? null,
-    source_status: researchScoreError ? 'RESEARCH_SCORE_INVALID' : (market?.source_status ?? legacy?.source_status ?? null),
+    source_status: market?.source_status ?? legacy?.source_status ?? null,
     lexical_gate: lexicalGate,
     pmt_advisory_context: buildPmtAdvisoryContext({
       route: route?.route ?? null,
@@ -1384,23 +1382,48 @@ export function mentionCompositeToDecisionRow(composite) {
   // STRONG YES. The cap is on the score, not the tier, because the janitor
   // fails score>=65 paired with a non-STRONG-YES tier. Blocked/null scores
   // are left untouched (null stays null; the cap only bounds a real number).
-  let compositeScore = r.composite_score ?? null;
+  // ─── Customer score-adjustment contract ──────────────────────────────────
+  // raw_model_score (== canonical_term_record.score, gated) is the single
+  // starting point. customerScore only ever moves through an explicit,
+  // logged entry in customerAdjustments — no other code path may change it.
+  // For a route with zero adjustments, customerScore stays byte-identical to
+  // rawModelScore (requirement: raw_model_score == customer_score when no
+  // downstream policy applies).
+  const rawModelScore = r.raw_model_score ?? r.composite_score ?? null;
+  let customerScore = rawModelScore;
+  const customerAdjustments = [];
   let confidenceCapReason = null;
   let familyScoreAdjusted = false;
   const familyEvidence = composite?.earnings_family_history ?? null;
   const familyHasEvidence = familyEvidence?.tier === 'exact_series' || familyEvidence?.tier === 'earnings_family';
-  if (familyHasEvidence && compositeScore !== null && Number.isFinite(Number(compositeScore)) && familyEvidence.tier === 'earnings_family') {
-    const raw = Number(compositeScore);
+  if (familyHasEvidence && customerScore !== null && Number.isFinite(Number(customerScore)) && familyEvidence.tier === 'earnings_family') {
+    const beforeFamilyBlock = Number(customerScore);
     const penalty = Number(familyEvidence.penalty);
-    compositeScore = Math.round(50 + (raw - 50) * (1 - penalty));
+    const inputScore = customerScore;
+    customerScore = Math.round(50 + (inputScore - 50) * (1 - penalty));
+    customerAdjustments.push({
+      type: 'earnings_family_penalty',
+      reason: `cross-company earnings family fallback (n=${familyEvidence.n}, hit_rate=${familyEvidence.hit_rate ?? 'n/a'}); no same-company settled comparables`,
+      input_score: inputScore,
+      output_score: customerScore,
+      penalty,
+    });
     if (familyEvidence.n < FAMILY_STRONG_MIN_N) {
-      compositeScore = Math.min(NO_HISTORY_CONFIDENCE_CAP, compositeScore);
       confidenceCapReason = 'thin cross-company earnings family sample: score capped below STRONG YES';
+      const beforeCap = customerScore;
+      customerScore = Math.min(NO_HISTORY_CONFIDENCE_CAP, customerScore);
+      customerAdjustments.push({
+        type: 'thin_family_sample_cap',
+        reason: confidenceCapReason,
+        input_score: beforeCap,
+        output_score: customerScore,
+        cap: NO_HISTORY_CONFIDENCE_CAP,
+      });
     }
-    if (compositeScore !== raw) {
+    if (customerScore !== beforeFamilyBlock) {
       familyScoreAdjusted = true;
       const recomputed = recomputePostureAfterScoreAdjustment({
-        score: compositeScore,
+        score: customerScore,
         result: r,
         ladder,
         earningsHint,
@@ -1411,7 +1434,7 @@ export function mentionCompositeToDecisionRow(composite) {
       const capNote = familyEvidence.n < FAMILY_STRONG_MIN_N
         ? `; ${confidenceCapReason}`
         : '';
-      analysis = `research score=${compositeScore} [${postureFinal}] — cross-company earnings family penalty=${penalty.toFixed(2)} adjusted raw model score ${raw} to ${compositeScore}${capNote}.`;
+      analysis = `research score=${customerScore} [${postureFinal}] — cross-company earnings family penalty=${penalty.toFixed(2)} adjusted raw model score ${beforeFamilyBlock} to ${customerScore}${capNote}.`;
       trigger = {
         price: null,
         event: postureFinal === 'PICK' || postureFinal === 'EVIDENCE_LEAN'
@@ -1422,17 +1445,25 @@ export function mentionCompositeToDecisionRow(composite) {
   }
   if (
     !hasHistoricalEvidence && !familyHasEvidence
-    && compositeScore !== null
-    && Number.isFinite(Number(compositeScore))
+    && customerScore !== null
+    && Number.isFinite(Number(customerScore))
     && !(sourceBlocked || noUsableSources || proximityOnly)
   ) {
-    const raw = Number(compositeScore);
-    if (raw > NO_HISTORY_CONFIDENCE_CAP || raw < NO_HISTORY_CONFIDENCE_FLOOR) {
-      compositeScore = Math.max(NO_HISTORY_CONFIDENCE_FLOOR, Math.min(NO_HISTORY_CONFIDENCE_CAP, raw));
+    const inputScore = Number(customerScore);
+    if (inputScore > NO_HISTORY_CONFIDENCE_CAP || inputScore < NO_HISTORY_CONFIDENCE_FLOOR) {
+      customerScore = Math.max(NO_HISTORY_CONFIDENCE_FLOOR, Math.min(NO_HISTORY_CONFIDENCE_CAP, inputScore));
       confidenceCapReason = NO_HISTORY_CONFIDENCE_CAP_REASON;
+      customerAdjustments.push({
+        type: 'no_historical_evidence_cap',
+        reason: NO_HISTORY_CONFIDENCE_CAP_REASON,
+        input_score: inputScore,
+        output_score: customerScore,
+        cap: NO_HISTORY_CONFIDENCE_CAP,
+        floor: NO_HISTORY_CONFIDENCE_FLOOR,
+      });
       postureFinal = 'WATCH';
       statusOverride = EDGE_STATUS.WATCH;
-      analysis = `research score=${compositeScore} — ${NO_HISTORY_CONFIDENCE_CAP_REASON}. Raw model score ${raw} was limited because the historical proof was insufficient.`;
+      analysis = `research score=${customerScore} — ${NO_HISTORY_CONFIDENCE_CAP_REASON}. Raw model score ${inputScore} was limited because the historical proof was insufficient.`;
     }
   }
 
@@ -1440,12 +1471,13 @@ export function mentionCompositeToDecisionRow(composite) {
   // market/edge row builder: quote fields must not exist during decision-row
   // construction. The score is the sole input to final posture, status,
   // confidence, explanation, tier, and downstream ranking.
-  const finalScore = compositeScore === null || compositeScore === undefined
+  const finalScore = customerScore === null || customerScore === undefined
     ? null
-    : Math.max(0, Math.min(100, Math.round(Number(compositeScore))));
+    : Math.max(0, Math.min(100, Math.round(Number(customerScore))));
   if (finalScore !== null && !Number.isFinite(finalScore)) {
     throw new Error(`mention model score is not finite for ${target}`);
   }
+  const finalCustomerProbability = finalScore === null ? null : finalScore / 100;
   if (!(sourceBlocked || noUsableSources || proximityOnly)) {
     postureFinal = postureFromScore(finalScore, r);
     if (ladder) postureFinal = applyQualificationCap(postureFinal, ladder).posture;
@@ -1474,8 +1506,18 @@ export function mentionCompositeToDecisionRow(composite) {
     side_target: target,
     full_strike_text: composite?.full_strike_text ?? target,
     settlement_summary: 'Exact-string mention settlement per Kalshi listing; verify the event rules and source before acting.',
+    // composite_score/cpc_yes_score are the CUSTOMER-facing score (post
+    // adjustment) — kept for back-compat with existing sort/render call
+    // sites, always equal to customer_score below. raw_model_score is the
+    // one true pre-adjustment number; customer_adjustments is the full,
+    // explicit trail from raw_model_score to customer_score.
     composite_score: finalScore,
     cpc_yes_score: finalScore,
+    raw_model_score: rawModelScore,
+    raw_model_probability: r.raw_model_probability ?? null,
+    customer_score: finalScore,
+    customer_adjustments: customerAdjustments,
+    final_customer_probability: finalCustomerProbability,
     composite_posture: postureFinal,
     edge_status: finalStatus,
     layers_present: `${presentCats.length}/${layersTotal}`,
@@ -1518,6 +1560,11 @@ export function mentionCompositeToDecisionRow(composite) {
     confidence_cap_reason: confidenceCapReason,
     earnings_family_history: familyEvidence,
     canonical_history: composite?.canonical_history ?? null,
+    // Pd x Ph x Pe term-probability record (mention-composite-core.mjs
+    // composeMentionLedgerFromTermRecord) — carried through so the renderer's
+    // renderCanonicalTermModelBlock can surface Pd/Ph/Pe/historical
+    // prior/final probability/score/citations on the rendered card.
+    canonical_term_record: r.canonical_term_record ?? null,
   };
   assertPriceBlind(output, `final mention decision row ${output.market_ticker}`);
   return output;
@@ -1852,6 +1899,11 @@ export function buildMentionsSynthesisInput({
     evidence_availability: row.evidence_availability ?? null,
     canonical_history: row.canonical_history ?? null,
     confidence_cap_reason: row.confidence_cap_reason ?? null,
+    canonical_term_record: row.canonical_term_record ?? null,
+    raw_model_score: row.raw_model_score ?? null,
+    raw_model_probability: row.raw_model_probability ?? null,
+    customer_adjustments: Array.isArray(row.customer_adjustments) ? row.customer_adjustments : [],
+    final_customer_probability: row.final_customer_probability ?? null,
     ...(row.earnings_family_history ? { earnings_family_history: row.earnings_family_history } : {}),
   }));
   const nonBlocked = terms.filter((term) => term.bucket !== 'blocked/no-source');

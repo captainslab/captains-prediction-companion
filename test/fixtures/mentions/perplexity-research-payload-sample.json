@@ -1,0 +1,103 @@
+{
+  "artifact": {
+    "generated_utc": "2026-07-16T23:36:29.060Z",
+    "engine": "kalshi-native-first + perplexity",
+    "model": "sonar",
+    "event_ticker": "KXTRUMPMENTION-26JUL16",
+    "event_title": "What will Trump say during his Speech to the Nation?",
+    "family": "trump_whitehouse",
+    "kalshi_native_first": {
+      "series_ticker": "KXTRUMPMENTION",
+      "settled_comparable_events": 40,
+      "events_scanned": 190,
+      "scan_ok": true,
+      "scan_error": null
+    },
+    "priority_sources": {
+      "priority_allowlist": [
+        "whitehouse.gov",
+        "c-span.org",
+        "rollcall.com",
+        "reuters.com",
+        "apnews.com",
+        "politico.com"
+      ],
+      "handicapping_open": true,
+      "rules_named_domains": []
+    },
+    "rows": [
+      {
+        "phrase": "Soleimani",
+        "ticker": "KXTRUMPMENTION-26JUL16-SOLE",
+        "market_type": "ednq",
+        "required_count": 1,
+        "repeat_requirement": null,
+        "kalshi_native_pct": 50,
+        "kalshi_native_n": 2,
+        "kalshi_scan_ok": true,
+        "kalshi_events_scanned": 190,
+        "kalshi_scan_error": null,
+        "proof_pct": 95,
+        "handicap_pct": 5,
+        "blended_pct": 50,
+        "confidence": "high",
+        "proof_reason": "Transcript of Trump's address explicitly includes 'General Qassem Soleimani'.",
+        "handicap_reason": "2026 Iran speech focuses on nuclear facilities, not 2020 Soleimani strike.",
+        "reason": "Transcript of Trump's address explicitly includes 'General Qassem Soleimani'.",
+        "actual_result": ""
+      }
+    ],
+    "proof_pass": {
+      "citations": [
+        "https://apnews.com/article/donald-trump-transcript-address-iran-war-b5970011fe934dde84d95d650bda56a9",
+        "https://www.politico.com/news/2020/01/08/trump-speech-on-iran-missile-attack-full-statement-and-transcript-096196",
+        "https://apnews.com/article/trump-iran-speech-transcript-text-ff4b286992309ec1337e04260247bb1e",
+        "https://apnews.com/article/iran-us-trump-address-f662a4f3378535d81197be699fb35a3e",
+        "https://www.reuters.com/article/world/trump-uses-campaign-rally-to-trumpet-soleimani-killing-as-justice-idUSKBN1Z9060/",
+        "https://www.politico.com/news/2020/01/14/trump-middle-east-iran-rally-2020-098988",
+        "https://www.reuters.com/article/world/slain-iranian-commanders-daughter-says-us-faces-dark-day-idUSKBN1Z50EX/",
+        "https://www.reuters.com/world/middle-east/trump-says-us-will-hit-iran-very-hard-2026-06-11/",
+        "https://www.politico.com/story/2016/08/donald-trump-terrorism-speech-227025",
+        "https://www.politico.com/newsletters/playbook-pm/2020/01/08/trump-pumps-the-brakes-on-iran-488018"
+      ],
+      "cost_usd": 0.00536
+    },
+    "handicapping_pass": {
+      "citations": [
+        "https://trumpwhitehouse.archives.gov/briefings-statements/remarks-president-trump-killing-qasem-soleimani/",
+        "https://www.aljazeera.com/news/2025/6/22/full-speech-donald-trumps-address-to-nation-after-attack-on-iran",
+        "https://apnews.com/article/donald-trump-transcript-address-iran-war-b5970011fe934dde84d95d650bda56a9",
+        "https://www.foxnews.com/transcript/president-trump-addresses-nation-following-iranian-missile-attack-defends-decision-to-take-out-qassem-soleimani",
+        "https://www.cnn.com/2020/01/18/politics/trump-soleimani-details-mar-a-lago",
+        "https://www.youtube.com/watch?v=84ttaEWZl6s",
+        "https://reason.com/2020/01/08/trumps-speech-confirms-that-soleimani-strike-didnt-prevent-imminent-attack-or-make-americans-safer/",
+        "https://www.youtube.com/watch?v=oZydVW87R6Y",
+        "https://www.youtube.com/watch?v=Ic-MC5XAKNQ"
+      ],
+      "cost_usd": 0.00536
+    }
+  },
+  "outPath": null,
+  "rows": [
+    {
+      "phrase": "Soleimani",
+      "ticker": "KXTRUMPMENTION-26JUL16-SOLE",
+      "market_type": "ednq",
+      "required_count": 1,
+      "repeat_requirement": null,
+      "kalshi_native_pct": 50,
+      "kalshi_native_n": 2,
+      "kalshi_scan_ok": true,
+      "kalshi_events_scanned": 190,
+      "kalshi_scan_error": null,
+      "proof_pct": 95,
+      "handicap_pct": 5,
+      "blended_pct": 50,
+      "confidence": "high",
+      "proof_reason": "Transcript of Trump's address explicitly includes 'General Qassem Soleimani'.",
+      "handicap_reason": "2026 Iran speech focuses on nuclear facilities, not 2020 Soleimani strike.",
+      "reason": "Transcript of Trump's address explicitly includes 'General Qassem Soleimani'.",
+      "actual_result": ""
+    }
+  ]
+}
