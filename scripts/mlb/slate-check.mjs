@@ -77,11 +77,17 @@ function isPostponedOrCanceled(record) {
 }
 
 export function mergeOfficialGames(discoveredGames, officialRecords) {
-  const games = [...discoveredGames];
+  const games = [];
   const used = new Set();
   for (const game of discoveredGames) {
     const official = closestOfficialRecord(game, officialRecords, used);
-    if (official) used.add(official);
+    if (official) {
+      used.add(official);
+      games.push(game);
+      continue;
+    }
+    const hasTeamIdentity = (game.away && game.home) || (game.away_full && game.home_full);
+    if (hasTeamIdentity) games.push(game);
   }
   for (const record of officialRecords || []) {
     if (used.has(record)) continue;

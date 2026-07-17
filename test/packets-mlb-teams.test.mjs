@@ -36,6 +36,11 @@ test('parseEventTickerTeams: splits Kalshi ticker into [away, home]', () => {
   assert.deepEqual(parseEventTickerTeams('KXMLBGAME-26MAY181940BOSKC'), ['BOS', 'KC']);
 });
 
+test('parseEventTickerTeams: preserves teams for doubleheader legs', () => {
+  assert.deepEqual(parseEventTickerTeams('KXMLBGAME-26JUL171910TBBOSG2'), ['TB', 'BOS']);
+  assert.deepEqual(parseEventTickerTeams('KXMLBGAME-26JUL171335TBBOSG1'), ['TB', 'BOS']);
+});
+
 test('parseEventTickerTeams: returns null on unknown teams or malformed input', () => {
   assert.equal(parseEventTickerTeams('KXMLBGAME-26MAY181940ZZZQQQ'), null);
   assert.equal(parseEventTickerTeams(''), null);

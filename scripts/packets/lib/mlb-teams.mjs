@@ -73,7 +73,7 @@ export function parseEventTickerTeams(eventTicker) {
   if (typeof eventTicker !== 'string') return null;
   const tail = eventTicker.split('-').pop() || '';
   // strip leading digit/time portion; keep trailing uppercase letters
-  const m = tail.match(/([A-Z]+)$/);
+  const m = tail.match(/([A-Z]+?)(?:G\d+)?$/);
   if (!m) return null;
   const letters = m[1];
   // Try every split point; prefer the split where BOTH halves are known

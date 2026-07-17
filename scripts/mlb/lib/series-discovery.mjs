@@ -36,7 +36,7 @@ export function gameKeyFromEventTicker(ticker) {
 const MON = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 };
 export function parseGameKey(gameKey) {
   if (typeof gameKey !== 'string') return null;
-  const m = gameKey.match(/^(\d{2})([A-Z]{3})(\d{2})(\d{2})(\d{2})([A-Z]+)$/);
+  const m = gameKey.match(/^(\d{2})([A-Z]{3})(\d{2})(\d{2})(\d{2})([A-Z]+?)(?:G\d+)?$/);
   if (!m) return null;
   const yy = Number(m[1]);
   const mon = MON[m[2]];

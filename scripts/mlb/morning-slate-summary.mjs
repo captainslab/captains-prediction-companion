@@ -50,8 +50,8 @@ export function renderMorningSummary(plan) {
   lines.push('');
   lines.push('GAMES');
   for (const g of plan.games || []) {
-    const away = g.away ?? '?';
-    const home = g.home ?? '?';
+    const away = g.away ?? g.away_full ?? '?';
+    const home = g.home ?? g.home_full ?? '?';
     const ct = g.first_pitch_ct ?? '?';
     lines.push(`  ${away} @ ${home}  — ${ct}`);
   }

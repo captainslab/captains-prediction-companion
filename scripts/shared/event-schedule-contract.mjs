@@ -7,6 +7,19 @@ function toIso(value) {
 
 const PREPARE_LEAD_MINUTES = 5;
 
+function ctClockFromUtc(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const f = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(d);
+  const obj = Object.fromEntries(f.map((p) => [p.type, p.value]));
+  return `${obj.year}-${obj.month}-${obj.day} ${obj.hour}:${obj.minute} CT`;
+}
+
 function idempotencyKeyFromParts(parts) {
   if (Array.isArray(parts)) return parts.map((part) => String(part)).join(':');
   if (parts == null) return null;
@@ -55,7 +68,7 @@ export function buildReportWindow({
     event_start_freshness: 'fresh',
     prepare_at_utc: new Date(startMs - (prelockMinutes + PREPARE_LEAD_MINUTES) * 60_000).toISOString(),
     report_at_utc: reportIso,
-    report_at_ct: null,
+    report_at_ct: ctClockFromUtc(reportIso),
     retry_at_utc: retryOffsetsMinutes.map((offset) => new Date(reportMs + Number(offset) * 60_000).toISOString()),
     retry_index: 0,
     game_keys: [eventKey],

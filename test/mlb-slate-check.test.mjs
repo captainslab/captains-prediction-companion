@@ -13,9 +13,9 @@ import {
   clusterWindows,
   ctClockFromUtc,
 } from '../scripts/mlb/lib/series-discovery.mjs';
-import { summarizeMarketCoverage, buildPerGameWindows } from '../scripts/mlb/slate-check.mjs';
+import { summarizeMarketCoverage, buildPerGameWindows, mergeOfficialGames } from '../scripts/mlb/slate-check.mjs';
 import { selectDueWindows } from '../scripts/mlb/run-due-windows.mjs';
-import { buildMorningSlatePlan, isMorningSummaryEligible } from '../scripts/mlb/morning-slate-summary.mjs';
+import { buildMorningSlatePlan, isMorningSummaryEligible, renderMorningSummary } from '../scripts/mlb/morning-slate-summary.mjs';
 import { renderGameSection } from '../scripts/mlb/lib/report-render.mjs';
 
 test('MLB_SERIES covers all six required series', () => {
@@ -58,6 +58,13 @@ test('parseGameKey honors EST (Jan) vs EDT (May)', () => {
   assert.equal(jul.startUtc, '2026-07-20T23:00:00.000Z');
 });
 
+test('parseGameKey decodes doubleheader suffixes without changing the game key', () => {
+  const p = parseGameKey('26JUL171910TBBOSG2');
+  assert.equal(p.away, 'TB');
+  assert.equal(p.home, 'BOS');
+  assert.equal(p.startUtc, '2026-07-17T23:10:00.000Z');
+});
+
 test('ctClockFromUtc renders America/Chicago', () => {
   // 2026-05-20T01:40Z is 2026-05-19 20:40 CDT
   const s = ctClockFromUtc('2026-05-20T01:40:00.000Z');
@@ -79,6 +86,24 @@ test('joinGames merges series by game key', () => {
   assert.ok(games[0].series.ml);
   assert.ok(games[0].series.spread);
   assert.equal(games[0].series.total, undefined);
+});
+
+test('mergeOfficialGames matches both doubleheader legs and drops an unresolvable ghost', () => {
+  const discovered = joinGames({
+    ml: { events: [
+      { event_ticker: 'KXMLBGAME-26JUL171910TBBOSG2', markets: [] },
+      { event_ticker: 'KXMLBGAME-26JUL171335TBBOSG1', markets: [] },
+    ] },
+  });
+  discovered.push({ game_key: '26JUL171999????', away: null, home: null, away_full: null, home_full: null, start_utc: null, series: {} });
+  const official = [
+    { game_pk: 824766, away_team: 'Tampa Bay Rays', home_team: 'Boston Red Sox', start_time_utc: '2026-07-17T17:35:00Z' },
+    { game_pk: 824737, away_team: 'Tampa Bay Rays', home_team: 'Boston Red Sox', start_time_utc: '2026-07-17T23:10:00Z' },
+  ];
+  const merged = mergeOfficialGames(discovered, official);
+  assert.equal(merged.length, 2);
+  assert.deepEqual(merged.map((game) => game.game_key), ['26JUL171335TBBOSG1', '26JUL171910TBBOSG2']);
+  assert.ok(merged.every((game) => game.away === 'TB' && game.home === 'BOS'));
 });
 
 test('clusterWindows groups games within 10 minutes and computes report_at', () => {
@@ -109,6 +134,7 @@ test('buildPerGameWindows uses official starts and creates T-60/T-55 windows ind
     [823440, '2026-07-16T22:10:00.000Z', '2026-07-16T22:15:00.000Z'],
     [823441, '2026-07-16T23:10:00.000Z', '2026-07-16T23:15:00.000Z'],
   ]);
+  assert.deepEqual(windows.map((w) => w.report_at_ct), ['2026-07-16 17:15 CT', '2026-07-16 18:15 CT']);
   assert.deepEqual(windows.map((w) => w.game_keys), [['A'], ['B']]);
   assert.ok(windows.every((w) => w.event_start_authority === 'official_mlb_schedule'));
   assert.deepEqual(windows.map((w) => ({
@@ -213,6 +239,20 @@ test('morning summary is single-run eligible until its sent marker exists', () =
   assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: null }), true);
   assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: '2026-07-17T12:00:00Z' }), false);
   assert.equal(isMorningSummaryEligible({ morning_summary_sent_utc: '2026-07-17T12:00:00Z' }, { force: true }), true);
+});
+
+test('morning summary falls back to known full team names and report time', () => {
+  const summary = renderMorningSummary({
+    date: '2026-07-17',
+    generated_utc: '2026-07-17T14:00:00.000Z',
+    game_count: 1,
+    games: [{ away: null, home: null, away_full: 'Tampa Bay Rays', home_full: 'Boston Red Sox', first_pitch_ct: '2026-07-17 18:10 CT' }],
+    report_windows: [{ cluster_id: 'G01', report_at_ct: '2026-07-17 17:15 CT', lead_first_pitch_ct: '2026-07-17 18:10 CT', game_keys: ['MLB-1'] }],
+  });
+  assert.ok(summary.includes('Tampa Bay Rays @ Boston Red Sox'));
+  assert.ok(summary.includes('fire 2026-07-17 17:15 CT'));
+  assert.ok(!summary.includes('? @ ?'));
+  assert.ok(!summary.includes('fire ?'));
 });
 
 test('morning plan path fetches official records and passes them into the plan builder', async () => {
