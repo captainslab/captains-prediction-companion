@@ -138,6 +138,20 @@ test('mentions delivery plan uses one base txt document and ignores chunk artifa
   assert.deepEqual(plan[0].files, [`${date}-KXTEST-EVENT.txt`]);
 });
 
+test('MLB daily generator output plans exactly one board document', () => {
+  const date = '2099-01-01';
+  const { dir } = makePacketDir(date, 'mlb-daily');
+  writeFileSync(join(dir, `${date}-mlb-daily-board.txt`), 'board packet');
+  writeFileSync(join(dir, `${date}-mlb-daily-board.inventory.txt`), 'AUDIT ONLY');
+  writeFileSync(join(dir, `${date}-mlb-daily-board.meta.json`), '{}');
+
+  const plan = planDeliveries(dir, date, { preferBaseFile: true });
+  assert.deepEqual(plan, [{
+    name: `${date}-mlb-daily-board`,
+    files: [`${date}-mlb-daily-board.txt`],
+  }]);
+});
+
 test('sender dry-run on no-events day plans a single status message', () => {
   const date = '2099-01-02';
   const { root, dir } = makePacketDir(date);
