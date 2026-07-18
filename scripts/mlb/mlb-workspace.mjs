@@ -38,6 +38,7 @@ function helpText() {
     '  node scripts/mlb/mlb-workspace.mjs status --date YYYY-MM-DD',
     '  node scripts/mlb/mlb-workspace.mjs morning-scan [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--state-root path]',
     '  node scripts/mlb/mlb-workspace.mjs pregame-refresh [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--state-root path]',
+    '  add --discovery-only to pregame-refresh to refresh adapters without rewriting slate outputs',
     '',
     'Examples:',
     '  node scripts/mlb/mlb-workspace.mjs router --title "Will the Alpha City Aces beat the Beta Town Bears?" --json',
@@ -158,7 +159,7 @@ function parseOutputsArgs(argv) {
 }
 
 function parseScanArgs(argv) {
-  const options = { date: null, fixturesOnly: false, liveReadonly: false, stateRoot: 'state' };
+  const options = { date: null, fixturesOnly: false, liveReadonly: false, discoveryOnly: false, stateRoot: 'state' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--date') {
@@ -168,6 +169,8 @@ function parseScanArgs(argv) {
       options.fixturesOnly = true;
     } else if (arg === '--live-readonly') {
       options.liveReadonly = true;
+    } else if (arg === '--discovery-only') {
+      options.discoveryOnly = true;
     } else if (arg === '--state-root') {
       options.stateRoot = readValue(argv, index, arg);
       index += 1;
@@ -299,6 +302,17 @@ export async function runPregameRefresh(argv) {
   console.log(`[pregame-refresh] discover: kalshi=${discoverResult.kalshi_status} mlb=${discoverResult.mlb_status}`);
 
   createBoardIntakeReport({ runDate, discoveryDir: discDir });
+
+  if (options.discoveryOnly) {
+    console.log(`[pregame-refresh] discovery-only: skipping slate output writer`);
+    return {
+      run_date: runDate,
+      mode,
+      discover: discoverResult,
+      outputs: null,
+      message: 'Pregame discovery refresh complete. Slate outputs were not written.',
+    };
+  }
 
   const outputResult = await runOutputWriterDryRun({
     date: runDate,
