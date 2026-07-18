@@ -57,6 +57,8 @@ import {
   buildHrWatchlist,
 } from '../mlb/lib/assumptions-ledger.mjs';
 import { writeScopedLedger } from '../mlb/lib/assumptions-writer.mjs';
+import { writeJsonAtomic } from '../mlb/file-io.mjs';
+import { hashRunRecordValue, writeRunRecord } from '../mlb/lib/mlb-run-record.mjs';
 import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '../shared/decision-process.mjs';
 import {
   buildDecisionRow,
@@ -1277,14 +1279,153 @@ function buildEmptyPacket({ date, artifacts, primeAttempts, kalshiSummary }) {
   return [header, lines.join('\n'), packetFooter()].filter(Boolean).join('\n\n');
 }
 
-async function main() {
-  const opts = parseMlbDailyArgs(process.argv.slice(2));
+function discoveryRecords(path) {
+  const payload = readJsonIfExists(path);
+  return Array.isArray(payload?.records) ? payload.records : [];
+}
+
+function gameRecordFor(records, gamePk) {
+  return records.find((record) => String(record?.game_pk ?? '') === String(gamePk)) ?? null;
+}
+
+function lineupSourceForRecord(statsRecord) {
+  const explicit = statsRecord?.lineup_source && typeof statsRecord.lineup_source === 'object'
+    ? statsRecord.lineup_source
+    : {};
+  const raw = String(statsRecord?.hr_lineup_source ?? '');
+  const status = String(statsRecord?.lineup_status ?? '').toLowerCase();
+  const orders = Array.isArray(statsRecord?.hr_batters)
+    ? statsRecord.hr_batters.map((batter) => ({
+      mlb_id: batter?.mlb_id ?? batter?.batter_id ?? null,
+      lineup_slot: batter?.lineup_slot ?? null,
+      side: batter?.side ?? null,
+    }))
+    : [
+      ...(Array.isArray(statsRecord?.away_batting_order) ? statsRecord.away_batting_order.map((mlb_id) => ({ side: 'away', mlb_id })) : []),
+      ...(Array.isArray(statsRecord?.home_batting_order) ? statsRecord.home_batting_order.map((mlb_id) => ({ side: 'home', mlb_id })) : []),
+    ];
+  const proxyDate = explicit.proxy_date
+    ?? raw.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1]
+    ?? null;
+  const mode = explicit.mode
+    ?? (status === 'proxy' ? 'LAST_LOCKED_LINEUP_PROXY' : status === 'confirmed' ? 'CONFIRMED_LINEUP' : 'UNAVAILABLE');
+  return {
+    mode,
+    proxy_date: proxyDate,
+    proxy_game_pk: explicit.proxy_game_pk ?? statsRecord?.proxy_game_pk ?? null,
+    batting_order_hash: explicit.batting_order_hash ?? hashRunRecordValue(orders),
+  };
+}
+
+function starterRecord({ statsRecord, officialRecord, side, generationDate }) {
+  const key = `${side}_pitcher`;
+  const statsPitcher = statsRecord?.[key] ?? null;
+  const probable = statsRecord?.probable_pitchers?.[side]
+    ?? officialRecord?.probable_pitchers?.[side]
+    ?? null;
+  const value = statsPitcher ?? probable;
+  const name = typeof value === 'string' ? value : value?.name ?? value?.fullName ?? null;
+  return {
+    name,
+    source: statsPitcher ? 'stats_adapter' : probable ? 'mlb_official_adapter' : null,
+    as_of: generationDate,
+  };
+}
+
+function compositeModelSlot(pick) {
+  if (!pick) return { status: null, outputs: null };
+  const safeStrings = (values) => (Array.isArray(values) ? values : [])
+    .filter((value) => !/(price|odds|bid|ask|volume|open_interest)/i.test(String(value)));
+  const outputs = {
+    classification: pick.classification ?? null,
+    primary_pick: pick.primary_pick ?? false,
+    gates_passed: safeStrings(pick.gates_passed),
+    gates_failed: safeStrings(pick.gates_failed),
+    missing_confirmations: safeStrings(pick.missing_confirmations),
+    notes: safeStrings(pick.notes),
+  };
+  return { status: pick.classification ?? null, outputs };
+}
+
+function modelAuditEntry(name, model) {
+  const status = model?.status ?? null;
+  const blocked = status === null || /blocked|insufficient/i.test(String(status));
+  const reason = status === null
+    ? 'model was not invoked'
+    : blocked
+      ? `projection status ${status}`
+      : null;
+  return { name, status, ran: !blocked, skipped: blocked, reason };
+}
+
+function buildInvocationAudit({ date, generatedAtUtc, records }) {
+  const games = records.map(({ gamePk, record, path }) => {
+    const models = Object.fromEntries(
+      ['score', 'yrfi', 'ks_home', 'ks_away', 'hr', 'composite']
+        .map((name) => [name, modelAuditEntry(name, record.models[name])]),
+    );
+    const ranModels = Object.values(models).filter((model) => model.ran).map((model) => model.name);
+    const skippedModels = Object.values(models)
+      .filter((model) => model.skipped)
+      .map((model) => ({ model: model.name, reason: model.reason }));
+    return {
+      game_pk: record.game_pk ?? gamePk,
+      run_record_path: path,
+      models,
+      ran_models: ranModels,
+      skipped_models: skippedModels,
+      all_models_ran: skippedModels.length === 0,
+    };
+  });
+  return {
+    run_type: 'morning_proxy',
+    generation_date: date,
+    generated_at_utc: generatedAtUtc,
+    games,
+  };
+}
+
+function buildMorningProxyRecord({ date, generatedAtUtc, statsRecord, officialRecord, weatherRecord, contextRecord, projection, compositePick }) {
+  const gamePk = statsRecord?.game_pk ?? officialRecord?.game_pk ?? compositePick?.matched_game_pk;
+  const lineupConfidence = statsRecord?.lineup_status === 'confirmed' ? 'CONFIRMED' : 'PROXY';
+  const models = {
+    score: projection?.score ?? null,
+    yrfi: projection?.yrfi ?? null,
+    ks_home: projection?.ks_home ?? null,
+    ks_away: projection?.ks_away ?? null,
+    hr: projection?.hr ?? null,
+    composite: compositeModelSlot(compositePick),
+  };
+  const inputSnapshot = {
+    official: officialRecord,
+    stats: statsRecord,
+    weather: weatherRecord,
+    context: contextRecord,
+  };
+  return {
+    run_type: 'morning_proxy',
+    game_pk: gamePk,
+    generated_at_utc: generatedAtUtc,
+    generation_date: date,
+    lineup_confidence: lineupConfidence,
+    lineup_source: lineupSourceForRecord(statsRecord),
+    starters: {
+      away: starterRecord({ statsRecord, officialRecord, side: 'away', generationDate: date }),
+      home: starterRecord({ statsRecord, officialRecord, side: 'home', generationDate: date }),
+    },
+    models,
+    input_hash: hashRunRecordValue(inputSnapshot),
+  };
+}
+
+export async function main(argv = process.argv.slice(2), { primeResearch = primeMlbResearch, fetchEvents = fetchKalshiEvents } = {}) {
+  const opts = parseMlbDailyArgs(argv);
   if (opts.help) {
     console.log('Usage: node scripts/packets/generate-mlb-daily.mjs --date YYYY-MM-DD [--dry-run] [--scope FULL_DAY_PREVIEW|SLATE_PREVIEW|GAME_PACKET]');
     return;
   }
   const dir = ensurePacketDir(opts.stateRoot, opts.date, PACKET_TYPE);
-  const primeAttempts = primeMlbResearch(opts.date);
+  const primeAttempts = await primeResearch(opts.date);
   const artifacts = locateMlbArtifacts(opts.stateRoot, opts.date);
   const statsSourceRef = resolve(opts.stateRoot, 'mlb', opts.date, 'discovery', 'stats_adapter.json');
   const weatherSourceRef = resolve(opts.stateRoot, 'mlb', opts.date, 'discovery', 'weather_adapter.json');
@@ -1294,17 +1435,23 @@ async function main() {
   // Public-stats projection inputs (price-free). Drives real model-layer reads.
   const statsRecords = loadStatsRecords(opts.stateRoot, opts.date);
   const leagueRPG = leagueRunsPerGame(statsRecords);
-  const slateHrProjections = statsRecords.map((record) => buildGameProjections({
-    record,
-    leagueRPG,
-    as_of: `${opts.date}T00:00:00Z`,
-    lineup_status: record?.lineup_status === 'confirmed' || record?.lineup_status === 'proxy'
-      ? record.lineup_status
-      : 'unconfirmed',
-    weather_status: record?.weather_status ?? null,
-  }).hr);
+  const projectionsByGamePk = new Map();
+  const slateProjections = statsRecords.map((record) => {
+    const projection = buildGameProjections({
+      record,
+      leagueRPG,
+      as_of: `${opts.date}T00:00:00Z`,
+      lineup_status: record?.lineup_status === 'confirmed' || record?.lineup_status === 'proxy'
+        ? record.lineup_status
+        : 'unconfirmed',
+      weather_status: record?.weather_status ?? null,
+    });
+    projectionsByGamePk.set(String(record?.game_pk ?? ''), projection);
+    return projection;
+  });
+  const slateHrProjections = slateProjections.map((projection) => projection.hr);
 
-  const discovery = await fetchKalshiEvents('mlb');
+  const discovery = await fetchEvents('mlb');
   const dateFilter = filterByEventDate(opts.date, { windowDays: 0, allowUndated: false });
   const kalshiEvents = discovery.events.filter(dateFilter);
 
@@ -1332,6 +1479,51 @@ async function main() {
   // the full per-pick inventory to a separate audit artifact. This replaces the
   // old all-WATCH per-event dump as the main user-facing result.
   const scoring = loadMlbScoring(opts.stateRoot, opts.date);
+
+  // Immutable morning invocation records are written alongside the existing
+  // packet outputs. The customer-facing board remains sourced from scoring and
+  // keeps its current render/send behavior.
+  const officialRecords = discoveryRecords(officialSourceRef);
+  const weatherRecords = discoveryRecords(weatherSourceRef);
+  const contextRecords = discoveryRecords(contextSourceRef);
+  const gameInputs = new Map();
+  for (const record of officialRecords) {
+    if (record?.game_pk != null) gameInputs.set(String(record.game_pk), { officialRecord: record });
+  }
+  for (const record of statsRecords) {
+    if (record?.game_pk == null) continue;
+    const key = String(record.game_pk);
+    gameInputs.set(key, { ...(gameInputs.get(key) ?? {}), statsRecord: record });
+  }
+  for (const pick of scoring?.picks ?? []) {
+    if (pick?.matched_game_pk == null) continue;
+    const key = String(pick.matched_game_pk);
+    if (!gameInputs.has(key)) gameInputs.set(key, {});
+  }
+
+  const generatedAtUtc = new Date().toISOString();
+  const writtenRunRecords = [];
+  for (const [gamePk, input] of gameInputs) {
+    const statsRecord = input.statsRecord ?? null;
+    const officialRecord = input.officialRecord ?? null;
+    const projection = statsRecord ? projectionsByGamePk.get(gamePk) ?? null : null;
+    const gamePicks = (scoring?.picks ?? []).filter((pick) => String(pick?.matched_game_pk ?? '') === gamePk);
+    const compositePick = selectPrimaryScoringPick(gamePicks);
+    const result = writeRunRecord(opts.stateRoot, buildMorningProxyRecord({
+      date: opts.date,
+      generatedAtUtc,
+      statsRecord,
+      officialRecord,
+      weatherRecord: gameRecordFor(weatherRecords, gamePk),
+      contextRecord: gameRecordFor(contextRecords, gamePk),
+      projection,
+      compositePick,
+    }));
+    writtenRunRecords.push({ gamePk, record: result.record, path: result.path });
+  }
+  const auditPath = resolve(opts.stateRoot, 'mlb', opts.date, 'runs', 'invocation-audit.json');
+  writeJsonAtomic(auditPath, buildInvocationAudit({ date: opts.date, generatedAtUtc, records: writtenRunRecords }));
+
   if (scoring) {
     const slateScope = resolvePacketScope({
       explicit: opts.scope ?? 'FULL_DAY_PREVIEW',
