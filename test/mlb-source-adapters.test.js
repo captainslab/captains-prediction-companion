@@ -31,6 +31,8 @@ import {
   loadDynamicCompositeSlate,
   runComposite,
 } from '../scripts/mlb/late-slate-composite-refresh.mjs';
+import { loadStatsRecords } from '../scripts/mlb/lib/projection-engine.mjs';
+import { resolveLastLockedLineupProxy } from '../scripts/mlb/lib/lineup-proxy.mjs';
 
 function makeJsonResponse(payload, status = 200) {
   return {
@@ -44,6 +46,112 @@ function makeJsonResponse(payload, status = 200) {
     },
   };
 }
+
+test('last locked lineup proxy resolves the most recent confirmed prior game', () => {
+  const proxy = resolveLastLockedLineupProxy({
+    team: 'New York Yankees',
+    generationDate: '2026-07-18',
+    lineup_status: 'lineup_pending',
+    priorGames: [
+      {
+        game_pk: 101,
+        game_date: '2026-07-15',
+        away_team: 'New York Yankees',
+        home_team: 'Boston Red Sox',
+        lineup_status: 'confirmed_or_boxscore_available',
+        away_batting_order: [101, 102, 103],
+        probable_pitchers: { away: 'Older Pitcher' },
+      },
+      {
+        game_pk: 102,
+        game_date: '2026-07-17',
+        away_team: 'New York Yankees',
+        home_team: 'Toronto Blue Jays',
+        lineup_status: 'lineup_pending',
+        away_batting_order: [201, 202, 203],
+      },
+      {
+        game_pk: 103,
+        game_date: '2026-07-16',
+        away_team: 'New York Yankees',
+        home_team: 'Tampa Bay Rays',
+        lineup_status: 'confirmed_or_boxscore_available',
+        away_batting_order: [111, 112, 113],
+        probable_pitchers: { away: 'Never Copy This Pitcher' },
+      },
+    ],
+  });
+
+  assert.deepEqual(proxy, {
+    mode: 'LAST_LOCKED_LINEUP_PROXY',
+    proxy_date: '2026-07-16',
+    proxy_game_pk: 103,
+    batting_order: [111, 112, 113],
+    source: 'prior_lineup_context',
+    hash: proxy.hash,
+  });
+  assert.equal(Object.hasOwn(proxy, 'pitcher'), false);
+  assert.equal(JSON.stringify(proxy).includes('Never Copy This Pitcher'), false);
+  assert.notEqual(proxy.mode, 'confirmed');
+  assert.equal(resolveLastLockedLineupProxy({
+    team: 'New York Yankees',
+    generationDate: '2026-07-18',
+    lineup_status: 'lineup_pending',
+    priorGames: [{
+      game_pk: 104,
+      game_date: '2026-07-17',
+      away_team: 'New York Yankees',
+      home_team: 'Boston Red Sox',
+      lineup_status: 'lineup_pending',
+    }],
+  }), null);
+});
+
+test('pending stats merge uses proxy batting order, preserves today probable pitchers, and keeps pending unchanged without a proxy', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cpc-lineup-proxy-'));
+  const priorDiscovery = join(root, 'mlb', '2026-07-16', 'discovery');
+  const currentDiscovery = join(root, 'mlb', '2026-07-18', 'discovery');
+  mkdirSync(priorDiscovery, { recursive: true });
+  mkdirSync(currentDiscovery, { recursive: true });
+  try {
+    writeFileSync(join(priorDiscovery, 'mlb_official_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 103, game_date: '2026-07-16', away_team: 'New York Yankees', home_team: 'Tampa Bay Rays',
+    }] }));
+    writeFileSync(join(priorDiscovery, 'context_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 103, game_date: '2026-07-16', away_team: 'New York Yankees', home_team: 'Tampa Bay Rays',
+      lineup_status: 'confirmed_or_boxscore_available', away_batting_order: [111, 112, 113], home_batting_order: [211, 212, 213],
+    }] }));
+    writeFileSync(join(currentDiscovery, 'stats_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 104, game_date: '2026-07-18', away_team: 'New York Yankees', home_team: 'Boston Red Sox',
+      probable_pitchers: { away: 'Today Away', home: 'Today Home' },
+    }] }));
+    writeFileSync(join(currentDiscovery, 'context_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 104, game_date: '2026-07-18', away_team: 'New York Yankees', home_team: 'Boston Red Sox',
+      lineup_status: 'lineup_pending', away_batting_order: [], home_batting_order: [],
+    }] }));
+
+    const [record] = loadStatsRecords(root, '2026-07-18');
+    assert.equal(record.lineup_status, 'proxy');
+    assert.deepEqual(record.hr_batters.map(player => player.mlb_id), [111, 112, 113]);
+    assert.match(record.hr_lineup_source, /LAST_LOCKED_LINEUP_PROXY from 2026-07-16 vs Tampa Bay Rays/);
+    assert.deepEqual(record.probable_pitchers, { away: 'Today Away', home: 'Today Home' });
+
+    const rootWithoutPrior = mkdtempSync(join(tmpdir(), 'cpc-lineup-pending-'));
+    try {
+      const discovery = join(rootWithoutPrior, 'mlb', '2026-07-18', 'discovery');
+      mkdirSync(discovery, { recursive: true });
+      writeFileSync(join(discovery, 'stats_adapter.json'), JSON.stringify({ records: [{ game_pk: 104, away_team: 'New York Yankees', home_team: 'Boston Red Sox' }] }));
+      writeFileSync(join(discovery, 'context_adapter.json'), JSON.stringify({ records: [{ game_pk: 104, away_team: 'New York Yankees', home_team: 'Boston Red Sox', lineup_status: 'lineup_pending' }] }));
+      const [pending] = loadStatsRecords(rootWithoutPrior, '2026-07-18');
+      assert.equal(pending.lineup_status, 'unconfirmed');
+      assert.deepEqual(pending.hr_batters, []);
+    } finally {
+      rmSync(rootWithoutPrior, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('fixture Kalshi success envelope', () => {
   const envelope = fixtureKalshiSuccessEnvelope({

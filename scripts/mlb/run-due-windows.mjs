@@ -10,6 +10,7 @@ import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, ren
 import { resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { runPregameRefresh } from './mlb-workspace.mjs';
 
 const LOG_PATH = resolve('logs', 'mlb-prelock-reporter.log');
 
@@ -70,28 +71,51 @@ function writePlanAtomic(planPath, plan) {
   renameSync(tmp, planPath);
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
+export async function runDueWindows({
+  options: injectedOptions = null,
+  argv = process.argv.slice(2),
+  nowMs = Date.now(),
+  refreshPregame = runPregameRefresh,
+  spawn = spawnSync,
+  logFn = log,
+} = {}) {
+  const opts = injectedOptions ?? parseArgs(argv);
   if (opts.help) {
     console.log('Usage: node scripts/mlb/run-due-windows.mjs [--date YYYY-MM-DD] [--state-root state] [--grace-minutes 60]');
     return;
   }
   const planPath = resolve(opts.stateRoot, 'mlb', opts.date, 'slate-run-plan.json');
   if (!existsSync(planPath)) {
-    log(`no plan for ${opts.date} (${planPath}) — nothing to do`);
+    logFn(`no plan for ${opts.date} (${planPath}) — nothing to do`);
     return;
   }
   const plan = JSON.parse(readFileSync(planPath, 'utf8'));
-  const now = Date.now();
-  const due = selectDueWindows(plan, { nowMs: now, graceMinutes: opts.graceMinutes });
+  const due = selectDueWindows(plan, { nowMs, graceMinutes: opts.graceMinutes });
   if (!due.length) {
-    log(`no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
+    logFn(`no due windows (date=${opts.date}, total=${(plan.report_windows||[]).length})`);
     return;
   }
 
   for (const fired of due) {
     if (fired.game_pk == null) {
-      log(`blocked ${fired.cluster_id} — official game_pk missing`);
+      logFn(`blocked ${fired.cluster_id} — official game_pk missing`);
+      continue;
+    }
+    try {
+      await refreshPregame([
+        '--date', opts.date,
+        '--state-root', opts.stateRoot,
+        '--live-readonly',
+      ]);
+    } catch (error) {
+      const cur = JSON.parse(readFileSync(planPath, 'utf8'));
+      const target = (cur.report_windows || []).find((w) => w.idempotency_key === fired.idempotency_key);
+      if (target) {
+        target.last_refresh_error_utc = new Date().toISOString();
+        target.refresh_error = error instanceof Error ? error.message : String(error);
+        writePlanAtomic(planPath, cur);
+      }
+      logFn(`skipped game_pk=${fired.game_pk} — pregame refresh failed: ${error instanceof Error ? error.message : String(error)}`);
       continue;
     }
     const readiness = requiredInputsReady(opts.stateRoot, opts.date, fired.game_pk);
@@ -105,11 +129,11 @@ async function main() {
         if (nextRetry < (target.retry_at_utc || []).length) {
           target.status = 'retry_pending';
           target.retry_index = nextRetry;
-          log(`deferred game_pk=${fired.game_pk} missing=${readiness.missing.join(',')} retry=${nextRetry}`);
+          logFn(`deferred game_pk=${fired.game_pk} missing=${readiness.missing.join(',')} retry=${nextRetry}`);
         } else {
           target.status = 'blocked';
           target.blocked_reason = 'required_game_inputs_unavailable';
-          log(`blocked game_pk=${fired.game_pk} missing=${readiness.missing.join(',')}`);
+          logFn(`blocked game_pk=${fired.game_pk} missing=${readiness.missing.join(',')}`);
         }
         writePlanAtomic(planPath, cur);
       }
@@ -121,8 +145,8 @@ async function main() {
     claim.status = 'processing';
     claim.claimed_at_utc = new Date().toISOString();
     writePlanAtomic(planPath, claimed);
-    log(`firing game packet game_pk=${fired.game_pk} window=${fired.cluster_id}`);
-    const r = spawnSync('node', [
+    logFn(`firing game packet game_pk=${fired.game_pk} window=${fired.cluster_id}`);
+    const r = spawn('node', [
       'scripts/mlb/late-slate-composite-refresh.mjs',
       '--date', opts.date,
       '--state-root', opts.stateRoot,
@@ -160,8 +184,12 @@ async function main() {
       target.source = 'composite-refresh-trigger';
     }
     writePlanAtomic(planPath, cur);
-    log(`marked game_pk=${fired.game_pk} rendered`);
+    logFn(`marked game_pk=${fired.game_pk} rendered`);
   }
+}
+
+async function main() {
+  await runDueWindows();
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

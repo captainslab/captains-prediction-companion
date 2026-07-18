@@ -270,6 +270,14 @@ function weatherSlateSummary(game, provenance) {
   return `weather/park ${status}${availability}`;
 }
 
+function proxyLineupLabel(game, provenance) {
+  const status = provenance?.lineup?.status ?? game?.lineup_status ?? null;
+  if (status !== 'proxy') return null;
+  const source = game?.hr_lineup_source ?? provenance?.lineup?.detail ?? game?.lineup_notes ?? null;
+  const detail = String(source ?? '').replace(/^LAST_LOCKED_LINEUP_PROXY\s*/i, '').trim();
+  return `Lineup: PROXY ${detail || 'from prior confirmed game'}`;
+}
+
 function lineupInjurySlateSummary(game, provenance) {
   const lineupStatus = provenance?.lineup?.status ?? (game.lineup_notes ? 'partial' : 'missing');
   const injuryStatus = provenance?.injuries?.status ?? (game.injuries?.length ? 'partial' : 'missing');
@@ -280,6 +288,13 @@ function lineupInjurySlateSummary(game, provenance) {
     const text = String(value ?? '').trim();
     return text.toLowerCase().startsWith(label) ? text : `${label} ${text}`;
   };
+  const proxyLabel = proxyLineupLabel(game, provenance);
+  if (proxyLabel) {
+    const injuries = game.injuries?.length
+      ? `; injuries ${game.injuries.slice(0, 2).map((inj) => `${inj.player ?? inj.name ?? '?'}/${inj.team ?? '?'}/${inj.status ?? inj.detail ?? '?'}`).join(', ')}`
+      : '';
+    return `${proxyLabel}; ${phrase('injury', injuryDetail || injuryStatus)}${injuries}`;
+  }
   if (!game.lineup_notes && !game.injuries?.length && !game.injury_notes) {
     if (lineupStatus === 'missing' && injuryStatus === 'missing') {
       return 'lineup/injury missing';
@@ -1182,7 +1197,8 @@ function buildAuditGameArticle({ date, game, analysis }) {
   }
 
   lines.push('Risk Notes');
-  lines.push(`  Lineups: ${game.lineup_notes ? `${game.lineup_notes}` : 'MISSING (not sourced).'}`);
+  const proxyLabel = proxyLineupLabel(game, analysis?.final?.context_bundle?.provenance ?? null);
+  lines.push(`  ${proxyLabel ?? `Lineups: ${game.lineup_notes ? `${game.lineup_notes}` : 'MISSING (not sourced).'}`}`);
   lines.push(`  Weather/park: ${game.weather ? 'Sourced — see Game Context.' : 'MISSING (not sourced).'}`);
   lines.push(`  Starters: ${game.starters ? 'Sourced — see Game Context.' : 'MISSING (not sourced beyond market presence).'}`);
   lines.push('  Thin liquidity or stale rungs may have been filtered by the engine; see Evidence Box.');

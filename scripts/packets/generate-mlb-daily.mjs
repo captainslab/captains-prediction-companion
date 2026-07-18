@@ -108,6 +108,12 @@ function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function proxyLineupLabel(statsRecord) {
+  if (statsRecord?.lineup_status !== 'proxy') return null;
+  const source = String(statsRecord?.hr_lineup_source ?? '').replace(/^LAST_LOCKED_LINEUP_PROXY\s*/i, '').trim();
+  return `Lineup: PROXY ${source || 'from prior confirmed game'}`;
+}
+
 function parseMlbDailyArgs(argv) {
   const filtered = [];
   let scope = null;
@@ -198,7 +204,9 @@ function derivePacketStatusSnapshot({ gamePicks = [], statsRecord = null } = {})
   const allMissing = picks.flatMap((pick) => safeArray(pick?.missing_confirmations));
   const passedText = picks.flatMap((pick) => safeArray(pick?.gates_passed)).join(' | ').toLowerCase();
   const lineupConfirmed = /lineup/.test(passedText) && /confirm/.test(passedText) && !/pending|soft/.test(passedText);
-  const lineup_status = lineupConfirmed ? 'confirmed' : ((picks.length || statsRecord) ? 'unconfirmed' : null);
+  const lineup_status = statsRecord?.lineup_status === 'proxy'
+    ? 'proxy'
+    : (lineupConfirmed ? 'confirmed' : ((picks.length || statsRecord) ? 'unconfirmed' : null));
   const weather_status = picks.length
     ? (allMissing.some((m) => /roof|weather/i.test(String(m))) ? 'partial' : 'complete')
     : null;
@@ -237,7 +245,9 @@ function buildPacketAssumptionsLedger({
   const statsSource = sourceRefs.stats ?? null;
   const weatherSource = sourceRefs.weather ?? sharedSource;
   const contextSource = sourceRefs.context ?? sharedSource;
-  const lineupBasis = picks.length
+  const lineupBasis = statsRecord?.lineup_status === 'proxy'
+    ? (statsRecord.hr_lineup_source ?? 'LAST_LOCKED_LINEUP_PROXY')
+    : picks.length
     ? `lineup state derived from ${picks.length} scored pick(s)${eventLabel ? ` for ${eventLabel}` : ''}`
     : 'no scored pick inputs available for lineup state';
   const weatherBasis = picks.length
@@ -1018,7 +1028,9 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
   const allMissing = picks.flatMap((p) => (Array.isArray(p.missing_confirmations) ? p.missing_confirmations : []));
   const passedText = picks.flatMap((p) => (Array.isArray(p.gates_passed) ? p.gates_passed : [])).join(' | ').toLowerCase();
   const lineupConfirmed = /lineup/.test(passedText) && /confirm/.test(passedText) && !/pending|soft/.test(passedText);
-  const lineup_status = lineupConfirmed ? 'confirmed' : ((picks.length || statsRecord) ? 'unconfirmed' : null);
+  const lineup_status = statsRecord?.lineup_status === 'proxy'
+    ? 'proxy'
+    : (lineupConfirmed ? 'confirmed' : ((picks.length || statsRecord) ? 'unconfirmed' : null));
   const weather_status = picks.length
     ? (allMissing.some((m) => /roof|weather/i.test(String(m))) ? 'partial' : 'complete')
     : null;
@@ -1030,6 +1042,7 @@ export function buildProjectionFirstBlock({ date, gamePicks = [], statsRecord = 
     const hpName = statsRecord.home_pitcher?.name || `${home} starter`;
     return [
       '--- PROJECTION-FIRST READ (model layer, market-free) ---',
+      ...(proxyLineupLabel(statsRecord) ? [proxyLineupLabel(statsRecord)] : []),
       describeMoneyline(proj.score, { home_team: home, away_team: away }),
       describeRunline(proj.score, { home_team: home }),
       describeTotal(proj.score),
@@ -1105,7 +1118,7 @@ export function buildKalshiGamePacket({
     lines.push(`  Call: ${read.call}.`);
     lines.push(`  Why: ${read.reason}.`);
     lines.push(`  Model summary: ${read.summary}.`);
-    lines.push('  Context: starters, lineup status, weather/park, and recent form sourced from adapters.');
+    lines.push(`  Context: starters, ${proxyLineupLabel(statsRecord) ?? 'lineup status sourced from adapters'}, weather/park, and recent form sourced from adapters.`);
     lines.push('  Market data is display-only and NOT IN SCORE.');
     lines.push('');
     lines.push('Research Status');
@@ -1285,7 +1298,9 @@ async function main() {
     record,
     leagueRPG,
     as_of: `${opts.date}T00:00:00Z`,
-    lineup_status: record?.lineup_status === 'confirmed' ? 'confirmed' : 'unconfirmed',
+    lineup_status: record?.lineup_status === 'confirmed' || record?.lineup_status === 'proxy'
+      ? record.lineup_status
+      : 'unconfirmed',
     weather_status: record?.weather_status ?? null,
   }).hr);
 
