@@ -59,10 +59,13 @@ const excludeStems = (() => {
   return new Set(String(v).split(',').map(s => s.trim()).filter(Boolean));
 })();
 const correctionMode = Boolean(customCaption || customIdempotencyKey || documentOnly || checkOnly);
+export const CORRECTION_PACKET_TYPES = Object.freeze(['nascar-sunday', 'mlb-daily']);
 
 function validateCorrectionOptions() {
   if (!correctionMode) return;
-  if (packetType !== 'nascar-sunday') throw new Error('correction delivery options are supported only for --type nascar-sunday');
+  if (!CORRECTION_PACKET_TYPES.includes(packetType)) {
+    throw new Error(`correction delivery options are supported only for --type ${CORRECTION_PACKET_TYPES.join(' or ')}`);
+  }
   if (!onlyStems || onlyStems.size !== 1) throw new Error('correction delivery requires exactly one --only packet stem');
   if (!customCaption || !customIdempotencyKey || !documentOnly) {
     throw new Error('correction delivery requires --caption, --idempotency-key, and --document-only');
@@ -308,7 +311,7 @@ export function mentionsPacketNotice(packetText = '', stem = '') {
   return cpcPacketCaption(packetText, stem, 'mentions');
 }
 
-function loadLedger(path) {
+export function loadLedger(path) {
   if (!existsSync(path)) return { delivered: {} };
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
@@ -317,7 +320,7 @@ function loadLedger(path) {
   }
 }
 
-function saveLedger(path, ledger) {
+export function saveLedger(path, ledger) {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, JSON.stringify(ledger, null, 2));
@@ -453,6 +456,8 @@ export async function deliverDocumentEntry({
   documentOnly = false,
   checkOnly = false,
   correctionMode = false,
+  recordDelivery = true,
+  sleepImpl = sleep,
 }) {
   const fileName = entry.files.find((f) => f === `${entry.name}.txt`) ?? entry.files[0];
   const filePath = join(dir, fileName);
@@ -528,6 +533,7 @@ export async function deliverDocumentEntry({
       idempotency_key: idempotencyKey,
       notice,
       document_file: deliveryName,
+      delivery_path: deliveryPath,
     };
   }
   if (dryRun) {
@@ -536,33 +542,36 @@ export async function deliverDocumentEntry({
       verdict: janitor?.verdict ?? DELIVERY_VERDICTS.SEND_ALLOWED,
       notice,
       document_file: deliveryName,
+      delivery_path: deliveryPath,
     };
   }
-  if (pace) await sleep(SEND_PACING_MS);
+  if (pace) await sleepImpl(SEND_PACING_MS);
   let noticeId = null;
   if (!documentOnly) {
     noticeId = await sendMessage(notice);
-    await sleep(SEND_PACING_MS);
+    await sleepImpl(SEND_PACING_MS);
   }
   const documentId = await sendDocument(deliveryPath, documentOnly ? { caption: notice } : undefined);
-  ledger.delivered = ledger.delivered || {};
-  ledger.delivered[idempotencyKey] = {
-    utc: new Date().toISOString(),
-    message_ids: noticeId === null ? [documentId] : [noticeId, documentId],
-    notice_message_id: noticeId ?? undefined,
-    document_message_id: documentId,
-    document_file: deliveryName,
-    delivery_mode: 'document_txt',
-    janitor_verdict: janitor.verdict,
-    janitor_sidecar: janitor.sidecar_path,
-    janitor_repaired_path: janitor.repaired_path ?? undefined,
-    forced: force || undefined,
-    source_packet_stem: entry.name,
-    idempotency_key: idempotencyKey,
-    caption: documentOnly ? notice : undefined,
-    correction: correctionMode || undefined,
-  };
-  saveLedger(ledgerPath, ledger);
+  if (recordDelivery) {
+    ledger.delivered = ledger.delivered || {};
+    ledger.delivered[idempotencyKey] = {
+      utc: new Date().toISOString(),
+      message_ids: noticeId === null ? [documentId] : [noticeId, documentId],
+      notice_message_id: noticeId ?? undefined,
+      document_message_id: documentId,
+      document_file: deliveryName,
+      delivery_mode: 'document_txt',
+      janitor_verdict: janitor.verdict,
+      janitor_sidecar: janitor.sidecar_path,
+      janitor_repaired_path: janitor.repaired_path ?? undefined,
+      forced: force || undefined,
+      source_packet_stem: entry.name,
+      idempotency_key: idempotencyKey,
+      caption: documentOnly ? notice : undefined,
+      correction: correctionMode || undefined,
+    };
+    saveLedger(ledgerPath, ledger);
+  }
   return {
     status: 'sent',
     verdict: janitor.verdict,
@@ -570,6 +579,7 @@ export async function deliverDocumentEntry({
     document_message_id: documentId,
     idempotency_key: idempotencyKey,
     document_file: deliveryName,
+    delivery_path: deliveryPath,
   };
 }
 
