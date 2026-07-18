@@ -28,6 +28,7 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
+import { runComposite, loadDynamicCompositeSlate } from '../mlb/late-slate-composite-refresh.mjs';
 import {
   buildScoreEngineProjection,
   buildYrfiProjection,
@@ -1332,19 +1333,11 @@ function starterRecord({ statsRecord, officialRecord, side, generationDate }) {
   };
 }
 
-function compositeModelSlot(pick) {
-  if (!pick) return { status: null, outputs: null };
-  const safeStrings = (values) => (Array.isArray(values) ? values : [])
-    .filter((value) => !/(price|odds|bid|ask|volume|open_interest)/i.test(String(value)));
-  const outputs = {
-    classification: pick.classification ?? null,
-    primary_pick: pick.primary_pick ?? false,
-    gates_passed: safeStrings(pick.gates_passed),
-    gates_failed: safeStrings(pick.gates_failed),
-    missing_confirmations: safeStrings(pick.missing_confirmations),
-    notes: safeStrings(pick.notes),
-  };
-  return { status: pick.classification ?? null, outputs };
+function priceNeutralCompositeSlot(compositeResult) {
+  if (!compositeResult) return { status: null, outputs: null };
+  const status = compositeResult.board?.top_pick?.status ?? null;
+  const outputs = { game_ledger: compositeResult.gameLedger ?? null, board: compositeResult.board ?? null };
+  return { status, outputs };
 }
 
 function modelAuditEntry(name, model) {
@@ -1385,8 +1378,8 @@ function buildInvocationAudit({ date, generatedAtUtc, records }) {
   };
 }
 
-function buildMorningProxyRecord({ date, generatedAtUtc, statsRecord, officialRecord, weatherRecord, contextRecord, projection, compositePick }) {
-  const gamePk = statsRecord?.game_pk ?? officialRecord?.game_pk ?? compositePick?.matched_game_pk;
+function buildMorningProxyRecord({ date, generatedAtUtc, statsRecord, officialRecord, weatherRecord, contextRecord, projection, compositeResult }) {
+  const gamePk = statsRecord?.game_pk ?? officialRecord?.game_pk;
   const lineupConfidence = statsRecord?.lineup_status === 'confirmed' ? 'CONFIRMED' : 'PROXY';
   const models = {
     score: projection?.score ?? null,
@@ -1394,7 +1387,7 @@ function buildMorningProxyRecord({ date, generatedAtUtc, statsRecord, officialRe
     ks_home: projection?.ks_home ?? null,
     ks_away: projection?.ks_away ?? null,
     hr: projection?.hr ?? null,
-    composite: compositeModelSlot(compositePick),
+    composite: priceNeutralCompositeSlot(compositeResult),
   };
   const inputSnapshot = {
     official: officialRecord,
@@ -1503,12 +1496,21 @@ export async function main(argv = process.argv.slice(2), { primeResearch = prime
 
   const generatedAtUtc = new Date().toISOString();
   const writtenRunRecords = [];
+  // Composite model slot is sourced from the price-neutral runComposite engine
+  // (same engine the pregame confirmed_lineup run uses), not the price-aware
+  // scoring-core classification that drives the customer board — the Price
+  // Isolation Invariant bars price-derived classifications from stored model
+  // outputs, even with pending/proxy lineups.
+  const compositeSlate = loadDynamicCompositeSlate({ date: opts.date, stateRoot: opts.stateRoot, allowPendingLineups: true });
+  const compositeInputByGamePk = new Map(compositeSlate.inputs.map((input) => [String(input.game_pk), input]));
   for (const [gamePk, input] of gameInputs) {
     const statsRecord = input.statsRecord ?? null;
     const officialRecord = input.officialRecord ?? null;
     const projection = statsRecord ? projectionsByGamePk.get(gamePk) ?? null : null;
-    const gamePicks = (scoring?.picks ?? []).filter((pick) => String(pick?.matched_game_pk ?? '') === gamePk);
-    const compositePick = selectPrimaryScoringPick(gamePicks);
+    const compositeInput = compositeInputByGamePk.get(gamePk) ?? null;
+    const compositeResult = compositeInput
+      ? runComposite((({ ou_line: _ignoredMarketLine, ...priceFreeInput }) => priceFreeInput)(compositeInput))
+      : null;
     const result = writeRunRecord(opts.stateRoot, buildMorningProxyRecord({
       date: opts.date,
       generatedAtUtc,
@@ -1517,7 +1519,7 @@ export async function main(argv = process.argv.slice(2), { primeResearch = prime
       weatherRecord: gameRecordFor(weatherRecords, gamePk),
       contextRecord: gameRecordFor(contextRecords, gamePk),
       projection,
-      compositePick,
+      compositeResult,
     }));
     writtenRunRecords.push({ gamePk, record: result.record, path: result.path });
   }
