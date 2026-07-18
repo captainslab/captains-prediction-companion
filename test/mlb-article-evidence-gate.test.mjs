@@ -68,8 +68,11 @@ function buildTempPublishStateRoot() {
     schema: 'mlb-slate-run-plan/v1',
     date,
     generated_utc: '2026-06-13T13:32:02.038Z',
-    cluster_count: 1,
-    games: [{ game_key: '26JUN132207TBLAA' }],
+    cluster_count: 2,
+    games: [
+      { game_key: '26JUN132207TBLAA' },
+      { game_key: 'MLB-UNMATCHED-FIXTURE' },
+    ],
     report_windows: [],
   }, null, 2), 'utf8');
   writeFileSync(resolve(discoveryDir, 'kalshi_adapter.json'), JSON.stringify({
@@ -371,7 +374,98 @@ test('publish dry-run uses per-game article text in delivery planning and return
 
     const summaryPath = resolve(root, 'mlb', '2026-06-13', 'article-reports', 'delivery-summary.json');
     assert.ok(existsSync(summaryPath), 'dry-run should still write a delivery summary for inspection');
+    const summary = JSON.parse(readFileSync(summaryPath, 'utf8'));
+    assert.deepEqual(summary.unmatched_plan_games, [{
+      game_key: 'MLB-UNMATCHED-FIXTURE',
+      reason: 'not present in cached kalshi_adapter join',
+    }]);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('publish refuses unscoped Telegram sends before loading state or Telegram env', async () => {
+  const root = mkdtempSync(resolve(tmpdir(), 'mlb-publish-send-guard-'));
+  try {
+    await assert.rejects(
+      publish({
+        date: '2026-06-13',
+        dryRun: false,
+        refresh: false,
+        sendTelegram: true,
+        force: false,
+        only: null,
+        stateRoot: root,
+      }),
+      (err) => {
+        assert.match(err.message, /refusing unscoped --send-telegram/);
+        assert.match(err.message, /--only <game_key/);
+        return true;
+      },
+    );
+    assert.equal(existsSync(resolve(root, 'mlb', '2026-06-13', 'article-reports')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('scoped publish dry-run plans only the requested game and preserves the plan gap', async () => {
+  const root = buildTempPublishStateRoot();
+  try {
+    const result = await publish({
+      date: '2026-06-13',
+      dryRun: true,
+      refresh: false,
+      sendTelegram: false,
+      force: false,
+      only: '26JUN132207TBLAA',
+      stateRoot: root,
+    });
+
+    assert.deepEqual(result.delivery_plan.filter((item) => item.kind === 'game').map((item) => item.game_key), [
+      '26JUN132207TBLAA',
+    ]);
+    assert.deepEqual(result.unmatched_plan_games, [{
+      game_key: 'MLB-UNMATCHED-FIXTURE',
+      reason: 'not present in cached kalshi_adapter join',
+    }]);
+    const summaryPath = resolve(root, 'mlb', '2026-06-13', 'article-reports', 'delivery-summary.json');
+    assert.deepEqual(JSON.parse(readFileSync(summaryPath, 'utf8')).unmatched_plan_games, result.unmatched_plan_games);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('scoped blocked send persists the plan gap without reaching Telegram', async () => {
+  const root = buildTempPublishStateRoot();
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousChat = process.env.TELEGRAM_CHAT_ID;
+  process.env.TELEGRAM_BOT_TOKEN = 'test-token-never-sent';
+  process.env.TELEGRAM_CHAT_ID = 'test-chat-never-sent';
+  try {
+    const result = await publish({
+      date: '2026-06-13',
+      dryRun: false,
+      refresh: false,
+      sendTelegram: true,
+      force: false,
+      only: '26JUN132207TBLAA',
+      stateRoot: root,
+    });
+
+    assert.equal(result.sent, true);
+    assert.deepEqual(result.delivery_plan.filter((item) => item.kind === 'game').map((item) => item.game_key), [
+      '26JUN132207TBLAA',
+    ]);
+    assert.equal(result.results.some((item) => item.sent), false, 'blocked fixture must not call Telegram');
+    assert.ok(result.results.every((item) => item.skipped === 'blocked'));
+    const summaryPath = resolve(root, 'mlb', '2026-06-13', 'article-reports', 'delivery-summary.json');
+    assert.deepEqual(JSON.parse(readFileSync(summaryPath, 'utf8')).unmatched_plan_games, result.unmatched_plan_games);
+  } finally {
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousToken;
+    if (previousChat === undefined) delete process.env.TELEGRAM_CHAT_ID;
+    else process.env.TELEGRAM_CHAT_ID = previousChat;
     rmSync(root, { recursive: true, force: true });
   }
 });

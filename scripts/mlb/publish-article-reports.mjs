@@ -442,6 +442,14 @@ async function telegramSendDocument({ token, chat }, filePath, caption) {
 // --- Main pipeline ---
 
 export async function publish(opts) {
+  if (opts.sendTelegram === true && !opts.only) {
+    throw new Error(
+      'refusing unscoped --send-telegram: pass --only <game_key,...> to send specific articles; '
+      + 'bulk/unscoped Telegram sends are disabled — the 10AM customer-preview pipeline '
+      + '(scripts/packets/send-packets-telegram.mjs) is the sole full-slate sender',
+    );
+  }
+
   // Article-report sends re-enabled 2026-06-12 (user directive): packets go
   // out mentions-style — short caption + attached .txt document, idempotency
   // keys in delivery-summary.json. The composite pipeline remains separate.
@@ -587,6 +595,7 @@ export async function publish(opts) {
         results.push({ ...item, sent: false, error: err.message });
       }
     }
+    summary.data.unmatched_plan_games = unmatchedPlanGames;
     saveDeliverySummary(summary);
   } else {
     // dry run — still write a summary file so callers can inspect plan
@@ -594,6 +603,7 @@ export async function publish(opts) {
     summary.data.last_dry_run_plan = deliveryPlan.map(({ kind, game_key, idem, file, headline, already_sent, blocked, blocked_reason }) => ({
       kind, game_key: game_key ?? null, idem, file, headline, already_sent, blocked: blocked ?? false, blocked_reason: blocked_reason ?? null,
     }));
+    summary.data.unmatched_plan_games = unmatchedPlanGames;
     saveDeliverySummary(summary);
   }
 
@@ -634,6 +644,9 @@ async function main() {
     }
     for (const r of failed) {
       console.error(`[mlb-articles] FAILED ${r.kind} ${r.game_key ?? 'slate'}: ${r.error}`);
+    }
+    for (const item of result.unmatched_plan_games ?? []) {
+      console.log(`[mlb-articles]   unmatched plan game ${item.game_key}: ${item.reason}`);
     }
     if (failed.length) process.exit(2);
   } else {
