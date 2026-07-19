@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import {
   parseFirstPitchUtc,
+  parseGameStatus,
   evaluateSlateExpiry,
   deliverDocumentEntry,
 } from '../scripts/packets/send-packets-telegram.mjs';
@@ -16,12 +17,13 @@ const NOW_MS = Date.parse('2026-07-08T20:00:00Z');
 const FUTURE_ISO = new Date(NOW_MS + 60 * 60 * 1000).toISOString(); // +1h
 const PAST_ISO = new Date(NOW_MS - 60 * 60 * 1000).toISOString(); // -1h
 
-function makePacket({ matchup = 'Colorado Rockies at Los Angeles Dodgers', date = '2026-07-08', firstPitch = FUTURE_ISO } = {}) {
+function makePacket({ matchup = 'Colorado Rockies at Los Angeles Dodgers', date = '2026-07-08', firstPitch = FUTURE_ISO, status = null } = {}) {
+  const statusSuffix = status ? ` | Status: ${status}` : '';
   return [
     "Captain's MLB Prediction Companion",
     `Captain MLB — ${matchup} CPC Read`,
     matchup,
-    `Date: ${date} | First pitch: ${firstPitch} | Venue: Test Park`,
+    `Date: ${date} | First pitch: ${firstPitch} | Venue: Test Park${statusSuffix}`,
     '',
     'CPC Read',
     '  CPC Read: monitor only.',
@@ -58,6 +60,11 @@ test('parseFirstPitchUtc: present/parsed, present/unparseable, and absent', () =
   assert.deepEqual(parseFirstPitchUtc('no pitch line here'), { present: false, ms: null, raw: null });
 });
 
+test('parseGameStatus reads the optional status suffix and stays absent when omitted', () => {
+  assert.deepEqual(parseGameStatus(makePacket({ status: 'Delayed Start' })), { present: true, raw: 'Delayed Start' });
+  assert.deepEqual(parseGameStatus(makePacket()), { present: false, raw: null });
+});
+
 // --- Test 1: future locked slate CAN send ----------------------------------
 
 test('future slate: evaluateSlateExpiry allows send', () => {
@@ -83,9 +90,23 @@ test('future slate: deliverDocumentEntry sends both messages and marks delivered
   assert.deepEqual(ledger.delivered[entry.name].message_ids, [111, 222]);
 });
 
-// --- Test 2: started slate CANNOT send --------------------------------------
+// --- Test 2: delayed-but-not-started slate CAN send --------------------------
 
-test('started slate: evaluateSlateExpiry blocks with EXPIRED_SLATE_BLOCKED', () => {
+test('delayed-but-not-started slate: scheduled time passed but delivery remains allowed', () => {
+  const res = evaluateSlateExpiry({ packetText: makePacket({ firstPitch: PAST_ISO, status: 'Delayed Start' }), nowMs: NOW_MS });
+  assert.equal(res.blocked, false);
+  assert.equal(res.verdict, DELIVERY_VERDICTS.SEND_ALLOWED);
+});
+
+// --- Test 3: started slate CANNOT send ---------------------------------------
+
+test('in-progress slate: status does not weaken EXPIRED_SLATE_BLOCKED', () => {
+  const res = evaluateSlateExpiry({ packetText: makePacket({ firstPitch: PAST_ISO, status: 'In Progress' }), nowMs: NOW_MS });
+  assert.equal(res.blocked, true);
+  assert.equal(res.verdict, DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED);
+});
+
+test('missing status: pure time gate still blocks with EXPIRED_SLATE_BLOCKED', () => {
   const res = evaluateSlateExpiry({ packetText: makePacket({ firstPitch: PAST_ISO }), nowMs: NOW_MS });
   assert.equal(res.blocked, true);
   assert.equal(res.verdict, DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED);

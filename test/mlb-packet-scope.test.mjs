@@ -8,12 +8,31 @@ import {
   resolvePacketScope,
   buildInputStatusNote,
   buildKalshiGamePacket,
+  formatGamePacketLead,
   classifyGamePacketRead,
   mlbPickToDecisionRow,
   selectPrimaryScoringPick,
 } from '../scripts/packets/generate-mlb-daily.mjs';
 
 const SYNTHETIC_STATS_FIXTURE = join(import.meta.dirname, 'fixtures', 'mlb-stats-adapter.json');
+
+test('formatGamePacketLead appends official status only when supplied', () => {
+  const args = {
+    event: {
+      title: 'Cleveland Guardians at Detroit Tigers',
+      start_time_utc: '2026-07-18T23:10:00Z',
+      venue: 'Progressive Field',
+    },
+    date: '2026-07-18',
+    packetLabel: 'Game Board',
+    generatedAtUtc: '2026-07-18T18:00:00Z',
+  };
+  const withStatus = formatGamePacketLead({ ...args, statsRecord: { game_status: 'Delayed Start' } });
+  const withoutStatus = formatGamePacketLead({ ...args, statsRecord: {} });
+  assert.match(withStatus, /Date: 2026-07-18 \| First pitch: 2026-07-18T23:10:00Z \| Venue: Progressive Field \| Status: Delayed Start/);
+  assert.match(withoutStatus, /Date: 2026-07-18 \| First pitch: 2026-07-18T23:10:00Z \| Venue: Progressive Field/);
+  assert.doesNotMatch(withoutStatus, /\| Status:/);
+});
 
 test('resolvePacketScope derives and honors explicit scope', () => {
   assert.equal(resolvePacketScope({}), 'FULL_DAY_PREVIEW');

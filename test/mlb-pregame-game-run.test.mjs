@@ -13,7 +13,7 @@ import {
 const DATE = '2099-07-18';
 const GAME_PK = 9001;
 
-function fixtureState(root, { lineupStatus = 'confirmed_or_boxscore_available' } = {}) {
+function fixtureState(root, { lineupStatus = 'confirmed_or_boxscore_available', mlbStatus = 'Delayed Start' } = {}) {
   const discovery = join(root, 'mlb', DATE, 'discovery');
   mkdirSync(discovery, { recursive: true });
   const official = {
@@ -24,6 +24,7 @@ function fixtureState(root, { lineupStatus = 'confirmed_or_boxscore_available' }
     away_team_abbrev: 'ACA',
     home_team_abbrev: 'BTB',
     start_time_utc: '2099-07-18T23:00:00.000Z',
+    mlb_status: mlbStatus,
     venue: 'Source Park',
   };
   const stats = {
@@ -127,6 +128,7 @@ test('confirmed-lineup run is fresh, does not read picks.json, and preserves mor
     assert.doesNotMatch(JSON.stringify(record.models), /"(?:yes_ask|no_bid|yes_bid|no_ask|price|odds|volume|open_interest|kalshi_ask)"/i);
     assert.deepEqual(JSON.parse(readFileSync(morningPath, 'utf8')), morning);
     assert.ok(existsSync(result.packetPath));
+    assert.match(readFileSync(result.packetPath, 'utf8'), /\| Status: Delayed Start/);
   } finally {
     cleanup(root);
   }

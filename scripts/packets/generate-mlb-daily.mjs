@@ -505,7 +505,7 @@ function stripAuditArtifactsSection(text = '') {
   return idx >= 0 ? raw.slice(0, idx).trimEnd() : raw.trimEnd();
 }
 
-function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, generatedAtUtc = new Date().toISOString() }) {
+export function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, generatedAtUtc = new Date().toISOString() }) {
   const display = buildEventDisplay(event);
   const matchupAbbrev = display.away_abbrev && display.home_abbrev
     ? `${display.away_abbrev} @ ${display.home_abbrev}`
@@ -523,12 +523,16 @@ function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, ge
   const venue = event?.venue
     ?? statsRecord?.venue
     ?? 'MISSING';
+  const gameStatus = statsRecord?.game_status == null
+    ? ''
+    : String(statsRecord.game_status).trim();
+  const statusSuffix = gameStatus ? ` | Status: ${gameStatus}` : '';
 
   return [
     `Captain's MLB Prediction Companion`,
     `Captain MLB — ${matchupAbbrev} ${packetLabel}`,
     matchupFull,
-    `Date: ${date} | First pitch: ${firstPitch} | Venue: ${venue}`,
+    `Date: ${date} | First pitch: ${firstPitch} | Venue: ${venue}${statusSuffix}`,
     `CPC Packet: ${packetLabel} | generated_utc: ${generatedAtUtc}`,
   ].join('\n');
 }

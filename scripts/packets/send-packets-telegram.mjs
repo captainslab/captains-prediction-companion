@@ -362,6 +362,24 @@ export function parseFirstPitchUtc(packetText) {
   return { present: true, ms: Number.isFinite(ms) ? ms : NaN, raw };
 }
 
+// Returns { present, raw } for the packet's optional "| Status: <value>" line.
+// present=false keeps the gate's legacy time-only behavior for other packet types.
+const NOT_YET_STARTED_STATUSES = new Set(['scheduled', 'pre-game', 'preview', 'warmup', 'delayed start', 'delayed']);
+
+export function parseGameStatus(packetText) {
+  const text = packetText ?? '';
+  const m = /\|\s*Status:\s*([^|\r\n]+)/i.exec(text);
+  if (!m) return { present: false, raw: null };
+  const raw = m[1].trim();
+  return { present: true, raw: raw || null };
+}
+
+function isNotYetStartedStatus(status) {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  return NOT_YET_STARTED_STATUSES.has(normalized)
+    || normalized.startsWith('delayed');
+}
+
 function parseMatchup(packetText) {
   const text = packetText ?? '';
   const titled = /Captain MLB\s*[—-]\s*(.+?)\s+(?:CPC Read|Pre-Final-Lineup|Game Board)\b/.exec(text);
@@ -378,6 +396,7 @@ function parseGameDate(packetText) {
 // Pure decision: is this packet's slate still deliverable at nowMs?
 export function evaluateSlateExpiry({ packetText, nowMs }) {
   const fp = parseFirstPitchUtc(packetText);
+  const status = parseGameStatus(packetText);
   if (!fp.present) {
     return { blocked: false, verdict: DELIVERY_VERDICTS.SEND_ALLOWED, firstPitchUtc: null, reason: null };
   }
@@ -390,7 +409,7 @@ export function evaluateSlateExpiry({ packetText, nowMs }) {
     };
   }
   const firstPitchUtc = new Date(fp.ms).toISOString();
-  if (fp.ms <= nowMs) {
+  if (fp.ms <= nowMs && !(status.present && isNotYetStartedStatus(status.raw))) {
     return {
       blocked: true,
       verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,

@@ -121,6 +121,7 @@ function projectionRecord(state) {
     game_pk: stats.game_pk ?? official.game_pk,
     game_date: stats.game_date ?? official.game_date,
     start_time_utc: official.start_time_utc ?? stats.start_time_utc ?? null,
+    game_status: official.mlb_status ?? null,
     away_team: stats.away_team ?? official.away_team,
     home_team: stats.home_team ?? official.home_team,
     venue: stats.venue ?? official.venue ?? weather?.venue ?? null,
