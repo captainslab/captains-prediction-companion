@@ -193,11 +193,16 @@ test('game packets ignore stale article-report format and stay on the clean wrap
     assert.match(lines[2], /New York Yankees at Boston Red Sox/);
     assert.match(lines.slice(0, 5).join('\n'), /CPC Packet: Game Board/);
     assert.match(lines.slice(0, 5).join('\n'), /generated_utc:/);
-    assert.match(packet.text, /TLDR/);
+    assert.doesNotMatch(packet.text, /^(?:TLDR|Game Model Results)$/m);
     assert.match(packet.text, /Research Status/);
     assert.match(packet.text, /Event Preview \/ Storyline/);
-    assert.match(packet.text, /Game Model Results/);
-    assert.match(packet.text, /Source Ledger/);
+    assert.match(packet.text, /PLAYER PROPS/);
+    assert.match(packet.text, /ANYTIME HOME RUN/);
+    assert.match(packet.text, /MARKET COMPARISON/);
+    assert.match(packet.text, /LIMITATIONS/);
+    assert.match(packet.text, /SOURCE STATUS/);
+    assert.match(packet.text, /DELIVERY AND AUDIT/);
+    assert.match(packet.text, /Source Ledger: 8 categories/);
     assert.match(packet.text, /MLB_OFFICIAL:/);
     assert.match(packet.text, /STATS_ADAPTER:/);
     assert.match(packet.text, /WEATHER_ADAPTER:/);
@@ -345,11 +350,11 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
     },
   });
 
-  const runSplit = packet.text.match(/projected run split favors Los Angeles Angels ([0-9]+\.[0-9]) to ([0-9]+\.[0-9]) and the win split lands at ([0-9]+\.[0-9])%/);
+  const runSplit = packet.text.match(/projected run split favors Los\s+Angeles Angels\s+([0-9]+\.[0-9])\s+to\s+([0-9]+\.[0-9])\s+and the win split lands at\s+([0-9]+\.[0-9])%/);
   const totalShape = packet.text.match(/projected total ~([0-9]+\.[0-9])/);
   const yrfiShape = packet.text.match(/YRFI ([0-9]+(?:\.[0-9]+)?)%/);
-  const awayKs = packet.text.match(/Reid Detmers projects around ([0-9]+\.[0-9]) K/);
-  const homeKs = packet.text.match(/Jack Perkins projects around ([0-9]+\.[0-9]) K/);
+  const awayKs = packet.text.match(/Reid Detmers\s+projects around\s+([0-9]+\.[0-9]) K/);
+  const homeKs = packet.text.match(/Jack Perkins\s+projects around\s+([0-9]+\.[0-9]) K/);
 
   assert.match(packet.text, /Event Preview \/ Storyline/);
   assert.match(packet.text, /NO CLEAR PICK because only the MONEYLINE family is fully modeled/);
@@ -465,8 +470,12 @@ test('reference-price-only gaps do not suppress a market-free model posture', ()
   ];
   const read = classifyGamePacketRead(picks, null, { hasModelProjection: true });
   assert.equal(read.cpcRead, 'MODEL_ONLY');
+  assert.equal(read.call, 'EVIDENCE LEAN — favorite');
+  assert.equal(read.scoringClassification, 'LEAN');
   assert.match(read.readLine, /market-context blocked/);
-  assert.match(read.reason, /reference_price gap only/);
+  assert.match(read.reason, /model-backed posture stands/);
+  assert.doesNotMatch(read.call, /NO CLEAR PICK/);
+  assert.notEqual(read.scoringClassification, 'BLOCKED_SOURCE_GAP');
 
   const blockedRead = classifyGamePacketRead(picks, null, { hasModelProjection: false });
   assert.equal(blockedRead.cpcRead, 'BLOCKED');
@@ -553,5 +562,5 @@ test('game packets show projected lineup status when alpha is still pending', ()
   assert.match(packet.text, /Research Status/);
   assert.match(packet.text, /Lineup PROJECTED · Starter PROBABLE · Weather UPDATED/);
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /the line is still provisional on lineup alpha/);
+  assert.match(packet.text, /the line is still provisional on lineup\s+alpha/);
 });

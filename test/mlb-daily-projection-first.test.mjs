@@ -125,6 +125,12 @@ test('matched stats record renders ACTUAL projected win prob / total / team runs
   // Real projected total runs and team runs.
   assert.match(text, /projected ~\d+(\.\d+)? total runs/);
   assert.match(text, /Projected runs — Houston Astros ~\d+(\.\d+)?/);
+  assert.match(text, /CPC projected spread — Detroit Tigers -\d+(\.\d+)?/);
+  const awayRunsLine = text.indexOf('Projected runs — Detroit Tigers');
+  const homeRunsLine = text.indexOf('Projected runs — Houston Astros');
+  const spreadLine = text.indexOf('CPC projected spread —');
+  assert.ok(awayRunsLine >= 0 && awayRunsLine < homeRunsLine && homeRunsLine < spreadLine,
+    'daily packet order must be away runs, home runs, then CPC projected spread');
   // Real YRFI probability.
   assert.match(text, /Projected first-inning run \(YRFI\) probability \d+%/);
   // Pre-lineup → provisional tag, not fabricated certainty.

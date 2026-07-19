@@ -181,7 +181,7 @@ function modelPickFromComposite(composite, state) {
   const classification = top.status === 'PICK'
     ? 'CLEAR_PICK'
     : top.status === 'EVIDENCE_LEAN'
-      ? 'PRE_LINEUP_PICK'
+      ? 'LEAN'
       : top.status === 'LEAN' ? 'LEAN' : 'PASS';
   return [{
     matched_game_pk: state.official.game_pk,
