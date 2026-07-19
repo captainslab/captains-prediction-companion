@@ -1114,6 +1114,7 @@ export function buildKalshiGamePacket({
   leagueRPG = null,
   scope = null,
   sourceRefs = {},
+  audit = null,
 }) {
   const s = summarizeEvent(event);
   const block = renderMarketBlocks(event, { limit: 40 });
@@ -1183,6 +1184,93 @@ export function buildKalshiGamePacket({
   const calculation = favoriteRuns == null || opponentRuns == null
     ? 'not modeled'
     : `${favoriteRuns.toFixed(1)} minus ${opponentRuns.toFixed(1)} equals ${(favoriteRuns - opponentRuns).toFixed(1)}`;
+  const primaryPick = selectPrimaryScoringPick(gamePicks);
+  const blockedKs = { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] };
+  const propPosture = (side, pitcherName) => {
+    const candidate = safeArray(gamePicks).find((pick) => {
+      const laneText = `${pick?.market_lane ?? ''} ${pick?.market_title ?? ''} ${pick?.contract_title ?? ''} ${pick?.player_name ?? ''}`;
+      const sideText = `${pick?.side ?? ''} ${pick?.team ?? ''} ${pick?.player_name ?? ''}`;
+      return /strikeout|pitcher|\bks\b/i.test(laneText)
+        && (new RegExp(side, 'i').test(sideText) || new RegExp(String(pitcherName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(sideText));
+    });
+    return candidate?.classification ?? frontRead.cpcRead ?? 'UNAVAILABLE';
+  };
+  const probabilityText = (value) => Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(1)}%` : 'MISSING';
+  const ppText = (value) => Number.isFinite(Number(value)) ? `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}pp` : 'MISSING';
+
+  const auditInput = audit && typeof audit === 'object'
+    ? audit
+    : (!Array.isArray(artifacts) && artifacts && typeof artifacts === 'object' ? artifacts : null);
+  const auditGamePk = auditInput?.game_pk ?? auditInput?.game_id ?? statsRecord?.game_pk ?? event?.game_pk ?? null;
+  const canonicalRunRef = auditGamePk != null
+    ? `mlb/${date}/runs/${auditGamePk}-confirmed_lineup.json`
+    : 'MISSING';
+  const runRecordPath = auditGamePk != null
+    ? resolve(stateRoot, 'mlb', date, 'runs', `${auditGamePk}-confirmed_lineup.json`)
+    : null;
+  const persistedRunRecord = runRecordPath ? readJsonIfExists(runRecordPath) : null;
+  const runRecord = auditInput?.run_record_object ?? persistedRunRecord ?? null;
+  const packetStem = auditGamePk != null ? `${date}-confirmed-lineup-${auditGamePk}` : null;
+  const packetDir = resolve(stateRoot, 'packets', date, PACKET_TYPE);
+  const packetMeta = packetStem ? readJsonIfExists(join(packetDir, `${packetStem}.meta.json`)) : null;
+  const deliveryLedger = readJsonIfExists(join(packetDir, '.delivery-ledger.json'));
+  const deliveryKey = auditInput?.idempotency_key ?? (auditGamePk != null ? `mlb:confirmed_lineup:${auditGamePk}:${date}` : null);
+  const deliveryEntry = deliveryKey ? deliveryLedger?.delivered?.[deliveryKey] : null;
+  const auditMeta = auditInput?.meta ?? packetMeta ?? {};
+  const auditArtifactName = auditInput?.artifact_name
+    ?? auditMeta.artifact_name
+    ?? (packetStem ? `${packetStem}.txt` : 'MISSING');
+  const artifactName = String(auditArtifactName).split(/[\\/]/).pop() || 'MISSING';
+  const sourceStatus = (backed) => backed ? 'BACKED' : 'MISSING — no backing data supplied';
+  const hasOfficialRef = Boolean(sourceRefs.official ?? sourceRefs.event ?? sourcePath);
+  const hasStatsRef = Boolean(sourceRefs.stats);
+  const hasWeatherRef = Boolean(sourceRefs.weather);
+  const hasContextRef = Boolean(sourceRefs.context);
+  const hasLockedOrders = packetStatusSnapshot.lineup_status === 'confirmed'
+    && (Array.isArray(statsRecord?.hr_batters) && statsRecord.hr_batters.length > 0
+      || Array.isArray(statsRecord?.away_batting_order) && statsRecord.away_batting_order.length > 0
+      || Array.isArray(statsRecord?.home_batting_order) && statsRecord.home_batting_order.length > 0);
+  const hasStatistics = Boolean(
+    statsRecord?.away_pitcher || statsRecord?.home_pitcher
+      || statsRecord?.away_team_stats || statsRecord?.home_team_stats
+      || statsRecord?.away_team_ops != null || statsRecord?.home_team_ops != null,
+  );
+  const hasHrEvidence = Boolean(
+    (Array.isArray(statsRecord?.hr_evidence) && statsRecord.hr_evidence.length > 0)
+      || (Array.isArray(statsRecord?.hr_batters) && statsRecord.hr_batters.length > 0),
+  );
+  const hasModelOutput = Boolean(
+    [packetProjections?.score, packetProjections?.yrfi, packetProjections?.ks_away, packetProjections?.ks_home, packetProjections?.hr]
+      .some((projection) => projection && projection.status !== 'blocked')
+      || safeArray(gamePicks).some((pick) => hasModelBackedScoringSignal(pick)),
+  );
+  const sourceRows = [
+    ['MLB_OFFICIAL', 'MLB official schedule', hasOfficialRef && Boolean(event?.title || event?.event_ticker || statsRecord?.game_pk)],
+    ['OFFICIAL_GAME_STATUS', 'official game status', hasOfficialRef && gameStatus !== 'UNKNOWN'],
+    ['LOCKED_BATTING_ORDERS / CONTEXT_ADAPTER', 'locked batting orders', hasContextRef && hasLockedOrders],
+    ['STARTING_PITCHERS', 'starting pitchers', hasStatsRef && awayStarter !== 'MISSING' && homeStarter !== 'MISSING'],
+    ['STATS_ADAPTER', 'statistics', hasStatsRef && hasStatistics],
+    ['WEATHER_ADAPTER', 'weather', hasWeatherRef && Boolean(statsRecord?.weather || event?.weather)],
+    ['HR_EVIDENCE', 'HR evidence', (hasStatsRef || hasContextRef) && hasHrEvidence],
+    ['MODEL_OUTPUT', 'model output', hasModelOutput],
+  ];
+  const runType = auditInput?.run_type ?? runRecord?.run_type ?? 'confirmed_lineup';
+  const gameId = auditInput?.game_id ?? auditInput?.game_pk ?? runRecord?.game_pk ?? statsRecord?.game_pk ?? event?.game_pk ?? 'MISSING';
+  const runId = auditInput?.run_id ?? runRecord?.run_id ?? 'MISSING';
+  const inputHash = auditInput?.input_hash ?? runRecord?.input_hash ?? 'MISSING';
+  const outputHash = auditInput?.output_hash ?? runRecord?.output_hash ?? 'MISSING';
+  const janitorResult = auditInput?.janitor_result
+    ?? auditMeta.janitor_result
+    ?? auditMeta.janitor_verdict
+    ?? deliveryEntry?.janitor_verdict
+    ?? 'MISSING';
+  const deliveryStatus = auditInput?.delivery_status
+    ?? auditMeta.delivery_status
+    ?? (deliveryEntry ? 'sent' : 'NOT_RECORDED');
+  const telegramDocumentId = auditInput?.telegram_document_id
+    ?? auditMeta.telegram_document_id
+    ?? deliveryEntry?.document_message_id
+    ?? 'MISSING';
 
   lines.push('STATUS');
   lines.push(`  game status: ${gameStatus}`);
@@ -1222,13 +1310,6 @@ export function buildKalshiGamePacket({
 
   if (hasComposite) {
     const read = classifyGamePacketRead(gamePicks, event, { hasModelProjection: Boolean(statsRecord) });
-    lines.push('TLDR');
-    lines.push(`  Call: ${read.call}.`);
-    lines.push(`  Why: ${read.reason}.`);
-    lines.push(`  Model summary: ${read.summary}.`);
-    lines.push(`  Context: starters, ${proxyLineupLabel(statsRecord) ?? 'lineup status sourced from adapters'}, weather/park, and recent form sourced from adapters.`);
-    lines.push('  Market data is display-only and NOT IN SCORE.');
-    lines.push('');
     lines.push('Research Status');
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
@@ -1238,13 +1319,6 @@ export function buildKalshiGamePacket({
     }
     lines.push('');
   } else {
-    lines.push('TLDR');
-    lines.push('  Call: NO CLEAR PICK.');
-    lines.push('  Why: no MLB event with a composite-ready game packet was found.');
-    lines.push('  Model summary: model outputs are unavailable.');
-    lines.push('  Context: no scored game inputs were attached.');
-    lines.push('  Market data is display-only and NOT IN SCORE.');
-    lines.push('');
     lines.push('Research Status');
     lines.push(`  ${buildPacketScopeNote({ scope: resolvedScope, gamePicks, statsRecord })}`);
     lines.push('');
@@ -1256,11 +1330,56 @@ export function buildKalshiGamePacket({
   }
 
   lines.push('');
-  lines.push('Game Model Results');
+  lines.push('PLAYER PROPS');
+  lines.push(`  ${describeKs(packetProjections?.ks_away ?? blockedKs, awayStarter)}`);
+  lines.push(`  away pitcher prop posture: ${propPosture('away', awayStarter)}`);
+  lines.push(`  ${describeKs(packetProjections?.ks_home ?? blockedKs, homeStarter)}`);
+  lines.push(`  home pitcher prop posture: ${propPosture('home', homeStarter)}`);
   lines.push('');
-  for (const l of buildProjectionFirstBlock({ date, gamePicks, statsRecord, leagueRPG, projections: packetProjections })) lines.push(l);
+
+  lines.push('ANYTIME HOME RUN');
+  lines.push(`  ${describeHr(packetProjections?.hr ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'], outputs: [] })}`);
   lines.push('');
-  lines.push(renderGamePacketSourceLedger({ sourceRefs, gamePicks, statsRecord }));
+
+  lines.push('MARKET COMPARISON');
+  const cpcProbability = primaryPick?.fair_value;
+  const marketImpliedProbability = primaryPick?.kalshi_ask;
+  if (Number.isFinite(Number(cpcProbability)) && Number.isFinite(Number(marketImpliedProbability))) {
+    lines.push(`  CPC posture: ${frontRead.cpcRead ?? frontRead.call}; CPC probability: ${probabilityText(cpcProbability)}; market implied probability: ${probabilityText(marketImpliedProbability)}; difference: ${ppText(primaryPick?.edge_pp)}.`);
+  } else if (!Number.isFinite(Number(marketImpliedProbability))) {
+    lines.push(`  CPC posture: ${frontRead.cpcRead ?? frontRead.call}; CPC probability: ${probabilityText(cpcProbability)}; market implied probability: MISSING; difference: MISSING.`);
+    lines.push('  Missing market pricing does not erase the CPC model projection.');
+  } else {
+    lines.push(`  CPC posture: ${frontRead.cpcRead ?? frontRead.call}; CPC probability: MISSING; market implied probability: ${probabilityText(marketImpliedProbability)}; difference: MISSING.`);
+  }
+  lines.push('');
+
+  lines.push('LIMITATIONS');
+  lines.push('  The projected score is an expected value, not an exact-score call.');
+  lines.push('  The CPC projected spread is the difference between the two projected team scores.');
+  lines.push('  Market data is display-only and NOT IN SCORE.');
+  if (frontRead.whatItMeans) lines.push(`  ${frontRead.whatItMeans}`);
+  lines.push('');
+
+  lines.push('SOURCE STATUS');
+  lines.push('  Source Ledger: 8 categories; MISSING means no backing data was supplied for that category.');
+  for (const [label, description, backed] of sourceRows) {
+    lines.push(`  ${label}: ${sourceStatus(backed)} (${description})`);
+  }
+  lines.push('  AUDIT_ARTIFACTS_AVAILABLE: yes (customer text omits local paths; artifacts stay in inventory/meta/audit files).');
+  lines.push('');
+
+  lines.push('DELIVERY AND AUDIT');
+  lines.push(`  run type: ${runType}`);
+  lines.push(`  game ID: ${gameId}`);
+  lines.push(`  run ID: ${runId}`);
+  lines.push(`  input hash: ${inputHash}`);
+  lines.push(`  output hash: ${outputHash}`);
+  lines.push(`  artifact name: ${artifactName}`);
+  lines.push(`  canonical state reference: ${auditInput?.canonical_state_reference ?? canonicalRunRef}`);
+  lines.push(`  janitor result: ${janitorResult}`);
+  lines.push(`  delivery status: ${deliveryStatus}`);
+  lines.push(`  Telegram document ID: ${telegramDocumentId}`);
   lines.push('');
 
   const inventoryLines = [];
