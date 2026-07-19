@@ -14,6 +14,7 @@ import {
 } from '../scripts/mlb/lib/projection-contracts.mjs';
 import {
   describeMoneyline, describeRunline, describeTotal, describeTeamRuns,
+  describeProjectedSpread,
   describeYrfi, describeKs, describeHr, renderProjectionBlock, NO_TRADE_FOOTER,
 } from '../scripts/mlb/lib/projection-language.mjs';
 
@@ -68,10 +69,38 @@ test('total copy: projected runs + rung probability, never "over/under call"', (
 test('runline + team runs copy is projection-first', () => {
   const rl = describeRunline(scoreProj(), { home_team: 'BOS' });
   assert.match(rl, /cover probability/i);
+  assert.match(rl, /Market run-line/);
+  assert.match(rl, /market context/);
   assertProjectionFirst(rl);
   const tr = describeTeamRuns(scoreProj(), 'home', 'BOS');
   assert.match(tr, /Projected runs — BOS/);
   assertProjectionFirst(tr);
+});
+
+test('CPC projected spread uses only projected team runs', () => {
+  const awayFavorite = describeProjectedSpread(6.3, 3.6, {
+    away_team: 'NYY', home_team: 'BOS',
+  });
+  assert.equal(awayFavorite, 'CPC projected spread — NYY -2.7 (model projected-run margin; no market signal used).');
+
+  const homeFavorite = describeProjectedSpread(3.6, 6.3, {
+    away_team: 'NYY', home_team: 'BOS',
+  });
+  assert.equal(homeFavorite, 'CPC projected spread — BOS -2.7 (model projected-run margin; no market signal used).');
+
+  const even = describeProjectedSpread(4.2, 4.2, {
+    away_team: 'NYY', home_team: 'BOS',
+  });
+  assert.match(even, /pick'em \/ even line/);
+  assert.doesNotMatch(even, /NYY -|BOS -/);
+
+  const blocked = describeProjectedSpread(null, null, {
+    away_team: 'NYY', home_team: 'BOS', status: 'blocked',
+    blocked_reasons: ['team_runs_unavailable'],
+  });
+  assert.match(blocked, /CPC projected spread — BLOCKED_MODEL_LAYER_MISSING/);
+  assert.match(blocked, /team_runs_unavailable/);
+  assert.doesNotMatch(blocked, /NYY -|BOS -/);
 });
 
 test('yrfi copy: first-inning run probability phrasing', () => {

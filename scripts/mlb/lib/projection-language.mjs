@@ -49,11 +49,11 @@ export function describeMoneyline(proj, { home_team = 'Home', away_team = 'Away'
 
 // ---- Spread / run line (cover probability) ---------------------------------
 export function describeRunline(proj, { home_team = 'Home' } = {}) {
-  if (proj.status === 'blocked') return blockedLine('Run line', proj);
+  if (proj.status === 'blocked') return blockedLine('Market run-line', proj);
   const pc = proj.outputs?.runline_home_minus_1_5;
-  if (typeof pc !== 'number') return `Run-line cover probability — not modeled${statusTag(proj)}.`;
-  return `Projected run-line — ${home_team} -1.5 cover probability ${pct(pc, 1)} `
-    + `(derived from the same score model)${statusTag(proj)}.`;
+  if (typeof pc !== 'number') return `Market run-line cover probability — not modeled${statusTag(proj)}.`;
+  return `Market run-line — ${home_team} -1.5 cover probability ${pct(pc, 1)} `
+    + `(market context; derived from the same score model)${statusTag(proj)}.`;
 }
 
 // ---- Total runs (projected runs + rung probability, never "take the over") --
@@ -79,6 +79,30 @@ export function describeTeamRuns(proj, side, teamName = side) {
   const mean = distributionFloorMean(dist);
   if (mean == null) return `Projected runs (${teamName}) — not modeled${statusTag(proj)}.`;
   return `Projected runs — ${teamName} ~${mean.toFixed(1)} (run-scoring distribution)${statusTag(proj)}.`;
+}
+
+// ---- CPC projected spread (model-side projected-run margin) -----------------
+export function describeProjectedSpread(
+  awayRuns,
+  homeRuns,
+  {
+    away_team = 'Away',
+    home_team = 'Home',
+    status = 'official',
+    blocked_reasons = [],
+  } = {},
+) {
+  const proj = { status, blocked_reasons };
+  if (status === 'blocked') return blockedLine('CPC projected spread', proj);
+  if (!Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) {
+    return `CPC projected spread — not modeled${statusTag(proj)}.`;
+  }
+  if (awayRuns === homeRuns) {
+    return `CPC projected spread — pick'em / even line (${away_team} and ${home_team} both project ${awayRuns.toFixed(1)} runs)${statusTag(proj)}.`;
+  }
+  const favorite = awayRuns > homeRuns ? away_team : home_team;
+  const margin = Math.abs(awayRuns - homeRuns).toFixed(1);
+  return `CPC projected spread — ${favorite} -${margin} (model projected-run margin; no market signal used)${statusTag(proj)}.`;
 }
 
 // ---- YRFI (first-inning run probability) -----------------------------------

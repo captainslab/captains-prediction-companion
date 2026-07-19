@@ -398,6 +398,7 @@ test('renderPerGamePacket: projection-first section is present, market-free, and
   assert.match(section, /Projected win probability/);
   assert.match(section, /Projected total/);
   assert.match(section, /Projected runs —/);
+  assert.match(section, /CPC projected spread —/);
   assert.match(section, /Projected first-inning run/);
   assert.match(section, /Projected strikeouts/);
   assert.match(section, /Anytime-HR model/);

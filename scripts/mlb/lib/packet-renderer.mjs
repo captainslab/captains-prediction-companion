@@ -13,6 +13,7 @@ import {
   describeRunline,
   describeTotal,
   describeTeamRuns,
+  describeProjectedSpread,
   describeYrfi,
   describeKs,
   describeHr,
@@ -134,6 +135,16 @@ function renderProjectionFirstSection(game, projections, modelFreshness) {
   lines.push(describeTotal(projections.score));
   lines.push(describeTeamRuns(projections.score, 'away', awayName));
   lines.push(describeTeamRuns(projections.score, 'home', homeName));
+  lines.push(describeProjectedSpread(
+    projections.means?.lambdaAway,
+    projections.means?.lambdaHome,
+    {
+      away_team: awayName,
+      home_team: homeName,
+      status: projections.score?.status,
+      blocked_reasons: projections.score?.blocked_reasons,
+    },
+  ));
   lines.push(describeYrfi(projections.yrfi));
   lines.push(describeKs(projections.ks_away, `${awayName} starter`));
   lines.push(describeKs(projections.ks_home, `${homeName} starter`));
