@@ -1,0 +1,1278 @@
+CPC DEFAULT MLB PACKET TEMPLATES
+Morning Full-Slate + Confirmed-Lineup Individual Game
+Version: 1.0
+
+PURPOSE
+
+These templates define the default customer-facing structure for CPC MLB
+packets.
+
+They must be implemented as permanent renderers.
+
+Do not manually assemble, copy, or edit customer packets after generation.
+
+
+============================================================
+TEMPLATE 1
+MORNING FULL-SLATE PACKET
+============================================================
+
+CAPTAIN'S MLB PREDICTION COMPANION
+MORNING FULL-SLATE BOARD
+[DISPLAY_DATE]
+
+Generated: [GENERATED_TIME_CT]
+Run type: morning_proxy
+Games scheduled: [GAME_COUNT]
+
+IMPORTANT
+
+  This morning report uses each team's most recent confirmed locked
+  batting order as a lineup proxy.
+
+  Today's official starting pitchers are required.
+
+  Every game will be rerun with today's confirmed lineups before first
+  pitch.
+
+MARKET CONTEXT
+
+  Market data is display-only and NOT IN SCORE.
+
+  Missing market prices may disable market comparison, but they must
+  not hide or block valid CPC model projections.
+
+============================================================
+FAST READ
+============================================================
+
+TOP SIDE POSTURES
+
+1. [TEAM_OR_MATCHUP]
+
+   Model posture:
+   [POSTURE]
+
+   Projected score:
+   [TEAM_A]: [TEAM_A_PROJECTED_RUNS]
+   [TEAM_B]: [TEAM_B_PROJECTED_RUNS]
+
+   CPC projected spread:
+   [PROJECTED_FAVORITE] [PROJECTED_SPREAD]
+
+   CPC projected total:
+   [PROJECTED_TOTAL]
+
+   Win probability:
+   [PROJECTED_FAVORITE] [WIN_PROBABILITY]%
+
+2. [TEAM_OR_MATCHUP]
+
+   Model posture:
+   [POSTURE]
+
+   Projected score:
+   [TEAM_A]: [TEAM_A_PROJECTED_RUNS]
+   [TEAM_B]: [TEAM_B_PROJECTED_RUNS]
+
+   CPC projected spread:
+   [PROJECTED_FAVORITE] [PROJECTED_SPREAD]
+
+   CPC projected total:
+   [PROJECTED_TOTAL]
+
+   Win probability:
+   [PROJECTED_FAVORITE] [WIN_PROBABILITY]%
+
+3. [TEAM_OR_MATCHUP]
+
+   Model posture:
+   [POSTURE]
+
+   Projected score:
+   [TEAM_A]: [TEAM_A_PROJECTED_RUNS]
+   [TEAM_B]: [TEAM_B_PROJECTED_RUNS]
+
+   CPC projected spread:
+   [PROJECTED_FAVORITE] [PROJECTED_SPREAD]
+
+   CPC projected total:
+   [PROJECTED_TOTAL]
+
+   Win probability:
+   [PROJECTED_FAVORITE] [WIN_PROBABILITY]%
+
+TOP RUN ENVIRONMENTS
+
+1. [MATCHUP]
+
+   Projected total:
+   [PROJECTED_TOTAL]
+
+   YRFI:
+   [YRFI_PROBABILITY]%
+
+2. [MATCHUP]
+
+   Projected total:
+   [PROJECTED_TOTAL]
+
+   YRFI:
+   [YRFI_PROBABILITY]%
+
+3. [MATCHUP]
+
+   Projected total:
+   [PROJECTED_TOTAL]
+
+   YRFI:
+   [YRFI_PROBABILITY]%
+
+TOP PITCHER PROP SIGNALS
+
+1. [PITCHER_NAME]
+
+   Matchup:
+   [MATCHUP]
+
+   Projection:
+   [PROJECTED_K] K
+
+   [LOWEST_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+   [MIDDLE_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+   [HIGHEST_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+2. [PITCHER_NAME]
+
+   Matchup:
+   [MATCHUP]
+
+   Projection:
+   [PROJECTED_K] K
+
+   [LOWEST_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+   [MIDDLE_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+   [HIGHEST_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+3. [PITCHER_NAME]
+
+   Matchup:
+   [MATCHUP]
+
+   Projection:
+   [PROJECTED_K] K
+
+   [LOWEST_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+   [MIDDLE_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+   [HIGHEST_K_THRESHOLD]+ strikeouts:
+   [PROBABILITY]%
+
+TOP ANYTIME HOME RUN SIGNALS
+
+[IF HR MODEL IS AVAILABLE]
+
+1. [BATTER_NAME]
+
+   Team:
+   [TEAM]
+
+   Batting position:
+   [LINEUP_POSITION]
+
+   Opposing starter:
+   [OPPOSING_STARTER]
+
+   HR probability:
+   [HR_PROBABILITY]%
+
+   Evidence quality:
+   [GOOD / MODERATE / LIMITED]
+
+2. [BATTER_NAME]
+
+   Team:
+   [TEAM]
+
+   Batting position:
+   [LINEUP_POSITION]
+
+   Opposing starter:
+   [OPPOSING_STARTER]
+
+   HR probability:
+   [HR_PROBABILITY]%
+
+   Evidence quality:
+   [GOOD / MODERATE / LIMITED]
+
+3. [BATTER_NAME]
+
+   Team:
+   [TEAM]
+
+   Batting position:
+   [LINEUP_POSITION]
+
+   Opposing starter:
+   [OPPOSING_STARTER]
+
+   HR probability:
+   [HR_PROBABILITY]%
+
+   Evidence quality:
+   [GOOD / MODERATE / LIMITED]
+
+
+[IF HR MODEL IS UNAVAILABLE]
+
+Status:
+  UNAVAILABLE
+
+Reason:
+
+  The regular-game HR model exists, but the live evidence pipeline did
+  not provide complete fresh batter and opposing-starter Statcast
+  profiles.
+
+Missing or stale evidence:
+
+  [MISSING_HR_INPUT_1]
+  [MISSING_HR_INPUT_2]
+  [MISSING_HR_INPUT_3]
+
+Result:
+
+  No HR probability or HR candidate is published.
+
+
+OPERATIONS WATCH
+
+[DELAYED_OR_WEATHER_GAME]
+
+  Status:
+  [OFFICIAL_STATUS]
+
+  Action:
+  [REFRESH_OR_HOLD_INSTRUCTION]
+
+[DOUBLEHEADER_GAME]
+
+  Status:
+  [OFFICIAL_STATUS]
+
+  Action:
+
+  Refresh bullpen usage, lineups, starters, and weather before the
+  affected game.
+
+[OTHER_OPERATIONAL_NOTE]
+
+
+============================================================
+FULL SLATE BOARD
+============================================================
+
+------------------------------------------------------------
+GAME [GAME_NUMBER]
+[AWAY_TEAM] AT [HOME_TEAM]
+------------------------------------------------------------
+
+STATUS
+
+  [SCHEDULED / PRE-GAME / DELAYED START / POSTPONED / OTHER]
+
+FIRST PITCH
+
+  [FIRST_PITCH_CT]
+
+VENUE
+
+  [VENUE]
+
+LINEUP MODE
+
+  LAST_LOCKED_LINEUP_PROXY
+
+PROXY LINEUP SOURCE
+
+  [AWAY_TEAM]
+
+  Source:
+  [SOURCE]
+
+  Confirmed date:
+  [PROXY_LINEUP_DATE]
+
+  Batting-order hash:
+  [HASH_OR_CUSTOMER_SAFE_REFERENCE]
+
+  [HOME_TEAM]
+
+  Source:
+  [SOURCE]
+
+  Confirmed date:
+  [PROXY_LINEUP_DATE]
+
+  Batting-order hash:
+  [HASH_OR_CUSTOMER_SAFE_REFERENCE]
+
+STARTING PITCHERS
+
+  [AWAY_TEAM]
+
+  Starter:
+  [AWAY_STARTER]
+
+  Status:
+  [CONFIRMED / EXPECTED / CHANGED]
+
+  Source time:
+  [SOURCE_TIME]
+
+  [HOME_TEAM]
+
+  Starter:
+  [HOME_STARTER]
+
+  Status:
+  [CONFIRMED / EXPECTED / CHANGED]
+
+  Source time:
+  [SOURCE_TIME]
+
+PROJECTED SCORE
+
+  [AWAY_TEAM]:
+  [AWAY_PROJECTED_RUNS]
+
+  [HOME_TEAM]:
+  [HOME_PROJECTED_RUNS]
+
+CPC PROJECTED SPREAD
+
+  [PROJECTED_FAVORITE] [PROJECTED_SPREAD]
+
+CPC PROJECTED TOTAL
+
+  [PROJECTED_TOTAL]
+
+WIN PROBABILITY
+
+  [AWAY_TEAM]:
+  [AWAY_WIN_PROBABILITY]%
+
+  [HOME_TEAM]:
+  [HOME_WIN_PROBABILITY]%
+
+FIRST INNING
+
+  YRFI:
+  [YRFI_PROBABILITY]%
+
+  NRFI:
+  [NRFI_PROBABILITY]%
+
+MODEL POSTURE
+
+  [STRONG LEAN / LEAN / SLIGHT LEAN / PASS]
+
+WHY
+
+  [ONE_TO_THREE_SHORT_SENTENCES_EXPLAINING_THE_MODEL_POSTURE]
+
+PLAYER PROPS
+
+  [AWAY_STARTER] STRIKEOUTS
+
+    Projection:
+    [PROJECTED_K] K
+
+    [THRESHOLD]+ strikeouts:
+    [PROBABILITY]%
+
+    [THRESHOLD]+ strikeouts:
+    [PROBABILITY]%
+
+    [THRESHOLD]+ strikeouts:
+    [PROBABILITY]%
+
+  [HOME_STARTER] STRIKEOUTS
+
+    Projection:
+    [PROJECTED_K] K
+
+    [THRESHOLD]+ strikeouts:
+    [PROBABILITY]%
+
+    [THRESHOLD]+ strikeouts:
+    [PROBABILITY]%
+
+    [THRESHOLD]+ strikeouts:
+    [PROBABILITY]%
+
+ANYTIME HOME RUN
+
+  [IF AVAILABLE]
+
+  1. [BATTER_NAME]
+
+     HR probability:
+     [HR_PROBABILITY]%
+
+     Batting position:
+     [LINEUP_POSITION]
+
+     Evidence quality:
+     [QUALITY]
+
+  2. [BATTER_NAME]
+
+     HR probability:
+     [HR_PROBABILITY]%
+
+     Batting position:
+     [LINEUP_POSITION]
+
+     Evidence quality:
+     [QUALITY]
+
+
+  [IF UNAVAILABLE]
+
+  Status:
+  UNAVAILABLE
+
+  Reason:
+
+  [SHORT_CUSTOMER_SAFE_REASON]
+
+MODEL LIMITATIONS
+
+  [REAL_LIMITATION_1]
+
+  [REAL_LIMITATION_2]
+
+MARKET COMPARISON
+
+  [IF AVAILABLE]
+
+  CPC model probability:
+  [MODEL_PROBABILITY]%
+
+  Market implied probability:
+  [MARKET_PROBABILITY]%
+
+  Difference:
+  [DIFFERENCE] percentage points
+
+
+  [IF UNAVAILABLE]
+
+  Status:
+  Unavailable
+
+  The CPC projection remains visible.
+
+SOURCE STATUS
+
+  MLB official schedule:
+  [BACKED / DEGRADED / MISSING]
+
+  Starting pitchers:
+  [BACKED / DEGRADED / MISSING]
+
+  Proxy lineups:
+  [BACKED / DEGRADED / MISSING]
+
+  Statistics:
+  [BACKED / DEGRADED / MISSING]
+
+  Weather:
+  [BACKED / DEGRADED / MISSING]
+
+  Model output:
+  [BACKED / BLOCKED]
+
+PREGAME REFRESH
+
+  Scheduled refresh:
+  [REFRESH_TIME_CT]
+
+  Required action:
+
+  Replace the proxy batting orders with today's confirmed locked
+  lineups and rerun every eligible model from scratch.
+
+
+[REPEAT GAME BLOCK FOR EVERY SCHEDULED GAME]
+
+
+============================================================
+MODEL AVAILABILITY
+============================================================
+
+AVAILABLE
+
+  Projected team runs
+
+  CPC projected spread
+
+  CPC projected total
+
+  Win probability
+
+  YRFI and NRFI
+
+  Starting-pitcher strikeout projections
+
+  Strikeout threshold probabilities
+
+  [OTHER_AVAILABLE_MODEL]
+
+UNAVAILABLE OR DEGRADED
+
+  [MODEL_NAME]
+
+  Status:
+  [UNAVAILABLE / DEGRADED]
+
+  Reason:
+  [REASON]
+
+
+============================================================
+DELIVERY AND AUDIT
+============================================================
+
+Packet type:
+
+  morning_proxy
+
+Customer artifact:
+
+  [ARTIFACT_NAME]
+
+Canonical state:
+
+  [CANONICAL_STATE_REFERENCE]
+
+Games included:
+
+  [GAME_COUNT]
+
+Generation result:
+
+  [PASS / BLOCKED]
+
+
+No trades placed by this workflow.
+No bankroll advice.
+No order placement.
+Research only.
+
+
+============================================================
+TEMPLATE 2
+CONFIRMED-LINEUP INDIVIDUAL GAME PACKET
+============================================================
+
+CAPTAIN'S MLB PREDICTION COMPANION
+CONFIRMED-LINEUP GAME BOARD
+[AWAY_TEAM] AT [HOME_TEAM]
+[DISPLAY_DATE]
+
+
+============================================================
+STATUS
+============================================================
+
+GAME STATUS
+
+  [PRE-GAME / DELAYED START / IN PROGRESS / POSTPONED]
+
+FIRST PITCH
+
+  [FIRST_PITCH_CT]
+
+VENUE
+
+  [VENUE]
+
+RUN TYPE
+
+  confirmed_lineup
+
+GENERATED
+
+  [GENERATED_TIME_CT]
+
+
+[IF DELAYED]
+
+DELAY NOTICE
+
+  Official status:
+  [OFFICIAL_STATUS]
+
+  Scheduled first pitch:
+  [SCHEDULED_FIRST_PITCH_CT]
+
+  Latest official update:
+  [LATEST_DELAY_UPDATE]
+
+  Model context:
+
+  Pregame projection based on the confirmed locked lineups and starters.
+
+
+[IF ALREADY IN PROGRESS]
+
+IN-PROGRESS NOTICE
+
+  This is a pregame model projection generated from confirmed locked
+  lineups and starters.
+
+  It is not a live in-game projection and does not include events after
+  first pitch.
+
+
+============================================================
+RESEARCH STATUS
+============================================================
+
+LINEUPS
+
+  [AWAY_TEAM]:
+  LOCKED
+
+  [HOME_TEAM]:
+  LOCKED
+
+STARTERS
+
+  [AWAY_STARTER]:
+  CONFIRMED
+
+  [HOME_STARTER]:
+  CONFIRMED
+
+WEATHER
+
+  [UPDATED / INDOOR / DEGRADED]
+
+MARKET DATA
+
+  Display-only and NOT IN SCORE
+
+
+============================================================
+FAST READ
+============================================================
+
+MODEL POSTURE
+
+  [STRONG LEAN / LEAN / SLIGHT LEAN / PASS]
+
+PROJECTED SCORE
+
+  [AWAY_TEAM]:
+  [AWAY_PROJECTED_RUNS]
+
+  [HOME_TEAM]:
+  [HOME_PROJECTED_RUNS]
+
+CPC PROJECTED SPREAD
+
+  [PROJECTED_FAVORITE] [PROJECTED_SPREAD]
+
+CPC PROJECTED TOTAL
+
+  [PROJECTED_TOTAL]
+
+WIN PROBABILITY
+
+  [AWAY_TEAM]:
+  [AWAY_WIN_PROBABILITY]%
+
+  [HOME_TEAM]:
+  [HOME_WIN_PROBABILITY]%
+
+TOP PROP SIGNAL
+
+  [PLAYER_NAME]
+
+  [PROP_DESCRIPTION]:
+  [PROBABILITY]%
+
+
+============================================================
+GAME MODEL
+============================================================
+
+PROJECTED SCORE
+
+  [AWAY_TEAM]:
+  [AWAY_PROJECTED_RUNS]
+
+  [HOME_TEAM]:
+  [HOME_PROJECTED_RUNS]
+
+CPC PROJECTED SPREAD
+
+  [PROJECTED_FAVORITE] [PROJECTED_SPREAD]
+
+CALCULATION
+
+  [FAVORITE_PROJECTED_RUNS]
+
+  minus
+
+  [OPPONENT_PROJECTED_RUNS]
+
+  equals
+
+  [PROJECTED_MARGIN]
+
+CPC PROJECTED TOTAL
+
+  [PROJECTED_TOTAL]
+
+WIN PROBABILITY
+
+  [AWAY_TEAM]:
+  [AWAY_WIN_PROBABILITY]%
+
+  [HOME_TEAM]:
+  [HOME_WIN_PROBABILITY]%
+
+FIRST INNING
+
+  YRFI:
+  [YRFI_PROBABILITY]%
+
+  NRFI:
+  [NRFI_PROBABILITY]%
+
+MODEL POSTURE
+
+  [MODEL_POSTURE]
+
+WHY
+
+  1. [PRIMARY_MODEL_REASON]
+
+  2. [SECONDARY_MODEL_REASON]
+
+  3. [THIRD_MODEL_REASON]
+
+
+============================================================
+PLAYER PROPS
+============================================================
+
+[AWAY_STARTER] - STRIKEOUTS
+
+  Projection:
+
+  [PROJECTED_K] K
+
+  Threshold probabilities:
+
+  [LOWEST_THRESHOLD]+ strikeouts:
+  [PROBABILITY]%
+
+  [MIDDLE_THRESHOLD]+ strikeouts:
+  [PROBABILITY]%
+
+  [HIGHEST_THRESHOLD]+ strikeouts:
+  [PROBABILITY]%
+
+  Prop posture:
+
+  [PROP_POSTURE]
+
+
+[HOME_STARTER] - STRIKEOUTS
+
+  Projection:
+
+  [PROJECTED_K] K
+
+  Threshold probabilities:
+
+  [LOWEST_THRESHOLD]+ strikeouts:
+  [PROBABILITY]%
+
+  [MIDDLE_THRESHOLD]+ strikeouts:
+  [PROBABILITY]%
+
+  [HIGHEST_THRESHOLD]+ strikeouts:
+  [PROBABILITY]%
+
+  Prop posture:
+
+  [PROP_POSTURE]
+
+
+[ADDITIONAL_CONFIGURED_PROP_FAMILY]
+
+  Player:
+
+  [PLAYER_NAME]
+
+  Projection:
+
+  [PROJECTION]
+
+  Threshold probabilities:
+
+  [THRESHOLD_AND_PROBABILITY_LINES]
+
+  Prop posture:
+
+  [PROP_POSTURE]
+
+
+============================================================
+ANYTIME HOME RUN
+============================================================
+
+[IF HR MODEL IS AVAILABLE]
+
+1. [BATTER_NAME]
+
+   Team:
+
+   [TEAM]
+
+   Batting position:
+
+   [LINEUP_POSITION]
+
+   Opposing starter:
+
+   [OPPOSING_STARTER]
+
+   HR probability:
+
+   [HR_PROBABILITY]%
+
+   Evidence quality:
+
+   [GOOD / MODERATE / LIMITED]
+
+   Evidence windows:
+
+   Recent:
+   [RECENT_WINDOW]
+
+   Trailing:
+   [TRAILING_WINDOW]
+
+   Season:
+   [SEASON_WINDOW]
+
+
+2. [BATTER_NAME]
+
+   Team:
+
+   [TEAM]
+
+   Batting position:
+
+   [LINEUP_POSITION]
+
+   Opposing starter:
+
+   [OPPOSING_STARTER]
+
+   HR probability:
+
+   [HR_PROBABILITY]%
+
+   Evidence quality:
+
+   [GOOD / MODERATE / LIMITED]
+
+
+[IF HR MODEL IS UNAVAILABLE]
+
+STATUS
+
+  UNAVAILABLE
+
+WHY
+
+  The regular-game HR model exists, but the live evidence pipeline did
+  not provide complete fresh batter and opposing-starter Statcast
+  profiles.
+
+MISSING OR STALE INPUTS
+
+  [MISSING_HR_INPUT_1]
+
+  [MISSING_HR_INPUT_2]
+
+  [MISSING_HR_INPUT_3]
+
+  [MISSING_HR_INPUT_4]
+
+RESULT
+
+  No HR candidate or HR probability is published.
+
+REQUIRED TO UNBLOCK
+
+  Fresh rolling batter Statcast profiles
+
+  Fresh opposing-starter HR profile
+
+  Valid observation dates
+
+  Minimum sample-size validation
+
+  Freshness validation
+
+  Current park and weather context
+
+
+============================================================
+MARKET COMPARISON
+============================================================
+
+[IF MARKET CONTEXT IS AVAILABLE]
+
+CPC model posture
+
+  [MODEL_POSTURE]
+
+CPC model probability
+
+  [MODEL_PROBABILITY]%
+
+Market implied probability
+
+  [MARKET_PROBABILITY]%
+
+Difference
+
+  [DIFFERENCE] percentage points
+
+Market data is display-only and NOT IN SCORE.
+
+
+[IF MARKET CONTEXT IS UNAVAILABLE]
+
+STATUS
+
+  Unavailable
+
+CPC model posture
+
+  [MODEL_POSTURE]
+
+RULE
+
+  Missing market pricing does not erase the CPC model projection.
+
+  Market data is display-only and NOT IN SCORE.
+
+
+============================================================
+LIMITATIONS
+============================================================
+
+  The projected score is an expected value, not an exact-score call.
+
+  The CPC projected spread is the difference between the two projected
+  team scores.
+
+  [MODEL_LIMITATION_1]
+
+  [MODEL_LIMITATION_2]
+
+  [MODEL_LIMITATION_3]
+
+
+============================================================
+SOURCE STATUS
+============================================================
+
+MLB official schedule
+
+  [BACKED / DEGRADED / MISSING]
+
+Official game status
+
+  [BACKED / DEGRADED / MISSING]
+
+Locked batting orders
+
+  [BACKED / DEGRADED / MISSING]
+
+Starting pitchers
+
+  [BACKED / DEGRADED / MISSING]
+
+Statistics
+
+  [BACKED / DEGRADED / MISSING]
+
+Weather
+
+  [BACKED / DEGRADED / MISSING]
+
+HR evidence
+
+  [BACKED / DEGRADED / MISSING]
+
+Model output
+
+  [BACKED / BLOCKED]
+
+
+============================================================
+DELIVERY AND AUDIT
+============================================================
+
+Run type
+
+  confirmed_lineup
+
+Game ID
+
+  [GAME_ID]
+
+Run ID
+
+  [RUN_ID]
+
+Input hash
+
+  [INPUT_HASH]
+
+Output hash
+
+  [OUTPUT_HASH]
+
+Customer artifact
+
+  [ARTIFACT_NAME]
+
+Canonical state
+
+  [CANONICAL_STATE_REFERENCE]
+
+Janitor result
+
+  [PASS / WARNING / BLOCKED]
+
+Delivery status
+
+  [NOT SENT / DELIVERED / BLOCKED]
+
+Telegram document ID
+
+  [MESSAGE_ID_OR_NOT_SENT]
+
+
+No trades placed by this workflow.
+No bankroll advice.
+No order placement.
+Research only.
+
+
+============================================================
+NON-NEGOTIABLE DEFAULT RENDERER RULES
+============================================================
+
+1. These packets must be generated by permanent renderers.
+
+   No hand assembly.
+
+   No manual customer-packet edits after generation.
+
+
+2. Morning packet:
+
+   One full-slate document using run_type=morning_proxy.
+
+
+3. Individual packet:
+
+   One game document using run_type=confirmed_lineup.
+
+
+4. CPC projected spread:
+
+   The projected scoring margin between the two teams.
+
+   Example:
+
+   Detroit projected runs:
+   6.3
+
+   Los Angeles projected runs:
+   3.6
+
+   CPC projected spread:
+   Detroit -2.7
+
+
+5. The fixed baseball market run line of 1.5 is not CPC's projected
+   spread.
+
+
+6. Market prices cannot enter CPC model scoring, ranking, or posture.
+
+
+7. Missing market prices cannot convert a valid CPC projection into
+   NO CLEAR PICK or BLOCKED_SOURCE_GAP.
+
+
+8. Confirmed-lineup packets cannot contain stale classifications such
+   as PRE_LINEUP_PICK.
+
+
+9. Model posture must agree with the visible model output.
+
+
+10. Every configured eligible prop family must receive a visible
+    section.
+
+
+11. Unavailable model families must state exactly why they are
+    unavailable.
+
+
+12. HR output may only appear when batter and pitcher rolling profiles
+    pass freshness, observation-date, and minimum-sample validation.
+
+
+13. If HR evidence is unavailable, the renderer must publish a concise
+    unavailable section instead of fabricating candidates.
+
+
+14. Mobile formatting requirements:
+
+    No wide tables.
+
+    No dense walls of text.
+
+    No line materially wider than 80 characters.
+
+    One metric per line where practical.
+
+    Blank lines between major sections.
+
+    Consistent section order for every game.
+
+
+15. Important projections must appear before technical source details.
+
+
+16. Customer-visible sections must include:
+
+    Projected score
+
+    CPC projected spread
+
+    CPC projected total
+
+    Win probability
+
+    YRFI and NRFI
+
+    Pitcher strikeout projections
+
+    Strikeout threshold probabilities
+
+    Anytime-HR output or honest unavailable status
+
+    Model posture
+
+    Concise explanation
+
+    Limitations
+
+    Market context
+
+    Source status
+
+
+17. Internal filesystem paths and full hashes should remain in audit
+    sidecars unless explicitly required in the customer document.
+
+
+18. The exact rendered customer artifact must pass automated validation
+    and complete literal review before delivery.
+
+
+19. Production artifacts and delivery ledgers must use canonical state
+    independent of the active checkout or worktree.
+
+
+20. A successful send must prove:
+
+    True sender exit code
+
+    Telegram notice and document message IDs
+
+    Artifact SHA-256
+
+    Canonical ledger entry
+
+    Duplicate-send protection
+
+
+============================================================
+DEFINITION OF DONE
+============================================================
+
+The default renderer change is complete only when:
+
+  The morning full-slate renderer produces this structure automatically.
+
+  The confirmed-lineup renderer produces this structure automatically.
+
+  No customer packet requires manual text assembly or correction.
+
+  Projected spread is derived from projected team scores.
+
+  Model posture remains visible without market pricing.
+
+  Every eligible prop family is shown.
+
+  HR either produces validated candidates or an honest unavailable
+  section.
+
+  Mobile formatting passes automated checks.
+
+  Canonical state and delivery-ledger behavior are proven.
+
+  Exact customer-facing artifacts are reviewed before any production
+  send.
+
+  Focused tests pass.
+
+  Existing baseline failures are unchanged.
+
+  The final diff is reviewed.
+
+  The change is committed, pushed, merged, and ancestry verified.
