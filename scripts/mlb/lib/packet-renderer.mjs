@@ -17,6 +17,13 @@ import {
   describeYrfi,
   describeKs,
   describeHr,
+  formatCompactMoneyline,
+  formatCompactTotal,
+  formatCompactTeamRuns,
+  formatCompactProjectedSpread,
+  formatCompactYrfi,
+  formatCompactKs,
+  wrapCustomerPacketText,
 } from './projection-language.mjs';
 import {
   LINEUP_STATUS,
@@ -130,12 +137,12 @@ function renderProjectionFirstSection(game, projections, modelFreshness) {
   }
 
   lines.push('--- PROJECTION-FIRST READ (model layer, market-free) ---');
-  lines.push(describeMoneyline(projections.score, { home_team: homeName, away_team: awayName }));
+  lines.push(formatCompactMoneyline(projections.score, { home_team: homeName, away_team: awayName }));
   lines.push(describeRunline(projections.score, { home_team: homeName }));
-  lines.push(describeTotal(projections.score));
-  lines.push(describeTeamRuns(projections.score, 'away', awayName));
-  lines.push(describeTeamRuns(projections.score, 'home', homeName));
-  lines.push(describeProjectedSpread(
+  lines.push(formatCompactTotal(projections.score));
+  lines.push(formatCompactTeamRuns(projections.score, 'away', awayName));
+  lines.push(formatCompactTeamRuns(projections.score, 'home', homeName));
+  lines.push(formatCompactProjectedSpread(
     projections.means?.lambdaAway,
     projections.means?.lambdaHome,
     {
@@ -145,9 +152,9 @@ function renderProjectionFirstSection(game, projections, modelFreshness) {
       blocked_reasons: projections.score?.blocked_reasons,
     },
   ));
-  lines.push(describeYrfi(projections.yrfi));
-  lines.push(describeKs(projections.ks_away, `${awayName} starter`));
-  lines.push(describeKs(projections.ks_home, `${homeName} starter`));
+  lines.push(formatCompactYrfi(projections.yrfi));
+  lines.push(formatCompactKs(projections.ks_away, `${awayName} starter`));
+  lines.push(formatCompactKs(projections.ks_home, `${homeName} starter`));
   lines.push(describeHr(projections.hr));
 
   return lines;
@@ -482,7 +489,7 @@ export function renderPerGamePacket(game, options = {}) {
   );
 
   return {
-    text: sections.join('\n'),
+    text: wrapCustomerPacketText(sections.join('\n')),
     analysis,
     lineupStatus,
     downgrade,

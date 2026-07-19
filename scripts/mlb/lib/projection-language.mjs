@@ -16,6 +16,31 @@ import { distributionFloorMean } from './projection-contracts.mjs';
 
 export const NO_TRADE_FOOTER = 'No trades placed. No bankroll sizing. Research only.';
 
+export function wrapCustomerPacketText(text, maxWidth = 80) {
+  return String(text).split('\n').flatMap((line) => {
+    if (line.length <= maxWidth) return [line];
+    const indent = line.match(/^\s*/)?.[0] ?? '';
+    const continuationIndent = `${indent}  `;
+    let remaining = line.trimStart();
+    const wrapped = [];
+    let first = true;
+    while (remaining.length > 0) {
+      const prefix = first ? indent : continuationIndent;
+      const available = Math.max(1, maxWidth - prefix.length);
+      if (remaining.length <= available) {
+        wrapped.push(`${prefix}${remaining}`);
+        break;
+      }
+      let cut = remaining.lastIndexOf(' ', available);
+      if (cut <= 0) cut = available;
+      wrapped.push(`${prefix}${remaining.slice(0, cut)}`);
+      remaining = remaining.slice(cut).trimStart();
+      first = false;
+    }
+    return wrapped.length ? wrapped : [line.slice(0, maxWidth)];
+  }).join('\n');
+}
+
 function pct(p, digits = 0) {
   if (typeof p !== 'number' || !Number.isFinite(p)) return null;
   return `${(p * 100).toFixed(digits)}%`;
@@ -35,6 +60,64 @@ function statusTag(proj) {
 function blockedLine(label, proj) {
   const why = (proj.blocked_reasons || []).join(', ') || 'required inputs missing';
   return `${label} — BLOCKED_MODEL_LAYER_MISSING: ${why}. No projection issued.`;
+}
+
+// Compact values for dense customer-facing summaries. Keep the describe*
+// helpers below as full audit/narrative sentences; these helpers intentionally
+// carry only the metric label and its key value.
+function compactStatusTag(proj) {
+  return proj?.status === 'provisional' ? ' [provisional]' : '';
+}
+
+export function formatCompactMoneyline(proj, { home_team = 'Home', away_team = 'Away' } = {}) {
+  if (proj?.status === 'blocked') return 'Projected win probability: BLOCKED';
+  const ph = proj?.outputs?.moneyline_home;
+  if (typeof ph !== 'number') return `Projected win probability: not modeled${compactStatusTag(proj)}`;
+  return `Projected win probability: ${home_team} ${pct(ph)}, ${away_team} ${pct(1 - ph)}${compactStatusTag(proj)}`;
+}
+
+export function formatCompactTotal(proj) {
+  if (proj?.status === 'blocked') return 'CPC projected total — BLOCKED';
+  const mean = distributionFloorMean(proj?.outputs?.total_runs_distribution);
+  return mean == null
+    ? `CPC projected total — not modeled${compactStatusTag(proj)}`
+    : `CPC projected total — ~${mean.toFixed(1)} runs${compactStatusTag(proj)}`;
+}
+
+export function formatCompactTeamRuns(proj, side, teamName = side) {
+  if (proj?.status === 'blocked') return `Projected runs (${teamName}): BLOCKED`;
+  const mean = distributionFloorMean(proj?.outputs?.team_runs_distribution?.[side]);
+  return mean == null
+    ? `Projected runs (${teamName}): not modeled${compactStatusTag(proj)}`
+    : `Projected runs — ${teamName} ~${mean.toFixed(1)}${compactStatusTag(proj)}`;
+}
+
+export function formatCompactProjectedSpread(
+  awayRuns,
+  homeRuns,
+  { away_team = 'Away', home_team = 'Home', status = 'official' } = {},
+) {
+  if (status === 'blocked') return 'CPC projected spread — BLOCKED';
+  if (!Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) return 'CPC projected spread — not modeled';
+  if (awayRuns === homeRuns) return `CPC projected spread — pick'em (${awayRuns.toFixed(1)} / ${homeRuns.toFixed(1)})`;
+  const favorite = awayRuns > homeRuns ? away_team : home_team;
+  return `CPC projected spread — ${favorite} -${Math.abs(awayRuns - homeRuns).toFixed(1)}`;
+}
+
+export function formatCompactYrfi(proj) {
+  if (proj?.status === 'blocked') return 'Projected first-inning run (YRFI): BLOCKED';
+  const p = proj?.outputs?.yrfi_prob;
+  return typeof p !== 'number'
+    ? `Projected first-inning run (YRFI): not modeled${compactStatusTag(proj)}`
+    : `Projected first-inning run (YRFI): ${pct(p)} / NRFI ${pct(1 - p)}${compactStatusTag(proj)}`;
+}
+
+export function formatCompactKs(proj, pitcherName = 'Starter') {
+  if (proj?.status === 'blocked') return `Projected strikeouts — ${pitcherName}: BLOCKED`;
+  const mean = distributionFloorMean(proj?.outputs?.distribution);
+  return mean == null
+    ? `Projected strikeouts — ${pitcherName}: not modeled${compactStatusTag(proj)}`
+    : `Projected strikeouts — ${pitcherName}: ~${mean.toFixed(1)} K${compactStatusTag(proj)}`;
 }
 
 // ---- Moneyline (derived win probability, not a market line) ----------------

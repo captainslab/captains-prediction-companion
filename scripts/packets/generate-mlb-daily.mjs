@@ -45,6 +45,12 @@ import {
   describeYrfi,
   describeKs,
   describeHr,
+  formatCompactMoneyline,
+  formatCompactTotal,
+  formatCompactProjectedSpread,
+  formatCompactYrfi,
+  formatCompactKs,
+  wrapCustomerPacketText,
 } from '../mlb/lib/projection-language.mjs';
 import {
   buildGameProjections,
@@ -943,15 +949,15 @@ function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG
     `  ${teams.away}: ${slatePitcher({ game, side: 'away' })}`,
     `  ${teams.home}: ${slatePitcher({ game, side: 'home' })}`,
     `PROJECTED SCORE: ${scoreText}`,
-    `CPC PROJECTED SPREAD: ${describeProjectedSpread(awayRuns, homeRuns, {
+    `CPC PROJECTED SPREAD: ${formatCompactProjectedSpread(awayRuns, homeRuns, {
       away_team: teams.away,
       home_team: teams.home,
       status: score.status,
       blocked_reasons: score.blocked_reasons,
     })}`,
-    `CPC PROJECTED TOTAL: ${describeTotal(score)}`,
-    `WIN PROBABILITY: ${describeMoneyline(score, { home_team: teams.home, away_team: teams.away })}`,
-    `YRFI/NRFI: ${describeYrfi(projection?.yrfi ?? {
+    `CPC PROJECTED TOTAL: ${formatCompactTotal(score)}`,
+    `WIN PROBABILITY: ${formatCompactMoneyline(score, { home_team: teams.home, away_team: teams.away })}`,
+    `YRFI/NRFI: ${formatCompactYrfi(projection?.yrfi ?? {
       status: 'blocked',
       blocked_reasons: ['MODEL_INPUTS_MISSING'],
     })}`,
@@ -1102,7 +1108,7 @@ function formatSlateScore(entry) {
 }
 
 function slateSpreadText(entry) {
-  return describeProjectedSpread(entry.awayRuns, entry.homeRuns, {
+  return formatCompactProjectedSpread(entry.awayRuns, entry.homeRuns, {
     away_team: entry.teams.away,
     home_team: entry.teams.home,
     status: entry.score.status,
@@ -1111,11 +1117,11 @@ function slateSpreadText(entry) {
 }
 
 function slateTotalText(entry) {
-  return describeTotal(entry.score);
+  return formatCompactTotal(entry.score);
 }
 
 function slateWinProbabilityText(entry) {
-  return describeMoneyline(entry.score, {
+  return formatCompactMoneyline(entry.score, {
     home_team: entry.teams.home,
     away_team: entry.teams.away,
   });
@@ -1146,25 +1152,34 @@ function renderFastRead(entries = []) {
 
   const lines = ['FAST READ', 'TOP SIDE POSTURES'];
   if (postureEntries.length) {
-    for (const entry of postureEntries) {
-      lines.push(`  ${slateGameLabel(entry)} — posture: ${entry.modelPosture}; projected score: ${formatSlateScore(entry)}; ${slateSpreadText(entry)}; ${slateTotalText(entry)}; ${slateWinProbabilityText(entry)}`);
+    for (const [position, entry] of postureEntries.entries()) {
+      lines.push(`  ${position + 1}. ${slateGameLabel(entry)}`);
+      lines.push(`    Model posture: ${entry.modelPosture}`);
+      lines.push(`    Projected score: ${formatSlateScore(entry)}`);
+      lines.push(`    ${slateSpreadText(entry)}`);
+      lines.push(`    ${slateTotalText(entry)}`);
+      lines.push(`    ${slateWinProbabilityText(entry)}`);
     }
   } else {
     lines.push('  none available — no model-backed side posture is available.');
   }
   lines.push('TOP RUN ENVIRONMENTS');
   if (runEntries.length) {
-    for (const entry of runEntries) {
-      lines.push(`  ${slateGameLabel(entry)} — total: ${entry.totalRuns.toFixed(1)} runs; ${describeYrfi(entry.projection?.yrfi ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+    for (const [position, entry] of runEntries.entries()) {
+      lines.push(`  ${position + 1}. ${slateGameLabel(entry)}`);
+      lines.push(`    Projected total: ~${entry.totalRuns.toFixed(1)} runs`);
+      lines.push(`    ${formatCompactYrfi(entry.projection?.yrfi ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
     }
   } else {
     lines.push('  none available — projected totals are unavailable.');
   }
   lines.push('TOP PITCHER PROP SIGNALS');
   if (pitcherEntries.length) {
-    for (const { entry, side, projection } of pitcherEntries) {
+    for (const [position, { entry, side, projection }] of pitcherEntries.entries()) {
       const pitcher = slatePitcher({ game: entry.game, side });
-      lines.push(`  ${slateGameLabel(entry)} — ${describeKs(projection, pitcher)}`);
+      lines.push(`  ${position + 1}. ${slateGameLabel(entry)}`);
+      lines.push(`    Pitcher: ${pitcher}`);
+      lines.push(`    ${formatCompactKs(projection, pitcher)}`);
     }
   } else {
     lines.push('  none available — pitcher K projections are unavailable.');
@@ -1327,7 +1342,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     '  Missing market prices may disable market comparison, but they must not hide or block valid CPC model projections.',
   ].join('\n');
   const fullSlateBoard = renderFullSlateBoardEntries(slateEntries);
-  const text = [
+  const text = wrapCustomerPacketText([
     header,
     important,
     marketContext,
@@ -1338,7 +1353,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     renderModelAvailability(slateEntries, readyHr),
     renderSlateDeliveryAudit({ date, gameCount: slateEntries.length }),
     packetFooter(),
-  ].filter(Boolean).join('\n\n');
+  ].filter(Boolean).join('\n\n'));
 
   // Full per-pick inventory -> audit artifact only. Each line carries model and
   // market fields together for routing/audit; pricing here is NOT a score input.
@@ -1648,7 +1663,7 @@ export function buildKalshiGamePacket({
   const scoreProjection = packetProjections?.score ?? null;
   const awayRuns = packetProjections?.means?.lambdaAway;
   const homeRuns = packetProjections?.means?.lambdaHome;
-  const projectedSpread = describeProjectedSpread(awayRuns, homeRuns, {
+  const projectedSpread = formatCompactProjectedSpread(awayRuns, homeRuns, {
     away_team: awayTeam,
     home_team: homeTeam,
     status: scoreProjection?.status ?? 'blocked',
@@ -1775,17 +1790,17 @@ export function buildKalshiGamePacket({
   lines.push(`  model posture: ${frontRead.cpcRead ?? frontRead.call}`);
   lines.push(`  projected score: ${awayTeam} ${scoreValue(awayRuns)}, ${homeTeam} ${scoreValue(homeRuns)}`);
   lines.push(`  ${projectedSpread}`);
-  lines.push(`  CPC projected total: ${describeTotal(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
-  lines.push(`  ${describeMoneyline(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] }, { home_team: homeTeam, away_team: awayTeam })}`);
+  lines.push(`  ${formatCompactTotal(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+  lines.push(`  ${formatCompactMoneyline(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] }, { home_team: homeTeam, away_team: awayTeam })}`);
   lines.push('');
 
   lines.push('GAME MODEL');
   lines.push(`  projected score: ${awayTeam} ${scoreValue(awayRuns)}, ${homeTeam} ${scoreValue(homeRuns)}`);
   lines.push(`  ${projectedSpread}`);
   lines.push(`  CALCULATION: ${calculation}`);
-  lines.push(`  CPC projected total: ${describeTotal(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
-  lines.push(`  ${describeMoneyline(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] }, { home_team: homeTeam, away_team: awayTeam })}`);
-  lines.push(`  YRFI/NRFI: ${describeYrfi(packetProjections?.yrfi ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+  lines.push(`  ${formatCompactTotal(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+  lines.push(`  ${formatCompactMoneyline(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] }, { home_team: homeTeam, away_team: awayTeam })}`);
+  lines.push(`  ${formatCompactYrfi(packetProjections?.yrfi ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
   lines.push(`  model posture: ${frontRead.cpcRead ?? frontRead.call}`);
   lines.push(`  WHY: ${frontRead.reason ?? frontRead.summary ?? 'model posture unavailable'}`);
   lines.push('');
@@ -1813,9 +1828,9 @@ export function buildKalshiGamePacket({
 
   lines.push('');
   lines.push('PLAYER PROPS');
-  lines.push(`  ${describeKs(packetProjections?.ks_away ?? blockedKs, awayStarter)}`);
+  lines.push(`  ${formatCompactKs(packetProjections?.ks_away ?? blockedKs, awayStarter)}`);
   lines.push(`  away pitcher prop posture: ${propPosture('away', awayStarter)}`);
-  lines.push(`  ${describeKs(packetProjections?.ks_home ?? blockedKs, homeStarter)}`);
+  lines.push(`  ${formatCompactKs(packetProjections?.ks_home ?? blockedKs, homeStarter)}`);
   lines.push(`  home pitcher prop posture: ${propPosture('home', homeStarter)}`);
   lines.push('');
 
@@ -1922,7 +1937,7 @@ export function buildKalshiGamePacket({
   });
 
   return {
-    text: [lead, lines.join('\n'), packetFooter()].filter(Boolean).join('\n\n'),
+    text: wrapCustomerPacketText([lead, lines.join('\n'), packetFooter()].filter(Boolean).join('\n\n')),
     inventoryText: inventoryLines.join('\n'),
     marketCount: block.marketCount,
     missingStrikeCount: block.missingStrikeCount,

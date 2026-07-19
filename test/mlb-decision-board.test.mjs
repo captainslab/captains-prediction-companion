@@ -85,11 +85,11 @@ test('MLB slate packet renders the morning wrapper and excludes raw inventory', 
   assert.match(slate.text, /Run type: morning_proxy/);
   assert.match(slate.text, /Games scheduled: 1/);
   assert.match(slate.text, /IMPORTANT/);
-  assert.match(slate.text, /This morning report uses each team's most recent confirmed locked batting order as a lineup proxy/);
+  assert.match(slate.text, /This morning report uses each team's most recent confirmed locked batting\s+order as a lineup proxy/);
   assert.match(slate.text, /Today's official starting pitchers are required/);
   assert.match(slate.text, /Every game will be rerun with today's confirmed lineups before first pitch/);
   assert.match(slate.text, /MARKET CONTEXT/);
-  assert.match(slate.text, /Missing market prices may disable market comparison, but they must not hide or block valid CPC model projections/);
+  assert.match(slate.text, /Missing market prices may disable market comparison, but they must not hide or\s+block valid CPC model projections/);
   assert.match(slate.text, /FAST READ/);
   assert.match(slate.text, /TOP SIDE POSTURES/);
   assert.match(slate.text, /TOP RUN ENVIRONMENTS/);
@@ -201,11 +201,11 @@ test('MLB slate uses official mlb_status, labels started games as pregame proxy,
   });
 
   assert.match(slate.text, /GAME 1[\s\S]*STATUS: In Progress/);
-  assert.match(slate.text, /PREGAME PROXY NOTICE: This is a pregame-proxy model context only[\s\S]*does not reflect live in-game state/);
+  assert.match(slate.text, /PREGAME PROXY NOTICE: This is a pregame-proxy model context only[\s\S]*does\s+not reflect live in-game state/);
   assert.match(slate.text, /GAME 1[\s\S]*PROJECTED SCORE: Toronto Blue Jays \d+\.\d, Baltimore Orioles \d+\.\d/);
   assert.match(slate.text, /GAME 2[\s\S]*STATUS: Scheduled/);
   assert.equal((slate.text.match(/\[DOUBLEHEADER_GAME\]/g) || []).length, 1);
-  assert.match(slate.text, /\[DOUBLEHEADER_GAME\] Toronto Blue Jays AT Baltimore Orioles — status: In Progress \/ Scheduled; required action: Refresh bullpen usage, lineups, starters, and weather before the affected game\./);
+  assert.match(slate.text, /\[DOUBLEHEADER_GAME\] Toronto Blue Jays AT Baltimore Orioles — status:\s+In\s+Progress\s+\/\s+Scheduled; required action:\s+Refresh bullpen usage, lineups,\s+starters, and weather before the affected game\./);
 });
 
 test('BLOCKED MLB rows compact into event-level notes and never render score=MISSING rows', () => {

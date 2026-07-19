@@ -350,11 +350,11 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
     },
   });
 
-  const runSplit = packet.text.match(/projected run split favors Los Angeles Angels ([0-9]+\.[0-9]) to ([0-9]+\.[0-9]) and the win split lands at ([0-9]+\.[0-9])%/);
+  const runSplit = packet.text.match(/projected run split favors Los\s+Angeles Angels\s+([0-9]+\.[0-9])\s+to\s+([0-9]+\.[0-9])\s+and the win split lands at\s+([0-9]+\.[0-9])%/);
   const totalShape = packet.text.match(/projected total ~([0-9]+\.[0-9])/);
   const yrfiShape = packet.text.match(/YRFI ([0-9]+(?:\.[0-9]+)?)%/);
-  const awayKs = packet.text.match(/Reid Detmers projects around ([0-9]+\.[0-9]) K/);
-  const homeKs = packet.text.match(/Jack Perkins projects around ([0-9]+\.[0-9]) K/);
+  const awayKs = packet.text.match(/Reid Detmers\s+projects around\s+([0-9]+\.[0-9]) K/);
+  const homeKs = packet.text.match(/Jack Perkins\s+projects around\s+([0-9]+\.[0-9]) K/);
 
   assert.match(packet.text, /Event Preview \/ Storyline/);
   assert.match(packet.text, /NO CLEAR PICK because only the MONEYLINE family is fully modeled/);
@@ -562,5 +562,5 @@ test('game packets show projected lineup status when alpha is still pending', ()
   assert.match(packet.text, /Research Status/);
   assert.match(packet.text, /Lineup PROJECTED · Starter PROBABLE · Weather UPDATED/);
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /the line is still provisional on lineup alpha/);
+  assert.match(packet.text, /the line is still provisional on lineup\s+alpha/);
 });

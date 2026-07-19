@@ -128,7 +128,7 @@ test('confirmed-lineup run is fresh, does not read picks.json, and preserves mor
     assert.doesNotMatch(JSON.stringify(record.models), /"(?:yes_ask|no_bid|yes_bid|no_ask|price|odds|volume|open_interest|kalshi_ask)"/i);
     assert.deepEqual(JSON.parse(readFileSync(morningPath, 'utf8')), morning);
     assert.ok(existsSync(result.packetPath));
-    assert.match(readFileSync(result.packetPath, 'utf8'), /\| Status: Delayed Start/);
+    assert.match(readFileSync(result.packetPath, 'utf8'), /\|\s+Status: Delayed Start/);
   } finally {
     cleanup(root);
   }
