@@ -152,3 +152,55 @@ test('expired slate: neither send function is invoked (no Telegram)', async () =
   assert.equal(outcome.status, 'blocked_expired');
   assert.equal(touched, false);
 });
+
+function makeMultiGamePacket(firstPitches) {
+  return [
+    "Captain's MLB Prediction Companion",
+    '=== FULL SLATE BOARD ===',
+    'Date: 2026-07-08',
+    ...firstPitches.map((firstPitch, index) => [
+      `Game ${index + 1}`,
+      `FIRST PITCH: ${firstPitch}`,
+      'Status: Pregame',
+    ].join('\n')),
+  ].join('\n');
+}
+
+test('multi-game slate: earliest started but latest remains future allows send', () => {
+  const firstPitches = [
+    PAST_ISO,
+    new Date(NOW_MS + 2 * 60 * 60 * 1000).toISOString(),
+    new Date(NOW_MS + 3 * 60 * 60 * 1000).toISOString(),
+  ];
+  const res = evaluateSlateExpiry({ packetText: makeMultiGamePacket(firstPitches), nowMs: NOW_MS });
+  assert.equal(res.blocked, false);
+  assert.equal(res.verdict, DELIVERY_VERDICTS.SEND_ALLOWED);
+  assert.equal(res.firstPitchUtc, firstPitches[2]);
+});
+
+test('multi-game slate: all three games started blocks at the latest first pitch', () => {
+  const firstPitches = [
+    new Date(NOW_MS - 3 * 60 * 60 * 1000).toISOString(),
+    new Date(NOW_MS - 2 * 60 * 60 * 1000).toISOString(),
+    PAST_ISO,
+  ];
+  const res = evaluateSlateExpiry({ packetText: makeMultiGamePacket(firstPitches), nowMs: NOW_MS });
+  assert.equal(res.blocked, true);
+  assert.equal(res.verdict, DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED);
+  assert.equal(res.firstPitchUtc, PAST_ISO);
+  assert.match(res.reason, /all games in this slate have started/);
+  assert.match(res.reason, /latest first pitch was at/);
+});
+
+test('multi-game slate: two of sixteen started remains deliverable', () => {
+  const firstPitches = [
+    new Date(NOW_MS - 3 * 60 * 60 * 1000).toISOString(),
+    new Date(NOW_MS - 2 * 60 * 60 * 1000).toISOString(),
+    ...Array.from({ length: 14 }, (_, index) => new Date(NOW_MS + (index + 1) * 60 * 60 * 1000).toISOString()),
+  ];
+  const res = evaluateSlateExpiry({ packetText: makeMultiGamePacket(firstPitches), nowMs: NOW_MS });
+  assert.equal(firstPitches.length, 16);
+  assert.equal(res.blocked, false);
+  assert.equal(res.verdict, DELIVERY_VERDICTS.SEND_ALLOWED);
+  assert.equal(res.firstPitchUtc, firstPitches.at(-1));
+});
