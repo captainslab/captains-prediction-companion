@@ -1136,6 +1136,90 @@ export function buildKalshiGamePacket({
     })
     : null;
 
+  const generatedAtUtc = new Date().toISOString();
+  const display = buildEventDisplay(event);
+  const awayTeam = statsRecord?.away_team ?? event?.away_full ?? event?.away_team
+    ?? display.away_full ?? 'Away';
+  const homeTeam = statsRecord?.home_team ?? event?.home_full ?? event?.home_team
+    ?? display.home_full ?? 'Home';
+  const awayStarter = statsRecord?.away_pitcher?.name ?? event?.away_starter ?? event?.away_pitcher ?? 'MISSING';
+  const homeStarter = statsRecord?.home_pitcher?.name ?? event?.home_starter ?? event?.home_pitcher ?? 'MISSING';
+  const gameStatus = String(statsRecord?.game_status ?? event?.game_status ?? event?.status ?? 'UNKNOWN').trim() || 'UNKNOWN';
+  const firstPitch = event?.start_time_utc
+    ?? event?.start_utc
+    ?? statsRecord?.start_utc
+    ?? statsRecord?.start_time_utc
+    ?? 'MISSING';
+  const venue = event?.venue ?? statsRecord?.venue ?? 'MISSING';
+  const latestUpdate = statsRecord?.checked_at_utc ?? statsRecord?.updated_at_utc ?? 'MISSING';
+  const delayed = /delay/i.test(gameStatus);
+  const alreadyStarted = /\b(?:in progress|live|warmup|final|completed|game over|manager challenge|review)\b/i.test(gameStatus);
+  const frontRead = hasComposite
+    ? classifyGamePacketRead(gamePicks, event, { hasModelProjection: Boolean(statsRecord) })
+    : {
+      cpcRead: 'PASS',
+      call: 'NO CLEAR PICK',
+      reason: 'no MLB event with a composite-ready game packet was found',
+      summary: 'model outputs are unavailable',
+    };
+  const scoreProjection = packetProjections?.score ?? null;
+  const awayRuns = packetProjections?.means?.lambdaAway;
+  const homeRuns = packetProjections?.means?.lambdaHome;
+  const projectedSpread = describeProjectedSpread(awayRuns, homeRuns, {
+    away_team: awayTeam,
+    home_team: homeTeam,
+    status: scoreProjection?.status ?? 'blocked',
+    blocked_reasons: scoreProjection?.blocked_reasons ?? ['MODEL_INPUTS_MISSING'],
+  });
+  const scoreValue = (value) => Number.isFinite(value) ? value.toFixed(1) : 'not modeled';
+  const lineupState = packetStatusSnapshot.lineup_status === 'confirmed' ? 'LOCKED' : String(packetStatusSnapshot.lineup_status ?? 'UNKNOWN').toUpperCase();
+  const starterState = packetStatusSnapshot.starterInput === 'LOCKED' ? 'CONFIRMED' : String(packetStatusSnapshot.starterInput ?? 'UNKNOWN').toUpperCase();
+  const favoriteRuns = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
+    ? (awayRuns >= homeRuns ? awayRuns : homeRuns)
+    : null;
+  const opponentRuns = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
+    ? (awayRuns >= homeRuns ? homeRuns : awayRuns)
+    : null;
+  const calculation = favoriteRuns == null || opponentRuns == null
+    ? 'not modeled'
+    : `${favoriteRuns.toFixed(1)} minus ${opponentRuns.toFixed(1)} equals ${(favoriteRuns - opponentRuns).toFixed(1)}`;
+
+  lines.push('STATUS');
+  lines.push(`  game status: ${gameStatus}`);
+  lines.push(`  first pitch: ${firstPitch}`);
+  lines.push(`  venue: ${venue}`);
+  lines.push('  run type: confirmed_lineup');
+  lines.push(`  generated time: ${generatedAtUtc}`);
+  if (delayed) lines.push(`  delay notice: official status ${gameStatus}; scheduled first pitch ${firstPitch}; latest update ${latestUpdate}`);
+  if (alreadyStarted) lines.push('This is a pregame model projection generated from confirmed locked lineups and starters. It is not a live in-game projection and does not include events after first pitch.');
+  lines.push('');
+
+  lines.push('RESEARCH STATUS');
+  lines.push(`  lineups ${lineupState} — ${awayTeam}: ${lineupState}; ${homeTeam}: ${lineupState}`);
+  lines.push(`  starters ${starterState} — ${awayTeam}: ${awayStarter}; ${homeTeam}: ${homeStarter}`);
+  lines.push(`  weather status: ${String(packetStatusSnapshot.weather_status ?? 'UNKNOWN').toUpperCase()}`);
+  lines.push('  market-display-only-not-in-score');
+  lines.push('');
+
+  lines.push('FAST READ');
+  lines.push(`  model posture: ${frontRead.cpcRead ?? frontRead.call}`);
+  lines.push(`  projected score: ${awayTeam} ${scoreValue(awayRuns)}, ${homeTeam} ${scoreValue(homeRuns)}`);
+  lines.push(`  ${projectedSpread}`);
+  lines.push(`  CPC projected total: ${describeTotal(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+  lines.push(`  ${describeMoneyline(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] }, { home_team: homeTeam, away_team: awayTeam })}`);
+  lines.push('');
+
+  lines.push('GAME MODEL');
+  lines.push(`  projected score: ${awayTeam} ${scoreValue(awayRuns)}, ${homeTeam} ${scoreValue(homeRuns)}`);
+  lines.push(`  ${projectedSpread}`);
+  lines.push(`  CALCULATION: ${calculation}`);
+  lines.push(`  CPC projected total: ${describeTotal(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+  lines.push(`  ${describeMoneyline(scoreProjection ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] }, { home_team: homeTeam, away_team: awayTeam })}`);
+  lines.push(`  YRFI/NRFI: ${describeYrfi(packetProjections?.yrfi ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+  lines.push(`  model posture: ${frontRead.cpcRead ?? frontRead.call}`);
+  lines.push(`  WHY: ${frontRead.reason ?? frontRead.summary ?? 'model posture unavailable'}`);
+  lines.push('');
+
   if (hasComposite) {
     const read = classifyGamePacketRead(gamePicks, event, { hasModelProjection: Boolean(statsRecord) });
     lines.push('TLDR');
@@ -1233,6 +1317,7 @@ export function buildKalshiGamePacket({
     date,
     statsRecord,
     packetLabel: hasComposite ? 'Game Board' : 'Pre-Final-Lineup',
+    generatedAtUtc,
   });
 
   return {
