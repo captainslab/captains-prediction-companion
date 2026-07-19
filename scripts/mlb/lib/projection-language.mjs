@@ -15,6 +15,13 @@
 import { distributionFloorMean } from './projection-contracts.mjs';
 
 export const NO_TRADE_FOOTER = 'No trades placed. No bankroll sizing. Research only.';
+export const PROJECTED_RUN_TIE_TOLERANCE = 1e-9;
+
+export function projectedRunsAreTied(awayRuns, homeRuns) {
+  return Number.isFinite(awayRuns)
+    && Number.isFinite(homeRuns)
+    && Math.abs(awayRuns - homeRuns) <= PROJECTED_RUN_TIE_TOLERANCE;
+}
 
 export function wrapCustomerPacketText(text, maxWidth = 80) {
   return String(text).split('\n').flatMap((line) => {
@@ -99,7 +106,7 @@ export function formatCompactProjectedSpread(
 ) {
   if (status === 'blocked') return 'CPC projected spread — BLOCKED';
   if (!Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) return 'CPC projected spread — not modeled';
-  if (awayRuns === homeRuns) return `CPC projected spread — pick'em (${awayRuns.toFixed(1)} / ${homeRuns.toFixed(1)})`;
+  if (projectedRunsAreTied(awayRuns, homeRuns)) return `CPC projected spread — pick'em (${awayRuns.toFixed(1)} / ${homeRuns.toFixed(1)})`;
   const favorite = awayRuns > homeRuns ? away_team : home_team;
   return `CPC projected spread — ${favorite} -${Math.abs(awayRuns - homeRuns).toFixed(1)}`;
 }
@@ -180,7 +187,7 @@ export function describeProjectedSpread(
   if (!Number.isFinite(awayRuns) || !Number.isFinite(homeRuns)) {
     return `CPC projected spread — not modeled${statusTag(proj)}.`;
   }
-  if (awayRuns === homeRuns) {
+  if (projectedRunsAreTied(awayRuns, homeRuns)) {
     return `CPC projected spread — pick'em / even line (${away_team} and ${home_team} both project ${awayRuns.toFixed(1)} runs)${statusTag(proj)}.`;
   }
   const favorite = awayRuns > homeRuns ? away_team : home_team;

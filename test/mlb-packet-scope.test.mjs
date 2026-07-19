@@ -357,7 +357,8 @@ test('single-family fully sourced packets render a sharp model-backed storyline'
   const homeKs = packet.text.match(/Jack Perkins\s+projects around\s+([0-9]+\.[0-9]) K/);
 
   assert.match(packet.text, /Event Preview \/ Storyline/);
-  assert.match(packet.text, /NO CLEAR PICK because only the MONEYLINE family is fully modeled/);
+  assert.match(packet.text, /MODEL POSTURE\s+LEAN/);
+  assert.doesNotMatch(packet.text, /NO CLEAR PICK/);
   assert.ok(runSplit, 'run split line should render');
   assert.ok(totalShape, 'total shape line should render');
   assert.ok(yrfiShape, 'YRFI shape line should render');

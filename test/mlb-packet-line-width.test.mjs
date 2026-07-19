@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import {
   buildKalshiGamePacket,
   buildMlbSlatePacket,
+  buildGamePreviewStory,
 } from '../scripts/packets/generate-mlb-daily.mjs';
+import { buildGameProjections, poissonDistribution } from '../scripts/mlb/lib/projection-engine.mjs';
 
 const statsRecord = {
   ...JSON.parse(readFileSync(
@@ -31,6 +33,63 @@ const pick = {
   gates_passed: ['starter confirmed', 'lineup confirmed', 'weather updated'],
   missing_confirmations: [],
 };
+
+const baseProjection = buildGameProjections({
+  record: statsRecord,
+  leagueRPG: 4.36,
+  as_of: '2026-06-21T00:00:00Z',
+  lineup_status: 'confirmed',
+  weather_status: 'complete',
+});
+
+function syntheticProjection({ awayRuns = 4.1, homeRuns = 4.1, homeProbability = 0.5 } = {}) {
+  return {
+    ...baseProjection,
+    means: { lambdaAway: awayRuns, lambdaHome: homeRuns },
+    score: {
+      ...baseProjection.score,
+      status: 'official',
+      lineup_status: 'confirmed',
+      weather_status: 'complete',
+      outputs: {
+        ...baseProjection.score.outputs,
+        moneyline_home: homeProbability,
+        team_runs_distribution: {
+          away: poissonDistribution(awayRuns, 12),
+          home: poissonDistribution(homeRuns, 12),
+        },
+        total_runs_distribution: poissonDistribution(awayRuns + homeRuns, 20),
+      },
+    },
+  };
+}
+
+function buildSyntheticMorningPacket({ projection, pickOverrides = {} } = {}) {
+  return buildMlbSlatePacket({
+    date: '2026-06-21',
+    scoring: {
+      picks: [{
+        ...pick,
+        classification: 'PASS',
+        primary_pick: true,
+        kalshi_ask: null,
+        ...pickOverrides,
+      }],
+      summaryCounts: { pass: 1 },
+    },
+    slateGames: [{
+      officialRecord: {
+        game_pk: 824987,
+        event_ticker: 'KXMLBGAME-26JUN211605LAAATH',
+        status: 'Scheduled',
+        start_time_utc: '2026-06-21T19:05:00Z',
+      },
+      statsRecord,
+      projection,
+    }],
+    leagueRPG: 4.36,
+  });
+}
 
 function assertPacketLinesUnder80(label, text) {
   const offenders = text.split(/\r?\n/)
@@ -155,7 +214,7 @@ test('renderers use score-derived spread, honest market fallback, and safe audit
         venue: 'Synthetic Park',
         start_utc: '2026-06-21T19:05:00Z',
       },
-      gamePicks: [{ ...pick, classification: 'PRE_LINEUP_PICK', kalshi_ask: null }],
+      gamePicks: [{ ...pick, classification: 'PASS', kalshi_ask: null }],
       statsRecord,
       leagueRPG: 4.36,
       scope: 'GAME_PACKET',
@@ -190,4 +249,99 @@ test('renderers use score-derived spread, honest market fallback, and safe audit
   } finally {
     rmSync(stateRoot, { recursive: true, force: true });
   }
+});
+
+test('tied projected score renders pick\'em and an even-margin narrative', () => {
+  const packet = buildSyntheticMorningPacket({
+    projection: syntheticProjection({ awayRuns: 4.1, homeRuns: 4.1, homeProbability: 0.51 }),
+  });
+
+  assert.match(packet.text, /CPC projected spread — pick'em \(4\.1 \/ 4\.1\)/);
+  assert.match(packet.text, /projected scoring margin is even/i);
+  assert.match(packet.text, /score-distribution shape, not the expected-run difference/i);
+  assert.doesNotMatch(packet.text, /projected run split favors/i);
+});
+
+test('projection-only posture survives absent market data and keeps model families visible', () => {
+  const packet = buildSyntheticMorningPacket({
+    projection: syntheticProjection({ awayRuns: 5.2, homeRuns: 3.4, homeProbability: 0.86 }),
+    pickOverrides: {
+      classification: 'PASS',
+      primary_pick: false,
+      fair_value: null,
+      kalshi_ask: null,
+      edge_pp: null,
+    },
+  });
+
+  assert.match(packet.text, /MODEL POSTURE: STRONG LEAN/);
+  assert.match(packet.text, /PROJECTED SCORE:/);
+  assert.match(packet.text, /CPC projected spread/);
+  assert.match(packet.text, /CPC projected total/);
+  assert.match(packet.text, /Projected win probability/);
+  assert.match(packet.text, /YRFI\/NRFI/);
+  assert.match(packet.text, /Reid Detmers .*STRIKEOUTS/);
+  assert.match(packet.text, /Jack Perkins .*STRIKEOUTS/);
+  assert.doesNotMatch(packet.text, /NO CLEAR PICK/);
+  assert.doesNotMatch(packet.text, /BLOCKED_SOURCE_GAP/);
+});
+
+test('run and win favorites are independently named in WHY and storyline', () => {
+  const projection = syntheticProjection({ awayRuns: 5.2, homeRuns: 3.4, homeProbability: 0.86 });
+  const packet = buildSyntheticMorningPacket({ projection });
+  const story = buildGamePreviewStory({
+    event: { away_full: 'Los Angeles Angels', home_full: 'Athletics' },
+    statsRecord,
+    read: { call: 'NO CLEAR PICK', reason: 'single modeled family only' },
+    projections: projection,
+    posture: 'STRONG LEAN',
+  }).join('\n');
+
+  assert.match(packet.text, /Athletics carries the stronger model win probability\s+at 86\.0%/);
+  assert.doesNotMatch(packet.text, /Los Angeles Angels carries the stronger model win probability\s+at 14\.0%/);
+  assert.match(story, /projected run split favors Los Angeles Angels 5\.2 to 3\.4/);
+  assert.match(story, /Athletics has the stronger model win probability at 86\.0%/);
+  assert.doesNotMatch(story, /Los Angeles Angels has the stronger model win probability at 14\.0%/);
+});
+
+test('confirmed_lineup rejects stale PRE_LINEUP_PICK state instead of renaming it', () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), 'cpc-mlb-confirmed-contract-'));
+  try {
+    assert.throws(() => buildKalshiGamePacket({
+      date: '2026-06-21',
+      stateRoot,
+      event: {
+        event_ticker: 'KXMLBGAME-26JUN211605LAAATH',
+        title: 'Los Angeles Angels at Athletics',
+        away_full: 'Los Angeles Angels',
+        home_full: 'Athletics',
+        venue: 'Synthetic Park',
+        start_utc: '2026-06-21T19:05:00Z',
+      },
+      gamePicks: [{ ...pick, classification: 'PRE_LINEUP_PICK' }],
+      statsRecord,
+      leagueRPG: 4.36,
+      scope: 'GAME_PACKET',
+    }), /CONFIRMED_LINEUP_CONTRACT_VIOLATION.*PRE_LINEUP_PICK/);
+  } finally {
+    rmSync(stateRoot, { recursive: true, force: true });
+  }
+});
+
+test('displayed CPC model probability is projection-derived, not ask/fair_value-derived', () => {
+  const projection = syntheticProjection({ awayRuns: 4.0, homeRuns: 4.6, homeProbability: 0.64 });
+  const lowAsk = buildSyntheticMorningPacket({
+    projection,
+    pickOverrides: { team_side: 'home', fair_value: 0.02, kalshi_ask: 0.25, edge_pp: 39 },
+  });
+  const highAsk = buildSyntheticMorningPacket({
+    projection,
+    pickOverrides: { team_side: 'home', fair_value: 0.98, kalshi_ask: 0.75, edge_pp: -11 },
+  });
+  const modelProbability = (text) => text.match(/CPC model probability\n\s+([0-9.]+%)/)?.[1];
+
+  assert.equal(modelProbability(lowAsk.text), '64.0%');
+  assert.equal(modelProbability(highAsk.text), '64.0%');
+  assert.match(lowAsk.text, /Market implied probability\n\s+25\.0%/);
+  assert.match(highAsk.text, /Market implied probability\n\s+75\.0%/);
 });

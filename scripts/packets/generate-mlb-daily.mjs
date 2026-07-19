@@ -51,6 +51,7 @@ import {
   formatCompactYrfi,
   formatCompactKs,
   wrapCustomerPacketText,
+  projectedRunsAreTied,
 } from '../mlb/lib/projection-language.mjs';
 import {
   buildGameProjections,
@@ -718,13 +719,15 @@ function distMean(value) {
   return typeof mean === 'number' && Number.isFinite(mean) ? mean : null;
 }
 
-function buildGamePreviewStory({ event = null, statsRecord = null, read = null, projections = null } = {}) {
+export function buildGamePreviewStory({ event = null, statsRecord = null, read = null, projections = null, posture = 'PASS' } = {}) {
   const awayTeam = statsRecord?.away_team ?? event?.away_team ?? event?.away_full ?? 'Away';
   const homeTeam = statsRecord?.home_team ?? event?.home_team ?? event?.home_full ?? 'Home';
   const awayStarter = statsRecord?.away_pitcher?.name ?? event?.away_starter ?? event?.away_pitcher ?? 'away starter';
   const homeStarter = statsRecord?.home_pitcher?.name ?? event?.home_starter ?? event?.home_pitcher ?? 'home starter';
-  const call = String(read?.call ?? 'NO CLEAR PICK').trim() || 'NO CLEAR PICK';
   const reason = String(read?.reason ?? '').trim().toLowerCase();
+  const postureLabel = ['LEAN', 'STRONG LEAN', 'SLIGHT LEAN'].includes(String(posture).trim().toUpperCase())
+    ? String(posture).trim().toUpperCase()
+    : 'PASS';
 
   const moneylineHome = projections?.score?.outputs?.moneyline_home;
   const totalRuns = distMean(projections?.score?.outputs?.total_runs_distribution);
@@ -738,17 +741,27 @@ function buildGamePreviewStory({ event = null, statsRecord = null, read = null, 
 
   if (typeof moneylineHome === 'number' && Number.isFinite(moneylineHome) && typeof awayRuns === 'number' && typeof homeRuns === 'number') {
     const awayWinProb = 1 - moneylineHome;
-    const leanTeam = awayWinProb >= moneylineHome ? awayTeam : homeTeam;
-    const leanRuns = awayWinProb >= moneylineHome
-      ? `${awayTeam} ${awayRuns.toFixed(1)} to ${homeRuns.toFixed(1)}`
-      : `${homeTeam} ${homeRuns.toFixed(1)} to ${awayRuns.toFixed(1)}`;
-    const leanProb = awayWinProb >= moneylineHome ? awayWinProb : moneylineHome;
-    lines.push(`The model leans ${leanTeam} because the projected run split favors ${leanRuns} and the win split lands at ${pct(leanProb)}.`);
+    const runsTied = projectedRunsAreTied(awayRuns, homeRuns);
+    const runFavorite = runsTied ? null : awayRuns > homeRuns
+      ? { team: awayTeam, runs: awayRuns, opponentRuns: homeRuns }
+      : { team: homeTeam, runs: homeRuns, opponentRuns: awayRuns };
+    const winFavorite = awayWinProb >= moneylineHome
+      ? { team: awayTeam, probability: awayWinProb }
+      : { team: homeTeam, probability: moneylineHome };
+    if (runsTied && Math.abs(moneylineHome - 0.5) > 1e-9) {
+      lines.push(`The model leans ${winFavorite.team} because both teams project ${awayRuns.toFixed(1)} runs and the win split lands at ${pct(winFavorite.probability)}.`);
+    } else if (runsTied) {
+      lines.push(`The projected scoring margin is even at ${awayRuns.toFixed(1)} runs for both teams, and the win probability is even at 50.0%.`);
+    } else if (runFavorite.team === winFavorite.team) {
+      lines.push(`The model leans ${winFavorite.team} because the projected run split favors ${runFavorite.team} ${runFavorite.runs.toFixed(1)} to ${runFavorite.opponentRuns.toFixed(1)} and the win split lands at ${pct(winFavorite.probability)}.`);
+    } else {
+      lines.push(`The model separates the two signals: the projected run split favors ${runFavorite.team} ${runFavorite.runs.toFixed(1)} to ${runFavorite.opponentRuns.toFixed(1)}, while ${winFavorite.team} has the stronger model win probability at ${pct(winFavorite.probability)}.`);
+    }
   } else {
     lines.push(`Starter matchup: ${awayStarter} vs ${homeStarter}; ${awayTeam} at ${homeTeam} still reads through the sourced model layer.`);
   }
 
-  if (call === 'NO CLEAR PICK') {
+  if (postureLabel === 'PASS') {
     if (reason.includes('single modeled family only')) {
       lines.push(`This remains NO CLEAR PICK because only the MONEYLINE family is fully modeled, so there is no cross-family confirmation to promote it.`);
     } else if (reason.includes('projections provisional due lineup')) {
@@ -757,7 +770,13 @@ function buildGamePreviewStory({ event = null, statsRecord = null, read = null, 
       lines.push(`This remains NO CLEAR PICK because ${read?.reason ?? 'the model does not yet clear the internal promotion threshold'}.`);
     }
   } else {
-    lines.push(`Current call: ${call}.`);
+    if (reason.includes('single modeled family only')) {
+      lines.push(`The model posture is ${postureLabel}; only the MONEYLINE family is fully modeled, so cross-family confirmation is not available.`);
+    } else if (reason.includes('projections provisional due lineup')) {
+      lines.push(`The model posture is ${postureLabel}; the line is still provisional on lineup alpha, so treat this as an early read.`);
+    } else {
+      lines.push(`The model posture is ${postureLabel}; ${read?.reason ?? 'the projection remains the active model read'}.`);
+    }
   }
 
   const shapeParts = [];
@@ -775,8 +794,10 @@ function buildGamePreviewStory({ event = null, statsRecord = null, read = null, 
     lines.push(`Pitching context: ${pitchParts.join(' while ')}.`);
   }
 
-  if (call === 'NO CLEAR PICK') {
+  if (postureLabel === 'PASS') {
     lines.push('Upgrade trigger: add a confirmed second modeled family or a stronger lane-specific threshold before this moves off no clear pick.');
+  } else {
+    lines.push('Upgrade trigger: add a confirmed second modeled family or a stronger lane-specific threshold before this moves off the current posture.');
   }
 
   return lines.slice(0, 6);
@@ -902,31 +923,52 @@ function buildSlateGameProjection({ date, game = null, leagueRPG = null } = {}) 
   });
 }
 
-function customerPosture(read = null, { scoreBlocked = false } = {}) {
-  const raw = String(read?.cpcRead ?? read?.call ?? '').toUpperCase();
-  if (scoreBlocked || raw === 'BLOCKED' || raw === 'NO CLEAR PICK' || raw === 'PASS') return 'PASS';
-  if (raw === 'PICK' || raw === 'STRONG LEAN') return 'STRONG LEAN';
-  if (raw === 'EVIDENCE_LEAN' || raw === 'LEAN' || raw === 'MODEL_ONLY') return 'LEAN';
-  if (raw === 'WATCH' || raw === 'SLIGHT LEAN') return 'SLIGHT LEAN';
+function customerPosture(projection = null, { scoreBlocked = false } = {}) {
+  const score = projection?.score ?? null;
+  if (scoreBlocked || score?.status === 'blocked') return 'PASS';
+  const homeProbability = score?.outputs?.moneyline_home;
+  if (!Number.isFinite(homeProbability)) return 'PASS';
+  const skew = Math.abs(homeProbability - 0.5);
+  if (skew >= 0.20) return 'STRONG LEAN';
+  if (skew >= 0.10) return 'LEAN';
+  if (skew > 0) return 'SLIGHT LEAN';
   return 'PASS';
 }
 
-function customerSafeRead(read = null, { confirmed = false } = {}) {
+function customerSafeRead(read = null) {
   if (!read || typeof read !== 'object') return read;
-  const safe = { ...read };
-  for (const key of ['call', 'readLine', 'reason', 'summary', 'whatItMeans']) {
-    if (typeof safe[key] === 'string') {
-      safe[key] = safe[key]
-        .replace(/PRE_LINEUP_PICK/g, 'confirmed-lineup model')
-        .replace(/EVIDENCE_LEAN/g, 'LEAN');
-      if (confirmed) {
-        safe[key] = safe[key]
-          .replace(/pre[- ]lineup/gi, 'confirmed-lineup')
-          .replace(/\bprovisional\b/gi, 'not fully backed');
-      }
+  return { ...read };
+}
+
+function assertConfirmedLineupContract({ gamePicks = [], statsRecord = null, projections = null, read = null, statusSnapshot = null } = {}) {
+  const violations = [];
+  if (safeArray(gamePicks).some((pick) => String(pick?.classification ?? '').toUpperCase() === 'PRE_LINEUP_PICK')) {
+    violations.push('pick classification PRE_LINEUP_PICK');
+  }
+  if (safeArray(gamePicks).some((pick) => safeArray(pick?.missing_confirmations).some((item) => /lineup/i.test(String(item))))) {
+    violations.push('pick lineup confirmation is pending');
+  }
+  if (statsRecord?.lineup_status && statsRecord.lineup_status !== 'confirmed') {
+    violations.push(`stats lineup_status=${statsRecord.lineup_status}`);
+  }
+  if (statusSnapshot?.lineup_status && statusSnapshot.lineup_status !== 'confirmed') {
+    violations.push(`packet lineup_status=${statusSnapshot.lineup_status}`);
+  }
+  for (const [name, projection] of Object.entries(projections ?? {})) {
+    if (!projection || typeof projection !== 'object') continue;
+    if (projection.status === 'provisional') violations.push(`${name} projection is provisional`);
+    if (projection.lineup_status && projection.lineup_status !== 'confirmed') {
+      violations.push(`${name} lineup_status=${projection.lineup_status}`);
     }
   }
-  return safe;
+  const readState = ['evidenceStatus', 'readLine', 'reason', 'summary', 'whatItMeans']
+    .map((key) => read?.[key])
+    .filter((value) => typeof value === 'string')
+    .join(' ');
+  if (/provisional|pre[-_ ]?lineup/i.test(readState)) violations.push('classification read is provisional/pre-lineup');
+  if (violations.length) {
+    throw new Error(`CONFIRMED_LINEUP_CONTRACT_VIOLATION: ${violations.join('; ')}`);
+  }
 }
 
 function projectionMeans(projection) {
@@ -967,13 +1009,33 @@ function projectionWhy({ awayTeam, homeTeam, projection, posture, fallbackReason
   const yrfi = projection?.yrfi?.outputs?.yrfi_prob;
   const lines = [];
   if (Number.isFinite(away) && Number.isFinite(home)) {
-    const favorite = away >= home ? awayTeam : homeTeam;
-    const favoriteRuns = Math.max(away, home);
-    const opponentRuns = Math.min(away, home);
-    lines.push(`The projected run split favors ${favorite} ${favoriteRuns.toFixed(1)} to ${opponentRuns.toFixed(1)}.`);
-    if (Number.isFinite(homeProbability)) {
-      const favoriteProbability = away >= home ? 1 - homeProbability : homeProbability;
-      lines.push(`${favorite} carries the stronger model win probability at ${(favoriteProbability * 100).toFixed(1)}%.`);
+    if (projectedRunsAreTied(away, home)) {
+      lines.push(`The projected scoring margin is even: ${awayTeam} and ${homeTeam} both project ${away.toFixed(1)} runs; the run split is pick'em.`);
+      if (Number.isFinite(homeProbability)) {
+        if (Math.abs(homeProbability - 0.5) > 1e-9) {
+          const edgeTeam = homeProbability > 0.5 ? homeTeam : awayTeam;
+          const edgeProbability = homeProbability > 0.5 ? homeProbability : 1 - homeProbability;
+          lines.push(`${edgeTeam} has a ${(edgeProbability * 100).toFixed(1)}% model win probability; that edge comes from score-distribution shape, not the expected-run difference.`);
+        } else {
+          lines.push('The model win probability is even at 50.0% for both teams.');
+        }
+      }
+    } else {
+      const favorite = away > home ? awayTeam : homeTeam;
+      const favoriteRuns = Math.max(away, home);
+      const opponentRuns = Math.min(away, home);
+      lines.push(`The projected run split favors ${favorite} ${favoriteRuns.toFixed(1)} to ${opponentRuns.toFixed(1)}.`);
+      if (Number.isFinite(homeProbability)) {
+        const awayWinProbability = 1 - homeProbability;
+        const winFavorite = awayWinProbability >= homeProbability
+          ? { team: awayTeam, probability: awayWinProbability }
+          : { team: homeTeam, probability: homeProbability };
+        if (winFavorite.team === favorite) {
+          lines.push(`${winFavorite.team} carries the stronger model win probability at ${(winFavorite.probability * 100).toFixed(1)}%.`);
+        } else {
+          lines.push(`${winFavorite.team} carries the stronger model win probability at ${(winFavorite.probability * 100).toFixed(1)}%; the run split favors ${favorite}, so the two model favorites differ.`);
+        }
+      }
     }
     const shape = [];
     if (Number.isFinite(total)) shape.push(`projected total ${total.toFixed(1)}`);
@@ -1077,8 +1139,23 @@ function renderStrikeoutProp(projection, pitcherName, posture) {
   return lines;
 }
 
-function renderMarketComparison({ primaryPick = null, posture = 'PASS', confirmed = false } = {}) {
-  const modelProbability = primaryPick?.fair_value;
+function modelProbabilityForPick({ primaryPick = null, projection = null, awayTeam = 'Away', homeTeam = 'Home' } = {}) {
+  const homeProbability = projection?.score?.outputs?.moneyline_home;
+  if (!Number.isFinite(homeProbability)) return null;
+  const explicitSide = String(primaryPick?.team_side ?? primaryPick?.side ?? '').toLowerCase();
+  if (explicitSide === 'home') return homeProbability;
+  if (explicitSide === 'away') return 1 - homeProbability;
+  const identity = String(primaryPick?.team_name ?? primaryPick?.contract_title ?? primaryPick?.market_title ?? '').trim().toLowerCase();
+  if (identity && identity === String(homeTeam).trim().toLowerCase()) return homeProbability;
+  if (identity && identity === String(awayTeam).trim().toLowerCase()) return 1 - homeProbability;
+  return null;
+}
+
+function renderMarketComparison({ primaryPick = null, projection = null, awayTeam = 'Away', homeTeam = 'Home', posture = 'PASS', confirmed = false } = {}) {
+  // Do not trust primaryPick.fair_value here: this renderer receives scorer
+  // rows whose fair_value producer is not guaranteed in-repo to be price-free.
+  // The canonical projection probability is computed from model inputs only.
+  const modelProbability = modelProbabilityForPick({ primaryPick, projection, awayTeam, homeTeam });
   const marketProbability = primaryPick?.kalshi_ask;
   const numeric = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
   const available = numeric(modelProbability) && numeric(marketProbability);
@@ -1167,9 +1244,9 @@ function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG
   const read = customerSafeRead(classifyGamePacketRead(gamePicks, event, {
     hasModelProjection: Boolean(projection?.score && projection.score.status !== 'blocked'),
   }));
-  const modelPosture = projection?.score?.status === 'blocked'
-    ? 'PASS'
-    : customerPosture(read);
+  const modelPosture = customerPosture(projection, {
+    scoreBlocked: projection?.score?.status === 'blocked' || !projection,
+  });
   const scoreText = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
     ? `${teams.away} ${awayRuns.toFixed(1)}, ${teams.home} ${homeRuns.toFixed(1)}`
     : 'not modeled — model inputs unavailable';
@@ -1235,7 +1312,13 @@ function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG
       '  The CPC projected spread is the difference between the two projected team scores.',
       ...(score.status === 'blocked' ? ['  BLOCKED_MODEL_LAYER_MISSING: stats-backed model projection unavailable.'] : []),
     ],
-    renderMarketComparison({ primaryPick, posture: modelPosture }),
+    renderMarketComparison({
+      primaryPick,
+      projection,
+      awayTeam: teams.away,
+      homeTeam: teams.home,
+      posture: modelPosture,
+    }),
     renderSourceStatus({ game, projection, hrProjection: projection?.hr }),
   ];
   return sections.map((section) => Array.isArray(section) ? section.join('\n') : section).join('\n\n');
@@ -1294,9 +1377,9 @@ function buildFullSlateBoardEntries({ date, scoring, slateGames = [], leagueRPG 
     const read = customerSafeRead(classifyGamePacketRead(game.picks, event, {
       hasModelProjection: Boolean(projection?.score && projection.score.status !== 'blocked'),
     }));
-    const modelPosture = projection?.score?.status === 'blocked'
-      ? 'PASS'
-      : customerPosture(read);
+    const modelPosture = customerPosture(projection, {
+      scoreBlocked: projection?.score?.status === 'blocked' || !projection,
+    });
     const status = slateGameStatus(boardGame);
     const statusCandidates = [
       status,
@@ -1957,29 +2040,26 @@ export function buildKalshiGamePacket({
   const scoreValue = (value) => Number.isFinite(value) ? value.toFixed(1) : 'not modeled';
   const lineupState = packetStatusSnapshot.lineup_status === 'confirmed' ? 'LOCKED' : 'UNAVAILABLE';
   const starterState = packetStatusSnapshot.starterInput === 'LOCKED' ? 'CONFIRMED' : 'UNAVAILABLE';
-  const favoriteRuns = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
-    ? (awayRuns >= homeRuns ? awayRuns : homeRuns)
-    : null;
-  const opponentRuns = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
-    ? (awayRuns >= homeRuns ? homeRuns : awayRuns)
-    : null;
   const primaryPick = selectPrimaryScoringPick(gamePicks);
-  const displayRead = customerSafeRead(frontRead, {
-    confirmed: packetStatusSnapshot.lineup_status === 'confirmed',
-  });
-  const displayPosture = customerPosture(displayRead, {
+  // buildKalshiGamePacket also serves legacy GAME_PACKET previews in tests and
+  // discovery flows. Enforce the stale-state contract once a positive
+  // confirmed-lineup marker is present; unconfirmed previews stay disclosed.
+  const confirmedLineupPath = statsRecord?.lineup_status === 'confirmed'
+    || packetStatusSnapshot.lineup_status === 'confirmed';
+  if (confirmedLineupPath) {
+    assertConfirmedLineupContract({
+      gamePicks,
+      statsRecord,
+      projections: packetProjections,
+      read: frontRead,
+      statusSnapshot: packetStatusSnapshot,
+    });
+  }
+  const displayPosture = customerPosture(packetProjections, {
     scoreBlocked: scoreProjection?.status === 'blocked' || !packetProjections,
   });
   const blockedKs = { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] };
-  const propPosture = (side, pitcherName) => {
-    const candidate = safeArray(gamePicks).find((pick) => {
-      const laneText = `${pick?.market_lane ?? ''} ${pick?.market_title ?? ''} ${pick?.contract_title ?? ''} ${pick?.player_name ?? ''}`;
-      const sideText = `${pick?.side ?? ''} ${pick?.team ?? ''} ${pick?.player_name ?? ''}`;
-      return /strikeout|pitcher|\bks\b/i.test(laneText)
-        && (new RegExp(side, 'i').test(sideText) || new RegExp(String(pitcherName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(sideText));
-    });
-    return candidate ? customerPosture({ cpcRead: candidate.classification }) : displayPosture;
-  };
+  const propPosture = () => displayPosture;
   const probabilityText = (value) => Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(1)}%` : 'MISSING';
   const ppText = (value) => Number.isFinite(Number(value)) ? `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)}pp` : 'MISSING';
 
@@ -2062,9 +2142,7 @@ export function buildKalshiGamePacket({
   };
   const storyRead = customerSafeRead(hasComposite
     ? classifyGamePacketRead(gamePicks, event, { hasModelProjection: Boolean(statsRecord) })
-    : { call: 'NO CLEAR PICK', reason: 'model outputs are unavailable' }, {
-    confirmed: packetStatusSnapshot.lineup_status === 'confirmed',
-  });
+    : { call: 'NO CLEAR PICK', reason: 'model outputs are unavailable' });
   const why = projectionWhy({
     awayTeam,
     homeTeam,
@@ -2121,7 +2199,7 @@ export function buildKalshiGamePacket({
   ];
   const story = [
     'Event Preview / Storyline',
-    ...buildGamePreviewStory({ event, statsRecord, read: storyRead, projections: packetProjections }).map((line) => `  ${line}`),
+    ...buildGamePreviewStory({ event, statsRecord, read: storyRead, projections: packetProjections, posture: displayPosture }).map((line) => `  ${line}`),
     ...(storyRead?.reason ? [`  Model read note: ${storyRead.reason}`] : []),
   ];
   const sourceGame = { officialRecord: event, statsRecord, weatherRecord: statsRecord?.weather };
@@ -2150,13 +2228,20 @@ export function buildKalshiGamePacket({
     [
       'PLAYER PROPS',
       [
-        renderStrikeoutProp(packetProjections?.ks_away ?? blockedKs, awayStarter, displayPosture),
-        renderStrikeoutProp(packetProjections?.ks_home ?? blockedKs, homeStarter, displayPosture),
+        renderStrikeoutProp(packetProjections?.ks_away ?? blockedKs, awayStarter, propPosture()),
+        renderStrikeoutProp(packetProjections?.ks_home ?? blockedKs, homeStarter, propPosture()),
       ].map((section) => section.join('\n')).join('\n\n'),
     ],
     renderHrSection(packetProjections?.hr ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'], outputs: [] }, { statsRecord, includeWindows: true }),
     limitationSection,
-    renderMarketComparison({ primaryPick, posture: displayPosture, confirmed: true }),
+    renderMarketComparison({
+      primaryPick,
+      projection: packetProjections,
+      awayTeam,
+      homeTeam,
+      posture: displayPosture,
+      confirmed: true,
+    }),
     renderSourceStatus({ game: sourceGame, projection: projectionForLanguage, hrProjection: packetProjections?.hr, sourceRefs }),
     deliverySection,
   ];
