@@ -465,8 +465,12 @@ test('reference-price-only gaps do not suppress a market-free model posture', ()
   ];
   const read = classifyGamePacketRead(picks, null, { hasModelProjection: true });
   assert.equal(read.cpcRead, 'MODEL_ONLY');
+  assert.equal(read.call, 'EVIDENCE LEAN — favorite');
+  assert.equal(read.scoringClassification, 'LEAN');
   assert.match(read.readLine, /market-context blocked/);
-  assert.match(read.reason, /reference_price gap only/);
+  assert.match(read.reason, /model-backed posture stands/);
+  assert.doesNotMatch(read.call, /NO CLEAR PICK/);
+  assert.notEqual(read.scoringClassification, 'BLOCKED_SOURCE_GAP');
 
   const blockedRead = classifyGamePacketRead(picks, null, { hasModelProjection: false });
   assert.equal(blockedRead.cpcRead, 'BLOCKED');

@@ -613,14 +613,14 @@ export function classifyGamePacketRead(gamePicks = [], event = null, { hasModelP
 
   if (priceOnlyBlocked && hasModelProjection) {
     return {
-      call: 'NO CLEAR PICK',
+      call: `EVIDENCE LEAN — ${marketLabel}`,
       cpcRead: 'MODEL_ONLY',
       readLine: 'model read available; market-context blocked',
-      scoringClassification: 'BLOCKED_SOURCE_GAP',
-      reason: 'reference_price gap only — market-free model still renders',
-      summary: 'scoring blocked on reference_price; composite/model layer is not price-dependent',
-      whatItMeans: 'Reference price is missing, so board entry is blocked. Market-free projections still render below.',
-      evidenceStatus: hasModelProjection ? 'model_ready_price_gap' : 'blocked',
+      scoringClassification: 'LEAN',
+      reason: 'reference_price gap only — model-backed posture stands',
+      summary: 'model-backed scoring posture LEAN; market-edge comparison is omitted because reference_price is unavailable',
+      whatItMeans: 'Reference price is unavailable, so market-edge comparison is omitted. The model-backed projection remains the active read.',
+      evidenceStatus: 'model_ready_price_gap',
     };
   }
 
