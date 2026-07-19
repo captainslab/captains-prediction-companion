@@ -65,7 +65,6 @@ import { evaluateDecisionProcess, MARKET_TYPES, renderDecisionProcess } from '..
 import {
   buildDecisionRow,
   renderDecisionBoard,
-  renderSectionedPacket,
   rankDecisionRows,
   buildInventoryArtifact,
   EDGE_STATUS,
@@ -497,13 +496,6 @@ function trimArticleHeadline(text = '') {
     return lines.slice(idx).join('\n').trimEnd();
   }
   return String(text).trimEnd();
-}
-
-function stripAuditArtifactsSection(text = '') {
-  const raw = String(text);
-  const marker = '\n=== 5. AUDIT ARTIFACTS ===';
-  const idx = raw.indexOf(marker);
-  return idx >= 0 ? raw.slice(0, idx).trimEnd() : raw.trimEnd();
 }
 
 export function formatGamePacketLead({ event, date, statsRecord = null, packetLabel, generatedAtUtc = new Date().toISOString() }) {
@@ -943,7 +935,18 @@ function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG
   ].join('\n');
 }
 
-function buildFullSlateBoard({ date, scoring, slateGames = [], leagueRPG = null } = {}) {
+const SLATE_POSTURE_STRENGTH = Object.freeze({
+  PICK: 5,
+  MODEL_ONLY: 4,
+  EVIDENCE_LEAN: 3,
+  LEAN: 2,
+  WATCH: 1,
+  PASS: 0,
+  BLOCKED: -1,
+  MODEL_INSUFFICIENT: -2,
+});
+
+function buildFullSlateBoardEntries({ date, scoring, slateGames = [], leagueRPG = null } = {}) {
   const picks = safeArray(scoring?.picks);
   const groupedPicks = new Map();
   for (const pick of picks) {
@@ -964,25 +967,264 @@ function buildFullSlateBoard({ date, scoring, slateGames = [], leagueRPG = null 
     scheduled.push({ picks: gamePicks, officialRecord: { event_ticker: key } });
   }
 
-  if (!scheduled.length) return 'FULL SLATE BOARD\n\n  MISSING — no scheduled game records were supplied.';
-  return [
-    'FULL SLATE BOARD',
-    ...scheduled.map((game, index) => renderFullSlateGameBlock({
+  return scheduled.map((game, index) => {
+    // The slate runner normally supplies projection objects. For direct callers
+    // and tests, build the same market-free projection once and pass it through
+    // to the existing per-game renderer and the wrapper sections.
+    const projection = game.projection ?? buildSlateGameProjection({ date, game, leagueRPG });
+    const boardGame = game.projection == null && projection ? { ...game, projection } : game;
+    const teams = slateTeamNames({ game: boardGame, picks: game.picks });
+    const record = boardGame?.statsRecord ?? boardGame?.officialRecord ?? boardGame ?? {};
+    const score = projection?.score ?? {
+      status: 'blocked',
+      blocked_reasons: ['MODEL_INPUTS_MISSING'],
+    };
+    const awayRuns = score.status === 'blocked' ? null : projection?.means?.lambdaAway;
+    const homeRuns = score.status === 'blocked' ? null : projection?.means?.lambdaHome;
+    const event = {
+      event_ticker: record.event_ticker ?? record.ticker,
+      title: `${teams.away} at ${teams.home}`,
+    };
+    const read = classifyGamePacketRead(game.picks, event, {
+      hasModelProjection: Boolean(projection?.score && projection.score.status !== 'blocked'),
+    });
+    const modelPosture = projection?.score?.status === 'blocked'
+      ? 'MODEL_INSUFFICIENT'
+      : (read.cpcRead ?? read.call ?? 'PASS');
+    const status = String(
+      boardGame?.statsRecord?.game_status
+        ?? boardGame?.officialRecord?.game_status
+        ?? boardGame?.officialRecord?.status
+        ?? record.game_status
+        ?? record.status
+        ?? 'UNKNOWN',
+    ).trim() || 'UNKNOWN';
+    const statusCandidates = [
+      boardGame?.officialRecord?.game_status,
+      boardGame?.officialRecord?.status,
+      boardGame?.statsRecord?.game_status,
+      boardGame?.statsRecord?.status,
+      boardGame?.contextRecord?.game_status,
+      boardGame?.contextRecord?.status,
+      status,
+    ].map((value) => String(value ?? '').trim()).filter(Boolean);
+    const operationsStatus = statusCandidates.find((value) => /delay|postpon|suspend|double\s*header/i.test(value)) ?? status;
+    const totalRuns = distMean(score.outputs?.total_runs_distribution);
+    const winProbability = score.outputs?.moneyline_home;
+    const doubleheader = [boardGame, boardGame?.officialRecord, boardGame?.statsRecord, boardGame?.contextRecord]
+      .some((source) => source?.doubleheader === true
+        || /^(?:true|yes|y|1)$/i.test(String(source?.doubleheader ?? ''))
+        || source?.is_doubleheader === true
+        || source?.double_header === true
+        || source?.doubleheader_game_number != null
+        || /double\s*header/i.test(String(source?.series_description ?? source?.game_description ?? ''))
+        || /double\s*header/i.test(String(source?.game_status ?? source?.status ?? '')));
+    const delayed = statusCandidates.some((value) => /delay|postpon|suspend/i.test(value));
+    return {
       date,
-      game,
+      game: boardGame,
       gamePicks: game.picks,
       index: index + 1,
       leagueRPG,
+      teams,
+      projection,
+      score,
+      awayRuns,
+      homeRuns,
+      totalRuns,
+      winProbability,
+      read,
+      modelPosture,
+      status,
+      operationsStatus,
+      delayed,
+      doubleheader,
+    };
+  });
+}
+
+function renderFullSlateBoardEntries(entries = []) {
+  if (!entries.length) return 'FULL SLATE BOARD\n\n  MISSING — no scheduled game records were supplied.';
+  return [
+    'FULL SLATE BOARD',
+    ...entries.map((entry) => renderFullSlateGameBlock({
+      date: entry.date,
+      game: entry.game,
+      gamePicks: entry.gamePicks,
+      index: entry.index,
+      leagueRPG: entry.leagueRPG,
     })),
   ].join('\n\n');
+}
+
+function formatSlateScore(entry) {
+  return Number.isFinite(entry.awayRuns) && Number.isFinite(entry.homeRuns)
+    ? `${entry.teams.away} ${entry.awayRuns.toFixed(1)}, ${entry.teams.home} ${entry.homeRuns.toFixed(1)}`
+    : 'not modeled — model inputs unavailable';
+}
+
+function slateSpreadText(entry) {
+  return describeProjectedSpread(entry.awayRuns, entry.homeRuns, {
+    away_team: entry.teams.away,
+    home_team: entry.teams.home,
+    status: entry.score.status,
+    blocked_reasons: entry.score.blocked_reasons,
+  });
+}
+
+function slateTotalText(entry) {
+  return describeTotal(entry.score);
+}
+
+function slateWinProbabilityText(entry) {
+  return describeMoneyline(entry.score, {
+    home_team: entry.teams.home,
+    away_team: entry.teams.away,
+  });
+}
+
+function slateGameLabel(entry) {
+  return `${entry.teams.away} AT ${entry.teams.home}`;
+}
+
+function renderFastRead(entries = []) {
+  const postureEntries = entries
+    .filter((entry) => !['PASS', 'BLOCKED', 'MODEL_INSUFFICIENT'].includes(entry.modelPosture))
+    .sort((a, b) => (SLATE_POSTURE_STRENGTH[b.modelPosture] ?? -99)
+      - (SLATE_POSTURE_STRENGTH[a.modelPosture] ?? -99) || a.index - b.index)
+    .slice(0, 3);
+  const runEntries = entries
+    .filter((entry) => Number.isFinite(entry.totalRuns))
+    .sort((a, b) => b.totalRuns - a.totalRuns || a.index - b.index)
+    .slice(0, 3);
+  const pitcherEntries = entries.flatMap((entry) => [
+    { entry, side: 'away', projection: entry.projection?.ks_away },
+    { entry, side: 'home', projection: entry.projection?.ks_home },
+  ])
+    .filter(({ projection }) => projection?.status !== 'blocked' && Number.isFinite(distMean(projection?.outputs?.distribution)))
+    .sort((a, b) => distMean(b.projection.outputs.distribution) - distMean(a.projection.outputs.distribution)
+      || a.entry.index - b.entry.index)
+    .slice(0, 3);
+
+  const lines = ['FAST READ', 'TOP SIDE POSTURES'];
+  if (postureEntries.length) {
+    for (const entry of postureEntries) {
+      lines.push(`  ${slateGameLabel(entry)} — posture: ${entry.modelPosture}; projected score: ${formatSlateScore(entry)}; ${slateSpreadText(entry)}; ${slateTotalText(entry)}; ${slateWinProbabilityText(entry)}`);
+    }
+  } else {
+    lines.push('  none available — no model-backed side posture is available.');
+  }
+  lines.push('TOP RUN ENVIRONMENTS');
+  if (runEntries.length) {
+    for (const entry of runEntries) {
+      lines.push(`  ${slateGameLabel(entry)} — total: ${entry.totalRuns.toFixed(1)} runs; ${describeYrfi(entry.projection?.yrfi ?? { status: 'blocked', blocked_reasons: ['MODEL_INPUTS_MISSING'] })}`);
+    }
+  } else {
+    lines.push('  none available — projected totals are unavailable.');
+  }
+  lines.push('TOP PITCHER PROP SIGNALS');
+  if (pitcherEntries.length) {
+    for (const { entry, side, projection } of pitcherEntries) {
+      const pitcher = slatePitcher({ game: entry.game, side });
+      lines.push(`  ${slateGameLabel(entry)} — ${describeKs(projection, pitcher)}`);
+    }
+  } else {
+    lines.push('  none available — pitcher K projections are unavailable.');
+  }
+  return lines.join('\n');
+}
+
+function projectionAvailabilityReason(projection, fallback = 'MODEL_INPUTS_MISSING') {
+  const reasons = [
+    ...safeArray(projection?.blocked_reasons),
+    ...(projection?.status === 'provisional' && projection?.lineup_status && projection.lineup_status !== 'confirmed'
+      ? [`lineup_status=${projection.lineup_status}`] : []),
+    ...(projection?.status === 'provisional' && projection?.weather_status && projection.weather_status !== 'complete'
+      ? [`weather_status=${projection.weather_status}`] : []),
+  ];
+  return [...new Set(reasons)].join(', ') || fallback;
+}
+
+function renderAvailabilityLine(label, entries, available) {
+  const total = entries.length;
+  const count = available.length;
+  const degraded = available.filter(({ projection }) => projection?.status === 'provisional');
+  const unavailable = entries.filter((entry) => !available.some((item) => item.entry === entry));
+  const reasons = [...new Set(unavailable.map(({ projection }) => projectionAvailabilityReason(projection)))];
+  const status = count
+    ? `available for ${count}/${total} game(s)${degraded.length ? `; degraded/provisional: ${[...new Set(degraded.map(({ projection }) => projectionAvailabilityReason(projection)))] .join(', ')}` : ''}`
+    : `unavailable — ${reasons.join('; ') || 'MODEL_INPUTS_MISSING'}`;
+  return `  ${label}: ${status}`;
+}
+
+function renderModelAvailability(entries = [], readyHr = []) {
+  const fields = [
+    ['projected runs', (entry) => entry.score?.outputs?.team_runs_distribution
+      && Number.isFinite(entry.awayRuns) && Number.isFinite(entry.homeRuns), (entry) => entry.score],
+    ['spread', (entry) => Number.isFinite(entry.score?.outputs?.runline_home_minus_1_5)
+      && Number.isFinite(entry.awayRuns) && Number.isFinite(entry.homeRuns), (entry) => entry.score],
+    ['total', (entry) => Number.isFinite(entry.totalRuns), (entry) => entry.score],
+    ['win probability', (entry) => Number.isFinite(entry.winProbability), (entry) => entry.score],
+    ['YRFI/NRFI', (entry) => Number.isFinite(entry.projection?.yrfi?.outputs?.yrfi_prob)
+      && Number.isFinite(entry.projection?.yrfi?.outputs?.nrfi_prob), (entry) => entry.projection?.yrfi],
+    ['K projections', (entry) => [entry.projection?.ks_away, entry.projection?.ks_home]
+      .some((projection) => projection?.status !== 'blocked' && Number.isFinite(distMean(projection?.outputs?.distribution))), (entry) => entry.projection?.ks_away ?? entry.projection?.ks_home],
+    ['threshold probabilities', (entry) => [entry.projection?.ks_away, entry.projection?.ks_home]
+      .some((projection) => Object.keys(projection?.outputs?.derived_probs ?? {}).length > 0), (entry) => entry.projection?.ks_away ?? entry.projection?.ks_home],
+  ];
+  const lines = ['MODEL AVAILABILITY'];
+  for (const [label, isAvailable, projectionForStatus] of fields) {
+    const available = entries.filter((entry) => isAvailable(entry)).map((entry) => ({ entry, projection: projectionForStatus(entry) }));
+    lines.push(renderAvailabilityLine(label, entries, available));
+  }
+  lines.push(readyHr.length
+    ? `  anytime-HR model: available for ${readyHr.length} batter signal(s).`
+    : '  anytime-HR model: unavailable/degraded — MODEL_INSUFFICIENT; batter-level evidence is unavailable for this slate.');
+  return lines.join('\n');
+}
+
+function renderOperationsWatch(entries = []) {
+  const watched = entries.filter((entry) => entry.delayed || entry.doubleheader);
+  const lines = ['OPERATIONS WATCH'];
+  if (!watched.length) {
+    lines.push('  none');
+    return lines.join('\n');
+  }
+  for (const entry of watched) {
+    const actions = [];
+    if (entry.delayed) actions.push('recheck official first pitch/status and rerun before release');
+    if (entry.doubleheader) actions.push('confirm game number/order and rerun with each game\'s official starters and locked lineups');
+    lines.push(`  ${slateGameLabel(entry)} — status: ${entry.operationsStatus}; required action: ${actions.join('; ')}.`);
+  }
+  return lines.join('\n');
+}
+
+function formatGeneratedCt(date = new Date()) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
+}
+
+function renderSlateDeliveryAudit({ date, gameCount }) {
+  return [
+    'DELIVERY AND AUDIT',
+    '  packet type: mlb-daily',
+    '  customer artifact: morning_proxy slate packet',
+    `  canonical state: MLB morning_proxy state for ${date}`,
+    `  games included: ${gameCount}`,
+    '  generation result: rendered successfully',
+  ].join('\n');
 }
 
 /**
  * Build the compact, sectioned MLB slate packet from picks.json scoring rows.
  * Returns { text, rows, inventoryText, counts } or null if no scoring exists.
- * The main user-facing text contains ONLY the sectioned decision board (TLDR +
- * Top Edge / Watchlist / Fades / Blocked + audit pointers). The full per-pick
- * inventory goes to a separate audit artifact, never the packet body.
+ * The main user-facing text contains the morning wrapper and the literal full
+ * slate board. The full per-pick inventory goes to a separate audit artifact,
+ * never the packet body.
  */
 export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null, scope = null, sourceRefs = {}, hrProjections = [], slateGames = [], leagueRPG = null }) {
   if (!scoring || !Array.isArray(scoring.picks) || !scoring.picks.length) return null;
@@ -1000,33 +1242,22 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
   const lineupPending = scoring.picks.filter((p) =>
     Array.isArray(p.missing_confirmations) && p.missing_confirmations.some((m) => /lineup/i.test(String(m)))).length;
 
-  const tldrNote = suppressLineupLanguage
-    ? 'Morning slate baseline: scheduled games, starters, weather, research, and current model outputs.'
-    : (lineupPending
-      ? `Pre-lineup slate: ${lineupPending} pick(s) await confirmed lineups — confidence is downgraded, not the board.`
-      : 'Lineups confirmed where available.');
-
-  const body = renderSectionedPacket(boardRows, {
-    tldrNote,
-    auditArtifacts: [],
-    perSectionLimit: 14,
-  });
-  const cleanedBody = stripAuditArtifactsSection(body);
-
+  const slateEntries = buildFullSlateBoardEntries({ date, scoring, slateGames, leagueRPG });
+  const generatedAt = new Date();
   const header = [
     "Captain's MLB Prediction Companion",
-    'Captain MLB — Daily Slate Board',
-    `CPC Packet: Daily Slate Board`,
-    `date: ${date}`,
-    `packet_type: ${PACKET_TYPE}`,
-    `generated_utc: ${new Date().toISOString()}`,
+    'MORNING FULL-SLATE BOARD',
+    'CPC Packet: Morning Full-Slate Board',
+    `Date: ${date}`,
+    `Generated: ${formatGeneratedCt(generatedAt)} CT`,
+    'Run type: morning_proxy',
+    `Games scheduled: ${slateEntries.length}`,
   ].join('\n');
   const inputStatusNote = buildPacketScopeNote({
     scope: resolvedScope,
     gamePicks: scoring.picks,
   });
   const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
-  const fullSlateBoard = buildFullSlateBoard({ date, scoring, slateGames, leagueRPG });
   const readyHr = hrProjections.flatMap((projection) => projection?.outputs ?? [])
     .filter((row) => row?.status === 'ready');
   const hrSection = [
@@ -1035,7 +1266,32 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
       ? readyHr.slice(0, 12).map((row) => `  ${row.player?.player_name ?? `MLB ${row.player?.mlb_id}`}: ${(row.outputs.probability_at_least_one_hr * 100).toFixed(1)}% at least one HR; per-PA ${(row.outputs.per_pa_probability * 100).toFixed(2)}%; expected PA ${row.outputs.expected_pa.toFixed(2)}.`)
       : ['  MODEL_INSUFFICIENT — batter-level evidence is unavailable for this slate.']),
   ].join('\n');
-  const text = [header, inputStatusNote, neutralityNote, fullSlateBoard, cleanedBody, hrSection, packetFooter()].filter(Boolean).join('\n\n');
+  const important = [
+    'IMPORTANT',
+    '  This morning report uses each team\'s most recent confirmed locked batting order as a lineup proxy.',
+    '  Today\'s official starting pitchers are required.',
+    '  Every game will be rerun with today\'s confirmed lineups before first pitch.',
+    `  ${inputStatusNote}`,
+  ].join('\n');
+  const marketContext = [
+    'MARKET CONTEXT',
+    `  ${neutralityNote}`,
+    '  Market context is display-only / NOT IN SCORE.',
+    '  Missing market prices may disable market comparison, but they must not hide or block valid CPC model projections.',
+  ].join('\n');
+  const fullSlateBoard = renderFullSlateBoardEntries(slateEntries);
+  const text = [
+    header,
+    important,
+    marketContext,
+    renderFastRead(slateEntries),
+    renderOperationsWatch(slateEntries),
+    fullSlateBoard,
+    hrSection,
+    renderModelAvailability(slateEntries, readyHr),
+    renderSlateDeliveryAudit({ date, gameCount: slateEntries.length }),
+    packetFooter(),
+  ].filter(Boolean).join('\n\n');
 
   // Full per-pick inventory -> audit artifact only. Each line carries model and
   // market fields together for routing/audit; pricing here is NOT a score input.

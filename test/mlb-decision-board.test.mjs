@@ -61,7 +61,7 @@ test('missing MLB model score blocks ranked PICK/LEAN/WATCH rows before render',
   assert.equal(row.composite_score, null);
 });
 
-test('MLB slate packet renders sectioned board and excludes raw inventory', () => {
+test('MLB slate packet renders the morning wrapper and excludes raw inventory', () => {
   const scoring = {
     picks: [
       prelineupPick(),
@@ -79,27 +79,37 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.doesNotMatch(slate.text, /AUDIT ARTIFACTS/);
   assert.match(slate.inventoryText, /RAW CONTRACT INVENTORY/);
 
-  // 2. sectioned board present (TLDR + named sections)
-  assert.match(slate.text, /TLDR BOARD:/);
-  assert.match(slate.text, /TOP EDGE CANDIDATES/);
-  assert.match(slate.text, /WATCHLIST \/ TRIGGER BOARD/);
-  assert.match(slate.text, /FADES \/ OVERPRICED/);
-  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
+  // 2. required morning wrapper present; the old trading buckets are gone.
+  assert.match(slate.text, /MORNING FULL-SLATE BOARD/);
+  assert.match(slate.text, /Generated: .* CT/);
+  assert.match(slate.text, /Run type: morning_proxy/);
+  assert.match(slate.text, /Games scheduled: 1/);
+  assert.match(slate.text, /IMPORTANT/);
+  assert.match(slate.text, /This morning report uses each team's most recent confirmed locked batting order as a lineup proxy/);
+  assert.match(slate.text, /Today's official starting pitchers are required/);
+  assert.match(slate.text, /Every game will be rerun with today's confirmed lineups before first pitch/);
+  assert.match(slate.text, /MARKET CONTEXT/);
+  assert.match(slate.text, /Missing market prices may disable market comparison, but they must not hide or block valid CPC model projections/);
+  assert.match(slate.text, /FAST READ/);
+  assert.match(slate.text, /TOP SIDE POSTURES/);
+  assert.match(slate.text, /TOP RUN ENVIRONMENTS/);
+  assert.match(slate.text, /TOP PITCHER PROP SIGNALS/);
+  assert.match(slate.text, /OPERATIONS WATCH/);
+  assert.match(slate.text, /FULL SLATE BOARD/);
+  assert.match(slate.text, /MODEL AVAILABILITY/);
+  assert.match(slate.text, /DELIVERY AND AUDIT/);
+  const requiredOrder = ['IMPORTANT', 'MARKET CONTEXT', 'FAST READ', 'OPERATIONS WATCH', 'FULL SLATE BOARD', 'MODEL AVAILABILITY', 'DELIVERY AND AUDIT'];
+  let previous = -1;
+  for (const heading of requiredOrder) {
+    const current = slate.text.indexOf(heading);
+    assert.ok(current > previous, `${heading} must follow the required wrapper order`);
+    previous = current;
+  }
+  assert.doesNotMatch(slate.text, /TOP EDGE CANDIDATES|WATCHLIST \/ TRIGGER BOARD|FADES \/ OVERPRICED|BLOCKED \/ NEEDS SOURCE/);
   assert.doesNotMatch(slate.text, /AUDIT ARTIFACTS/);
 
-  // 3. rows carry both composite/model fields AND market/implied/edge fields
-  assert.match(slate.text, /model: fair=/);
-  assert.match(slate.text, /market: implied=/);
-  assert.match(slate.text, /edge=/);
-
-  // 4. PASS rows are summarized out of the headline (not dumped row-by-row)
-  assert.doesNotMatch(slate.text, /pass_rows_not_shown:/);
-
-  // 5. FADE row routed into the FADES section
-  const fadesIdx = slate.text.indexOf('FADES / OVERPRICED');
-  const blockedIdx = slate.text.indexOf('BLOCKED / NEEDS SOURCE');
-  const fadeRow = slate.text.indexOf('KXMLBGAME-2');
-  assert.ok(fadeRow > fadesIdx && fadeRow < blockedIdx, 'FADE row sits in the FADES section');
+  // 3. The customer body no longer duplicates per-contract trading buckets.
+  assert.doesNotMatch(slate.text, /model: fair=|market: implied=|edge=|pass_rows_not_shown:/);
 });
 
 test('MLB slate packet renders a literal full slate board in schedule order', () => {
@@ -177,8 +187,10 @@ test('BLOCKED MLB rows compact into event-level notes and never render score=MIS
   };
   const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
   assert.ok(slate, 'slate packet built');
-  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
-  assert.match(slate.text, /2 blocked row\(s\)/);
+  assert.match(slate.text, /FULL SLATE BOARD/);
+  assert.match(slate.text, /MODEL AVAILABILITY/);
+  assert.match(slate.text, /MODEL_INPUTS_MISSING/);
+  assert.doesNotMatch(slate.text, /BLOCKED \/ NEEDS SOURCE/);
   assert.doesNotMatch(slate.text, /#\d+\s+\[BLOCKED\]/);
   assert.doesNotMatch(slate.text, /score=MISSING/);
 });
@@ -208,8 +220,10 @@ test('ranked MLB rows with score=MISSING compact into blocked notes instead of r
   };
   const slate = buildMlbSlatePacket({ date: '2026-05-29', scoring, inventoryPath: '/tmp/inv.txt' });
   assert.ok(slate, 'slate packet built');
-  assert.match(slate.text, /BLOCKED \/ NEEDS SOURCE/);
-  assert.match(slate.text, /blocked row\(s\)/);
+  assert.match(slate.text, /FULL SLATE BOARD/);
+  assert.match(slate.text, /MODEL AVAILABILITY/);
+  assert.match(slate.text, /MODEL_INPUTS_MISSING/);
+  assert.doesNotMatch(slate.text, /BLOCKED \/ NEEDS SOURCE/);
   assert.doesNotMatch(slate.text, /\[\s*(LEAN|WATCH)\s*\]/, 'ranked rows must not survive with missing score');
   assert.doesNotMatch(slate.text, /score=MISSING/, 'missing-score rows must stay out of ranked sections');
 });
