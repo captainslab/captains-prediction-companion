@@ -10,6 +10,7 @@ import {
   DELIVERY_VERDICTS,
   inspectPacketDir,
   inspectPacketFile,
+  mlbAlphaPendingFinding,
   validatePacketText,
 } from '../scripts/cron/cpc-packet-janitor.mjs';
 import { renderMentionPacket } from '../scripts/mentions/render-mention-packet.mjs';
@@ -39,6 +40,36 @@ function writePacket(root, rel, text = cleanPacket()) {
   writeFileSync(p, text, 'utf8');
   return p;
 }
+
+test('morning_proxy MLB packets allow intentional provisional disclosure', () => {
+  const text = [
+    "Captain's MLB Prediction Companion",
+    'Run type: morning_proxy',
+    'Projected win probability — Team A 55%, Team B 45% [provisional].',
+    'No trades placed by this workflow.',
+  ].join('\n');
+  assert.equal(mlbAlphaPendingFinding(text, 'mlb-daily'), null);
+});
+
+test('confirmed_lineup MLB packets still block provisional disclosure', () => {
+  const text = [
+    "Captain's MLB Prediction Companion",
+    'run type: confirmed_lineup',
+    'Projected win probability — Team A 55%, Team B 45% [provisional].',
+    'No trades placed by this workflow.',
+  ].join('\n');
+  assert.equal(mlbAlphaPendingFinding(text, 'mlb-daily')?.code, 'MLB_ALPHA_PENDING');
+});
+
+test('morning_proxy MLB packets still block genuine missing alpha', () => {
+  const text = [
+    "Captain's MLB Prediction Companion",
+    'Run type: morning_proxy',
+    'Win probability — BLOCKED_MODEL_LAYER_MISSING: lineup data unavailable.',
+    'No trades placed by this workflow.',
+  ].join('\n');
+  assert.equal(mlbAlphaPendingFinding(text, 'mlb-daily')?.code, 'MLB_ALPHA_PENDING');
+});
 
 function newStyleMentionPacket({ researchBacked = true } = {}) {
   const term = researchBacked

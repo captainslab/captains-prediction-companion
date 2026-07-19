@@ -560,7 +560,7 @@ export function noUsableSourceEvidenceFinding(text, packetType) {
   return null;
 }
 
-function mlbAlphaPendingFinding(text, packetType) {
+export function mlbAlphaPendingFinding(text, packetType) {
   if (!/mlb/i.test(packetType ?? '')) return null;
   const body = String(text ?? '');
   const mainProjectionSection = body.split(/(?:^|\n)Source Ledger\b/i)[0] ?? body;
@@ -568,7 +568,12 @@ function mlbAlphaPendingFinding(text, packetType) {
     /(?:^|\n)\s*(?:Win probability|Projected win probability|Run line|Projected run-line|Total runs|Projected total|Projected runs \(Home\)|Projected runs \(Away\)|First-inning run \(YRFI\))\s+—\s+BLOCKED_MODEL_LAYER_MISSING\b/i.test(mainProjectionSection) ||
     /(?:^|\n)\s*MODEL_OUTPUT:\s+UNAVAILABLE\b/i.test(body) ||
     /(?:^|\n)\s*Model summary:\s*model outputs are unavailable\./i.test(body);
-  if (!/provisional/i.test(body) && !mainProjectionMissing) return null;
+  // The morning slate and confirmed-lineup game packets share packetType
+  // "mlb-daily". Use the explicit run-type marker to exempt only the
+  // intentional proxy-lineup disclosure from the legacy word gate.
+  const isMorningProxy = packetType === 'mlb-daily'
+    && /(?:^|\n)\s*Run type:\s*morning_proxy\b/i.test(body);
+  if ((!/provisional/i.test(body) || isMorningProxy) && !mainProjectionMissing) return null;
   return {
     code: 'MLB_ALPHA_PENDING',
     message: 'MLB packet is still provisional; required alpha is not fully pulled',
