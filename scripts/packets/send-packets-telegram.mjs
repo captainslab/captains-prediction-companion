@@ -350,16 +350,32 @@ function janitorAlert(entryName, janitor) {
 // only and reads solely the customer text (no market/price data).
 // ---------------------------------------------------------------------------
 
-// Returns { present, ms, raw } for the packet's "First pitch: <ISO>Z" line.
-// present=false → no such line (gate not applicable). ms=NaN → line present but
-// unparseable (fail closed).
-export function parseFirstPitchUtc(packetText) {
+// Returns every "First pitch: <ISO>Z" match in packet text. The /i flag keeps
+// this compatible with both single-game packets and uppercase slate-board
+// labels. Any malformed match remains fail-closed rather than being ignored.
+function collectFirstPitchUtc(packetText) {
   const text = packetText ?? '';
-  if (!/First pitch:/i.test(text)) return { present: false, ms: null, raw: null };
-  const m = /First pitch:\s*(\S+)/i.exec(text);
-  const raw = m ? m[1] : null;
-  const ms = raw ? Date.parse(raw) : NaN;
-  return { present: true, ms: Number.isFinite(ms) ? ms : NaN, raw };
+  const matches = [...text.matchAll(/First pitch:\s*(\S*)/gi)].map((match) => {
+    const raw = match[1] || null;
+    const ms = raw ? Date.parse(raw) : NaN;
+    return { raw, ms: Number.isFinite(ms) ? ms : NaN };
+  });
+  return { present: matches.length > 0, matches };
+}
+
+// Returns { present, ms, raw } for the packet's effective first pitch.
+// present=false → no such line (gate not applicable). ms=NaN → a line is
+// present but unparseable (fail closed). For multi-game packets, the latest
+// parsed timestamp is the effective expiry time.
+export function parseFirstPitchUtc(packetText) {
+  const parsed = collectFirstPitchUtc(packetText);
+  if (!parsed.present) return { present: false, ms: null, raw: null };
+  const invalid = parsed.matches.find((match) => !Number.isFinite(match.ms));
+  if (invalid) return { present: true, ms: NaN, raw: invalid.raw };
+  const latest = parsed.matches.reduce((current, match) => (
+    match.ms > current.ms ? match : current
+  ));
+  return { present: true, ms: latest.ms, raw: latest.raw };
 }
 
 // Returns { present, raw } for the packet's optional "| Status: <value>" line.
@@ -395,6 +411,7 @@ function parseGameDate(packetText) {
 
 // Pure decision: is this packet's slate still deliverable at nowMs?
 export function evaluateSlateExpiry({ packetText, nowMs }) {
+  const pitchMatches = collectFirstPitchUtc(packetText);
   const fp = parseFirstPitchUtc(packetText);
   const status = parseGameStatus(packetText);
   if (!fp.present) {
@@ -409,12 +426,19 @@ export function evaluateSlateExpiry({ packetText, nowMs }) {
     };
   }
   const firstPitchUtc = new Date(fp.ms).toISOString();
-  if (fp.ms <= nowMs && !(status.present && isNotYetStartedStatus(status.raw))) {
+  const isMultiGame = pitchMatches.matches.length > 1;
+  const statusAllowsSingleGameDelivery = !isMultiGame
+    && status.present
+    && isNotYetStartedStatus(status.raw);
+  if (fp.ms <= nowMs && !statusAllowsSingleGameDelivery) {
+    const reason = isMultiGame
+      ? `all games in this slate have started; latest first pitch was at ${firstPitchUtc} — EXPIRED_SLATE_BLOCKED`
+      : `${parseMatchup(packetText)} (${parseGameDate(packetText)}) already started at ${firstPitchUtc} — EXPIRED_SLATE_BLOCKED`;
     return {
       blocked: true,
       verdict: DELIVERY_VERDICTS.EXPIRED_SLATE_BLOCKED,
       firstPitchUtc,
-      reason: `${parseMatchup(packetText)} (${parseGameDate(packetText)}) already started at ${firstPitchUtc} — EXPIRED_SLATE_BLOCKED`,
+      reason,
     };
   }
   return { blocked: false, verdict: DELIVERY_VERDICTS.SEND_ALLOWED, firstPitchUtc, reason: null };
