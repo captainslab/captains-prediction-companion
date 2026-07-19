@@ -21,8 +21,8 @@ function dateInChicago(date = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function discoveryDir(runDate) {
-  return `state/mlb/${runDate}/discovery`;
+function discoveryDir(runDate, stateRoot = 'state') {
+  return `${stateRoot}/mlb/${runDate}/discovery`;
 }
 
 function helpText() {
@@ -36,8 +36,9 @@ function helpText() {
     '  node scripts/mlb/mlb-workspace.mjs report --date YYYY-MM-DD [--discovery-dir path]',
     '  node scripts/mlb/mlb-workspace.mjs outputs --date YYYY-MM-DD [--discovery-dir path] [--out-dir path]',
     '  node scripts/mlb/mlb-workspace.mjs status --date YYYY-MM-DD',
-    '  node scripts/mlb/mlb-workspace.mjs morning-scan [--date YYYY-MM-DD] [--fixtures-only|--live-readonly]',
-    '  node scripts/mlb/mlb-workspace.mjs pregame-refresh [--date YYYY-MM-DD] [--fixtures-only|--live-readonly]',
+    '  node scripts/mlb/mlb-workspace.mjs morning-scan [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--state-root path]',
+    '  node scripts/mlb/mlb-workspace.mjs pregame-refresh [--date YYYY-MM-DD] [--fixtures-only|--live-readonly] [--state-root path]',
+    '  add --discovery-only to pregame-refresh to refresh adapters without rewriting slate outputs',
     '',
     'Examples:',
     '  node scripts/mlb/mlb-workspace.mjs router --title "Will the Alpha City Aces beat the Beta Town Bears?" --json',
@@ -158,7 +159,7 @@ function parseOutputsArgs(argv) {
 }
 
 function parseScanArgs(argv) {
-  const options = { date: null, fixturesOnly: false, liveReadonly: false };
+  const options = { date: null, fixturesOnly: false, liveReadonly: false, discoveryOnly: false, stateRoot: 'state' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--date') {
@@ -168,6 +169,11 @@ function parseScanArgs(argv) {
       options.fixturesOnly = true;
     } else if (arg === '--live-readonly') {
       options.liveReadonly = true;
+    } else if (arg === '--discovery-only') {
+      options.discoveryOnly = true;
+    } else if (arg === '--state-root') {
+      options.stateRoot = readValue(argv, index, arg);
+      index += 1;
     } else {
       throw new Error(`Unknown scan argument: ${arg}`);
     }
@@ -278,11 +284,11 @@ async function runMorningScan(argv) {
   };
 }
 
-async function runPregameRefresh(argv) {
+export async function runPregameRefresh(argv) {
   const options = parseScanArgs(argv);
   const runDate = options.date ?? dateInChicago();
   const mode = options.liveReadonly ? 'live-readonly' : 'fixtures-only';
-  const discDir = discoveryDir(runDate);
+  const discDir = discoveryDir(runDate, options.stateRoot);
 
   console.log(`[pregame-refresh] date=${runDate} mode=${mode}`);
 
@@ -291,12 +297,28 @@ async function runPregameRefresh(argv) {
     fixturesOnly: !options.liveReadonly,
     liveReadonly: options.liveReadonly,
     source: 'all',
+    out: discDir,
   });
   console.log(`[pregame-refresh] discover: kalshi=${discoverResult.kalshi_status} mlb=${discoverResult.mlb_status}`);
 
   createBoardIntakeReport({ runDate, discoveryDir: discDir });
 
-  const outputResult = await runOutputWriterDryRun({ date: runDate });
+  if (options.discoveryOnly) {
+    console.log(`[pregame-refresh] discovery-only: skipping slate output writer`);
+    return {
+      run_date: runDate,
+      mode,
+      discover: discoverResult,
+      outputs: null,
+      message: 'Pregame discovery refresh complete. Slate outputs were not written.',
+    };
+  }
+
+  const outputResult = await runOutputWriterDryRun({
+    date: runDate,
+    discoveryDir: discDir,
+    outDir: `${options.stateRoot}/mlb/${runDate}`,
+  });
   console.log(`[pregame-refresh] outputs: picks=${outputResult.picks}`);
 
   console.log(`[pregame-refresh] complete. No picks placed. No trades placed.`);

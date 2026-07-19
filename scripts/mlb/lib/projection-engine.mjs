@@ -23,7 +23,7 @@
 //
 // Pure ESM. No I/O except the explicit loader. No network. No fabricated values.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   buildScoreEngineProjection,
@@ -34,6 +34,10 @@ import {
   buildGameHrProjections,
   loadRegularGameModel,
 } from '../hr-engine/regular-game-model.mjs';
+import {
+  formatLineupProxySource,
+  resolveLastLockedLineupProxy,
+} from './lineup-proxy.mjs';
 
 const BUNDLED_HR_MODEL_URL = new URL('../hr-engine/artifacts/regular-game-model-2025.json', import.meta.url);
 let bundledHrModelCache;
@@ -327,7 +331,42 @@ export function buildGameProjections({
 }
 
 // --- Loader + matcher --------------------------------------------------------
-export function loadStatsRecords(stateRoot, date) {
+function readJsonRecords(path) {
+  if (!existsSync(path)) return [];
+  try {
+    const payload = JSON.parse(readFileSync(path, 'utf8'));
+    return Array.isArray(payload?.records) ? payload.records : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadPriorLineupGames(stateRoot, date) {
+  const mlbRoot = join(stateRoot, 'mlb');
+  if (!existsSync(mlbRoot)) return [];
+  let dateDirs = [];
+  try {
+    dateDirs = readdirSync(mlbRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name) && entry.name < date)
+      .map(entry => entry.name);
+  } catch {
+    return [];
+  }
+
+  return dateDirs.flatMap(priorDate => {
+    const discovery = join(mlbRoot, priorDate, 'discovery');
+    const schedule = readJsonRecords(join(discovery, 'mlb_official_adapter.json'));
+    const context = readJsonRecords(join(discovery, 'context_adapter.json'));
+    const byGamePk = new Map(schedule.map(record => [String(record?.game_pk ?? ''), record]));
+    for (const record of context) {
+      const key = String(record?.game_pk ?? '');
+      byGamePk.set(key, { ...(byGamePk.get(key) ?? {}), ...record });
+    }
+    return [...byGamePk.values()].map(record => ({ ...record, game_date: record.game_date ?? priorDate }));
+  });
+}
+
+export function loadStatsRecords(stateRoot, date, { priorGames = null } = {}) {
   const p = join(stateRoot, 'mlb', date, 'discovery', 'stats_adapter.json');
   if (!existsSync(p)) return [];
   try {
@@ -342,24 +381,51 @@ export function loadStatsRecords(stateRoot, date) {
       return records;
     }
     const contexts = Array.isArray(contextPayload?.records) ? contextPayload.records : [];
+    const priorLineupGames = Array.isArray(priorGames) ? priorGames : loadPriorLineupGames(stateRoot, date);
     return records.map((record) => {
       const context = contexts.find((candidate) => String(candidate?.game_pk ?? '') === String(record?.game_pk ?? ''))
         ?? contexts.find((candidate) => candidate?.away_team === record?.away_team && candidate?.home_team === record?.home_team)
         ?? null;
       if (!context) return record;
-      const away = (context.away_batting_order ?? []).slice(0, 9).map((id, index) => ({
+      const currentLineupStatus = String(context.lineup_status ?? '').toLowerCase();
+      const isConfirmed = currentLineupStatus.startsWith('confirmed') || currentLineupStatus.includes('boxscore');
+      const awayProxy = !isConfirmed
+        ? resolveLastLockedLineupProxy({
+          team: record.away_team ?? record.away_team_abbrev,
+          generationDate: date,
+          lineup_status: currentLineupStatus,
+          priorGames: priorLineupGames,
+        })
+        : null;
+      const homeProxy = !isConfirmed
+        ? resolveLastLockedLineupProxy({
+          team: record.home_team ?? record.home_team_abbrev,
+          generationDate: date,
+          lineup_status: currentLineupStatus,
+          priorGames: priorLineupGames,
+        })
+        : null;
+      const awayOrder = (isConfirmed ? context.away_batting_order : awayProxy?.batting_order ?? []).slice(0, 9);
+      const homeOrder = (isConfirmed ? context.home_batting_order : homeProxy?.batting_order ?? []).slice(0, 9);
+      const away = awayOrder.map((id, index) => ({
         mlb_id: id, batter_id: id, lineup_slot: index + 1, side: 'away', team: record.away_team_abbrev ?? record.away_team,
       }));
-      const home = (context.home_batting_order ?? []).slice(0, 9).map((id, index) => ({
+      const home = homeOrder.map((id, index) => ({
         mlb_id: id, batter_id: id, lineup_slot: index + 1, side: 'home', team: record.home_team_abbrev ?? record.home_team,
       }));
       const batters = [...away, ...home];
+      const proxySources = [
+        formatLineupProxySource({ team: record.away_team ?? record.away_team_abbrev, proxy: awayProxy, priorGames: priorLineupGames }),
+        formatLineupProxySource({ team: record.home_team ?? record.home_team_abbrev, proxy: homeProxy, priorGames: priorLineupGames }),
+      ].filter(Boolean);
       return {
         ...record,
         hr_batters: batters,
         hr_evidence: batters,
-        hr_lineup_source: context.source_id ?? 'lineup_injury_bullpen',
-        lineup_status: String(context.lineup_status ?? '').startsWith('confirmed') ? 'confirmed' : 'unconfirmed',
+        hr_lineup_source: proxySources.length > 0
+          ? proxySources.join('; ')
+          : context.source_id ?? 'lineup_injury_bullpen',
+        lineup_status: isConfirmed ? 'confirmed' : proxySources.length > 0 ? 'proxy' : 'unconfirmed',
       };
     });
   } catch { return []; }

@@ -21,6 +21,7 @@ import {
   fixtureStatsEnvelope,
 } from '../scripts/mlb/source-adapters/stats-readonly.mjs';
 import {
+  aggregateStatcastRows,
   fetchBaseballSavantReadonly,
   fixtureBaseballSavantEnvelope,
 } from '../scripts/mlb/source-adapters/baseball-savant-readonly.mjs';
@@ -31,6 +32,12 @@ import {
   loadDynamicCompositeSlate,
   runComposite,
 } from '../scripts/mlb/late-slate-composite-refresh.mjs';
+import {
+  collectTargetBatterIds,
+  runSourceAdapterDryRun,
+} from '../scripts/mlb/source-adapter-dry-run.mjs';
+import { loadStatsRecords } from '../scripts/mlb/lib/projection-engine.mjs';
+import { resolveLastLockedLineupProxy } from '../scripts/mlb/lib/lineup-proxy.mjs';
 
 function makeJsonResponse(payload, status = 200) {
   return {
@@ -44,6 +51,112 @@ function makeJsonResponse(payload, status = 200) {
     },
   };
 }
+
+test('last locked lineup proxy resolves the most recent confirmed prior game', () => {
+  const proxy = resolveLastLockedLineupProxy({
+    team: 'New York Yankees',
+    generationDate: '2026-07-18',
+    lineup_status: 'lineup_pending',
+    priorGames: [
+      {
+        game_pk: 101,
+        game_date: '2026-07-15',
+        away_team: 'New York Yankees',
+        home_team: 'Boston Red Sox',
+        lineup_status: 'confirmed_or_boxscore_available',
+        away_batting_order: [101, 102, 103],
+        probable_pitchers: { away: 'Older Pitcher' },
+      },
+      {
+        game_pk: 102,
+        game_date: '2026-07-17',
+        away_team: 'New York Yankees',
+        home_team: 'Toronto Blue Jays',
+        lineup_status: 'lineup_pending',
+        away_batting_order: [201, 202, 203],
+      },
+      {
+        game_pk: 103,
+        game_date: '2026-07-16',
+        away_team: 'New York Yankees',
+        home_team: 'Tampa Bay Rays',
+        lineup_status: 'confirmed_or_boxscore_available',
+        away_batting_order: [111, 112, 113],
+        probable_pitchers: { away: 'Never Copy This Pitcher' },
+      },
+    ],
+  });
+
+  assert.deepEqual(proxy, {
+    mode: 'LAST_LOCKED_LINEUP_PROXY',
+    proxy_date: '2026-07-16',
+    proxy_game_pk: 103,
+    batting_order: [111, 112, 113],
+    source: 'prior_lineup_context',
+    hash: proxy.hash,
+  });
+  assert.equal(Object.hasOwn(proxy, 'pitcher'), false);
+  assert.equal(JSON.stringify(proxy).includes('Never Copy This Pitcher'), false);
+  assert.notEqual(proxy.mode, 'confirmed');
+  assert.equal(resolveLastLockedLineupProxy({
+    team: 'New York Yankees',
+    generationDate: '2026-07-18',
+    lineup_status: 'lineup_pending',
+    priorGames: [{
+      game_pk: 104,
+      game_date: '2026-07-17',
+      away_team: 'New York Yankees',
+      home_team: 'Boston Red Sox',
+      lineup_status: 'lineup_pending',
+    }],
+  }), null);
+});
+
+test('pending stats merge uses proxy batting order, preserves today probable pitchers, and keeps pending unchanged without a proxy', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cpc-lineup-proxy-'));
+  const priorDiscovery = join(root, 'mlb', '2026-07-16', 'discovery');
+  const currentDiscovery = join(root, 'mlb', '2026-07-18', 'discovery');
+  mkdirSync(priorDiscovery, { recursive: true });
+  mkdirSync(currentDiscovery, { recursive: true });
+  try {
+    writeFileSync(join(priorDiscovery, 'mlb_official_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 103, game_date: '2026-07-16', away_team: 'New York Yankees', home_team: 'Tampa Bay Rays',
+    }] }));
+    writeFileSync(join(priorDiscovery, 'context_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 103, game_date: '2026-07-16', away_team: 'New York Yankees', home_team: 'Tampa Bay Rays',
+      lineup_status: 'confirmed_or_boxscore_available', away_batting_order: [111, 112, 113], home_batting_order: [211, 212, 213],
+    }] }));
+    writeFileSync(join(currentDiscovery, 'stats_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 104, game_date: '2026-07-18', away_team: 'New York Yankees', home_team: 'Boston Red Sox',
+      probable_pitchers: { away: 'Today Away', home: 'Today Home' },
+    }] }));
+    writeFileSync(join(currentDiscovery, 'context_adapter.json'), JSON.stringify({ records: [{
+      game_pk: 104, game_date: '2026-07-18', away_team: 'New York Yankees', home_team: 'Boston Red Sox',
+      lineup_status: 'lineup_pending', away_batting_order: [], home_batting_order: [],
+    }] }));
+
+    const [record] = loadStatsRecords(root, '2026-07-18');
+    assert.equal(record.lineup_status, 'proxy');
+    assert.deepEqual(record.hr_batters.map(player => player.mlb_id), [111, 112, 113]);
+    assert.match(record.hr_lineup_source, /LAST_LOCKED_LINEUP_PROXY from 2026-07-16 vs Tampa Bay Rays/);
+    assert.deepEqual(record.probable_pitchers, { away: 'Today Away', home: 'Today Home' });
+
+    const rootWithoutPrior = mkdtempSync(join(tmpdir(), 'cpc-lineup-pending-'));
+    try {
+      const discovery = join(rootWithoutPrior, 'mlb', '2026-07-18', 'discovery');
+      mkdirSync(discovery, { recursive: true });
+      writeFileSync(join(discovery, 'stats_adapter.json'), JSON.stringify({ records: [{ game_pk: 104, away_team: 'New York Yankees', home_team: 'Boston Red Sox' }] }));
+      writeFileSync(join(discovery, 'context_adapter.json'), JSON.stringify({ records: [{ game_pk: 104, away_team: 'New York Yankees', home_team: 'Boston Red Sox', lineup_status: 'lineup_pending' }] }));
+      const [pending] = loadStatsRecords(rootWithoutPrior, '2026-07-18');
+      assert.equal(pending.lineup_status, 'unconfirmed');
+      assert.deepEqual(pending.hr_batters, []);
+    } finally {
+      rmSync(rootWithoutPrior, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('fixture Kalshi success envelope', () => {
   const envelope = fixtureKalshiSuccessEnvelope({
@@ -187,6 +300,137 @@ test('live Baseball Savant adapter surfaces CSV error-column failures as optiona
   assert.equal(envelope.required, false);
   assert.equal(envelope.optional_source, true);
   assert.match(JSON.stringify(envelope.errors), /CSV_ERROR_COLUMN_FAILURE/);
+});
+
+test('Statcast aggregation keeps every target lineup batter and excludes non-target leaders', () => {
+  const rows = [
+    { game_date: '2026-06-19', player_name: 'Target Low PA A', batter: '9001', events: 'single' },
+    { game_date: '2026-06-19', player_name: 'Target Low PA B', batter: 9002, events: 'home_run' },
+    ...Array.from({ length: 30 }, (_, index) => ({
+      game_date: '2026-06-19',
+      player_name: `Non-target ${index + 1}`,
+      batter: 9100 + index,
+      events: index === 29 ? 'home_run' : 'single',
+    })),
+  ];
+
+  const result = aggregateStatcastRows(rows, {
+    windowStart: '2026-06-17',
+    windowEnd: '2026-06-19',
+    maxBatters: 1,
+    targetBatterIds: new Set([9001, '9002']),
+  });
+
+  assert.deepEqual(result.records.map(record => record.batter_id), [9002, 9001]);
+  assert.equal(result.truncated, false);
+});
+
+test('Statcast aggregation preserves the top-25-by-PA fallback without targets', () => {
+  const rows = Array.from({ length: 30 }, (_, index) => Array.from({ length: index + 1 }, () => ({
+    game_date: '2026-06-19',
+    player_name: `Fallback ${index + 1}`,
+    batter: 9200 + index,
+    events: 'single',
+  }))).flat();
+
+  const result = aggregateStatcastRows(rows, {
+    windowStart: '2026-06-17',
+    windowEnd: '2026-06-19',
+  });
+
+  assert.equal(result.records.length, 25);
+  assert.deepEqual(result.records.map(record => record.batter_id), Array.from({ length: 25 }, (_, index) => 9229 - index));
+  assert.equal(result.truncated, true);
+});
+
+test('source adapter dry-run resolves live lineup IDs before Baseball Savant and wires them into the target filter', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mlb-savant-targets-'));
+  const outDir = join(dir, 'discovery');
+  const awayOrder = Array.from({ length: 9 }, (_, index) => String(5001 + index));
+  const homeOrder = Array.from({ length: 9 }, (_, index) => String(5010 + index));
+  const calls = [];
+
+  try {
+    const fetchImpl = async url => {
+      const value = String(url);
+      calls.push(value);
+
+      if (value.includes('statsapi.mlb.com/api/v1/schedule?')) {
+        return makeJsonResponse({
+          dates: [{ games: [{
+            gamePk: 400001,
+            officialDate: '2026-07-18',
+            gameDate: '2026-07-18T23:05:00Z',
+            teams: {
+              away: { team: { id: 1, name: 'Alpha City Aces' } },
+              home: { team: { id: 2, name: 'Beta Town Bears' } },
+            },
+            venue: { name: 'Source Park' },
+            status: { detailedState: 'Scheduled' },
+          }] }],
+        });
+      }
+
+      if (value.includes('/feed/live')) {
+        return makeJsonResponse({
+          gameData: { probablePitchers: { away: { fullName: 'Away Arm' }, home: { fullName: 'Home Arm' } } },
+          liveData: {
+            boxscore: {
+              teams: {
+                away: { batters: awayOrder, battingOrder: awayOrder },
+                home: { batters: homeOrder, battingOrder: homeOrder },
+              },
+            },
+          },
+        });
+      }
+
+      if (value.includes('baseballsavant.mlb.com/statcast_search/csv')) {
+        const parsed = new URL(value);
+        const lt = parsed.searchParams.get('game_date_lt');
+        const day = new Date(`${lt}T00:00:00.000Z`);
+        day.setUTCDate(day.getUTCDate() - 1);
+        const queryDay = day.toISOString().slice(0, 10);
+        return makeJsonResponse([
+          `game_date,player_name,batter,launch_speed,launch_angle,hit_distance_sc,events,barrel`,
+          `${queryDay},Target Low PA A,5001,91,20,300,single,0`,
+          `${queryDay},Target Low PA B,5018,99,25,410,home_run,1`,
+          ...Array.from({ length: 30 }, (_, index) => `${queryDay},Non-target ${index + 1},${6000 + index},105,30,430,home_run,1`),
+        ].join('\n'));
+      }
+
+      if (value.includes('site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard')) {
+        return makeJsonResponse({ events: [] });
+      }
+
+      if (value.includes('api.weather.gov')) return makeJsonResponse({});
+      if (value.includes('kalshi.com/calendar') || value.includes('/trade-api/v2/events')) {
+        return makeJsonResponse({ events: [], cursor: null });
+      }
+      return makeJsonResponse({});
+    };
+
+    const result = await runSourceAdapterDryRun({
+      date: '2026-07-18',
+      out: outDir,
+      liveReadonly: true,
+      source: 'all',
+      fetchImpl,
+      now: new Date('2026-07-18T14:00:00.000Z'),
+    });
+    const savant = JSON.parse(readFileSync(join(outDir, 'baseball_savant_adapter.json'), 'utf8'));
+    const context = JSON.parse(readFileSync(join(outDir, 'context_adapter.json'), 'utf8'));
+    const targetIds = collectTargetBatterIds({ contextEnvelope: context });
+
+    assert.equal(targetIds.size, 18);
+    assert.deepEqual(savant.records.map(record => record.batter_id), [5018, 5001]);
+    assert.equal(savant.warnings.some(warning => /truncated/i.test(warning)), false);
+    assert.ok(calls.findIndex(value => value.includes('/feed/live')) < calls.findIndex(value => value.includes('baseballsavant.mlb.com/statcast_search/csv')));
+    assert.doesNotMatch(JSON.stringify(savant), /yes_ask|bid|ask|price|volume|open_interest|odds/i);
+    assert.equal(result.baseball_savant_records, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('live MLB stats adapter normalizes pitcher/team/bullpen stats from no-auth sources', async () => {

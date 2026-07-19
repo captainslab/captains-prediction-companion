@@ -197,10 +197,36 @@ function csvDayRows(csvText, dayYmd) {
   return { dayRows, errorColumns, rowErrors, rowCount: rows.length };
 }
 
-function aggregateStatcastRows(rows, { windowStart, windowEnd, maxBatters = 25 } = {}) {
+function normalizeBatterId(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? String(numeric) : text;
+}
+
+function normalizedTargetBatterIds(targetBatterIds) {
+  if (targetBatterIds === null || targetBatterIds === undefined) return null;
+  const values = targetBatterIds instanceof Set
+    ? [...targetBatterIds]
+    : Array.isArray(targetBatterIds) ? targetBatterIds : [];
+  const normalized = new Set(values.map(normalizeBatterId).filter(Boolean));
+  return normalized.size > 0 ? normalized : null;
+}
+
+export function aggregateStatcastRows(rows, {
+  windowStart,
+  windowEnd,
+  maxBatters = 25,
+  targetBatterIds,
+} = {}) {
+  const targetIds = normalizedTargetBatterIds(targetBatterIds);
   const groups = new Map();
   for (const row of rows) {
-    const batterId = row.batter ?? row.batter_id ?? row.player_id ?? row.playerId ?? row.player_name ?? row.playerName ?? null;
+    const explicitBatterId = row.batter ?? row.batter_id ?? row.player_id ?? row.playerId ?? null;
+    if (targetIds && !targetIds.has(normalizeBatterId(explicitBatterId))) continue;
+
+    const batterId = explicitBatterId ?? row.player_name ?? row.playerName ?? null;
     const playerName = row.player_name ?? row.playerName ?? row.batter_name ?? row.name ?? null;
     const key = batterId != null ? String(batterId) : String(playerName ?? 'unknown');
     if (!groups.has(key)) {
@@ -301,7 +327,7 @@ function aggregateStatcastRows(rows, { windowStart, windowEnd, maxBatters = 25 }
     return String(a.player_name ?? '').localeCompare(String(b.player_name ?? ''));
   });
 
-  const truncated = records.length > maxBatters;
+  const truncated = targetIds ? false : records.length > maxBatters;
   return {
     records: truncated ? records.slice(0, maxBatters) : records,
     truncated,
@@ -400,8 +426,14 @@ export async function fetchBaseballSavantReadonly({
   fixturesOnly = true,
   fetchImpl = globalThis.fetch,
   now = new Date(),
-  trailingDays = 3,
+  // A 3-day trailing window misses most lineup batters (confirmed live:
+  // 0/251 target batters matched a 2026-07-15..17 window vs 246/251 with a
+  // 10-day window) since not every roster player has a plate appearance in
+  // any given 3-day slice. 10 days keeps HR-model batter coverage real
+  // without stretching so far that recency loses meaning.
+  trailingDays = 10,
   maxBatters = 25,
+  targetBatterIds,
   mode = 'trailing_yesterday',
 } = {}) {
   const checkedAtUtc = isoNow(now);
@@ -471,6 +503,7 @@ export async function fetchBaseballSavantReadonly({
       windowStart: window.start_date,
       windowEnd: window.end_date,
       maxBatters,
+      targetBatterIds,
     });
     const records = aggregated.records;
     return makeEnvelope({

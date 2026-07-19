@@ -73,6 +73,46 @@ function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function normalizeBatterId(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? String(numeric) : text;
+}
+
+function addBatterId(target, value) {
+  const candidate = value && typeof value === 'object'
+    ? value.mlb_id ?? value.batter_id ?? value.player_id ?? value.id
+    : value;
+  const normalized = normalizeBatterId(candidate);
+  if (normalized) target.add(normalized);
+}
+
+export function collectTargetBatterIds({ contextEnvelope, statsEnvelope, mlbEnvelope } = {}) {
+  const target = new Set();
+  for (const envelope of [contextEnvelope, statsEnvelope, mlbEnvelope]) {
+    for (const record of safeArray(envelope?.records)) {
+      const sources = [record, record?.context].filter(source => source && typeof source === 'object');
+      for (const source of sources) {
+        for (const field of [
+          'away_batting_order',
+          'home_batting_order',
+          'batting_order',
+          'away_lineup',
+          'home_lineup',
+          'lineup',
+          'hr_batters',
+          'hr_evidence',
+        ]) {
+          for (const value of safeArray(source[field])) addBatterId(target, value);
+        }
+      }
+    }
+  }
+  return target;
+}
+
 function makeSkippedEnvelope(sourceId, runDate, outputDir) {
   const checkedAtUtc = new Date().toISOString();
   const fileNameBySource = {
@@ -183,6 +223,8 @@ export async function runSourceAdapterDryRun(options = {}) {
   const fixturesOnly = options.liveReadonly ? false : options.fixturesOnly !== false;
   const mode = fixturesOnly ? 'fixtures-only' : 'live-readonly';
   const checkedAtUtc = new Date().toISOString();
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const now = options.now ?? new Date();
   const requestedSource = options.source ?? 'all';
   const runKalshi = shouldRunSource(requestedSource, 'kalshi');
   const runMlb = shouldRunSource(requestedSource, 'mlb');
@@ -205,7 +247,7 @@ export async function runSourceAdapterDryRun(options = {}) {
   const rejectedPath = `${outputDir}/kalshi_rejected_records.json`;
 
   const mlbEnvelope = runMlb
-    ? await fetchMlbScheduleReadonly({ runDate, outputDir, fixturesOnly })
+    ? await fetchMlbScheduleReadonly({ runDate, outputDir, fixturesOnly, fetchImpl, now })
     : readExistingOrSkipped({
         sourceId: 'mlb_official',
         filePath: mlbPath,
@@ -218,6 +260,8 @@ export async function runSourceAdapterDryRun(options = {}) {
         runDate,
         outputDir,
         fixturesOnly,
+        fetchImpl,
+        now,
         officialMlbGames: safeArray(mlbEnvelope.records),
       })
     : readExistingOrSkipped({
@@ -227,12 +271,44 @@ export async function runSourceAdapterDryRun(options = {}) {
         outputDir,
       });
 
+  const sportsbookEnvelope = runSportsbook
+    ? await fetchSportsbookReadonly({ runDate, outputDir, fixturesOnly, fetchImpl, now })
+    : readExistingOrSkipped({ sourceId: 'sportsbook_reference', filePath: sportsbookPath, runDate, outputDir });
+
+  const sportsbookRecordsForContext = safeArray(sportsbookEnvelope?.records);
+  const contextEnvelope = runContext
+    ? await fetchContextReadonly({
+        outputDir,
+        fixturesOnly,
+        fetchImpl,
+        now,
+        mlbGames: safeArray(mlbEnvelope.records),
+        sportsbookRecords: sportsbookRecordsForContext,
+      })
+    : readExistingOrSkipped({ sourceId: 'lineup_injury_bullpen', filePath: contextPath, runDate, outputDir });
+
+  const statsEnvelope = runStats
+    ? await fetchStatsReadonly({
+        runDate,
+        outputDir,
+        fixturesOnly,
+        fetchImpl,
+        now,
+        mlbGames: safeArray(mlbEnvelope.records),
+      })
+    : readExistingOrSkipped({ sourceId: 'mlb_stats', filePath: statsPath, runDate, outputDir });
+
+  const targetBatterIds = collectTargetBatterIds({ contextEnvelope, statsEnvelope, mlbEnvelope });
+
   const baseballSavantEnvelope = runBaseballSavant
     ? await fetchBaseballSavantReadonly({
         runDate,
         outputDir,
         fixturesOnly,
+        fetchImpl,
+        now,
         mlbGames: safeArray(mlbEnvelope.records),
+        targetBatterIds,
       })
     : readExistingOrSkipped({
         sourceId: 'baseball_savant',
@@ -246,6 +322,8 @@ export async function runSourceAdapterDryRun(options = {}) {
         runDate,
         outputDir,
         fixturesOnly,
+        fetchImpl,
+        now,
         mlbGames: safeArray(mlbEnvelope.records),
       })
     : readExistingOrSkipped({
@@ -259,36 +337,13 @@ export async function runSourceAdapterDryRun(options = {}) {
     .flatMap(r => safeArray(r.markets).map(m => m.market_ticker).filter(Boolean));
 
   const liquidityEnvelope = runLiquidity
-    ? await fetchLiquidityReadonly({ runDate, outputDir, fixturesOnly, kalshiTickers })
+    ? await fetchLiquidityReadonly({ runDate, outputDir, fixturesOnly, fetchImpl, now, kalshiTickers })
     : readExistingOrSkipped({
         sourceId: 'liquidity',
         filePath: liquidityPath,
         runDate,
         outputDir,
       });
-
-  const sportsbookEnvelope = runSportsbook
-    ? await fetchSportsbookReadonly({ runDate, outputDir, fixturesOnly })
-    : readExistingOrSkipped({ sourceId: 'sportsbook_reference', filePath: sportsbookPath, runDate, outputDir });
-
-  const sportsbookRecordsForContext = safeArray(sportsbookEnvelope?.records);
-  const contextEnvelope = runContext
-    ? await fetchContextReadonly({
-        outputDir,
-        fixturesOnly,
-        mlbGames: safeArray(mlbEnvelope.records),
-        sportsbookRecords: sportsbookRecordsForContext,
-      })
-    : readExistingOrSkipped({ sourceId: 'lineup_injury_bullpen', filePath: contextPath, runDate, outputDir });
-
-  const statsEnvelope = runStats
-    ? await fetchStatsReadonly({
-        runDate,
-        outputDir,
-        fixturesOnly,
-        mlbGames: safeArray(mlbEnvelope.records),
-      })
-    : readExistingOrSkipped({ sourceId: 'mlb_stats', filePath: statsPath, runDate, outputDir });
 
   const finalKalshiEnvelope = { ...kalshiEnvelope, cache_path: kalshiPath };
   const finalMlbEnvelope = { ...mlbEnvelope, cache_path: mlbPath };

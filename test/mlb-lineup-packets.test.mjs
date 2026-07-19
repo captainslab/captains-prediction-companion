@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   groupIntoLineupBlocks,
@@ -18,6 +21,7 @@ import {
   buildGameProjections,
   leagueRunsPerGame,
 } from '../scripts/mlb/lib/projection-engine.mjs';
+import { runDueWindows } from '../scripts/mlb/run-due-windows.mjs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,6 +71,58 @@ function makeBlock(overrides = {}) {
     ...overrides,
   };
 }
+
+function writeDuePlan(root, date = '2026-07-18') {
+  const discovery = join(root, 'mlb', date, 'discovery');
+  mkdirSync(discovery, { recursive: true });
+  writeFileSync(join(root, 'mlb', date, 'slate-run-plan.json'), JSON.stringify({ report_windows: [{
+    cluster_id: 'G1', game_pk: 7001, status: 'pending', idempotency_key: 'due-7001',
+    report_at_utc: '2026-07-18T12:00:00Z', retry_at_utc: ['2026-07-18T12:05:00Z'],
+  }] }));
+  writeFileSync(join(discovery, 'stats_adapter.json'), JSON.stringify({ records: [{ game_pk: 7001 }] }));
+  writeFileSync(join(discovery, 'context_adapter.json'), JSON.stringify({ records: [{ game_pk: 7001, lineup_status: 'confirmed_or_boxscore_available' }] }));
+}
+
+test('run-due-windows refreshes pregame discovery before firing a due game', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cpc-due-refresh-'));
+  try {
+    writeDuePlan(root);
+    const events = [];
+    await runDueWindows({
+      options: { date: '2026-07-18', stateRoot: root, graceMinutes: 5 },
+      nowMs: Date.parse('2026-07-18T12:01:00Z'),
+      refreshPregame: async args => { events.push(['refresh', args]); },
+      spawn: (...args) => { events.push(['fire', args]); return { status: 0 }; },
+      logFn: message => events.push(['log', message]),
+    });
+    assert.equal(events.findIndex(event => event[0] === 'refresh') < events.findIndex(event => event[0] === 'fire'), true);
+    assert.equal(JSON.parse(readFileSync(join(root, 'mlb', '2026-07-18', 'slate-run-plan.json'))).report_windows[0].status, 'rendered');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('run-due-windows skips a window on refresh failure without crashing the loop', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cpc-due-refresh-fail-'));
+  try {
+    writeDuePlan(root);
+    const events = [];
+    await runDueWindows({
+      options: { date: '2026-07-18', stateRoot: root, graceMinutes: 5 },
+      nowMs: Date.parse('2026-07-18T12:01:00Z'),
+      refreshPregame: async () => { throw new Error('context refresh unavailable'); },
+      spawn: (...args) => { events.push(['fire', args]); return { status: 0 }; },
+      logFn: message => events.push(['log', message]),
+    });
+    assert.equal(events.some(event => event[0] === 'fire'), false);
+    assert.match(events.find(event => event[0] === 'log')[1], /refresh failed/);
+    const window = JSON.parse(readFileSync(join(root, 'mlb', '2026-07-18', 'slate-run-plan.json'))).report_windows[0];
+    assert.equal(window.status, 'pending');
+    assert.equal(window.refresh_error, 'context refresh unavailable');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function makeProjections() {
   const record = {
