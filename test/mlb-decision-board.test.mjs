@@ -102,6 +102,56 @@ test('MLB slate packet renders sectioned board and excludes raw inventory', () =
   assert.ok(fadeRow > fadesIdx && fadeRow < blockedIdx, 'FADE row sits in the FADES section');
 });
 
+test('MLB slate packet renders a literal full slate board in schedule order', () => {
+  const stats = (game_pk, away_team, home_team) => ({
+    game_pk,
+    away_team,
+    home_team,
+    venue: `${home_team} Park`,
+    lineup_status: 'proxy',
+    away_pitcher: { name: `${away_team} Starter`, mlb_id: game_pk * 10 + 1, era: 3.5, games_started: 15, batters_faced: 360, k_pct: 0.28 },
+    home_pitcher: { name: `${home_team} Starter`, mlb_id: game_pk * 10 + 2, era: 4.2, games_started: 15, batters_faced: 360, k_pct: 0.25 },
+    away_team_stats: { runs_scored: 410, runs_allowed: 360, gamesPlayed: 80 },
+    home_team_stats: { runs_scored: 400, runs_allowed: 420, gamesPlayed: 80 },
+    away_bullpen: { era: 4.0 },
+    home_bullpen: { era: 4.8 },
+  });
+  const scoring = {
+    picks: [
+      prelineupPick({ matched_game_pk: 1 }),
+      prelineupPick({
+        matched_game_pk: undefined,
+        game: 'New York Mets at Philadelphia Phillies',
+        market_ticker: 'KXMLBTOTAL-2',
+      }),
+    ],
+    source: '/tmp/picks.json',
+    summaryCounts: { pre_lineup_pick: 2 },
+  };
+  const slate = buildMlbSlatePacket({
+    date: '2026-05-29',
+    scoring,
+    slateGames: [
+      { officialRecord: { game_pk: 1, start_time_utc: '2026-05-29T20:00:00Z', status: 'Scheduled' }, statsRecord: stats(1, 'Toronto Blue Jays', 'Baltimore Orioles') },
+      { officialRecord: { game_pk: 2, start_time_utc: '2026-05-29T23:00:00Z', status: 'Scheduled' }, statsRecord: stats(2, 'New York Mets', 'Philadelphia Phillies') },
+    ],
+    leagueRPG: 4.4,
+  });
+
+  assert.match(slate.text, /FULL SLATE BOARD/);
+  assert.match(slate.text, /GAME 1[\s\S]*Toronto Blue Jays AT Baltimore Orioles/);
+  assert.match(slate.text, /GAME 2[\s\S]*New York Mets AT Philadelphia Phillies/);
+  assert.ok(slate.text.indexOf('GAME 1') < slate.text.indexOf('GAME 2'), 'games stay in schedule order');
+  assert.equal((slate.text.match(/LINEUP MODE: LAST_LOCKED_LINEUP_PROXY/g) || []).length, 2);
+  assert.match(slate.text, /STARTING PITCHERS:[\s\S]*PROJECTED SCORE:/);
+  assert.match(slate.text, /PROJECTED SCORE: Toronto Blue Jays \d+\.\d, Baltimore Orioles \d+\.\d/);
+  assert.match(slate.text, /CPC PROJECTED SPREAD:/);
+  assert.match(slate.text, /CPC PROJECTED TOTAL:/);
+  assert.match(slate.text, /WIN PROBABILITY:/);
+  assert.match(slate.text, /YRFI\/NRFI:/);
+  assert.match(slate.text, /MODEL POSTURE:/);
+});
+
 test('BLOCKED MLB rows compact into event-level notes and never render score=MISSING rows', () => {
   const blockedPick = (market_ticker) => ({
     market_ticker,

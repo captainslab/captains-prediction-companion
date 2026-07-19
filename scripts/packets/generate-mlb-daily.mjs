@@ -799,6 +799,184 @@ function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRe
   return lines.join('\n');
 }
 
+function slateTeamNames({ game = null, picks = [] } = {}) {
+  const record = game?.statsRecord ?? game?.officialRecord ?? game ?? {};
+  let away = record.away_team ?? record.away_full ?? record.away;
+  let home = record.home_team ?? record.home_full ?? record.home;
+  const matchup = picks.find((pick) => typeof pick?.game === 'string' && /\s+at\s+/i.test(pick.game))?.game;
+  if ((!away || !home) && matchup) {
+    const [parsedAway, parsedHome] = matchup.split(/\s+at\s+/i);
+    away ??= parsedAway?.trim();
+    home ??= parsedHome?.trim();
+  }
+  return { away: away || 'Away', home: home || 'Home' };
+}
+
+function slateGameKey(value = null) {
+  if (value == null) return null;
+  return String(value).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function slateMatchupKey({ game = null, picks = [] } = {}) {
+  const teams = slateTeamNames({ game, picks });
+  return `${teams.away}|${teams.home}`.toLowerCase().replace(/[^a-z0-9|]+/g, '');
+}
+
+function slateRecordKey({ game = null, picks = [] } = {}) {
+  const record = game?.statsRecord ?? game?.officialRecord ?? game ?? {};
+  return slateGameKey(record.game_pk ?? record.event_ticker ?? record.ticker)
+    ?? slateMatchupKey({ game, picks });
+}
+
+function slatePickKey(pick = {}) {
+  return slateGameKey(pick.matched_game_pk ?? pick.game_pk)
+    ?? (pick.game ? slateMatchupKey({ picks: [pick] }) : null)
+    ?? slateGameKey(pick.event_ticker ?? pick.ticker);
+}
+
+function slatePitcher({ game = null, side = 'away' } = {}) {
+  const stats = game?.statsRecord ?? {};
+  const official = game?.officialRecord ?? {};
+  const context = game?.contextRecord ?? {};
+  const pitcher = stats[`${side}_pitcher`]
+    ?? stats.probable_pitchers?.[side]
+    ?? context.probable_pitchers?.[side]
+    ?? official.probable_pitchers?.[side]
+    ?? null;
+  const name = typeof pitcher === 'string'
+    ? pitcher
+    : pitcher?.name ?? pitcher?.fullName ?? pitcher?.full_name ?? null;
+  const explicitStatus = String(
+    pitcher?.status
+      ?? pitcher?.starter_status
+      ?? pitcher?.confirmation_status
+      ?? stats[`${side}_starter_status`]
+      ?? official[`${side}_starter_status`]
+      ?? '',
+  ).toLowerCase();
+  const changed = pitcher?.changed === true
+    || stats[`${side}_pitcher_changed`] === true
+    || /changed|scratch|replacement/.test(explicitStatus);
+  const confirmed = pitcher?.confirmed === true
+    || /confirm|lock|official|starting/.test(explicitStatus);
+  const status = changed ? 'CHANGED' : confirmed ? 'CONFIRMED' : 'EXPECTED';
+  return `${name || 'MISSING'} — ${status}`;
+}
+
+function buildSlateGameProjection({ date, game = null, leagueRPG = null } = {}) {
+  if (game?.projection) return game.projection;
+  const statsRecord = game?.statsRecord ?? null;
+  if (!statsRecord) return null;
+  return buildGameProjections({
+    record: statsRecord,
+    leagueRPG,
+    as_of: `${date || 'unknown-date'}T00:00:00Z`,
+    lineup_status: statsRecord.lineup_status ?? 'proxy',
+    weather_status: statsRecord.weather_status ?? null,
+  });
+}
+
+function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG = null } = {}) {
+  const teams = slateTeamNames({ game, picks: gamePicks });
+  const record = game?.statsRecord ?? game?.officialRecord ?? game ?? {};
+  const projection = buildSlateGameProjection({ date, game, leagueRPG });
+  const score = projection?.score ?? {
+    status: 'blocked',
+    blocked_reasons: ['MODEL_INPUTS_MISSING'],
+  };
+  const awayRuns = score.status === 'blocked' ? null : projection?.means?.lambdaAway;
+  const homeRuns = score.status === 'blocked' ? null : projection?.means?.lambdaHome;
+  const event = {
+    event_ticker: record.event_ticker ?? record.ticker,
+    title: `${teams.away} at ${teams.home}`,
+  };
+  const read = classifyGamePacketRead(gamePicks, event, {
+    hasModelProjection: Boolean(projection?.score && projection.score.status !== 'blocked'),
+  });
+  const modelPosture = projection?.score?.status === 'blocked'
+    ? 'MODEL_INSUFFICIENT'
+    : (read.cpcRead ?? read.call ?? 'PASS');
+  const scoreText = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
+    ? `${teams.away} ${awayRuns.toFixed(1)}, ${teams.home} ${homeRuns.toFixed(1)}`
+    : 'not modeled — model inputs unavailable';
+  const status = String(
+    game?.statsRecord?.game_status
+      ?? game?.officialRecord?.game_status
+      ?? game?.officialRecord?.status
+      ?? record.game_status
+      ?? record.status
+      ?? 'UNKNOWN',
+  ).trim() || 'UNKNOWN';
+  const firstPitch = game?.officialRecord?.start_time_utc
+    ?? game?.officialRecord?.start_utc
+    ?? game?.statsRecord?.start_utc
+    ?? game?.statsRecord?.start_time_utc
+    ?? record.start_time_utc
+    ?? record.start_utc
+    ?? 'MISSING';
+  const venue = game?.officialRecord?.venue ?? game?.statsRecord?.venue ?? record.venue ?? 'MISSING';
+
+  return [
+    `GAME ${index}`,
+    `${teams.away} AT ${teams.home}`,
+    `STATUS: ${status}`,
+    `FIRST PITCH: ${firstPitch}`,
+    `VENUE: ${venue}`,
+    'LINEUP MODE: LAST_LOCKED_LINEUP_PROXY',
+    'STARTING PITCHERS:',
+    `  ${teams.away}: ${slatePitcher({ game, side: 'away' })}`,
+    `  ${teams.home}: ${slatePitcher({ game, side: 'home' })}`,
+    `PROJECTED SCORE: ${scoreText}`,
+    `CPC PROJECTED SPREAD: ${describeProjectedSpread(awayRuns, homeRuns, {
+      away_team: teams.away,
+      home_team: teams.home,
+      status: score.status,
+      blocked_reasons: score.blocked_reasons,
+    })}`,
+    `CPC PROJECTED TOTAL: ${describeTotal(score)}`,
+    `WIN PROBABILITY: ${describeMoneyline(score, { home_team: teams.home, away_team: teams.away })}`,
+    `YRFI/NRFI: ${describeYrfi(projection?.yrfi ?? {
+      status: 'blocked',
+      blocked_reasons: ['MODEL_INPUTS_MISSING'],
+    })}`,
+    `MODEL POSTURE: ${modelPosture}`,
+  ].join('\n');
+}
+
+function buildFullSlateBoard({ date, scoring, slateGames = [], leagueRPG = null } = {}) {
+  const picks = safeArray(scoring?.picks);
+  const groupedPicks = new Map();
+  for (const pick of picks) {
+    const key = slatePickKey(pick);
+    if (!groupedPicks.has(key)) groupedPicks.set(key, []);
+    groupedPicks.get(key).push(pick);
+  }
+
+  const scheduled = safeArray(slateGames).map((game) => ({
+    ...game,
+    picks: groupedPicks.get(slateRecordKey({ game }))
+      ?? groupedPicks.get(slateMatchupKey({ game }))
+      ?? [],
+  }));
+  const consumed = new Set(scheduled.flatMap((game) => game.picks.map(slatePickKey)));
+  for (const [key, gamePicks] of groupedPicks) {
+    if (gamePicks.some((pick) => consumed.has(slatePickKey(pick)))) continue;
+    scheduled.push({ picks: gamePicks, officialRecord: { event_ticker: key } });
+  }
+
+  if (!scheduled.length) return 'FULL SLATE BOARD\n\n  MISSING — no scheduled game records were supplied.';
+  return [
+    'FULL SLATE BOARD',
+    ...scheduled.map((game, index) => renderFullSlateGameBlock({
+      date,
+      game,
+      gamePicks: game.picks,
+      index: index + 1,
+      leagueRPG,
+    })),
+  ].join('\n\n');
+}
+
 /**
  * Build the compact, sectioned MLB slate packet from picks.json scoring rows.
  * Returns { text, rows, inventoryText, counts } or null if no scoring exists.
@@ -806,7 +984,7 @@ function renderGamePacketSourceLedger({ sourceRefs = {}, gamePicks = [], statsRe
  * Top Edge / Watchlist / Fades / Blocked + audit pointers). The full per-pick
  * inventory goes to a separate audit artifact, never the packet body.
  */
-export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null, scope = null, sourceRefs = {}, hrProjections = [] }) {
+export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPath = null, scope = null, sourceRefs = {}, hrProjections = [], slateGames = [], leagueRPG = null }) {
   if (!scoring || !Array.isArray(scoring.picks) || !scoring.picks.length) return null;
   const resolvedScope = resolvePacketScope({
     explicit: scope,
@@ -848,6 +1026,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
     gamePicks: scoring.picks,
   });
   const neutralityNote = 'Composite scoring is market-neutral: model fair_value never reads market price. Edge = fair − implied.';
+  const fullSlateBoard = buildFullSlateBoard({ date, scoring, slateGames, leagueRPG });
   const readyHr = hrProjections.flatMap((projection) => projection?.outputs ?? [])
     .filter((row) => row?.status === 'ready');
   const hrSection = [
@@ -856,7 +1035,7 @@ export function buildMlbSlatePacket({ date, scoring, artifacts = [], inventoryPa
       ? readyHr.slice(0, 12).map((row) => `  ${row.player?.player_name ?? `MLB ${row.player?.mlb_id}`}: ${(row.outputs.probability_at_least_one_hr * 100).toFixed(1)}% at least one HR; per-PA ${(row.outputs.per_pa_probability * 100).toFixed(2)}%; expected PA ${row.outputs.expected_pa.toFixed(2)}.`)
       : ['  MODEL_INSUFFICIENT — batter-level evidence is unavailable for this slate.']),
   ].join('\n');
-  const text = [header, inputStatusNote, neutralityNote, cleanedBody, hrSection, packetFooter()].filter(Boolean).join('\n\n');
+  const text = [header, inputStatusNote, neutralityNote, fullSlateBoard, cleanedBody, hrSection, packetFooter()].filter(Boolean).join('\n\n');
 
   // Full per-pick inventory -> audit artifact only. Each line carries model and
   // market fields together for routing/audit; pricing here is NOT a score input.
@@ -1752,6 +1931,29 @@ export async function main(argv = process.argv.slice(2), { primeResearch = prime
   writeJsonAtomic(auditPath, buildInvocationAudit({ date: opts.date, generatedAtUtc, records: writtenRunRecords }));
 
   if (scoring) {
+    const slateGames = [];
+    const seenSlateGamePks = new Set();
+    for (const officialRecord of officialRecords) {
+      const gamePk = officialRecord?.game_pk;
+      if (gamePk != null) seenSlateGamePks.add(String(gamePk));
+      slateGames.push({
+        officialRecord,
+        statsRecord: gameRecordFor(statsRecords, gamePk),
+        weatherRecord: gameRecordFor(weatherRecords, gamePk),
+        contextRecord: gameRecordFor(contextRecords, gamePk),
+        projection: projectionsByGamePk.get(String(gamePk ?? '')) ?? null,
+      });
+    }
+    for (const statsRecord of statsRecords) {
+      const gamePk = statsRecord?.game_pk;
+      if (gamePk == null || seenSlateGamePks.has(String(gamePk))) continue;
+      slateGames.push({
+        statsRecord,
+        weatherRecord: gameRecordFor(weatherRecords, gamePk),
+        contextRecord: gameRecordFor(contextRecords, gamePk),
+        projection: projectionsByGamePk.get(String(gamePk)) ?? null,
+      });
+    }
     const slateScope = resolvePacketScope({
       explicit: opts.scope ?? 'FULL_DAY_PREVIEW',
       hasScoring: true,
@@ -1768,6 +1970,8 @@ export async function main(argv = process.argv.slice(2), { primeResearch = prime
         scoring: scoring.source,
       },
       hrProjections: slateHrProjections,
+      slateGames,
+      leagueRPG,
     });
     if (slate) {
       const invW = writeAudit(dir, inventoryName, slate.inventoryText, {
