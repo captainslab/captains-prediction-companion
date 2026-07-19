@@ -162,6 +162,52 @@ test('MLB slate packet renders a literal full slate board in schedule order', ()
   assert.match(slate.text, /MODEL POSTURE:/);
 });
 
+test('MLB slate uses official mlb_status, labels started games as pregame proxy, and watches detected doubleheaders', () => {
+  const stats = (game_pk, away_team, home_team) => ({
+    game_pk,
+    away_team,
+    home_team,
+    venue: `${home_team} Park`,
+    lineup_status: 'proxy',
+    away_pitcher: { name: `${away_team} Starter`, mlb_id: game_pk * 10 + 1, era: 3.5, games_started: 15, batters_faced: 360, k_pct: 0.28 },
+    home_pitcher: { name: `${home_team} Starter`, mlb_id: game_pk * 10 + 2, era: 4.2, games_started: 15, batters_faced: 360, k_pct: 0.25 },
+    away_team_stats: { runs_scored: 410, runs_allowed: 360, gamesPlayed: 80 },
+    home_team_stats: { runs_scored: 400, runs_allowed: 420, gamesPlayed: 80 },
+    away_bullpen: { era: 4.0 },
+    home_bullpen: { era: 4.8 },
+  });
+  const scoring = {
+    picks: [
+      prelineupPick({ matched_game_pk: 1 }),
+      prelineupPick({ matched_game_pk: 2, market_ticker: 'KXMLBTOTAL-DOUBLEHEADER-2' }),
+    ],
+    source: '/tmp/picks.json',
+    summaryCounts: { pre_lineup_pick: 2 },
+  };
+  const slate = buildMlbSlatePacket({
+    date: '2026-05-29',
+    scoring,
+    slateGames: [
+      {
+        officialRecord: { game_pk: 1, start_time_utc: '2026-05-29T20:00:00Z', mlb_status: 'In Progress' },
+        statsRecord: stats(1, 'Toronto Blue Jays', 'Baltimore Orioles'),
+      },
+      {
+        officialRecord: { game_pk: 2, start_time_utc: '2026-05-29T23:00:00Z', mlb_status: 'Scheduled' },
+        statsRecord: stats(2, 'Toronto Blue Jays', 'Baltimore Orioles'),
+      },
+    ],
+    leagueRPG: 4.4,
+  });
+
+  assert.match(slate.text, /GAME 1[\s\S]*STATUS: In Progress/);
+  assert.match(slate.text, /PREGAME PROXY NOTICE: This is a pregame-proxy model context only[\s\S]*does not reflect live in-game state/);
+  assert.match(slate.text, /GAME 1[\s\S]*PROJECTED SCORE: Toronto Blue Jays \d+\.\d, Baltimore Orioles \d+\.\d/);
+  assert.match(slate.text, /GAME 2[\s\S]*STATUS: Scheduled/);
+  assert.equal((slate.text.match(/\[DOUBLEHEADER_GAME\]/g) || []).length, 1);
+  assert.match(slate.text, /\[DOUBLEHEADER_GAME\] Toronto Blue Jays AT Baltimore Orioles — status: In Progress \/ Scheduled; required action: Refresh bullpen usage, lineups, starters, and weather before the affected game\./);
+});
+
 test('BLOCKED MLB rows compact into event-level notes and never render score=MISSING rows', () => {
   const blockedPick = (market_ticker) => ({
     market_ticker,

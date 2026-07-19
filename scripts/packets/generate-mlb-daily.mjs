@@ -28,6 +28,7 @@ import {
   KALSHI_SOURCES,
 } from './lib/kalshi-discovery.mjs';
 import { buildEventDisplay, buildMarketDisplay } from './lib/mlb-teams.mjs';
+import { isNotYetStartedStatus } from './send-packets-telegram.mjs';
 import { runComposite, loadDynamicCompositeSlate } from '../mlb/late-slate-composite-refresh.mjs';
 import {
   buildScoreEngineProjection,
@@ -820,6 +821,33 @@ function slateRecordKey({ game = null, picks = [] } = {}) {
     ?? slateMatchupKey({ game, picks });
 }
 
+function slateGamePk(game = null) {
+  return game?.officialRecord?.game_pk
+    ?? game?.statsRecord?.game_pk
+    ?? game?.contextRecord?.game_pk
+    ?? game?.game_pk
+    ?? null;
+}
+
+function slateGameStatus(game = null) {
+  const sources = [
+    game?.officialRecord,
+    game?.statsRecord,
+    game?.contextRecord,
+    game,
+  ];
+  const values = [
+    ...sources.map((source) => source?.mlb_status),
+    ...sources.flatMap((source) => [source?.game_status, source?.status]),
+  ];
+  return String(values.find((value) => String(value ?? '').trim()) ?? 'UNKNOWN').trim() || 'UNKNOWN';
+}
+
+function slateGameHasStarted(status) {
+  const normalized = String(status ?? '').trim();
+  return Boolean(normalized) && normalized.toUpperCase() !== 'UNKNOWN' && !isNotYetStartedStatus(normalized);
+}
+
 function slatePickKey(pick = {}) {
   return slateGameKey(pick.matched_game_pk ?? pick.game_pk)
     ?? (pick.game ? slateMatchupKey({ picks: [pick] }) : null)
@@ -891,14 +919,7 @@ function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG
   const scoreText = Number.isFinite(awayRuns) && Number.isFinite(homeRuns)
     ? `${teams.away} ${awayRuns.toFixed(1)}, ${teams.home} ${homeRuns.toFixed(1)}`
     : 'not modeled — model inputs unavailable';
-  const status = String(
-    game?.statsRecord?.game_status
-      ?? game?.officialRecord?.game_status
-      ?? game?.officialRecord?.status
-      ?? record.game_status
-      ?? record.status
-      ?? 'UNKNOWN',
-  ).trim() || 'UNKNOWN';
+  const status = slateGameStatus(game);
   const firstPitch = game?.officialRecord?.start_time_utc
     ?? game?.officialRecord?.start_utc
     ?? game?.statsRecord?.start_utc
@@ -912,6 +933,9 @@ function renderFullSlateGameBlock({ date, game, gamePicks = [], index, leagueRPG
     `GAME ${index}`,
     `${teams.away} AT ${teams.home}`,
     `STATUS: ${status}`,
+    ...(slateGameHasStarted(status)
+      ? ['PREGAME PROXY NOTICE: This is a pregame-proxy model context only, generated before/without knowledge of what has actually happened in the game, and does not reflect live in-game state.']
+      : []),
     `FIRST PITCH: ${firstPitch}`,
     `VENUE: ${venue}`,
     'LINEUP MODE: LAST_LOCKED_LINEUP_PROXY',
@@ -967,7 +991,7 @@ function buildFullSlateBoardEntries({ date, scoring, slateGames = [], leagueRPG 
     scheduled.push({ picks: gamePicks, officialRecord: { event_ticker: key } });
   }
 
-  return scheduled.map((game, index) => {
+  const entries = scheduled.map((game, index) => {
     // The slate runner normally supplies projection objects. For direct callers
     // and tests, build the same market-free projection once and pass it through
     // to the existing per-game renderer and the wrapper sections.
@@ -991,22 +1015,18 @@ function buildFullSlateBoardEntries({ date, scoring, slateGames = [], leagueRPG 
     const modelPosture = projection?.score?.status === 'blocked'
       ? 'MODEL_INSUFFICIENT'
       : (read.cpcRead ?? read.call ?? 'PASS');
-    const status = String(
-      boardGame?.statsRecord?.game_status
-        ?? boardGame?.officialRecord?.game_status
-        ?? boardGame?.officialRecord?.status
-        ?? record.game_status
-        ?? record.status
-        ?? 'UNKNOWN',
-    ).trim() || 'UNKNOWN';
+    const status = slateGameStatus(boardGame);
     const statusCandidates = [
+      status,
+      boardGame?.officialRecord?.mlb_status,
+      boardGame?.statsRecord?.mlb_status,
+      boardGame?.contextRecord?.mlb_status,
       boardGame?.officialRecord?.game_status,
       boardGame?.officialRecord?.status,
       boardGame?.statsRecord?.game_status,
       boardGame?.statsRecord?.status,
       boardGame?.contextRecord?.game_status,
       boardGame?.contextRecord?.status,
-      status,
     ].map((value) => String(value ?? '').trim()).filter(Boolean);
     const operationsStatus = statusCandidates.find((value) => /delay|postpon|suspend|double\s*header/i.test(value)) ?? status;
     const totalRuns = distMean(score.outputs?.total_runs_distribution);
@@ -1041,6 +1061,24 @@ function buildFullSlateBoardEntries({ date, scoring, slateGames = [], leagueRPG 
       doubleheader,
     };
   });
+
+  const matchupGroups = new Map();
+  for (const entry of entries) {
+    const key = slateMatchupKey({ game: entry.game, picks: entry.gamePicks });
+    const gamePk = slateGamePk(entry.game);
+    if (!matchupGroups.has(key)) matchupGroups.set(key, { entries: [], gamePks: new Set() });
+    const group = matchupGroups.get(key);
+    group.entries.push(entry);
+    if (gamePk != null) group.gamePks.add(String(gamePk));
+  }
+  for (const [key, group] of matchupGroups) {
+    if (group.gamePks.size < 2) continue;
+    for (const entry of group.entries) entry.doubleheaderGroupKey = key;
+  }
+  return entries.map((entry) => ({
+    ...entry,
+    doubleheader: entry.doubleheader || Boolean(entry.doubleheaderGroupKey),
+  }));
 }
 
 function renderFullSlateBoardEntries(entries = []) {
@@ -1190,7 +1228,16 @@ function renderOperationsWatch(entries = []) {
     lines.push('  none');
     return lines.join('\n');
   }
+  const emittedDoubleheaderGroups = new Set();
   for (const entry of watched) {
+    if (entry.doubleheaderGroupKey) {
+      if (emittedDoubleheaderGroups.has(entry.doubleheaderGroupKey)) continue;
+      emittedDoubleheaderGroups.add(entry.doubleheaderGroupKey);
+      const groupEntries = entries.filter((candidate) => candidate.doubleheaderGroupKey === entry.doubleheaderGroupKey);
+      const statuses = [...new Set(groupEntries.map((candidate) => candidate.status).filter(Boolean))].join(' / ');
+      lines.push(`  [DOUBLEHEADER_GAME] ${slateGameLabel(entry)} — status: ${statuses || entry.operationsStatus}; required action: Refresh bullpen usage, lineups, starters, and weather before the affected game.`);
+      continue;
+    }
     const actions = [];
     if (entry.delayed) actions.push('recheck official first pitch/status and rerun before release');
     if (entry.doubleheader) actions.push('confirm game number/order and rerun with each game\'s official starters and locked lineups');

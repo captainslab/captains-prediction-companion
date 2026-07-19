@@ -374,7 +374,7 @@ export function parseGameStatus(packetText) {
   return { present: true, raw: raw || null };
 }
 
-function isNotYetStartedStatus(status) {
+export function isNotYetStartedStatus(status) {
   const normalized = String(status ?? '').trim().toLowerCase();
   return NOT_YET_STARTED_STATUSES.has(normalized)
     || normalized.startsWith('delayed');
